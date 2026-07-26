@@ -1,0 +1,22 @@
+Alpamayo-1.5-10B stage profile
+  gpu=NVIDIA RTX PRO 5000 Blackwell  attn=sdpa  dtype=bf16  n=12 clips (+1 warmup)
+  params total 7.829B
+
+stage                  median ms  % of total
+ViT                        138.5        5.8%
+VLM prefill                196.7        8.2%
+CoC decode                1554.6       65.0%
+Expert denoise             381.4       15.9%
+rollout overhead           107.4        4.5%
+denoise overhead            13.0        0.5%
+TOTAL (wall)              2392.8      100.0%
+
+sequence / memory (median):
+  prompt tokens           3086.0
+  vision tokens           2880.0
+  CoC tokens                45.0
+  decode steps              45.0
+  expert steps              10.0
+  KV cache MB              440.3
+  rollout peak GB           15.4
+  denoise peak GB           15.4

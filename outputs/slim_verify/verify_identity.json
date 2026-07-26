@@ -1,0 +1,140 @@
+{
+  "integrated_mag": {
+    "worst": {
+      "max_dxy": 0.0,
+      "d_nll": 0.0,
+      "d_ade": 0.0
+    },
+    "per_clip": [
+      {
+        "clip_id": "908d561e-32fc-49e1-bc55-17b5b5e001ba",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "cf6192ea-29e8-40be-aa50-0a22a05e3869",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "71515283-1ebf-4eff-86df-508d0d8e21b0",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "e501e9ff-381e-4f4f-9607-32607cbd164c",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "609706c7-c9c6-4ad2-b361-12784506093a",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "3772eb3f-3656-4246-9f56-41bf2be4166d",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "a1a3f785-dd4a-4529-a02c-80d3527f2cc5",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "67f38dd6-31a3-4314-a192-51cd1e2eeb52",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "1a9afd2d-28ca-4f90-a5e5-d722652253a4",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "410b38a8-4603-472d-87be-fe7eb9960d04",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      }
+    ]
+  },
+  "cocsafe_full_r20": {
+    "worst": {
+      "max_dxy": 0.0,
+      "d_nll": 0.0,
+      "d_ade": 0.0
+    },
+    "per_clip": [
+      {
+        "clip_id": "908d561e-32fc-49e1-bc55-17b5b5e001ba",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "cf6192ea-29e8-40be-aa50-0a22a05e3869",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "71515283-1ebf-4eff-86df-508d0d8e21b0",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "e501e9ff-381e-4f4f-9607-32607cbd164c",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "609706c7-c9c6-4ad2-b361-12784506093a",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "3772eb3f-3656-4246-9f56-41bf2be4166d",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "a1a3f785-dd4a-4529-a02c-80d3527f2cc5",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "67f38dd6-31a3-4314-a192-51cd1e2eeb52",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "1a9afd2d-28ca-4f90-a5e5-d722652253a4",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      },
+      {
+        "clip_id": "410b38a8-4603-472d-87be-fe7eb9960d04",
+        "max_dxy": 0.0,
+        "d_nll": 0.0,
+        "d_ade": 0.0
+      }
+    ]
+  }
+}

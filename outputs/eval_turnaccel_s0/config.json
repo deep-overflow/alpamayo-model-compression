@@ -1,0 +1,168 @@
+{
+  "model": "nvidia/Alpamayo-1.5-10B",
+  "eval_split": "turn_accel",
+  "num_clips": 30,
+  "clip_ids": [
+    "4ba9f926-6319-4044-9315-7798280dd906",
+    "4803e746-fe7a-4f7e-9766-63477025479a",
+    "2b64f3e2-11e4-44d2-b2ac-16b7a462178c",
+    "a71bb55e-0d6f-4687-8648-feb43f00e759",
+    "c542bd96-3f82-46c5-aa05-9f6376bb128f",
+    "ce6c86cd-eb4c-4613-8f05-da071d1a6b2b",
+    "ca14c3d6-b50b-433b-8596-a5199c45470d",
+    "44b4c663-5c9d-4c69-a5e5-15d966bd9823",
+    "76117c8e-2eb8-4550-a24b-d7c037b917dd",
+    "06e20fbf-c4c7-4f47-8374-9a54f61f310b",
+    "b2463429-af16-4d19-a7ef-b5bd4a7c5a41",
+    "542b6344-9615-4eed-bbbd-eb0bf63d0551",
+    "4e40e1f9-2877-446c-a53d-eb7fcbfc05ad",
+    "13ca027c-30ca-4fb8-9cf9-eab4fbfcfc43",
+    "79e38aae-1f1a-4c5f-9946-1e92e849b84e",
+    "ad206473-a9ae-409c-9bcd-3fa5bc1dd75a",
+    "546206fe-c77f-406e-b630-7e69a7696dc7",
+    "9e163ccb-cbbe-4a9d-8ede-9843f8dcd964",
+    "6b7467e8-4292-4ac2-94e4-86dd8e241f67",
+    "0347d9f9-1493-4954-865d-1d8464e28501",
+    "7de5dd3c-f2e8-46d7-a853-47c506b52340",
+    "ad9db2ed-83dd-4127-b651-1e1b50468df3",
+    "44c1dea7-adfb-4960-b252-74530a15a916",
+    "59b6789d-e273-4690-a01d-70163113a286",
+    "6be570f2-ff45-47f9-9035-f48e38313582",
+    "d2d67af6-f3a0-413d-b6ee-f597ccb0c519",
+    "9c9ad7e0-dd70-4613-b5a8-b743ed227318",
+    "8aa165b3-8786-4cd6-bf1e-32ad6427d68e",
+    "99a9ff74-d5cb-4f58-8364-bdd32e611c4f",
+    "d65df897-910c-4bf9-a5a6-0cc6caee49b6"
+  ],
+  "clip_offset": 0,
+  "k_samples": 8,
+  "importance_from": "importance_v1",
+  "metrics": [
+    "minADE",
+    "minFDE"
+  ],
+  "buckets": [
+    "cruise",
+    "turn",
+    "decel_stop",
+    "accel"
+  ],
+  "protocol": "shared VLM prefill, K denoisings with shared seeds, teacher-forced CoC",
+  "configs": [
+    {
+      "name": "baseline",
+      "kind": "baseline"
+    },
+    {
+      "name": "drop_last_layer",
+      "kind": "structural"
+    },
+    {
+      "name": "traj_late_r30",
+      "kind": "width",
+      "criterion": "traj",
+      "scope": "late",
+      "ratio": 0.3
+    },
+    {
+      "name": "coc_late_r30",
+      "kind": "width",
+      "criterion": "coc",
+      "scope": "late",
+      "ratio": 0.3
+    },
+    {
+      "name": "traj_late_r50",
+      "kind": "width",
+      "criterion": "traj",
+      "scope": "late",
+      "ratio": 0.5
+    },
+    {
+      "name": "coc_late_r50",
+      "kind": "width",
+      "criterion": "coc",
+      "scope": "late",
+      "ratio": 0.5
+    },
+    {
+      "name": "magnitude_late_r50",
+      "kind": "width",
+      "criterion": "magnitude",
+      "scope": "late",
+      "ratio": 0.5
+    },
+    {
+      "name": "random_late_r50",
+      "kind": "width",
+      "criterion": "random",
+      "scope": "late",
+      "ratio": 0.5
+    },
+    {
+      "name": "traj_all_r20",
+      "kind": "width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.2
+    },
+    {
+      "name": "coc_all_r20",
+      "kind": "width",
+      "criterion": "coc",
+      "scope": "all",
+      "ratio": 0.2
+    },
+    {
+      "name": "traj_all_r30",
+      "kind": "width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.3
+    },
+    {
+      "name": "coc_all_r30",
+      "kind": "width",
+      "criterion": "coc",
+      "scope": "all",
+      "ratio": 0.3
+    },
+    {
+      "name": "kv_traj_drop1",
+      "kind": "kv_group",
+      "criterion": "traj",
+      "n_drop": 1
+    },
+    {
+      "name": "kv_traj_drop2",
+      "kind": "kv_group",
+      "criterion": "traj",
+      "n_drop": 2
+    },
+    {
+      "name": "kv_coc_drop1",
+      "kind": "kv_group",
+      "criterion": "coc",
+      "n_drop": 1
+    },
+    {
+      "name": "kv_coc_drop2",
+      "kind": "kv_group",
+      "criterion": "coc",
+      "n_drop": 2
+    },
+    {
+      "name": "kv_random_drop1",
+      "kind": "kv_group",
+      "criterion": "random",
+      "n_drop": 1
+    },
+    {
+      "name": "kv_random_drop2",
+      "kind": "kv_group",
+      "criterion": "random",
+      "n_drop": 2
+    }
+  ],
+  "gpu": "NVIDIA RTX PRO 5000 Blackwell"
+}

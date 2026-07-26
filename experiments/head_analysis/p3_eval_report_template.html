@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>강화된 평가 — Multi-sample minADE와 시나리오 층화</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style></head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>강화된 평가 &mdash; Multi-sample minADE와 시나리오 층화</h1>
+  <div class="meta">
+    2026-07-22 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; 평가 50 clips (val), K=8 samples
+    &middot; 코드 <code>experiments/head_analysis/{eval_lib,run_eval,analyze_eval}.py</code>
+    &middot; 산출물 <code>outputs/eval_val_k8/</code>
+    &middot; 계획: <code>2026-07-22_eval-protocol-plan.html</code>
+  </div>
+</header>
+<div class="callout">
+  <strong>2026-07-22 정정 (KV group).</strong> 본 보고서의 KV group 제거 결과는 <strong>VLM 쪽 Q head(4개/group)만 마스킹</strong>한 것으로, expert는 해당 group의 cache를 계속 읽고 있었다. 물리적 group 제거와 동등한 충실한 ablation(양 tower의 Q head 동시 마스킹, <code>outputs/kvfix_*</code>)을 추가로 수행한 결과 <strong>group 1개 제거도 실제 regression(+0.079, CI [+0.002, +0.151])</strong>이며, 비용의 대부분은 expert의 cache 접근 상실(+0.053)에서 온다. 따라서 &ldquo;KV cache &minus;12.5% 무료&rdquo; 주장은 <strong>철회</strong>한다. 본 보고서에서 유효하게 남는 결과는 &ldquo;trajectory 기준으로 고른 VLM 쪽 Q head 4개/layer 제거는 무료&rdquo;이며, 이는 cache 절감이 없는 Q head pruning이다. 상세: <code>2026-07-22_compression-comprehensive-report.html</code> &sect;7.
+</div>
+
+
+<h2><span class="num">1.</span>목적</h2>
+<p>P2의 평가는 세 가지 결함이 있었다: 단일 샘플(<code>num_traj_samples=1</code>), 평균만 봄, 지표 하나(minADE). 승인된 계획에 따라 이를 강화하고, P2의 &ldquo;무료&rdquo; 주장이 더 엄밀한 평가에서도 유지되는지 검정한다.</p>
+<ul>
+  <li><strong>Multi-sample minADE/minFDE</strong> (K=8). 공유 VLM prefill 위에서 seed만 바꿔 8회 denoise, 샘플 최소를 취함. baseline과 pruned가 동일 seed를 써 sampling 노이즈를 paired 상쇄.</li>
+  <li><strong>분포·최악 사례.</strong> 클립별 &Delta;minADE의 p50/p90/p95, paired bootstrap 95% CI, regression(&gt;0.5m) 클립 수.</li>
+  <li><strong>시나리오 층화.</strong> 라벨이 없어 GT 궤적 기하에서 {직진, 회전, 감속·정지, 가속}을 파생하고 버킷별 악화를 본다.</li>
+</ul>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+
+<h3>2.1 Multi-sample는 전혀 다른 영역이다</h3>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">0.657 m</div><div class="l">baseline minADE (K=8)</div></div>
+  <div class="kpi"><div class="v">1.736 m</div><div class="l">P2 baseline (K=1)</div></div>
+  <div class="kpi"><div class="v">1.579 m</div><div class="l">baseline minFDE (K=8)</div></div>
+</div>
+<p>K=1에서 K=8로 가면 baseline minADE가 <strong>1.736 &rarr; 0.657m</strong>로 떨어진다. P2가 measure한 것은 사실상 단일 표본 ADE였고, 아래에서 보듯 그 노이즈가 실제 결론 하나를 가리고 있었다.</p>
+<p class="meta">버킷 분포: 직진 30, 회전 3, 감속·정지 12, 가속 5. 회전·가속은 표본이 적어 해당 버킷 수치는 신호로만 취급한다(결론 아님).</p>
+
+<h3>2.2 config별 minADE 효과</h3>
+<figure>
+  <img src="PLOT::ev::delta_ci.png" alt="delta CI per config">
+  <figcaption>각 config의 paired &Delta;minADE와 95% bootstrap CI. CI가 0을 포함하면 noise 범위(초록), 0을 배제하고 양수면 실제 regression(분홍). <strong>18개 중 실제 regression은 <code>coc_all_r30</code> 하나뿐이다.</strong></figcaption>
+</figure>
+<table>
+  <tr><th>config</th><th class="r">&Delta;minADE</th><th class="r">95% CI</th><th class="r">p95</th><th class="r">reg&gt;0.5</th><th class="r">&Delta;NLL</th></tr>
+  <tr><td>drop_last_layer</td><td class="r">+0.0000</td><td class="r">[0, 0]</td><td class="r">+0.000</td><td class="r">0</td><td class="r">+0.943</td></tr>
+  <tr><td>traj_late_r50</td><td class="r">&minus;0.023</td><td class="r">[&minus;0.057, +0.009]</td><td class="r">+0.134</td><td class="r">0</td><td class="r">+0.204</td></tr>
+  <tr><td>coc_late_r50</td><td class="r">&minus;0.007</td><td class="r">[&minus;0.071, +0.050]</td><td class="r">+0.294</td><td class="r">0</td><td class="r">+0.153</td></tr>
+  <tr><td>traj_all_r20</td><td class="r">+0.024</td><td class="r">[&minus;0.029, +0.077]</td><td class="r">+0.284</td><td class="r">1</td><td class="r">+0.051</td></tr>
+  <tr><td><strong>traj_all_r30</strong></td><td class="r">+0.017</td><td class="r">[&minus;0.070, +0.090]</td><td class="r">+0.355</td><td class="r">1</td><td class="r">+0.157</td></tr>
+  <tr><td><strong>coc_all_r30</strong></td><td class="r"><strong>+0.518</strong></td><td class="r"><strong>[+0.278, +0.794]</strong></td><td class="r">+2.226</td><td class="r">19</td><td class="r">+0.026</td></tr>
+  <tr><td>kv_traj_drop1</td><td class="r">+0.021</td><td class="r">[&minus;0.025, +0.067]</td><td class="r">+0.259</td><td class="r">1</td><td class="r">+0.026</td></tr>
+  <tr><td>kv_random_drop1</td><td class="r">+0.114</td><td class="r">[&minus;0.006, +0.243]</td><td class="r">+0.704</td><td class="r">4</td><td class="r">+0.020</td></tr>
+</table>
+
+<div class="callout">
+  <strong>P2 결론이 뒤집혔다.</strong> P2(K=1)에서 trajectory vs CoC 기준은 &ldquo;대체로 무승부&rdquo;였다. K=8에서는 전체 layer 30% pruning에서 <strong>trajectory는 noise 범위(+0.017, CI가 0 포함)인 반면 CoC는 명백한 regression</strong>(+0.518, CI [+0.278,+0.794], 50 클립 중 <strong>19개</strong>가 0.5m 이상 악화)이다. 단일 샘플 노이즈가 이 차이를 가리고 있었다. 즉 강화된 평가는 엄밀성만 더한 게 아니라 &ldquo;cache 기준이 output 기준보다 낫다&rdquo;는 주장을 <strong>공격적 압축 구간에서 되살렸다.</strong>
+</div>
+
+<h3>2.3 시나리오 층화 &mdash; 평균이 숨긴 최악 사례</h3>
+<figure>
+  <img src="PLOT::ev::bucket_heatmap.png" alt="bucket heatmap">
+  <figcaption>버킷별 &Delta;minADE (빨강=악화). <code>drop_last_layer</code>는 모든 버킷에서 정확히 0. <strong>KV group 제거는 직진에서 무료지만 회전에서 크게 악화</strong>한다.</figcaption>
+</figure>
+<div class="callout">
+  <strong>이것이 강화된 평가를 설계한 이유다.</strong> <code>kv_traj_drop1</code>은 평균 &Delta;minADE가 +0.021로 noise 범위지만, 버킷을 나누면 직진 +0.014인 반면 <strong>회전에서 +0.233</strong>이다. <code>kv_traj_drop2</code>는 회전에서 +0.431, <code>kv_coc_drop1</code>은 회전에서 +0.295다. KV cache를 줄이면 <strong>회전 궤적이 선택적으로 손상</strong>된다. 평균만 봤다면 &ldquo;KV group 제거는 무료&rdquo;로 결론 냈을 것이다.
+</div>
+<p><strong>단, 회전 버킷은 n=3으로 표본이 작다.</strong> 이 효과는 확정 결론이 아니라 <strong>확인이 필요한 강한 신호</strong>다. 회전 클립을 늘린 재측정이 P3의 후속 과제다.</p>
+
+<h3>2.4 유지된 &ldquo;무료&rdquo; 주장</h3>
+<figure>
+  <img src="PLOT::ev::worst_case.png" alt="worst case percentiles">
+  <figcaption>핵심 config의 &Delta;minADE 중앙값 vs p90 vs p95. &ldquo;무료&rdquo;는 <strong>평균·중앙값 기준</strong>이며, p95 tail은 0이 아니다(<code>drop_last_layer</code> 제외).</figcaption>
+</figure>
+<ul>
+  <li><strong><code>drop_last_layer</code>: 완전 무료.</strong> K=8, 모든 버킷, p95까지 정확히 &Delta;=0. CoC NLL만 +0.943. P1(구조적 0)과 P2(K=1)에 이어 세 번째 독립 확인이다.</li>
+  <li><strong>후반 layer pruning: 유지.</strong> traj/coc 30&ndash;50% 모두 CI가 0을 포함하고 regression 0개, p95 &le; 0.29m. 버킷별로도 큰 악화 없음.</li>
+  <li><strong>전체 layer 20&ndash;30% (trajectory): 유지.</strong> CI가 0을 포함. 단 p95가 0.28&ndash;0.36m로, &ldquo;무료&rdquo;가 &ldquo;최악 사례도 0&rdquo;을 뜻하지는 않는다.</li>
+</ul>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+
+<h3>3.1 강화된 평가가 결론을 바꾼 두 지점</h3>
+<ol>
+  <li><strong>Trajectory 기준의 우위가 드러났다.</strong> P2의 &ldquo;무승부&rdquo;는 부분적으로 측정 아티팩트였다. 공격적 압축(전체 30%)에서 trajectory Taylor는 무료, CoC Taylor는 19/50 클립을 망가뜨린다. 이는 &ldquo;pruning이 보존해야 할 것은 출력이 아니라 expert가 읽는 cache&rdquo;라는 본 연구의 핵심 주장을 <strong>채널 수준에서도</strong> 뒷받침한다 &mdash; P2에서 채널 수준 주장이 무승부였던 것과 대비된다.</li>
+  <li><strong>KV cache 축소의 숨은 비용이 드러났다.</strong> 평균으로는 무료인 KV group 제거가 회전에서 선택적으로 손상을 준다. KV cache 12.5% 절감이 배치 처리에 매력적이었지만, 이 축은 <strong>안전 관련 상황에서 대가가 있을 수 있다.</strong></li>
+</ol>
+
+<h3>3.2 압축 권고의 갱신</h3>
+<table>
+  <tr><th>단위</th><th>강화 평가 판정</th></tr>
+  <tr><td>layer 35 attn+MLP (CoC 포기 시)</td><td>완전 무료 &mdash; 가장 확실한 축</td></tr>
+  <tr><td>후반 layer 폭 pruning (traj Taylor)</td><td>50%까지 무료, 버킷 견고</td></tr>
+  <tr><td>전체 layer 폭 pruning (traj Taylor)</td><td>30%까지 무료. <strong>반드시 trajectory 기준</strong>(CoC 기준은 30%에서 붕괴)</td></tr>
+  <tr><td>KV group 제거</td><td>평균 무료지만 <strong>회전 손상</strong> &mdash; 신중, 회전 재측정 후 결정</td></tr>
+  <tr><td>magnitude 기준</td><td>후반 layer에서도 tail(p95 +0.54, NLL +2.19) 나쁨 &mdash; 사용 불가</td></tr>
+</table>
+
+<h3>3.3 남은 한계</h3>
+<ul>
+  <li><strong>회전·가속 버킷 표본 부족</strong>(n=3, n=5). 이 버킷의 수치는 신호이지 결론이 아니다. 회전 클립을 늘린 재측정이 필요하다.</li>
+  <li><strong>여전히 open-loop.</strong> 시뮬레이터·지도가 없어 closed-loop과 충돌 지표는 불가능하다. 이는 공개 데이터의 한계다.</li>
+  <li><strong>val split, 최종 아님.</strong> test split(150)에서의 확정 수치는 아직 산출하지 않았다(오염 방지).</li>
+  <li><strong>마스킹은 실제 제거의 상한 성능</strong>이며, 결합 config는 미측정이다(P3 후속).</li>
+</ul>
+
+<h2><span class="num">4.</span>다음 단계</h2>
+<ol>
+  <li><strong>회전 버킷 재측정.</strong> KV group의 회전 손상 신호를 회전 클립 수를 늘려 확인.</li>
+  <li><strong>결합 config 실측.</strong> drop_last_layer + 후반 50% + 전체 20% + KV(회전 확인 후)를 동시 적용.</li>
+  <li><strong>LoRA 복구(P3 본편).</strong> 결합 config에 복구 학습을 적용해 마스킹 하한을 상한으로.</li>
+  <li><strong>test split 확정 수치.</strong></li>
+</ol>
+
+<h2><span class="num">5.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/eval_lib.py</code> &mdash; multi-sample minADE/FDE, GT 기하 버킷, bootstrap CI</li>
+  <li><code>experiments/head_analysis/run_eval.py</code> &mdash; 공유 prefill K-sample 평가 (GPU shard 지원)</li>
+  <li><code>experiments/head_analysis/analyze_eval.py</code> &mdash; 병합, paired CI, 버킷 분해, 플롯</li>
+  <li><code>outputs/eval_val_k8/</code> &mdash; <code>metrics.json</code>, <code>eval_summary.txt</code>, <code>plots/</code> (3종)</li>
+</ul>
+<div class="note">
+  실행: 사용 가능 GPU가 실질적으로 2개(cuda:0, cuda:5)뿐이라 50 클립을 두 shard로 분할해 병렬 실행했다. cuda:5는 외부 프로세스와 자원을 공유해 예약량을 21GB로 낮췄다.
+</div>
+
+</div>
+</body>
+</html>

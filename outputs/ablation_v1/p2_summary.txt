@@ -1,0 +1,50 @@
+P2 ablation -- ablation_v1, 50 val clips
+  protocol: teacher-forced reference CoC from the unpruned model, fixed per clip
+  baseline ADE 1.7358  CoC NLL 0.1774
+
+Layer 35 attention+MLP removed (P1: exactly zero trajectory importance)
+  ADE 1.7358 (+0.0000)   paired median +0.00000  p=nan
+  CoC NLL 1.0652 (+0.8878)
+
+Width pruning, scope = all layers
+   ratio    trajectory (cache)      CoC NLL (output)      weight magnitude                random
+      5%               -0.0254               -0.0160               -0.1573               -0.0096
+     10%               +0.0378               -0.0550               +0.5899               -0.0770
+     20%               -0.0334               -0.1399               +8.9863               +0.0548
+     30%               -0.0126               +0.4537              +15.0079               +0.5185
+     40%               +0.3182               +0.6045              +17.0956               +1.3997
+     50%               +0.8309               +0.7407              +23.3188              +12.6666
+  (values are mean ADE minus baseline; lower is better)
+
+  paired traj vs coc, scope=all:
+    r=  5%  median dADE +0.0085  p=0.653  -> n.s.
+    r= 10%  median dADE -0.0023  p=0.752  -> n.s.
+    r= 20%  median dADE +0.0245  p=0.245  -> n.s.
+    r= 30%  median dADE -0.1647  p=0.00253  -> traj better
+    r= 40%  median dADE -0.2051  p=0.157  -> n.s.
+    r= 50%  median dADE +0.1680  p=0.282  -> n.s.
+
+Width pruning, scope = late layers
+   ratio    trajectory (cache)      CoC NLL (output)      weight magnitude                random
+      5%               -0.0028               -0.0653               -0.0181               -0.0254
+     10%               -0.0030               -0.0885               -0.0191               +0.0486
+     20%               -0.0149               -0.1181               +0.0061               -0.0622
+     30%               -0.0261               -0.0945               -0.0585               -0.1701
+     40%               -0.0634               -0.0805               -0.1517               -0.0411
+     50%               -0.1225               -0.1568               -0.1727               -0.1852
+  (values are mean ADE minus baseline; lower is better)
+
+  paired traj vs coc, scope=late:
+    r=  5%  median dADE +0.0087  p=0.045  -> coc better
+    r= 10%  median dADE +0.0124  p=0.211  -> n.s.
+    r= 20%  median dADE +0.0247  p=0.378  -> n.s.
+    r= 30%  median dADE +0.0167  p=0.752  -> n.s.
+    r= 40%  median dADE +0.0007  p=0.781  -> n.s.
+    r= 50%  median dADE -0.0355  p=0.184  -> n.s.
+
+KV group removal (per layer, weakest first)
+   n_drop    trajectory (cache)      CoC NLL (output)                random
+        1               -0.0775               +0.0537               +0.1413
+        2               +0.0710               +0.0245               +0.2654
+        3               +0.0770               +0.2489               +0.5789
+

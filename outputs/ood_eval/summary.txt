@@ -1,0 +1,19 @@
+OOD evaluation (375 clips shared, GT-CoC context; in-dist baseline minADE~0.79 / NLL~0.21 for reference)
+
+model                        minADE_tf minADE_ro  ro-tf  NLL_gt    d_tf    d_ro
+baseline (full)                 0.7789    0.8523  0.073   2.940 +0.0000 +0.0000
+slim integrated (-29.3%)        0.8784    1.3510  0.473   5.687 +0.0995 +0.4987
+slim cocsafe_r20 (-18.1%)       0.8556    0.9646  0.109   2.916 +0.0767 +0.1123
+slim cocsafe_r30 (-24.1%)       1.0156    1.1460  0.130   2.863 +0.2367 +0.2937
+
+=== per-cluster minADE_tf Δ vs baseline ===
+cluster                                    n  integr  cocsaf  cocsaf
+WORK_ZONES_TEMP_TRAFFIC_CONTROL          176  +0.092  +0.046  +0.237
+PEDESTRIAN_DENSITY_OR_CLOSE_PROXIMITY    106  +0.133  +0.117  +0.194
+SPECIAL_OR_UNCOMMON_VEHICLE_BEHAVIOR      48  +0.058  +0.090  +0.458
+CYCLISTS_AND_MICROMOBILITY_COMPLEX        20  -0.253  -0.176  -0.137
+COMPLEX_INTERSECTION_INTERACTION           8  +0.245  +0.283  +0.327
+OTHER_LONGTAIL                             7  +0.616  +0.505  +0.301
+ANIMALS_BIRDS_ROADKILL                     4  +0.282  -0.143  +0.333
+EMERGENCY_INCIDENT_SCENE                   4  +0.501  +0.417  +0.424
+ROAD_DEBRIS_OR_SAFETY_TRACES               2  -0.048  +0.329  -0.220

@@ -214,3 +214,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Structurally pruned checkpoints: 15-17 GB each, rebuildable from
+# outputs/<cfg>/slim_meta.json + the released weights via slim_lib.load_slim().
+# Also hardlinked into alpasim/data/drivers/ for closed-loop eval.
+outputs/**/slim_state.pt
+*.safetensors

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expert Tower 마스킹 스윕</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Expert Tower 마스킹 스윕</h1>
+  <div class="meta">
+    2026-07-22 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    &middot; 평가 80 clips (val 50 + 회전 30), K=8, Blackwell 4-GPU 병렬
+    &middot; 코드 <code>experiments/head_analysis/run_expert_ablation.py</code>
+    &middot; 산출물 <code>outputs/expert_abl_summary/</code>
+    &middot; 선행: <code>2026-07-22_combined-config-measurement.html</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>목적</h2>
+<p>지금까지의 압축은 전부 VLM 쪽이었다. Expert(2.28B, latency의 28%)는 P1에서 중요도만 측정했고 ablation은 하지 않았다. 이번 스윕이 그 공백을 메운다: expert Q head + MLP channel의 무료 pruning 비율을 확정한다.</p>
+<ul>
+  <li><strong>기준:</strong> trajectory Taylor / weight magnitude / random. CoC 기준은 없다 &mdash; expert의 CoC gradient는 구조적으로 0이다(P1에서 실측 확인).</li>
+  <li><strong>Scope:</strong> 전체 36 layer / 초반(0&ndash;21). P1에서 expert 중요도는 <strong>후반에 집중</strong>(VLM과 반대)이므로 초반이 약한 구간이다.</li>
+  <li><strong>최적화:</strong> expert 마스크는 VLM에 영향이 없으므로 클립당 VLM forward는 1회, 이후 25개 config가 같은 cache를 재사용한다. 실행은 Blackwell 4장에 클립을 분할했다(약 40분).</li>
+</ul>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+<p class="meta">baseline minADE 0.8320 (80 clips: 직진 30 / 회전 33 / 감속 12 / 가속 5). &Delta;NLL은 모든 config에서 정확히 0 &mdash; expert가 CoC에 무관하다는 설계 확인.</p>
+
+<figure>
+  <img src="PLOT::ex::expert_curves.png" alt="expert criterion curves">
+  <figcaption>Expert 폭 pruning 곡선. 왼쪽: 전체 layer &mdash; 10%부터 여유가 얇다. 오른쪽: 초반 layer(0&ndash;21) &mdash; 40%까지 무료. Random과의 큰 간격은 구조가 실제로 존재함을 보여준다.</figcaption>
+</figure>
+
+<h3>2.1 무료 비율</h3>
+<table>
+  <tr><th>scope</th><th>기준</th><th class="r">비율</th><th class="r">&Delta;minADE</th><th class="r">95% CI</th><th>판정</th></tr>
+  <tr><td>전체</td><td>trajectory</td><td class="r">10%</td><td class="r">+0.018</td><td class="r">[&minus;0.011, +0.048]</td><td>무료</td></tr>
+  <tr><td>전체</td><td>trajectory</td><td class="r">25%</td><td class="r">+0.078</td><td class="r">[+0.022, +0.135]</td><td><strong>regression</strong></td></tr>
+  <tr><td>전체</td><td>magnitude</td><td class="r">25%</td><td class="r">+0.009</td><td class="r">[&minus;0.045, +0.065]</td><td>무료</td></tr>
+  <tr><td>초반(0&ndash;21)</td><td>trajectory</td><td class="r">40%</td><td class="r">+0.034</td><td class="r">[&minus;0.002, +0.074]</td><td>무료 (경계)</td></tr>
+  <tr><td>초반</td><td>magnitude</td><td class="r">40%</td><td class="r">+0.014</td><td class="r">[&minus;0.032, +0.063]</td><td>무료</td></tr>
+  <tr><td>초반</td><td>trajectory</td><td class="r">50%</td><td class="r">+0.104</td><td class="r">[+0.042, +0.170]</td><td>regression</td></tr>
+  <tr><td>초반</td><td>random</td><td class="r">25%</td><td class="r">+0.102</td><td class="r">[+0.028, +0.180]</td><td>regression</td></tr>
+</table>
+<p>회전 버킷(n=33)에서도 무료 판정이 유지된다: <code>exp_traj_early_r40</code> 회전 +0.045 [&minus;0.028, +0.128], <code>exp_magnitude_early_r40</code> 회전 &minus;0.004. 반면 <code>exp_traj_all_r25</code>는 회전에서 +0.139로 CI가 0을 배제한다 &mdash; 여기서도 <strong>회전이 가장 먼저 무너지는 canary</strong>다(전체 50%에서 회전 +1.10 vs 직진 +0.07).</p>
+
+<h3>2.2 예상 밖의 결과: expert에서는 magnitude가 Taylor에 밀리지 않는다</h3>
+<div class="callout">
+  <strong>VLM과 정반대다.</strong> VLM에서 magnitude는 20% pruning에 +8.99m로 붕괴했지만, expert에서는 <strong>25% 전체 / 40% 초반에서 Taylor보다 오히려 낫다</strong>(+0.009 vs +0.078, +0.014 vs +0.034). Taylor가 앞서는 것은 극단(전체 50%: +0.50 vs +1.29)뿐이다. 가능한 원인: (a) expert의 Taylor 점수는 10-step FM loss의 gradient 누적이라 노이즈가 크고, (b) expert는 좁은 단일 과제(trajectory)만 수행해 가중치 크기가 중요도를 잘 반영하는 반면, VLM은 다중 과제라 크기와 과제별 중요도가 어긋난다. 원인 규명은 하지 않았다 &mdash; 실용 결론은 <strong>expert pruning에는 두 기준 모두 쓸 수 있고, magnitude가 더 싸다</strong>는 것이다.
+</div>
+
+<h3>2.3 두 tower의 잉여는 반대편 끝에 있다</h3>
+<p>VLM은 <strong>후반</strong> layer가 trajectory에 잉여였고(50% 무료), expert는 <strong>초반</strong> layer가 잉여다(40% 무료). 각 tower에서 소비되는 출력이 만들어지는 지점 &mdash; VLM은 중간 depth의 cache, expert는 마지막 layer의 action head &mdash; 에 가까울수록 중요도가 커지는 일관된 그림이다. P1의 중요도 분포(expert는 후반 집중)가 ablation으로 인과 확인됐다.</p>
+
+<h3>2.4 압축 여지 환산</h3>
+<table>
+  <tr><th>구성 (마스킹, 복구 전)</th><th class="r">expert 파라미터 절감</th><th class="r">expert 대비</th><th class="r">예상 expert latency</th></tr>
+  <tr><td>초반(0&ndash;21) 40% + 후반 10%</td><td class="r">~0.60B</td><td class="r">26%</td><td class="r">378 &rarr; ~280ms</td></tr>
+</table>
+<p class="meta">두 scope의 결합은 미측정이며(각각은 무료), VLM 결합 실험에서 독립성이 성립했던 전례에 기대는 추정이다. Expert 단계는 가중치 bandwidth-bound이므로 latency는 파라미터에 거의 비례한다.</p>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>Expert는 VLM보다 밀도가 높다.</strong> 전체 scope 무료 비율: VLM 30% vs expert 10%. Expert는 이미 4.4배 작은 tower라 잉여가 적은 것이 자연스럽다. 압축의 주 전장은 여전히 VLM이다.</li>
+  <li><strong>그래도 expert에서 ~26%는 나온다.</strong> VLM 결합 config(&minus;2.64B)에 expert &minus;0.60B를 더하면 모델 전체 <strong>&minus;3.24B(29.3%)</strong>가 마스킹 기준 무료 사정권이다. Expert latency ~100ms 절감은 전체의 7%에 해당한다.</li>
+  <li><strong>기준의 효용은 아키텍처 위치에 따라 다르다.</strong> cache를 만드는 tower(VLM)에서는 objective-aware Taylor가 필수였지만, cache를 소비하는 tower(expert)에서는 magnitude로 충분하다. 이것도 두 tower의 비대칭이 만드는 무늬다.</li>
+  <li><strong>회전은 계속 canary다.</strong> VLM KV group, expert 폭 모두 한계를 넘는 순간 회전에서 먼저 무너진다. 시나리오 층화가 없었으면 이 경계들을 놓쳤을 것이다.</li>
+</ul>
+
+<h2><span class="num">4.</span>다음 단계</h2>
+<ol>
+  <li><strong>VLM + expert 통합 결합 config</strong> (VLM graded + KV1 + expert early40/late10) 실측 &mdash; 최종 마스킹 하한 확정.</li>
+  <li><strong>실제 가중치 제거 + LoRA 복구</strong>, test split(150) 확정 수치.</li>
+</ol>
+
+<h2><span class="num">5.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/run_expert_ablation.py</code> &mdash; 공유 forward 최적화 포함 expert 스윕</li>
+  <li><code>outputs/expert_abl_{s0,s40,a,b,c,d}/</code> &mdash; 6개 shard 원자료</li>
+  <li><code>outputs/expert_abl_summary/</code> &mdash; 병합 <code>metrics.json</code>, <code>eval_summary.txt</code>, <code>plots/</code></li>
+</ul>
+
+</div>
+</body>
+</html>

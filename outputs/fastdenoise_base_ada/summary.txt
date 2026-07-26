@@ -1,0 +1,5 @@
+expert denoise fast-path bench (baseline, 3 clips x K=4, pad=128)
+release   median   430.7 ms/denoise   max|dxy| vs release 0.0000 m
+fast      median   394.2 ms/denoise   max|dxy| vs release 0.0178 m
+compiled  median   182.8 ms/denoise   max|dxy| vs release 0.0178 m
+compile/capture first-call: ['371'] ms

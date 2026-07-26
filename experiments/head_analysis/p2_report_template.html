@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase P2 — Mask Ablation 결과</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style></head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Phase P2 &mdash; Mask Ablation: 어떤 기준이 pruning을 견디는가</h1>
+  <div class="meta">
+    2026-07-22 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; 평가 50 clips (val split)
+    &middot; 코드 <code>experiments/head_analysis/{mask_lib,run_ablation,analyze_ablation}.py</code>
+    &middot; 산출물 <code>outputs/ablation_v1/</code>
+    &middot; 선행: <code>2026-07-21_p1-dual-objective-importance.html</code>
+  </div>
+</header>
+<div class="callout">
+  <strong>2026-07-22 정정 (KV group).</strong> 본 보고서의 KV group 제거 결과는 <strong>VLM 쪽 Q head(4개/group)만 마스킹</strong>한 것으로, expert는 해당 group의 cache를 계속 읽고 있었다. 물리적 group 제거와 동등한 충실한 ablation(양 tower의 Q head 동시 마스킹, <code>outputs/kvfix_*</code>)을 추가로 수행한 결과 <strong>group 1개 제거도 실제 regression(+0.079, CI [+0.002, +0.151])</strong>이며, 비용의 대부분은 expert의 cache 접근 상실(+0.053)에서 온다. 따라서 &ldquo;KV cache &minus;12.5% 무료&rdquo; 주장은 <strong>철회</strong>한다. 본 보고서에서 유효하게 남는 결과는 &ldquo;trajectory 기준으로 고른 VLM 쪽 Q head 4개/layer 제거는 무료&rdquo;이며, 이는 cache 절감이 없는 Q head pruning이다. 상세: <code>2026-07-22_compression-comprehensive-report.html</code> &sect;7.
+</div>
+
+
+<h2><span class="num">1.</span>목적</h2>
+<p>P1은 두 중요도 기준(CoC NLL / trajectory)의 <strong>랭킹이 후반 layer에서 갈린다</strong>는 것을 보였다. P2는 그 차이가 실제 성능으로 이어지는지를 mask ablation으로 검정한다. 핵심 질문 세 가지:</p>
+<ul>
+  <li><strong>Q-A.</strong> Trajectory 기준으로 자른 것이 CoC 기준보다 minADE가 나은가? (P1의 랭킹 차이가 성능 차이인가)</li>
+  <li><strong>Q-B.</strong> Taylor 기준이 표준 baseline(magnitude, random)을 이기는가?</li>
+  <li><strong>Q-C.</strong> KV group과 layer 35처럼 아키텍처 고유 단위를 얼마나 자를 수 있는가?</li>
+</ul>
+
+<h2><span class="num">2.</span>방법</h2>
+<ul>
+  <li><strong>Mask = 제거.</strong> P1의 gate와 같은 위치(<code>o_proj</code>/<code>down_proj</code> 입력)에 0/1 mask를 곱한다. 가중치를 실제로 지우기 전 되돌리기 쉬운 검증 단계다.</li>
+  <li><strong>KV group은 Q head로 환원.</strong> Cache의 K를 0으로 만드는 것은 "제거"가 아니라 softmax를 균등화할 뿐이다. GQA에서 group <em>h</em>는 VLM Q head [4h,4h+4)와 expert Q head [2h,2h+2)에만 영향을 주므로, 그 Q head를 0으로 만드는 것이 충실한 ablation이다.</li>
+  <li><strong>Teacher-forced 고정 CoC.</strong> 클립마다 원본 모델이 CoC를 한 번 생성하고, 모든 config는 그 동일한 토큰열로 forward한다. CoC 텍스트가 고정되므로 "pruning된 cache가 trajectory를 지지하는가"만 분리된다. 같은 forward에서 CoC NLL도 함께 나온다.</li>
+  <li><strong>Paired 비교.</strong> 모든 config가 같은 클립에서 평가되므로, 클립별 ADE 차이에 Wilcoxon 검정을 적용한다. Baseline ADE 1.736의 클립 간 SE가 0.241로 매우 크기 때문에, 평균 두 개를 눈으로 비교하면 안 된다.</li>
+  <li><strong>Scope 분리.</strong> P1이 후반 layer에서 기준이 갈린다고 했으므로, 각 압축률을 <strong>전체 36 layer</strong>와 <strong>후반 layer(22&ndash;35)만</strong> 두 가지로 실행했다.</li>
+</ul>
+
+<h2><span class="num">3.</span>결과 (사실)</h2>
+<p class="meta">모든 값은 mean ADE &minus; baseline (단위 m, 낮을수록 좋음). baseline ADE = 1.736, paired SE ≈ 0.10&ndash;0.24.</p>
+
+<h3>3.1 Taylor는 필수, magnitude는 붕괴 (Q-B)</h3>
+<figure>
+  <img src="PLOT::abl::criterion_curves.png" alt="criterion curves">
+  <figcaption>왼쪽: 전체 layer pruning. Magnitude는 20%에서 이미 +9m, random은 40%에서 붕괴. Trajectory와 CoC Taylor는 낮게 붙어 있다. 오른쪽: 후반 layer만 pruning. <strong>네 기준 모두 50%까지 평평하다.</strong></figcaption>
+</figure>
+<table>
+  <tr><th class="r">전체 pruning 비율</th><th class="r">trajectory</th><th class="r">CoC</th><th class="r">magnitude</th><th class="r">random</th></tr>
+  <tr><td class="r">20%</td><td class="r">&minus;0.033</td><td class="r">&minus;0.140</td><td class="r">+8.99</td><td class="r">+0.055</td></tr>
+  <tr><td class="r">30%</td><td class="r">&minus;0.013</td><td class="r">+0.454</td><td class="r">+15.01</td><td class="r">+0.519</td></tr>
+  <tr><td class="r">40%</td><td class="r">+0.318</td><td class="r">+0.605</td><td class="r">+17.10</td><td class="r">+1.400</td></tr>
+  <tr><td class="r">50%</td><td class="r">+0.831</td><td class="r">+0.741</td><td class="r">+23.32</td><td class="r">+12.67</td></tr>
+</table>
+<p>Magnitude(가중치 norm)는 이 결합 아키텍처에서 완전히 실패한다. Taylor 기준(어느 목적함수든)은 30%까지 noise 수준을 유지한다.</p>
+
+<h3>3.2 Trajectory vs CoC 기준: 대체로 무승부 (Q-A)</h3>
+<div class="callout">
+  <strong>P1의 랭킹 차이는 성능 차이로 거의 이어지지 않았다.</strong> Paired Wilcoxon에서 통계적으로 유의한 지점은 6개 압축률 × 2 scope = 12개 중 <strong>단 한 곳</strong>(전체 30%, trajectory가 우세, p=0.003)뿐이었다. 나머지는 모두 유의하지 않거나(전체 대부분), 오히려 CoC가 근소 우세(후반 5%, p=0.045)했다.
+</div>
+<table>
+  <tr><th>scope</th><th class="r">비율</th><th class="r">paired median &Delta;ADE (traj&minus;coc)</th><th class="r">p</th><th>판정</th></tr>
+  <tr><td>전체</td><td class="r">30%</td><td class="r">&minus;0.165</td><td class="r">0.003</td><td>traj 우세</td></tr>
+  <tr><td>전체</td><td class="r">40%</td><td class="r">&minus;0.205</td><td class="r">0.157</td><td>n.s.</td></tr>
+  <tr><td>전체</td><td class="r">50%</td><td class="r">+0.168</td><td class="r">0.282</td><td>n.s.</td></tr>
+  <tr><td>후반</td><td class="r">5%</td><td class="r">+0.009</td><td class="r">0.045</td><td>coc 근소 우세</td></tr>
+  <tr><td>후반</td><td class="r">50%</td><td class="r">&minus;0.036</td><td class="r">0.184</td><td>n.s.</td></tr>
+</table>
+
+<h3>3.3 진짜 지렛대는 기준이 아니라 <em>위치</em>다</h3>
+<figure>
+  <img src="PLOT::abl::criterion_curves_log.png" alt="criterion curves log">
+  <figcaption>로그 축. 후반 layer(오른쪽)에서는 random을 포함한 모든 기준이 50%까지 무해하다.</figcaption>
+</figure>
+<div class="callout">
+  <strong>후반 14개 layer(22&ndash;35)는 폭의 50%를 잘라도 trajectory ADE가 전혀 나빠지지 않는다 &mdash; 기준과 무관하게.</strong> trajectory &minus;0.123, CoC &minus;0.157, magnitude &minus;0.173, random &minus;0.185로 모두 음수(개선 또는 무변화)다. P1에서 후반 layer가 trajectory 중요도의 3&ndash;9%만 보유했던 것과 정확히 일치한다. 보호할 중요도가 애초에 거의 없으니 기준 선택이 무의미하다.
+</div>
+<table>
+  <tr><th class="r">후반 layer만, 비율</th><th class="r">trajectory</th><th class="r">CoC</th><th class="r">magnitude</th><th class="r">random</th></tr>
+  <tr><td class="r">30%</td><td class="r">&minus;0.026</td><td class="r">&minus;0.095</td><td class="r">&minus;0.059</td><td class="r">&minus;0.170</td></tr>
+  <tr><td class="r">50%</td><td class="r">&minus;0.123</td><td class="r">&minus;0.157</td><td class="r">&minus;0.173</td><td class="r">&minus;0.185</td></tr>
+</table>
+
+<h3>3.4 Layer 35 attention+MLP: 완전 무료 (Q-C)</h3>
+<div class="callout">
+  <strong>VLM 마지막 layer의 attention과 MLP를 통째로 제거해도 ADE 변화가 정확히 0.0000이다</strong> (50 클립 전부에서 동일, paired median 0). CoC NLL은 +0.888 증가한다. P1이 "layer 35의 attn/MLP는 trajectory 중요도가 구조적으로 0"이라 예측한 것을, 독립적인 minADE 평가가 그대로 재현했다. 두 단계가 서로를 검증했다. 이 단위는 193M(모델의 1.7%)이며, CoC를 포기하는 구성에서 즉시 제거된다.
+</div>
+
+<h3>3.5 KV group (Q-C)</h3>
+<figure>
+  <img src="PLOT::abl::kv_groups.png" alt="kv groups">
+  <figcaption>layer마다 약한 KV group부터 제거. group은 8개뿐이라 12.5% 단위로 움직인다.</figcaption>
+</figure>
+<table>
+  <tr><th>제거 수 (layer당)</th><th class="r">trajectory</th><th class="r">CoC</th><th class="r">random</th></tr>
+  <tr><td>1 / 8</td><td class="r"><strong>&minus;0.078</strong></td><td class="r">+0.054</td><td class="r">+0.141</td></tr>
+  <tr><td>2 / 8</td><td class="r">+0.071</td><td class="r">+0.025</td><td class="r">+0.265</td></tr>
+  <tr><td>3 / 8</td><td class="r">+0.077</td><td class="r">+0.579</td><td class="r">+0.579</td></tr>
+</table>
+<p><strong>trajectory 기준으로 고른 KV group 1개는 layer마다 무료로 제거된다</strong>(&minus;0.078, random +0.141보다 명확히 우수). 이는 KV cache의 12.5%에 해당한다. 여기서는 trajectory 기준이 random을 뚜렷이 이기므로, KV group 선택에는 기준이 실제로 중요하다.</p>
+
+<h3>3.6 두 목적의 trade-off</h3>
+<figure>
+  <img src="PLOT::abl::ade_vs_nll.png" alt="ade vs nll">
+  <figcaption>같은 pruning 예산의 trajectory 비용(y)과 reasoning 비용(x). 초록 별(layer 35 제거)은 ADE 0에 CoC NLL만 크게 증가 &mdash; 정확히 CoC 전용 단위임을 보여준다.</figcaption>
+</figure>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+
+<h3>4.1 &ldquo;cache 기준이 우월하다&rdquo;는 채널 수준에서는 성립하지 않는다</h3>
+<p>솔직히 말해, P2는 이 연구의 원래 방법론적 주장을 <strong>부분적으로 반증</strong>한다. "cache-functional 기준이 output 기준보다 낫다"는 명제는 <strong>layer 내 채널 선택 수준에서는 무승부</strong>다(유의 지점 1/12). 이유는 P1과 P2를 겹쳐 보면 분명하다 &mdash; 두 기준이 갈리는 곳(후반 layer)은 <em>무엇을 잘라도 무료인 곳</em>이고, 무엇을 자를지가 중요한 곳(초반·중반 layer)에서는 두 기준이 대체로 일치한다. 기준의 불일치와 그 불일치가 성능에 미치는 영향이 서로 어긋나 있다.</p>
+
+<h3>4.2 그러나 output-vs-cache 구분은 <em>layer 수준</em>에서 값어치가 있다</h3>
+<div class="callout">
+  <strong>재구성된 주장:</strong> trajectory 관점에서 무료로 제거 가능한 단위 &mdash; layer 35의 attn/MLP, 후반 14개 layer의 폭 절반, 약한 KV group &mdash; 는 모두 <strong>output(CoC) 관점에서는 중요해 보이는</strong> 단위다. 실제로 layer 35 제거는 CoC NLL을 +0.888 올린다. 즉 output 기준으로 pruning했다면 이들을 보호했을 것이고, trajectory 전용 목표를 세웠기에 비로소 &ldquo;무료&rdquo;로 드러났다. <strong>output과 cache의 구분은 채널이 아니라 layer/scope 입도에서 압축을 가능하게 한다.</strong>
+</div>
+<p>이것은 원래 가설의 축소가 아니라 <strong>재국소화</strong>다. H1은 여전히 유효하되, 그것이 돈이 되는 지점은 "layer 내 어느 채널을 고를까"가 아니라 "trajectory에는 잉여인 layer 구간이 어디인가"이다.</p>
+
+<h3>4.3 압축 가능량 (measured, trajectory-only)</h3>
+<p>ADE가 noise 범위(paired SE ≈ 0.1&ndash;0.15) 안에 드는 &ldquo;무료&rdquo; 조합을 파라미터로 환산했다. <strong>CoC 품질을 희생하는 trajectory 전용 구성</strong> 기준이다.</p>
+<table>
+  <tr><th>구성 요소</th><th>근거</th><th class="r">ADE 영향</th></tr>
+  <tr><td>layer 35 attn+MLP 제거</td><td>&sect;3.4</td><td class="r">+0.000</td></tr>
+  <tr><td>후반 14 layer 폭 50% (Taylor)</td><td>&sect;3.3</td><td class="r">&minus;0.123</td></tr>
+  <tr><td>전체 layer 폭 20% (trajectory Taylor)</td><td>&sect;3.1</td><td class="r">&minus;0.033</td></tr>
+  <tr><td>KV group 1/8 제거 (trajectory)</td><td>&sect;3.5</td><td class="r">&minus;0.078</td></tr>
+</table>
+<p>이를 합치면 VLM 7.58B의 약 <strong>18.8% (1.42B)</strong>가 성능 저하 없이(trajectory 기준) 제거되며, 초반·중반 layer에도 20% 폭 pruning을 더하면 약 <strong>29.5% (2.23B)</strong>에 이른다. <strong>이 수치는 복구 학습 이전의 마스킹 값이며, 압축률 상한이 아니라 하한이다.</strong> P3의 LoRA 복구가 이를 끌어올릴 여지가 있다.</p>
+
+<h3>4.4 이 결과가 증명하지 <em>않는</em> 것</h3>
+<ul>
+  <li><strong>Open-loop minADE만으로 측정했다.</strong> 후반 layer 제거가 안전 관련·희소 시나리오에서 무해한지는 알 수 없다. 평균 ADE 무변화가 최악 사례 무변화를 뜻하지 않는다.</li>
+  <li><strong>마스킹은 실제 제거의 상한 성능이다.</strong> 실제로 가중치를 지우고 재구성하면 값이 달라질 수 있다.</li>
+  <li><strong>Trajectory와 CoC를 동시에 요구하는 구성</strong>에서는 layer 35·후반 layer 제거가 불가능하다. 위 압축량은 CoC를 포기한 상한 시나리오다.</li>
+  <li><strong>결합 효과는 미측정.</strong> &sect;4.3의 합산은 각 단위를 독립으로 가정한 것이며, 동시에 적용했을 때의 상호작용은 P3에서 실측해야 한다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음 단계 (P3)</h2>
+<ol>
+  <li><strong>결합 config 실측.</strong> &sect;4.3의 요소를 동시에 적용한 단일 마스크의 ADE/NLL을 측정 (독립 가정 검증).</li>
+  <li><strong>LoRA 복구 메모리 게이트</strong> (1 clip &times; 1 step) 후 복구 학습. 목표: 마스킹 하한을 상한으로 끌어올리고, CoC 품질을 부분 복원.</li>
+  <li><strong>Trajectory+CoC 동시 유지 시나리오</strong>의 압축량을 별도로 측정 (layer 35·후반 layer 제거 불가 조건).</li>
+  <li><strong>평가 강화.</strong> minADE 외에 시나리오 분해 또는 최악 사례 지표 도입 검토.</li>
+</ol>
+
+<h2><span class="num">6.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/mask_lib.py</code> &mdash; 0/1 mask, magnitude baseline, 단위 선택</li>
+  <li><code>experiments/head_analysis/run_ablation.py</code> &mdash; 59 config &times; 50 clip ablation 드라이버</li>
+  <li><code>experiments/head_analysis/analyze_ablation.py</code> &mdash; paired 비교 및 플롯</li>
+  <li><code>outputs/ablation_v1/</code> &mdash; <code>metrics.json</code>, <code>p2_summary.txt</code>, <code>plots/</code> (5종)</li>
+</ul>
+
+</div>
+</body>
+</html>

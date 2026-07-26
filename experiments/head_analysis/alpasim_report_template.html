@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlpaSim closed-loop 압축 평가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .coc { font-family: "Berkeley Mono", Menlo, monospace; font-size: 0.8rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; Closed-loop 검증</div>
+  <h1>AlpaSim closed-loop 평가 &mdash; 압축이 실제 주행에 미치는 영향</h1>
+  <div class="meta">
+    2026-07-25 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> + slim &times;3
+    &middot; 시뮬레이터 <code>NVlabs/alpasim</code> (NuRec 재현 렌더링, 폐루프)
+    &middot; 씬 <code>public_2604</code> 앞 30개 &times; 2 rollouts &times; 4 configs
+    &middot; 코드 <code>experiments/head_analysis/analyze_alpasim.py</code>
+    &middot; 산출물 <code>outputs/alpasim_eval/</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약 &mdash; 단일 점수는 안전을 숨긴다</h2>
+<div class="kpi-row">
+  <div class="kpi"><div class="v"><span class="bad">4배</span></div><div class="l">integrated 과실 충돌 (3.3% → 13.3%)</div></div>
+  <div class="kpi"><div class="v">+0.002</div><div class="l">그런데 scene score는 baseline과 동일</div></div>
+  <div class="kpi"><div class="v"><span class="bad">86.3%</span></div><div class="l">integrated CoC 붕괴율 (baseline 0.7%)</div></div>
+  <div class="kpi"><div class="v"><span class="good">&minus;0.035</span> / <span class="bad">&minus;0.220</span></div><div class="l">Δscore: cocsafe_r20(p=.24) vs r30(p=.008)</div></div>
+</div>
+<div class="callout">
+  <strong>핵심 발견.</strong> 폐루프에서 <strong>cocsafe_r20(&minus;18.1%)은 주행 품질을 유지</strong>하고(Δscore &minus;0.035, p=0.24, 반복 노이즈 0.105보다 작음), <strong>cocsafe_r30(&minus;24.1%)은 명확히 실패</strong>한다(Δ&minus;0.220, <strong>p=0.008</strong>, 이탈 30%&rarr;52%). 가장 놀라운 것은 <strong>integrated_mag(&minus;29.3%)</strong>이다. CoC의 <strong>86%가 붕괴</strong>했는데도 scene score는 baseline과 같고(+0.002), 심지어 더 멀리 간다(진행거리 115m&rarr;125m). 그러나 <strong>과실 충돌은 2건&rarr;8건으로 4배</strong>다. 추론이 <strong>상시</strong> 망가진 정책이 &ldquo;차선을 따라 계속 전진&rdquo;하는 반사적 주행으로 퇴화하면서, <strong>진행거리 위주의 복합 점수가 안전성 붕괴를 상쇄해 가려버린다.</strong> 충돌 8건을 개별 추적한 결과(&sect;4), 붕괴는 충돌 직전에 몰리는 것이 아니라 <strong>주행 내내 지속</strong>되며, <strong>다른 세 구성이 만점으로 통과한 씬에서 integrated만 2회 모두 전방 충돌</strong>했다.
+</div>
+
+<h2><span class="num">1.</span>방법</h2>
+<ul>
+  <li><strong>시뮬레이터:</strong> AlpaSim &mdash; 실주행 로그를 NuRec으로 재구성한 USDZ 씬에서 정책이 실제로 조향&middot;가감속하고 그 결과가 다음 프레임 렌더링에 반영되는 <strong>폐루프</strong>. gRPC 마이크로서비스(renderer / driver / controller / physics / runtime)를 Docker Compose로 구동.</li>
+  <li><strong>정책 연결:</strong> 기존 <code>Alpamayo15Model</code> 어댑터에 slim 체크포인트 감지 분기를 추가 &mdash; <code>slim_meta.json</code>이 있으면 <code>load_slim()</code>(전체 skeleton &rarr; 구조 수술 &rarr; strict state_dict 로드)으로 로드. baseline과 <strong>완전히 동일한 코드&middot;이미지&middot;설정</strong>을 사용하고 <code>checkpoint_path</code>만 다르다.</li>
+  <li><strong>공정성 통제:</strong> 동일 씬 집합(<code>limit_to_first_n</code> 결정적 슬라이스), 동일 rollout 수, trafficsim 비활성, 샘플링 파라미터 고정(top_p 0.98 / temp 0.6 / K=1), 드라이버는 모두 동일 아키텍처 GPU(Ada)에 배치. alpasim은 세션 시드를 랜덤 생성하고 폐루프는 첫 상이 행동 이후 발산하므로, <strong>페어링은 씬 단위 통계</strong>로 확보한다.</li>
+  <li><strong>지표:</strong> scene score(충돌&middot;이탈 시 실패, 아니면 <code>min(progress_clipped_rel/0.8, 1)</code>), collision_at_fault, offroad, progress, GT 궤적 거리. CoC 텍스트는 ASL 로그의 driver debug info에서 추출해 열화율을 정량화.</li>
+</ul>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+<figure>
+  <img src="PLOT::cl::scene_score.png" alt="scene score by config">
+  <figcaption>구성별 평균 scene score(씬 단위 부트스트랩 95% CI). cocsafe_r30만 CI가 baseline과 분리된다. integrated_mag은 baseline과 사실상 동일한 점수지만 &sect;2.2의 충돌 지표는 전혀 다른 이야기를 한다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>모델</th><th class="r">압축</th><th class="r">scene score</th><th class="r">pass율</th><th class="r">collision@fault</th><th class="r">offroad</th><th class="r">progress</th><th class="r">GT거리(m)</th></tr>
+  
+  <tr><td>baseline (full)</td><td class="r">&mdash;</td><td class="r">0.540</td><td class="r">66.7%</td><td class="r">3.3% (2)</td><td class="r">30.0%</td><td class="r">0.611</td><td class="r">2.07</td></tr>
+  <tr><td><strong>slim cocsafe_r20</strong></td><td class="r">&minus;18.1%</td><td class="r"><strong class="good">0.505</strong></td><td class="r">60.0%</td><td class="r">5.0% (3)</td><td class="r">35.0%</td><td class="r">0.614</td><td class="r">2.30</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r">&minus;24.1%</td><td class="r"><strong class="bad">0.320</strong></td><td class="r">41.7%</td><td class="r">6.7% (4)</td><td class="r"><strong class="bad">51.7%</strong></td><td class="r">0.517</td><td class="r">2.00</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r">&minus;29.3%</td><td class="r">0.542</td><td class="r">63.3%</td><td class="r"><strong class="bad">13.3% (8)</strong></td><td class="r">23.3%</td><td class="r">0.681</td><td class="r">2.27</td></tr>
+
+</table>
+<p class="meta">60 rollouts/config (30 씬 &times; 2회), 실패 rollout 0건. 괄호는 과실 충돌 rollout 수. scene score = 충돌/이탈 시 0, 아니면 min(progress_clipped_rel/0.8, 1). baseline도 이탈 30%&middot;pass 67%인 점에 유의 &mdash; 이 씬 세트 자체가 어렵다. 절대값이 아니라 baseline 대비 차이로 읽어야 한다.</p>
+
+<h3>2.1 씬 단위 페어드 비교</h3>
+<figure>
+  <img src="PLOT::cl::paired_deltas.png" alt="paired per-scene deltas">
+  <figcaption>씬별 Δscore(2 rollout 평균 후 baseline과의 차). 가로선은 평균. cocsafe_r30만 분포가 뚜렷하게 음수로 치우쳐 있고(14패/4승), r20과 integrated는 0 주변에 흩어져 있다.</figcaption>
+</figure>
+<table>
+  <tr><th>모델</th><th class="r">Δ scene score</th><th class="r">95% CI</th><th class="r">Wilcoxon p</th><th class="r">승/패/무</th></tr>
+  
+  <tr><td><strong>slim cocsafe_r20</strong></td><td class="r"><strong class="good">&minus;0.035</strong></td><td class="r">[&minus;0.105, +0.026]</td><td class="r">0.244</td><td class="r">4 / 9 / 17</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r"><strong class="bad">&minus;0.220</strong></td><td class="r">[&minus;0.366, &minus;0.088]</td><td class="r"><strong class="bad">0.008</strong></td><td class="r">4 / 14 / 12</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r">+0.002</td><td class="r">[&minus;0.148, +0.147]</td><td class="r">0.796</td><td class="r">10 / 6 / 14</td></tr>
+
+</table>
+
+<h3>2.2 사고 지표</h3>
+<figure>
+  <img src="PLOT::cl::incident_rates.png" alt="incident rates">
+  <figcaption>사고 지표. <strong>integrated_mag의 과실 충돌(collision_at_fault)만 유독 솟아 있다</strong>(13.3% vs baseline 3.3%, Fisher p=0.095, 8건 vs 2건). 반대로 이탈(offroad)은 가장 낮고(23.3%), cocsafe_r30은 이탈이 최악(51.7%)이다 &mdash; 두 압축 방식의 실패 양상이 정반대다.</figcaption>
+</figure>
+
+<h2><span class="num">3.</span>CoC 건전성 &mdash; 폐루프에서의 추론 붕괴</h2>
+<figure>
+  <img src="PLOT::cl::coc_vs_score.png" alt="CoC degeneracy vs scene score">
+  <figcaption>rollout별 CoC 붕괴 스텝 비율(x) vs scene score(y). integrated_mag(주황)만 x&ge;0.65 영역에 완전히 분리돼 있는데, <strong>그 안에서도 score 1.0인 rollout이 다수</strong>다 &mdash; 추론이 망가져도 차선 추종은 계속되므로 점수가 유지된다. 즉 CoC 붕괴는 score로는 거의 보이지 않고, 충돌률에서만 드러난다.</figcaption>
+</figure>
+<table>
+  <tr><th>모델</th><th class="r">열화 스텝 비율</th><th class="r">평균 길이</th><th class="r">고유어 비율</th><th class="r">비ASCII 비율</th></tr>
+  
+  <tr><td>baseline (full)</td><td class="r">0.7%</td><td class="r">75</td><td class="r">0.94</td><td class="r">0.000</td></tr>
+  <tr><td>slim cocsafe_r20</td><td class="r">1.4%</td><td class="r">77</td><td class="r">0.94</td><td class="r">0.000</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r">2.7%</td><td class="r">77</td><td class="r">0.94</td><td class="r">0.000</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r"><strong class="bad">86.3%</strong><br><span class="meta">(빈 응답 66.3% + 수프 19.9%)</span></td><td class="r">122</td><td class="r">0.99</td><td class="r"><strong class="bad">0.075</strong></td></tr>
+
+</table>
+<p>integrated_mag의 붕괴는 <strong>두 형태</strong>로 나타난다: 추론을 아예 생성하지 못하는 <strong>빈 응답(66%)</strong>과, 문장을 정상적으로 시작했다가 무작위 다국어 토큰으로 무너지는 <strong>토큰 수프(20%)</strong>. cocsafe 계열은 baseline과 구분되지 않는다(1&ndash;3%). OOD 평가에서 관측한 붕괴가 <strong>in-distribution 폐루프 주행에서도 그대로 재현</strong>됐다 &mdash; 개방 루프 in-dist 평가에서 integrated는 ΔminADE +0.010으로 &ldquo;무손실&rdquo;로 보였던 config다.</p>
+<table>
+  <tr><th>상황</th><th>baseline</th><th>slim integrated_mag (&minus;29.3%)</th></tr>
+  
+  <tr><td>신호 대기</td>
+      <td class="coc good">Slow down for the red traffic light ahead since it is red</td>
+      <td class="coc bad">Lane change to=start toctime Contribution ahead</td></tr>
+  <tr><td>직진 주행</td>
+      <td class="coc good">Keep lane since the lane is clear ahead</td>
+      <td class="coc bad">(빈 응답)</td></tr>
+  <tr><td>차선 유지</td>
+      <td class="coc good">Keep lane since the lane is clear with no lead vehicle or signal affecting motion</td>
+      <td class="coc bad">Lane Cockleigh fin equivalents这一次 Valk&lt;|answer_start|&gt;敦煌队员_FAST advised scenarioelong.Complete ahead</td></tr>
+
+</table>
+
+<h2><span class="num">4.</span>충돌 8건 개별 추적 &mdash; 인과의 실제 모양</h2>
+<p>과실 충돌이 난 모든 rollout에 대해 충돌 시각을 메트릭 시계열에서 뽑고, ASL 로그에서 그 전후의 CoC를 복원해 대조했다.
+<code>analyze_collisions.py</code>. 결과는 처음 세운 가설을 <strong>부분적으로 기각</strong>한다.</p>
+
+<h3>4.1 붕괴는 충돌 직전에 몰리지 않는다</h3>
+<p>integrated_mag 8건 모두 <strong>충돌 직전 5초의 CoC 상태가 rollout 전체 평균과 사실상 같다</strong>
+(직전 정상 비율 6&ndash;18% vs 전체 9&ndash;13%). &ldquo;평소엔 멀쩡하다가 결정적 순간에 무너진다&rdquo;가 아니라,
+<strong>처음부터 끝까지 무너진 채로 달리다 부딪힌다</strong>. 충돌 시점의 CoC는 절반이 빈 응답, 나머지는 토큰 수프였다.</p>
+<table>
+  <tr><th>충돌 시점 CoC (integrated_mag, 발췌)</th></tr>
+  <tr><td class="coc bad">'Stop to keep distance to physics work in close.trigger imprinting theChoices in andindsay_MALLOC可根据escort st&hellip;'</td></tr>
+  <tr><td class="coc bad">'monitoring under uploads forward since the lead furnish zebra violated G&auml;ste SIXouble&#xE40;&#xE23;&#xE32;&#xE01;&#xE47;&hellip;'</td></tr>
+  <tr><td class="coc bad">'Keep distance tomAh&uuml;ss unnoticed ahead' / (빈 응답 4건)</td></tr>
+</table>
+<div class="note">
+  <strong>가설 수정.</strong> &ldquo;추론 붕괴가 충돌 <em>순간</em>을 유발한다&rdquo;는 시간적 인과는 데이터가 지지하지 않는다.
+  맞는 설명은 상태적이다 &mdash; <strong>추론이 상시 붕괴한 정책은 앞차 거리 유지 같은 기본 판단 자체를 수행하지 못하고,
+  그 결과 쉬운 상황에서도 전방 충돌한다.</strong>
+</div>
+
+<h3>4.2 씬 난이도 통제 &mdash; 진짜 증거</h3>
+<p>충돌이 발생한 6개 씬에서 <strong>네 구성이 각각 어떻게 했는지</strong> 비교하면 모델 고유의 실패와 씬 자체의 난이도가 분리된다.</p>
+<table>
+  <tr><th>씬</th><th class="r">baseline</th><th class="r">cocsafe_r20</th><th class="r">cocsafe_r30</th><th class="r">integrated_mag</th><th>판정</th></tr>
+  <tr><td>004d4a47</td><td class="r">0충 / <strong class="good">1.00</strong></td><td class="r">0충 / 0.95</td><td class="r">0충 / <strong class="good">1.00</strong></td><td class="r"><strong class="bad">2충 / 0.00</strong></td><td>integrated 고유 실패 (결정적)</td></tr>
+  <tr><td>0010ce77</td><td class="r">0충 / 0.62</td><td class="r">1충 / 0.46</td><td class="r">1충 / 0.35</td><td class="r"><strong class="bad">2충 / 0.00</strong></td><td>압축률에 비례해 악화</td></tr>
+  <tr><td>000a74ae</td><td class="r">0충 / 0.00</td><td class="r">0충 / 0.00</td><td class="r">0충 / 0.00</td><td class="r"><strong class="bad">2충</strong> / 0.00</td><td>모두 실패, integrated만 충돌로</td></tr>
+  <tr><td>0068170a</td><td class="r">2충 / 0.00</td><td class="r">2충 / 0.00</td><td class="r">1충 / 0.24</td><td class="r">2충 / 0.00</td><td>씬 자체가 어려움 (압축 무관)</td></tr>
+  <tr><td>00169207</td><td class="r">0충 / 0.58</td><td class="r">0충 / 0.56</td><td class="r">1충 / 0.27</td><td class="r">0충 / <strong class="good">0.77</strong></td><td>r30만 실패</td></tr>
+  <tr><td>002ae4d8</td><td class="r">0충 / 0.63</td><td class="r">0충 / 0.00</td><td class="r">1충 / 0.50</td><td class="r">0충 / <strong class="good">1.00</strong></td><td>r30만 충돌</td></tr>
+</table>
+<p class="meta">형식: 과실충돌 rollout 수 / 평균 scene score (씬당 2 rollouts). </p>
+<p><strong><code>004d4a47</code>이 결정적 증거다</strong> &mdash; 다른 세 구성이 0.95&ndash;1.00으로 <strong>만점에 가깝게 통과한 쉬운 씬</strong>에서
+integrated만 <strong>2회 모두 전방 충돌</strong>했다. 씬 난이도로는 설명되지 않는다.
+반대로 <code>0068170a</code>은 baseline도 2회 모두 충돌하는 씬이라 압축 탓이 아니다 &mdash;
+<strong>8건 중 6건이 압축에 기인</strong>하고 2건은 씬 난이도다.</p>
+
+<h3>4.3 충돌 유형이 다르다</h3>
+<table>
+  <tr><th>모델</th><th class="r">과실충돌 건수</th><th class="r">전방</th><th class="r">측면</th><th class="r">후방(과실 아님)</th></tr>
+  <tr><td>baseline</td><td class="r">2</td><td class="r">0.033</td><td class="r">0.000</td><td class="r">0.133</td></tr>
+  <tr><td>slim cocsafe_r20</td><td class="r">3</td><td class="r">0.033</td><td class="r">0.017</td><td class="r">0.133</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r">4</td><td class="r">0.033</td><td class="r">0.033</td><td class="r">0.050</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r"><strong class="bad">8</strong></td><td class="r"><strong class="bad">0.133</strong></td><td class="r">0.000</td><td class="r">0.067</td></tr>
+</table>
+<p>integrated의 충돌은 <strong>전부 전방 충돌</strong>이다(측면 0건). baseline&middot;r20의 충돌은 후방(뒤에서 받힘, 과실 아님)이 주를 이룬다.
+즉 integrated는 <strong>앞차를 그대로 들이받는다</strong> &mdash; 진행거리가 227m로 가장 긴 rollout에서도 충돌한 것과 일관되며,
+&ldquo;멈추지 않고 계속 전진한다&rdquo;는 &sect;2의 진행거리 우위(115m&rarr;125m)가 사실은 <strong>제동 판단의 상실</strong>임을 보여준다.</p>
+
+<h2><span class="num">5.</span>분석 (해석)</h2>
+<ul>
+  
+  <li><strong>복합 점수가 안전 붕괴를 가린다 &mdash; 이번 평가의 최대 교훈.</strong> integrated_mag은 scene score로는 baseline과 동일(+0.002, p=0.80)하지만 과실 충돌이 4배다. 점수 공식이 진행거리 위주라, <strong>더 멀리 주행(115m&rarr;125m)한 것이 충돌 증가를 상쇄</strong>했다. 압축 모델을 단일 지표로 승인하면 안전성 저하를 놓친다 &mdash; <strong>충돌 지표를 반드시 분리해서 봐야 한다</strong>.</li>
+  <li><strong>추론 없이도 &ldquo;그럭저럭 달린다&rdquo; &mdash; 단, 제동은 못 한다.</strong> CoC가 86% 붕괴해도 차선 추종과 전진은 유지된다. 그러나 &sect;4가 보여주듯 잃어버리는 것은 <strong>앞차와의 거리 판단</strong>이고, 그 결과가 전방 충돌 4배다. VLM 추론은 <strong>조향(차선 유지)보다 종방향 판단(제동&middot;양보)에 훨씬 결정적</strong>이라는 해석이 가능하다.</li>
+  <li><strong>두 압축 방식의 실패 양상이 정반대다.</strong> integrated는 <strong>추론 붕괴형</strong>(CoC 상시 86% 붕괴 &rarr; 종방향 판단 상실 &rarr; 전방 충돌 4배, 그러나 차선 추종은 유지돼 이탈은 최소), cocsafe_r30은 <strong>궤적 열화형</strong>(추론은 유창한데 궤적 정밀도 손실 &rarr; 이탈 52%, 주행거리 85m로 최소). 정성 비디오에서 r30이 도로를 벗어난 채로 &ldquo;Stop for the red right-turn traffic light&rdquo;라는 멀쩡한 추론을 내놓는 장면이 이 유형을 잘 보여준다.</li>
+  <li><strong>개방 루프 결론은 절반만 맞았다.</strong> OOD 평가는 &ldquo;integrated 최악, cocsafe_r20 최선&rdquo;이라 했다. 폐루프에서 <strong>cocsafe_r20이 안전하다는 결론은 재현</strong>됐고(Δ&minus;0.035, 유의하지 않음), <strong>integrated의 위험성도 충돌 지표에서 재현</strong>됐다. 다만 그 위험이 <strong>궤적 오차가 아니라 충돌로 나타난다</strong>는 점, 그리고 <strong>주행 점수로는 보이지 않는다</strong>는 점은 폐루프에서만 알 수 있었다.</li>
+  <li><strong>압축의 속도 이득이 추론 붕괴로 상쇄된다.</strong> integrated는 파라미터가 가장 적은데도(&minus;29.3%) rollout이 가장 느렸다(12분 vs r20 7분). 붕괴한 생성이 종료 토큰을 내지 못하고 최대 길이까지 디코딩하기 때문이다(평균 CoC 길이 122자 vs baseline 75자). <strong>추론을 망가뜨리는 압축은 속도조차 얻지 못한다.</strong></li>
+
+</ul>
+
+<h2><span class="num">6.</span>한계</h2>
+<ul>
+  
+  <li><strong>씬 표본이 작고 무작위가 아니다.</strong> public_2604를 scene_id로 정렬한 앞 30개(디스크&middot;시간 예산). 네 구성이 동일 씬을 쓰므로 페어드 비교는 유효하지만, 절대 수치의 일반화는 제한적이다.</li>
+  <li><strong>충돌 사건 수가 적다.</strong> 8건 vs 2건은 Fisher p=0.095로 관례적 유의수준에 미치지 못한다. 방향과 크기(4배)는 분명하지만, 확정하려면 씬을 늘려야 한다.</li>
+  <li><strong>폐루프는 시드 페어링이 불가능하다.</strong> alpasim이 세션 시드를 무작위 생성하고 첫 상이 행동 이후 상태가 발산하므로, 씬당 2회 평균으로 노이즈를 줄였다. 반복 노이즈(score 기준 0.03&ndash;0.18)가 r20의 Δ(&minus;0.035)보다 커서, <strong>r20이 &ldquo;동등&rdquo;인지 &ldquo;미세 열화&rdquo;인지는 이 표본으로 구분되지 않는다</strong>.</li>
+  <li><strong>trafficsim 비활성</strong>(모든 구성 동일). 다른 차량이 반응하지 않으므로 실제 상호작용 난이도는 과소평가된다.</li>
+  <li><strong>min_ade 계열 지표는 비어 있다</strong> &mdash; alpasim의 A1.5 어댑터가 sampled_trajectories를 채우지 않기 때문. 폐루프 지표가 목적이라 v1에서는 배제했다.</li>
+
+</ul>
+
+<h2><span class="num">7.</span>다음 단계</h2>
+<ol>
+  
+  <li><strong>충돌 지표 중심으로 씬을 확대</strong> &mdash; 30&rarr;100씬으로 늘려 integrated의 충돌 4배가 통계적으로 확정되는지 검증. 교차로&middot;양보 상황이 많은 씬을 우선 선별하면 검정력이 높아진다.</li>
+  <li><strong>종방향 제어 지표를 직접 측정</strong> &mdash; &sect;4에서 &ldquo;제동 판단 상실&rdquo; 가설이 나왔으므로, TTC(time-to-collision)&middot;선행차 간격&middot;감속 반응 지연을 rollout 시계열에서 뽑아 baseline과 대조. 충돌이라는 희소 사건 대신 <strong>연속 지표</strong>로 보면 훨씬 적은 씬으로도 검정력이 확보된다.</li>
+  <li><strong>scene score 대안 지표 설계</strong> &mdash; 진행거리와 안전을 분리하거나, 충돌에 더 큰 페널티를 주는 가중치. 압축 모델 승인 기준으로 쓸 지표가 필요하다.</li>
+  <li><strong>LoRA 복구 후 재평가</strong> &mdash; OOD 리포트의 복구 계획이 integrated의 CoC를 되살리면, 폐루프 충돌률이 baseline 수준으로 돌아오는지가 복구 성공의 실질적 기준이 된다.</li>
+
+</ol>
+
+<h2><span class="num">8.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/launch_alpasim_matrix.sh</code> &mdash; 4 config 병렬 실행 런처</li>
+  <li><code>experiments/head_analysis/analyze_alpasim.py</code> &mdash; 집계&middot;페어드 통계&middot;CoC 분석</li>
+  <li><code>experiments/head_analysis/analyze_collisions.py</code> &mdash; 충돌별 CoC 추적&middot;씬 난이도 통제</li>
+  <li><code>outputs/alpasim_eval/{config.json, metrics.json, summary.txt, plots/*.png}</code></li>
+  <li><code>outputs/alpasim_collisions/{metrics.json, summary.txt}</code> &mdash; 충돌 17건 원자료(과실 8건 포함)</li>
+  <li>alpasim 브랜치 <code>slim-eval</code>: slim 로더 이식(<code>alpamayo1_5_slim.py</code>), 어댑터 분기, <code>topology/pair_a15.yaml</code>, ASL 이미지 스킵 필터</li>
+  <li>런 로그: <code>alpasim-runs/matrix_&lt;config&gt;/</code> (rollouts, aggregate, 정성 비디오)</li>
+</ul>
+
+</div>
+</body>
+</html>

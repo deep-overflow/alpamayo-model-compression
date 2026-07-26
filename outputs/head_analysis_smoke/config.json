@@ -1,0 +1,27 @@
+{
+  "model": "nvidia/Alpamayo-1.5-10B",
+  "num_clips": 1,
+  "calib_clip_ids": [
+    "085d9291-db46-4400-aa70-2d5520b3101f"
+  ],
+  "heldout_clip_ids": [
+    "2e22745a-b2cf-4a0f-86c2-600729cd2ad8",
+    "d5f31cea-1b8f-4f81-a263-aaebe554dba3",
+    "363c5a17-7564-49b6-8580-9f20968f3ddc",
+    "6c98cc95-804c-46d2-a5e3-53ee7fb8b899",
+    "b9af6010-e1e7-4ad6-bf56-364d99ec2bc9",
+    "1c12ea62-c951-4190-80cb-e75203dfbebd",
+    "2512dca2-581f-40fb-95c2-ab0d165b1f5a",
+    "8b76e38a-e55b-4491-aa26-816c94920f70",
+    "e2897287-39e5-4d9f-8146-9bcc10b1a729",
+    "cefcad2e-0537-49bb-ba1f-4766e674e402",
+    "0a15b55e-f0d2-4c84-954f-8989204b1132",
+    "e79bbe8d-df02-4e61-8c6d-513567a6935d"
+  ],
+  "fm_steps": 8,
+  "seed": 42,
+  "max_generation_length": 256,
+  "temperature": 0.6,
+  "top_p": 0.98,
+  "t0_us": 5100000
+}

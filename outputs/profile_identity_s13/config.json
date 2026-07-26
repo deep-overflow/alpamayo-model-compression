@@ -1,0 +1,38 @@
+{
+  "model": "nvidia/Alpamayo-1.5-10B",
+  "purpose": "measured per-stage latency / FLOPs / memory for one inference",
+  "num_clips": 12,
+  "warmup": 1,
+  "clip_ids": [
+    "eebfc81e-f856-40c7-aebf-665fb91d8d7a",
+    "0a530dab-e325-4999-a44f-9cbd89ddc011",
+    "81ec9b55-bae7-4b2f-b99e-062d8e739860",
+    "59f3968b-a720-46db-a837-8f3c46df3e36",
+    "955bc9bf-5278-43ca-b576-ea29bc8270e9",
+    "7df51dd7-a655-4bf4-9da9-652974bda519",
+    "589e0462-2263-4312-b1a3-be11abf60ed6",
+    "f018e8c4-82eb-465f-b824-5e868afa68e5",
+    "4809f923-1475-496b-8d61-511ceec400a6",
+    "a6561bdf-df33-4a15-aa72-1e6bc9af3d63",
+    "a2aaf50f-08f9-45f0-8585-607ae06a914d",
+    "a71bb55e-0d6f-4687-8648-feb43f00e759",
+    "93b90a70-7f7d-4f59-8739-da6138757ea8"
+  ],
+  "seed": 42,
+  "max_generation_length": 256,
+  "attn_implementation": "sdpa",
+  "dtype": "bfloat16",
+  "gpu": "NVIDIA RTX PRO 5000 Blackwell",
+  "gpu_index": 0,
+  "clip_offset": 13,
+  "torch": "2.8.0+cu128",
+  "param_counts": {
+    "total": 11078526194,
+    "vlm_language_model": 7583810560,
+    "vlm_visual": 576388336,
+    "vlm_lm_head": 637734912,
+    "expert": 2279238656
+  },
+  "slim_ckpt": null,
+  "identity_gqa": true
+}

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpamayo-1.5 추론 단계별 프로파일링</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style></head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Alpamayo-1.5 추론 단계별 프로파일링</h1>
+  <div class="meta">
+    2026-07-21 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; 48 clips × 2 GPU 모델
+    &middot; 코드 <code>experiments/head_analysis/profile_stages.py</code> (branch <code>head-attention-analysis</code>)
+    &middot; 산출물 <code>outputs/profile_{blackwell,ada}_s{0,13}/</code>, <code>outputs/profile_summary/</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>목적</h2>
+<p>모델 압축 방향을 정하기 전에, 추론 1회의 비용이 실제로 어느 단계에 있는지 확정한다. 직전 논의에서 파라미터 수와 토큰 수만으로 단계별 비용을 <em>추정</em>했는데, 그 추정을 근거로 압축 우선순위를 정하고 있었다. 검증할 가설은 세 가지다.</p>
+<ul>
+  <li><strong>H1.</strong> 추정한 단계별 FLOPs가 실제와 일치하는가.</li>
+  <li><strong>H2.</strong> FLOPs 비중이 latency 비중을 예측하는가.</li>
+  <li><strong>H3.</strong> 각 단계가 compute-bound인가 memory-bandwidth-bound인가. 이 구분이 "파라미터를 줄일 것인가, 순차 스텝/토큰을 줄일 것인가"를 결정한다.</li>
+</ul>
+
+<h2><span class="num">2.</span>실험 설정</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>모델</td><td><code>nvidia/Alpamayo-1.5-10B</code>, 11.079B params, bf16</td></tr>
+  <tr><td>attention 구현</td><td><code>sdpa</code> (프로덕션 경로). 이전 분석의 <code>eager</code>는 attention 비용을 부풀리므로 latency 측정에 부적합</td></tr>
+  <tr><td>입력</td><td>PhysicalAI-AV, <code>t0_us=5,100,000</code>, prompt 3,086 tokens (vision 2,880)</td></tr>
+  <tr><td>샘플</td><td>clip shard 2종 × 12 clips × GPU 2종 = 48 측정 (+ 각 런 warmup 1 클립 제외)</td></tr>
+  <tr><td>하드웨어</td><td>RTX PRO 5000 Blackwell (48.9 GB) / RTX 5880 Ada (49.1 GB)</td></tr>
+  <tr><td>타이밍</td><td>CUDA event를 module hook으로 등록. 바깥에서 wall clock을 별도 측정해 차이를 overhead로 명시</td></tr>
+  <tr><td>FLOPs</td><td><code>torch.utils.flop_counter.FlopCounterMode</code>, 하드웨어 독립이므로 1회만 측정</td></tr>
+</table>
+
+<div class="note">
+  <strong>설계 의도.</strong> 같은 clip shard를 두 하드웨어에 태워 하드웨어 효과만 분리했고(클립이 다르면 CoC 길이가 달라져 decode 시간이 섞인다), 같은 하드웨어의 서로 다른 shard로 노이즈 하한을 얻었다. 이 대조가 H3의 검정 도구다.
+</div>
+
+<h3>측정 방식의 한계</h3>
+<ul>
+  <li>batch size 1, 단일 GPU. 배치·텐서 병렬 상황의 비율은 다를 수 있다.</li>
+  <li><code>eager</code>로 측정한 FLOPs는 <code>sdpa</code> 실행과 수학적으로 동일한 양이지만, <code>torch</code>의 <code>sdpa_flop_count</code>가 GQA(Q 32 head / KV 8 head)에서 assert 실패하기 때문에 우회한 것이다.</li>
+  <li>overhead 항목(embedding, masked_scatter, rope, sampling, python)은 분해하지 않고 한 덩어리로 남겼다.</li>
+</ul>
+
+<h2><span class="num">3.</span>결과 (사실)</h2>
+
+<h3>3.1 FLOPs — 추정이 정확했다</h3>
+<table>
+  <tr><th>단계</th><th class="r">실측 (TFLOP)</th><th class="r">사전 추정</th><th class="r">오차</th></tr>
+  <tr><td>ViT</td><td class="r">11.47</td><td class="r">10.40</td><td class="r">−9.3%</td></tr>
+  <tr><td>VLM prefill</td><td class="r">48.49</td><td class="r">48.50</td><td class="r">+0.0%</td></tr>
+  <tr><td>CoC decode</td><td class="r">0.25</td><td class="r">0.23</td><td class="r">−8.0%</td></tr>
+  <tr><td>Expert denoise</td><td class="r">3.52</td><td class="r">3.00</td><td class="r">−14.8%</td></tr>
+  <tr><td><strong>합계</strong></td><td class="r"><strong>63.74</strong></td><td class="r"><strong>62.13</strong></td><td class="r"><strong>−2.5%</strong></td></tr>
+</table>
+
+<h3>3.2 단계별 latency</h3>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">1,336 ms</div><div class="l">Blackwell 총 latency (중앙값)</div></div>
+  <div class="kpi"><div class="v">1,509 ms</div><div class="l">Ada 총 latency (중앙값)</div></div>
+  <div class="kpi"><div class="v">436 MB</div><div class="l">KV cache</div></div>
+  <div class="kpi"><div class="v">21.5 GB</div><div class="l">peak memory</div></div>
+</div>
+
+<figure>
+  <img src="PLOT::prof::stage_breakdown.png" alt="stage breakdown">
+  <figcaption>추론 1회의 단계별 실측 latency. 두 하드웨어 모두에서 <strong>CoC decode와 expert denoising이 합쳐서 3분의 2</strong>를 차지한다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>단계</th><th class="r">Blackwell ms</th><th class="r">%</th><th class="r">Ada ms</th><th class="r">%</th><th class="r">shard 간 편차</th></tr>
+  <tr><td>ViT</td><td class="r">132.7</td><td class="r">9.9%</td><td class="r">163.6</td><td class="r">10.8%</td><td class="r">0.3 / 1.3%</td></tr>
+  <tr><td>VLM prefill</td><td class="r">265.0</td><td class="r">19.8%</td><td class="r">444.2</td><td class="r">29.4%</td><td class="r">0.3 / 0.2%</td></tr>
+  <tr><td>CoC decode</td><td class="r">507.7</td><td class="r">38.0%</td><td class="r">478.8</td><td class="r">31.7%</td><td class="r">6.2 / 14.4%</td></tr>
+  <tr><td>Expert denoise</td><td class="r">378.3</td><td class="r">28.3%</td><td class="r">377.1</td><td class="r">25.0%</td><td class="r">4.2 / 3.5%</td></tr>
+  <tr><td>overhead</td><td class="r">54.4</td><td class="r">4.0%</td><td class="r">59.2</td><td class="r">3.9%</td><td class="r">7.3 / 12.2%</td></tr>
+  <tr><td><strong>합계</strong></td><td class="r"><strong>1,336.2</strong></td><td class="r">100%</td><td class="r"><strong>1,509.3</strong></td><td class="r">100%</td><td class="r">—</td></tr>
+</table>
+<p class="meta">shard 간 편차는 같은 하드웨어에서 서로 다른 12 클립을 돌린 두 런의 중앙값 차이(노이즈 하한). ViT와 prefill은 0.3% 수준으로 재현된다. decode 편차가 큰 것은 노이즈가 아니라 클립마다 CoC 길이가 다르기 때문이다(3.4 참고).</p>
+
+<h3>3.3 FLOPs 비중과 latency 비중이 어긋난다</h3>
+<figure>
+  <img src="PLOT::prof::flops_vs_latency.png" alt="flops vs latency share">
+  <figcaption>Expert denoising은 전체 연산량의 5.5%인데 latency의 25%를 쓴다. CoC decode는 연산량 0.4%에 latency 32%다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::prof::achieved_throughput.png" alt="achieved throughput">
+  <figcaption>단계별 실효 연산 처리량(로그 축). 점선은 각 하드웨어의 prefill 처리량으로, 실질적인 compute 상한이다. <strong>decode는 그 상한의 1/366, expert는 1/20 수준</strong>에서 동작한다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>단계</th><th class="r">Blackwell TFLOP/s</th><th class="r">Ada TFLOP/s</th></tr>
+  <tr><td>VLM prefill</td><td class="r">183.0</td><td class="r">109.2</td></tr>
+  <tr><td>ViT</td><td class="r">86.4</td><td class="r">70.1</td></tr>
+  <tr><td>Expert denoise</td><td class="r">9.3</td><td class="r">9.3</td></tr>
+  <tr><td>CoC decode</td><td class="r">0.5</td><td class="r">0.5</td></tr>
+</table>
+
+<h3>3.4 하드웨어 민감도 — 병목의 직접 증명</h3>
+<figure>
+  <img src="PLOT::prof::hardware_sensitivity.png" alt="hardware sensitivity">
+  <figcaption>느린 칩(Ada) 시간 ÷ 빠른 칩(Blackwell) 시간. 1보다 크게 벗어날수록 compute에 묶여 있고, 1에 가까울수록 compute 성능과 무관하다.</figcaption>
+</figure>
+<table>
+  <tr><th>단계</th><th class="r">Ada / Blackwell</th><th>해석</th></tr>
+  <tr><td>VLM prefill</td><td class="r">1.68×</td><td>compute-bound</td></tr>
+  <tr><td>ViT</td><td class="r">1.23×</td><td>대체로 compute-bound</td></tr>
+  <tr><td>Expert denoise</td><td class="r">1.00×</td><td>compute 성능과 무관</td></tr>
+  <tr><td>CoC decode</td><td class="r">0.94×</td><td>compute 성능과 무관</td></tr>
+</table>
+
+<div class="callout">
+  <strong>H3 검증.</strong> 연산 성능이 1.68배 차이 나는 두 칩에서 <strong>expert denoising은 1.00배, CoC decode는 0.94배</strong>로 사실상 동일하다. 두 단계는 compute가 아니라 <strong>메모리 대역폭</strong>에 묶여 있다. 이 둘이 합쳐 전체 latency의 <strong>56~66%</strong>다.
+</div>
+
+<h3>3.5 decode 비용은 CoC 길이에 선형이다</h3>
+<figure>
+  <img src="PLOT::prof::decode_vs_coclen.png" alt="decode vs coc length">
+  <figcaption>토큰당 비용이 두 하드웨어에서 거의 같다: Blackwell 32.9 ms/token, Ada 33.4 ms/token (r = 0.996 / 0.990, n=24씩).</figcaption>
+</figure>
+<p>매 토큰마다 VLM 가중치 8.22B(bf16 = 16.4 GB)를 다시 읽는 구조이므로, 토큰당 비용은 연산 성능이 아니라 가중치 바이트 수에 비례한다. 하드웨어가 달라도 값이 같은 것이 이를 뒷받침한다.</p>
+
+<h3>3.6 추정 대비 실측</h3>
+<figure>
+  <img src="PLOT::prof::estimate_vs_measured.png" alt="estimate vs measured">
+  <figcaption>왼쪽: FLOPs 추정은 정확했다(합계 오차 2.5%). 오른쪽: 같은 추정에서 유도한 latency 비중은 크게 틀렸다.</figcaption>
+</figure>
+<table>
+  <tr><th>단계</th><th class="r">추정 latency 비중</th><th class="r">실측 (Ada)</th><th class="r">차이</th></tr>
+  <tr><td>VLM prefill</td><td class="r">57.9%</td><td class="r">29.4%</td><td class="r">−28.5%p</td></tr>
+  <tr><td>CoC decode</td><td class="r">26.1%</td><td class="r">31.7%</td><td class="r">+5.6%p</td></tr>
+  <tr><td>Expert denoise</td><td class="r">3.6%</td><td class="r">25.0%</td><td class="r"><strong>+21.4%p</strong></td></tr>
+  <tr><td>ViT</td><td class="r">12.5%</td><td class="r">10.8%</td><td class="r">−1.7%p</td></tr>
+</table>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+
+<h3>4.1 틀린 것은 FLOPs 모델이 아니라 FLOPs→latency 변환이었다</h3>
+<p>단계별 FLOPs 추정은 2.5% 오차로 맞았다. 틀린 것은 모든 단계에 동일한 실효 처리량을 가정한 부분이다. 실제로는 단계 간 실효 처리량이 <strong>366배</strong> 벌어진다. 원인은 arithmetic intensity다. prefill은 3,086개 토큰이 같은 가중치를 공유해 한 번 읽은 가중치로 많은 연산을 하지만, decode는 토큰 1개당 전체 가중치를 한 번씩 읽고, expert denoising은 64개 토큰이 10번 순차로 가중치를 다시 읽는다.</p>
+<p>따라서 <strong>"파라미터 수 × 토큰 수"로 압축 우선순위를 정하는 것은 이 모델에서 체계적으로 틀린다.</strong> 순차 스텝이 많은 단계의 비용을 구조적으로 과소평가하기 때문이다.</p>
+
+<h3>4.2 압축 레버의 재평가</h3>
+<p>측정된 스케일링 특성(prefill은 토큰 수와 depth에 비례, decode는 VLM 가중치 바이트에 비례, expert는 step 수와 expert 가중치 바이트에 비례)을 적용해 다시 계산했다. <strong>아래 표는 측정이 아니라 측정에 기반한 재추정이며, 정확도 손실은 전혀 반영돼 있지 않다.</strong></p>
+<table>
+  <tr><th>시나리오 (Blackwell 기준)</th><th class="r">ViT</th><th class="r">prefill</th><th class="r">decode</th><th class="r">expert</th><th class="r">합계 ms</th><th class="r">배속</th></tr>
+  <tr><td>baseline</td><td class="r">133</td><td class="r">265</td><td class="r">508</td><td class="r">378</td><td class="r">1,336</td><td class="r">1.00×</td></tr>
+  <tr><td>vision token 4× 축소</td><td class="r">133</td><td class="r">79</td><td class="r">508</td><td class="r">340</td><td class="r">1,114</td><td class="r">1.20×</td></tr>
+  <tr><td>expert step 10→4</td><td class="r">133</td><td class="r">265</td><td class="r">508</td><td class="r">151</td><td class="r">1,111</td><td class="r">1.20×</td></tr>
+  <tr><td>vocab 정리</td><td class="r">133</td><td class="r">265</td><td class="r">440</td><td class="r">378</td><td class="r">1,270</td><td class="r">1.05×</td></tr>
+  <tr><td><strong>VLM depth 36→12 + 재배선</strong></td><td class="r">133</td><td class="r">88</td><td class="r">223</td><td class="r">378</td><td class="r">876</td><td class="r"><strong>1.53×</strong></td></tr>
+  <tr><td>전부 결합</td><td class="r">133</td><td class="r">26</td><td class="r">155</td><td class="r">140</td><td class="r">508</td><td class="r"><strong>2.63×</strong></td></tr>
+</table>
+
+<div class="callout">
+  <strong>이전 판단의 정정 두 가지.</strong>
+  <ul style="margin-bottom:0">
+    <li><strong>vision token 축소를 1순위로 꼽은 것은 틀렸다.</strong> prefill이 전체의 20%뿐이라 4배 축소해도 1.20×에 그친다. 추정 단계에서는 prefill이 78%라고 봤기 때문에 1.7×로 계산했다.</li>
+    <li><strong>depth pruning의 이득은 prefill이 아니라 decode에서 나온다.</strong> 1.53× 중 prefill 기여는 177 ms, decode 기여는 285 ms다. depth를 줄이면 매 decode 토큰이 읽는 가중치 바이트가 줄기 때문이다. 이는 depth pruning의 가치를 <em>높이는</em> 방향의 정정이다.</li>
+  </ul>
+</div>
+
+<h3>4.3 연구 방향에 대한 함의</h3>
+<ul>
+  <li><strong>cache-functional pruning 방향은 유지된다.</strong> 오히려 근거가 강해졌다. VLM 가중치를 줄이는 것이 전체 latency의 38%를 차지하는 decode에 직접 작용하고, 이는 단일 레버 중 가장 크다.</li>
+  <li><strong>expert step 축소는 방법론적 신규성은 없지만 병목의 28%를 쥐고 있다.</strong> 논문의 기여로 삼을 수는 없어도, 최종 시스템 수치에는 반드시 포함해야 하며 "왜 이 축을 다루지 않았는가"라는 질문을 방어해야 한다.</li>
+  <li><strong>2.63× 결합 시나리오에서 ViT가 남은 latency의 26%가 된다.</strong> ViT는 아직 분석 대상에 넣지 않았다.</li>
+  <li><strong>CoC 길이가 latency를 직접 지배한다.</strong> 토큰당 33 ms이므로 CoC를 16→8 토큰으로 줄이면 그것만으로 264 ms(20%)가 빠진다. 앞선 분석에서 expert가 CoC에 주는 attention mass가 2.3%에 불과했던 점과 묶으면, <strong>"CoC 길이 대비 trajectory 품질" 곡선</strong>은 비용이 매우 낮은 반면 얻는 것이 큰 실험이다.</li>
+</ul>
+
+<h2><span class="num">5.</span>정정 사항</h2>
+<div class="callout">
+  <strong>이전 보고서의 "nvidia-smi를 신뢰할 수 없다"는 서술은 오류였다.</strong> 실제 원인은 <code>CUDA_DEVICE_ORDER</code>가 설정되지 않아 CUDA 런타임은 속도순, <code>nvidia-smi</code>는 PCI 버스순으로 GPU를 나열한 것이었다. 이 머신에서는 torch 0–3 = nvidia-smi 4–7 (Ada), torch 4–7 = nvidia-smi 0–3 (Blackwell)로 두 순서가 완전히 어긋난다. UUID 대조로 확정했다. 비어 보이는 GPU에서 18 GiB만 할당됐던 것은 실제로 다른 프로세스가 점유한 카드를 잡고 있었기 때문이며, <code>nvidia-smi</code>의 보고는 정확했다. <code>run_retry.sh</code>에 <code>CUDA_DEVICE_ORDER=PCI_BUS_ID</code>를 고정해 재발을 막았다.
+</div>
+
+<h2><span class="num">6.</span>다음 단계</h2>
+<ol>
+  <li><strong>coupling shift probe</strong> — expert layer <em>i</em>가 VLM layer <em>i+k</em>의 캐시를 읽도록 재배선하고 minADE 저하를 측정. 학습 없이 forward pass만으로 depth 재배선 가능성을 판정한다.</li>
+  <li><strong>CoC 길이-품질 곡선</strong> — 비용 대비 정보량이 가장 큰 실험. 토큰당 33 ms라는 실측 기울기가 있으므로 latency 환산이 바로 된다.</li>
+  <li><strong>평가 프로토콜 확정</strong> — 지금은 open-loop minADE뿐이다. 압축의 정확도 비용을 논증하려면 이것으로 부족하다.</li>
+  <li><strong>ViT 스코프 편입 여부 결정</strong> — 압축 후 남은 비용의 26%.</li>
+</ol>
+
+<h2><span class="num">7.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/profile_stages.py</code> — 단계별 측정</li>
+  <li><code>experiments/head_analysis/aggregate_profile.py</code> — 4개 런 집계 및 플롯</li>
+  <li><code>experiments/head_analysis/launch_profile.sh</code> — 다중 GPU 병렬 실행</li>
+  <li><code>experiments/head_analysis/build_report.py</code> — 플롯 인라인 삽입</li>
+  <li><code>outputs/profile_{blackwell,ada}_s{0,13}/</code> — 런별 <code>config.json</code>, <code>metrics.json</code>, <code>summary.txt</code></li>
+  <li><code>outputs/profile_summary/</code> — 통합 <code>metrics.json</code>, <code>summary.txt</code>, <code>plots/</code></li>
+</ul>
+
+</div>
+</body>
+</html>

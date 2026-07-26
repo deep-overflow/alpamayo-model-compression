@@ -1,0 +1,19 @@
+{
+  "n_clips": 2,
+  "per_clip": [
+    {
+      "coc_len": 10,
+      "prompt_len": 3086,
+      "fm_loss": 0.11687777042388917,
+      "peak_gb": 40.533480167388916,
+      "clip_id": "14cafa62-e6da-47ae-a524-1defd022b222"
+    },
+    {
+      "coc_len": 16,
+      "prompt_len": 3086,
+      "fm_loss": 0.0946768805384636,
+      "peak_gb": 40.54362964630127,
+      "clip_id": "33ee92f2-77fc-4bbf-80e6-09928b9c6c0f"
+    }
+  ]
+}

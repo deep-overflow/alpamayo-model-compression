@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Head Pruning을 위한 Attention 분석 계획</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 860px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin: 2.75rem 0 1rem;
+    padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--bg-code);
+    padding: 0.12em 0.35em;
+    border-radius: 4px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th {
+    background: var(--bg-code);
+    text-align: left;
+    font-weight: 600;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  .callout {
+    background: #FBF0EB;
+    border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block;
+    background: var(--bg-code);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    letter-spacing: 0.03em;
+  }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.88rem;
+  }
+  .flow .step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.85rem;
+  }
+  .flow .arrow { color: var(--accent); font-weight: 700; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 분석 계획</div>
+  <h1>Head Pruning을 위한 Attention 분석 계획</h1>
+  <div class="meta">
+    2026-07-19 &middot; 대상 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    &middot; 환경 <code>/workspace/alpamayo1.5/.venv</code>
+    &middot; 선행 분석: <code>2026-07-18_alpamayo1.5-model-structure.html</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>배경과 문제 설정</h2>
+<p>Alpamayo 1.5의 head pruning은 일반적인 LLM head pruning과 두 가지 점에서 다르다.</p>
+<ul>
+  <li><strong>Head가 결합된 두 개의 stack에 존재</strong>: VLM decoder(36 layer &times; 32 Q head / 8 KV head)와 action expert(36 layer &times; 16 Q head / 8 KV head). Expert는 VLM의 KV cache를 layer별 1:1로 직접 읽는다.</li>
+  <li><strong>추론이 두 단계로 구성</strong>: (1) autoregressive CoC 생성, (2) 그 KV cache 위에서 10회의 flow matching denoising. Head마다 기여하는 단계가 다르다.</li>
+</ul>
+<p>이 구조를 무시한 head importance 분석은 잘못된 순위를 만든다. 따라서 <strong>각 head를 실제로 기여하는 단계의 loss로 평가</strong>하는 것을 핵심 원칙으로 삼는다.</p>
+
+<h2><span class="num">2.</span>핵심 원칙: head 유형별 평가 신호</h2>
+<table>
+  <thead><tr><th>Head 유형</th><th>개수</th><th>영향 범위</th><th>평가 loss</th></tr></thead>
+  <tbody>
+    <tr><td>VLM Q head</td><td>36 &times; 32 = 1,152</td><td>CoC 생성만 (출력이 cache에 저장되지 않음)</td><td>CoC token NLL</td></tr>
+    <tr><td>VLM KV head</td><td>36 &times; 8 = 288</td><td>CoC 생성 + expert가 읽는 KV cache <strong>양쪽</strong></td><td>CoC NLL + flow matching MSE 합산</td></tr>
+    <tr><td>Expert Q head</td><td>36 &times; 16 = 576</td><td>Trajectory denoising만</td><td>Flow matching MSE</td></tr>
+  </tbody>
+</table>
+<p>최종 지표인 minADE는 개별 head 점수 산정이 아니라 <strong>pruning 후 검증</strong>에만 사용한다. 사용 loss 신호는 세 가지: (1) CoC token NLL(모델 자체 rollout에 대한 teacher forcing), (2) flow matching MSE(expert의 vector field 예측 오차), (3) minADE(검증 전용).</p>
+
+<h2><span class="num">3.</span>방법 1 — Attention map 통계 분석 <span class="tag">저비용 &middot; 해석용 &middot; 최우선 실행</span></h2>
+<p>Calibration clip 약 50개(<code>notebooks/clip_ids.parquet</code>에서 선정)에 대해 1회 forward를 수행한다. 모든 <code>self_attn</code>에 hook을 걸어 <strong>q_norm/k_norm과 RoPE 적용 이후의</strong> q/k를 받아 attention 확률을 chunk 단위로 재계산한다(flash attention은 attention weight를 노출하지 않으므로 VLM은 eager/sdpa로 실행). 전체 map은 저장하지 않고 head별 스칼라 통계만 누적한다.</p>
+<h3>수집 통계</h3>
+<ul>
+  <li><strong>Modality별 attention 질량</strong>: 각 head의 attention이 vision token / 텍스트 / trajectory history token(48개) / attention sink(첫 token)에 배분되는 비율. Input ids에서 token 유형 구간을 복원하여 mask를 구성한다. Vision grounding head, 언어 head, ego-motion head, sink head의 기능적 분류가 가능하다 (sink 위주 head는 고전적인 pruning 후보).</li>
+  <li><strong>Attention entropy</strong> (집중형 vs 분산형) 및 <strong>평균 attention 거리</strong> (local vs global).</li>
+  <li><strong>Head output norm</strong>: o_proj 이전 head별 출력의 평균 norm — 비용이 거의 없는 1차 importance 지표.</li>
+  <li><strong>Expert 전용 분석</strong>: expert 각 head의 attention이 자신의 diffusion token 64개와 cache 구간(vision / CoC 텍스트 / trajectory history)에 배분되는 비율. 이는 동시에 <strong>expert가 실제로 어떤 VLM layer의 cache를 사용하는지</strong>를 보여주어, 이후 layer pruning 결정의 직접적 근거가 된다.</li>
+  <li><strong>중복성 분석</strong>: layer 내 head 쌍별 attention 분포 유사도(Jensen&ndash;Shannon)와 head output 유사도(CKA). 개별적으로 중요해 보여도 중복인 head는 pruning 가능하다.</li>
+</ul>
+<p>산출물: 통계별 36&times;32 (VLM), 36&times;16 (expert) heatmap.</p>
+
+<h2><span class="num">4.</span>방법 2 — 1차 Taylor head importance <span class="tag">핵심 ranking &middot; 권장</span></h2>
+<p>Michel et al. / Molchanov 방식. 각 head 출력에 gate 변수 <code>&xi;_h = 1</code>을 곱해 두고, calibration set에 대해 importance <code>I_h = |&xi;_h &middot; &part;L/&part;&xi;_h|</code>를 누적한다 (등가적으로 head output과 그 gradient의 내적 절댓값). <strong>Backward 1회로 모든 head의 점수를 동시에</strong> 얻는다는 것이 mask ablation 대비 결정적 장점이다.</p>
+<ul>
+  <li>VLM head: CoC NLL을 backprop. Expert head: flow matching MSE를 backprop (token 64개뿐이라 저렴).</li>
+  <li><strong>VLM KV head</strong>: 두 loss의 합산 점수. KV cache를 computation graph에 유지하면 flow matching loss의 gradient가 cache를 통해 VLM의 K/V로 흘러 들어간다 — 이 cross-model 결합을 정량화하는 것이 이 분석의 차별점이다.</li>
+  <li>실행 가능성: optimizer state 불필요, batch 1 + gradient checkpointing이면 48GB &times; 4 GPU에서 여유 있음.</li>
+</ul>
+
+<h2><span class="num">5.</span>방법 3 — Mask ablation 검증 <span class="tag">ground truth &middot; 부분 실행</span></h2>
+<p>Head를 0으로 마스킹하고 실제 &Delta;loss를 측정한다. 전수 조사는 1,728 head &times; clip 수만큼의 forward가 필요하므로 다음과 같이 축소한다.</p>
+<ol>
+  <li>VLM은 <strong>KV group 단위</strong>(36&times;8 = 288회)로 먼저 ablation.</li>
+  <li>개별 head ablation은 Taylor ranking의 상위/하위 10% 구간에 대해서만 수행.</li>
+  <li>Expert head는 전수 조사 가능 — 각 시도가 cache된 prompt 위에서 denoising 10회만 재실행하면 되므로 저렴.</li>
+</ol>
+<p>방법 1/2/3의 ranking 간 Spearman 상관을 확인하고, Taylor가 ablation과 일치하면 전체 규모에서는 Taylor 점수를 신뢰한다.</p>
+
+<h2><span class="num">6.</span>처음부터 반영할 구조적 제약</h2>
+<ul>
+  <li><strong>GQA 단위</strong>: VLM Q head는 자유롭게 pruning 가능(KV group당 4개). KV head를 제거하려면 해당 group의 Q head 처리와 <strong>expert의 k_proj/v_proj 대응 수정</strong>이 함께 필요하다. 점수는 두 단위(개별 Q head / KV group) 모두로 산출한다.</li>
+  <li><strong>DeepStack layer 0&ndash;2</strong>: vision feature가 residual stream에 주입되는 특수 layer이므로 별도 표기하고 무조건적 pruning 대상에서 제외한다. Layer 0의 sink head도 동일.</li>
+  <li><strong>재현성</strong>: 고정 seed, 동일 clip 집합, <code>num_traj_samples</code> 고정. 최종 minADE 검증용 held-out clip은 분석에 사용하지 않는다.</li>
+</ul>
+
+<h2><span class="num">7.</span>실행 계획</h2>
+<div class="flow">
+  <span class="step">Phase A &middot; 통계 수집</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">Phase B &middot; Taylor importance</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">Phase C &middot; Ablation 검증 + pruning 곡선</span>
+</div>
+<table>
+  <thead><tr><th>Phase</th><th>내용</th><th>산출물</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>A</strong></td>
+      <td>Hook 기반 capture 1 pass로 &sect;3의 모든 통계 수집. A와 B는 동일한 capture 인프라를 공유하므로 함께 구현.</td>
+      <td>Head별 통계 heatmap, 기능적 head 분류표</td>
+    </tr>
+    <tr>
+      <td><strong>B</strong></td>
+      <td>Loss 신호별 Taylor importance 산출 (CoC NLL / FM MSE / KV head는 합산).</td>
+      <td>Head importance ranking (Q head 단위, KV group 단위)</td>
+    </tr>
+    <tr>
+      <td><strong>C</strong></td>
+      <td>축소된 ablation으로 ranking 교차 검증 후, 하위 head를 10 / 25 / 50% 비율로 pruning하여 held-out clip에서 minADE 곡선 측정.</td>
+      <td>Ranking 일치도(Spearman), pruning 비율&ndash;minADE 곡선</td>
+    </tr>
+  </tbody>
+</table>
+<p>각 실험은 <code>outputs/&lt;exp_id&gt;/</code>에 <code>config.json</code> / <code>metrics.json</code> / <code>summary.txt</code> / plot(<code>.png</code>)을 저장하고, 최종 결과는 Claude 스타일 HTML 보고서로 정리한다.</p>
+
+<div class="callout">
+  <strong>권장 시작점</strong>: Phase A + B 동시 착수. A는 해석 가능성(head의 기능 분류)을, B는 실행 가능한 pruning ranking을 제공하며 두 phase는 capture 코드를 공유한다. 승인 시 세부 구현 계획을 작성한 뒤 구현에 들어간다.
+</div>
+
+</div>
+</body>
+</html>

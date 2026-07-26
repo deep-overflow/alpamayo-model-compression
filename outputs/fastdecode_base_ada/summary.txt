@@ -1,0 +1,4 @@
+graphed decode bench (baseline, 3 clips, cap=3456, capture 774 ms)
+TF replay  eager  34.34 ms/tok   graphed  26.89 ms/tok
+equivalence  max|dlogit| 0.312   max|dNLL| 0.00220
+rollout wall  stock  1176.7 ms ([10, 16, 16])   graphed  1062.5 ms ([16, 8, 15])

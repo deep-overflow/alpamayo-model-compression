@@ -1,0 +1,4 @@
+graphed decode bench (slim outputs/slim_integrated_mag, 3 clips, cap=3456, capture 770 ms)
+TF replay  eager  32.41 ms/tok   graphed  19.10 ms/tok
+equivalence  max|dlogit| 1.094   max|dNLL| 0.01343
+rollout wall  stock  3170.2 ms ([64, 12, 74])   graphed  2866.3 ms ([123, 148, 109])

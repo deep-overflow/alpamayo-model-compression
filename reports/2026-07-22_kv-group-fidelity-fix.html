@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV Group Ablation 충실성 검증</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 검증 및 정정</div>
+  <h1>KV Group Ablation 충실성 검증 &mdash; &ldquo;cache &minus;12.5% 무료&rdquo; 주장의 철회</h1>
+  <div class="meta">
+    2026-07-22 &middot; 평가 80 clips (val 50 + 회전 30), K=8
+    &middot; 코드 <code>experiments/head_analysis/run_kvfix.py</code>
+    &middot; 산출물 <code>outputs/kvfix_s{0,40}/</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>발견된 문제</h2>
+<p>KV group <em>h</em>의 완전한 제거는 정의상 양 tower에 걸친다: cache 차원이 공유되므로 group <em>h</em>를 cache에서 지우면 VLM Q head 4개와 <strong>expert Q head 2개</strong>가 모두 key를 잃는다(expert의 own-token k/v도 같은 차원이라 함께 사라진다). 그런데 기존의 모든 KV config는 <strong>VLM 쪽 4개만</strong> 마스킹했고, expert는 그 group의 cache를 계속 읽고 있었다. 즉 &ldquo;KV cache &minus;12.5%&rdquo;라는 이득 주장은 측정되지 않은 배포 형태에 대한 것이었다.</p>
+
+<h2><span class="num">2.</span>검증 결과 (사실)</h2>
+<p class="meta">baseline minADE 0.8910. 선택은 기존과 동일(trajectory Taylor, layer별 최약 group).</p>
+<table>
+  <tr><th>config</th><th>차단 범위</th><th class="r">&Delta;minADE</th><th class="r">95% CI</th><th class="r">회전</th></tr>
+  <tr><td>kv1_vlm</td><td>VLM Q head 4/group (기존 방식)</td><td class="r">+0.002</td><td class="r">[&minus;0.056, +0.054]</td><td class="r">&minus;0.010</td></tr>
+  <tr><td>kv1_expert</td><td>expert Q head 2/group만</td><td class="r">+0.053</td><td class="r">[+0.003, +0.108]*</td><td class="r">+0.023</td></tr>
+  <tr><td><strong>kv1_both</strong></td><td><strong>양쪽 (= 충실한 완전 제거)</strong></td><td class="r"><strong>+0.079</strong></td><td class="r"><strong>[+0.002, +0.151]*</strong></td><td class="r">+0.053</td></tr>
+  <tr><td>kv2_both</td><td>양쪽, group 2개</td><td class="r">+0.342</td><td class="r">[+0.155, +0.538]*</td><td class="r">+0.669*</td></tr>
+</table>
+
+<h2><span class="num">3.</span>정정된 결론</h2>
+<div class="callout">
+  <ul style="margin-bottom:0">
+    <li><strong>철회:</strong> &ldquo;KV group 1개/layer 제거는 무료이며 KV cache가 12.5% 줄어든다.&rdquo; 충실한 ablation에서 완전 제거는 <strong>+0.079의 marginal regression</strong>이다(CI가 0을 배제).</li>
+    <li><strong>유지되는 사실:</strong> VLM 쪽 Q head 4개/layer(KV 점수 기준 선택)는 무료로 제거된다 &mdash; 다만 이는 cache 절감이 없는 <strong>기준-유도 Q head pruning</strong>이다.</li>
+    <li><strong>재분류:</strong> cache &minus;12.5%는 &ldquo;무료&rdquo;가 아니라 <strong>+0.08m을 대가로 하는 유료 옵션</strong>이다. 배치 처리에서 cache가 병목이면 여전히 합리적 선택일 수 있다.</li>
+    <li><strong>비용의 위치:</strong> 비용의 대부분은 expert 쪽 접근 상실에서 온다(+0.053*). trajectory-Taylor의 최약 group조차 expert에게는 값어치가 있었다 &mdash; cache 텐서에 대한 1차 Taylor가 실제 제거 효과를 과소평가하는 사례다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">4.</span>파급 효과 (수치 정정)</h2>
+<table>
+  <tr><th>항목</th><th class="r">기존 표기</th><th class="r">정정</th></tr>
+  <tr><td>통합 config (trajectory 전용) 제거 가능 파라미터</td><td class="r">3.24B (29.3%)</td><td class="r"><strong>3.20B (28.9%)</strong> &mdash; k/v projection 37.8M은 제거 불가</td></tr>
+  <tr><td>CoC+trajectory 유지 config</td><td class="r">1.97B (17.8%)</td><td class="r"><strong>1.93B (17.4%)</strong></td></tr>
+  <tr><td>reasoning 유지의 가격</td><td class="r">1.27B</td><td class="r">1.27B (변화 없음)</td></tr>
+  <tr><td>KV cache 절감</td><td class="r">&minus;12.5% 무료</td><td class="r"><strong>0% (무료 구성)</strong>; &minus;12.5%는 +0.08m 유료 옵션</td></tr>
+  <tr><td>예상 latency</td><td class="r">1.37&times; / 1.21&times;</td><td class="r">변화 없음 (37.8M은 무시 가능)</td></tr>
+</table>
+<p>측정된 minADE/NLL 수치 자체는 모두 유효하다 &mdash; 마스킹된 config가 실측된 그대로다. 정정되는 것은 그 config가 <strong>배포 시 무엇을 절감해 주는가에 대한 해석</strong>(cache 절감 없음, k/v projection 유지)이다.</p>
+
+</div>
+</body>
+</html>

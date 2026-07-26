@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Head Pruning Attention 분석 결과</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Head Pruning을 위한 Attention 분석 결과 (Phase A + B)</h1>
+  <div class="meta">
+    2026-07-20 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; calibration 50 clips
+    &middot; 코드 <code>experiments/head_analysis/</code> (branch <code>head-attention-analysis</code>)
+    &middot; 산출물 <code>outputs/head_analysis_v1/</code>
+    &middot; 계획: <code>2026-07-19_head-pruning-attention-analysis-plan.html</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>목적</h2>
+<p>승인된 분석 계획의 Phase A(attention 통계)와 Phase B(Taylor importance)를 실행하여 다음 가설을 검증했다.</p>
+<ul>
+  <li>Head importance는 균일하지 않으며, 낮은 importance의 head 집단(pruning 후보)이 존재한다.</li>
+  <li>VLM head와 expert head는 서로 다른 추론 단계(CoC 생성 vs trajectory denoising)에 기여하므로, 단계별 loss로 따로 평가해야 한다.</li>
+  <li>Expert가 VLM KV cache를 실제로 어떻게 사용하는지가 layer/KV pruning의 제약을 결정한다.</li>
+</ul>
+
+<h2><span class="num">2.</span>Setup</h2>
+<table>
+  <tbody>
+    <tr><th>모델</th><td><code>nvidia/Alpamayo-1.5-10B</code> (bf16), VLM sdpa/eager 전환, expert eager</td></tr>
+    <tr><th>Calibration</th><td>50 clips (seed 42로 <code>clip_ids.parquet</code> 1,181개 중 무작위 추출, held-out 12개 별도 예약), <code>t0_us</code>=5.1s</td></tr>
+    <tr><th>Rollout</th><td>temperature 0.6, top_p 0.98, <code>num_traj_samples</code>=1, max 256 tokens, clip별 고정 seed</td></tr>
+    <tr><th>Phase A</th><td>Teacher-forced eager forward에서 attention 확률 재계산, head별 스칼라 통계만 누적</td></tr>
+    <tr><th>Phase B</th><td>Pass 1: CoC NLL backward (Q-head gate + KV v-gate) / Pass 2: flow matching MSE 8 timestep backward (expert Q gate + cache k/v leaf Taylor)</td></tr>
+    <tr><th>하드웨어</th><td>RTX PRO 5000 Blackwell 48GB &times; 1, 클립당 약 22초, 전체 약 20분</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">3.</span>Results (Facts)</h2>
+
+<h3>3.1 실행 요약</h3>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">50 / 50</div><div class="l">클립 성공</div></div>
+  <div class="kpi"><div class="v">1.56 m</div><div class="l">mean minADE (median 1.18)</div></div>
+  <div class="kpi"><div class="v">0.188</div><div class="l">mean CoC NLL</div></div>
+  <div class="kpi"><div class="v">0.239</div><div class="l">mean FM MSE</div></div>
+  <div class="kpi"><div class="v">15.1</div><div class="l">mean CoC 길이 (tokens, 8&ndash;36)</div></div>
+</div>
+<div class="note">minADE는 <code>num_traj_samples=1</code> 단일 샘플 기준이므로 릴리즈 문서의 다중 샘플 수치보다 높게 나오는 것이 정상이다. prompt 길이는 전 클립 동일한 3,086 tokens (vision 약 2,600 + traj history 48 + 텍스트).</div>
+
+<h3>3.2 Phase A — VLM attention의 3-band 구조</h3>
+<figure>
+  <img src="PLOT::vlm_modality_mass.png" alt="VLM attention mass by key region">
+  <figcaption>CoC 생성 query 기준, 각 head의 attention이 어느 key 영역으로 가는지 (좌측부터 vision / text&middot;CoC / sink / trajectory history). Layer 0&ndash;6은 text 위주, 7&ndash;16은 sink 위주, 17&ndash;35는 vision 위주의 뚜렷한 3-band 구조.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT::vlm_sink_entropy.png" alt="VLM sink mass and entropy">
+  <figcaption>전체 query 기준 sink mass(좌)와 정규화 entropy(우). Sink mass &gt; 0.5인 head 181개(1,152개 중 15.7%)가 <strong>전부 layer 7&ndash;16 band에</strong> 몰려 있다 (layer 0&ndash;6: 0개, 17&ndash;35: 0개). 같은 band에서 entropy도 최저.</figcaption>
+</figure>
+<ul>
+  <li>Trajectory history token(48개)으로 가는 attention은 평균 2.7%로 작지만 특정 head(최대 45%)에 집중 — ego-motion 전담 head가 소수 존재한다.</li>
+  <li>카메라별 CoC-query attention mass: cross-left 20.1%, front-wide 9.3%, front-tele 6.4%, cross-right 3.4%.</li>
+  <li>중복성: 레이어 내 head output의 평균 off-diagonal CKA는 0.102로 낮으나, <strong>layer 35는 0.424</strong>로 눈에 띄게 높다 (최저는 layer 9의 0.038).</li>
+</ul>
+<figure>
+  <img src="PLOT::redundancy.png" alt="within-layer head redundancy">
+  <figcaption>레이어 내 head 중복성. 마지막 layer 35에서 head output CKA가 급등 — 마지막 레이어 head들은 서로 비슷한 일을 한다.</figcaption>
+</figure>
+
+<h3>3.3 Phase A — Expert의 VLM cache 사용 패턴</h3>
+<figure>
+  <img src="PLOT::expert_cache_usage.png" alt="expert cache usage">
+  <figcaption>좌: expert 각 레이어의 attention mass 배분. 우: flow matching loss의 VLM cache에 대한 layer별 Taylor importance.</figcaption>
+</figure>
+<ul>
+  <li>Expert attention의 평균 72.6%가 <strong>cache의 vision token</strong>으로, 19.0%가 텍스트 영역으로 간다. 자신의 diffusion token 64개에는 <strong>3.5%</strong>만 배분된다 (마지막 layer 35에서만 12.4%로 상승).</li>
+  <li>FM-loss cache Taylor의 <strong>92.3%가 VLM layer 16&ndash;35 구간</strong>에 집중된다. Layer 0&ndash;15의 cache 기여는 합쳐서 7.7%.</li>
+  <li>Layer별 최대 기여는 layer 22 (8.6%), layer 21 (7.9%).</li>
+</ul>
+
+<h3>3.4 후속 검증 — 프롬프트 텍스트와 생성 CoC의 분리 <span class="tag">보정</span></h3>
+<div class="callout">
+  <strong>초판 보고서 정정</strong>: 위 3.3의 곡선에서 &ldquo;text/CoC&rdquo;로 표기한 영역은 <strong>프롬프트 텍스트와 생성된 CoC를 합친 값</strong>이었다. 두 영역의 토큰 수가 28배 차이 나기 때문에(프롬프트 텍스트 416개 vs CoC 약 15개, vision 2,880개) 이 곡선은 사실상 프롬프트 텍스트를 보여주고 있었다. 별도 실험(<code>outputs/expert_per_clip_v1</code>, 동일 50 clips)으로 두 영역을 분리 재측정했다.
+</div>
+<figure>
+  <img src="PLOT2::region_split.png" alt="prompt text vs CoC split">
+  <figcaption>좌: 6개 영역으로 분리한 expert attention mass (중앙값, 10&ndash;90% 구간 밴드). 우: 기존에 합쳐져 있던 두 영역만 확대. 초반 layer의 큰 텍스트 mass는 전부 프롬프트 텍스트이며, 생성된 CoC는 전 구간에서 낮게 유지된다.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>영역</th><th class="r">토큰 수</th><th class="r">전체 평균 mass</th><th class="r">Layer 0 mass</th></tr></thead>
+  <tbody>
+    <tr><td>Vision</td><td class="r">2,880</td><td class="r">0.7255</td><td class="r">0.1978</td></tr>
+    <tr><td>프롬프트 텍스트</td><td class="r">416</td><td class="r">0.1667</td><td class="r"><strong>0.7320</strong></td></tr>
+    <tr><td>생성된 CoC</td><td class="r">~15</td><td class="r"><strong>0.0230</strong></td><td class="r"><strong>0.0374</strong></td></tr>
+    <tr><td>Trajectory history</td><td class="r">48</td><td class="r">0.0393</td><td class="r">0.0300</td></tr>
+    <tr><td>자신의 diffusion token</td><td class="r">64</td><td class="r">0.0347</td><td class="r">0.0017</td></tr>
+    <tr><td>Sink</td><td class="r">1</td><td class="r">0.0109</td><td class="r">0.0011</td></tr>
+  </tbody>
+</table>
+<p>Layer 0에서 기존 &ldquo;text/CoC&rdquo; 값 0.769를 분해하면 <strong>프롬프트 텍스트 95.1%, 생성 CoC 4.9%</strong>다. 즉 expert가 초반 layer에서 많이 참조하는 것은 모델이 추론한 내용이 아니라 시스템 지시문&middot;카메라 라벨 같은 <strong>고정된 프롬프트</strong>다.</p>
+<figure>
+  <img src="PLOT2::coc_len_vs_mass.png" alt="CoC length vs CoC attention mass">
+  <figcaption>CoC attention mass는 생성된 CoC 길이와 거의 완전히 비례한다 (Pearson r = +0.96). 즉 특정 클립이 CoC를 &ldquo;더 주목&rdquo;하는 것이 아니라, CoC token이 많을수록 mass가 비례해 늘어날 뿐이다. Layer-0 CoC mass 상위 클립은 모두 CoC가 긴 클립(36/32/24 tokens)이었고, 하위는 모두 짧은 클립(8&ndash;10 tokens)이었다.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT2::per_token_mass.png" alt="per-token normalized attention">
+  <figcaption>영역별 토큰 수로 나눈 per-token attention (로그 스케일). Token 하나당으로 보면 CoC는 vision보다 약 8&ndash;10배 높은 attention을 받는다. 총 mass가 작은 것은 선호도가 낮아서가 아니라 <strong>CoC token 자체가 적기 때문</strong>이다.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT2::layer0_per_clip.png" alt="per-clip layer 0 breakdown">
+  <figcaption>클립 50개 각각의 layer-0 영역 분해 (CoC mass 내림차순). 클립 간 편차가 매우 작고(프롬프트 텍스트 per-clip sd 0.018), 특이 샘플로 인한 왜곡은 없다.</figcaption>
+</figure>
+
+<h3>3.5 Phase B — Taylor head importance</h3>
+<figure>
+  <img src="PLOT::taylor_vlm_q.png" alt="VLM Q-head Taylor importance">
+  <figcaption>VLM Q-head importance (CoC NLL). 중후반 layer 18&ndash;24에 hotspot이 있고 (상위 5개 레이어: 24, 23, 19, 18, 21), 초기 layer 1&ndash;4가 가장 약하다. 최상위 head: L24-H25, L23-H9, L24-H27.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT::taylor_kv.png" alt="KV-head importance">
+  <figcaption>KV-head importance. CoC 측(v-gate, 좌)은 layer 15&ndash;25에 넓게 분포하고, FM 측(cache Taylor, 중앙)은 layer 20&ndash;22에 강하게 집중된다 (최상위: L22-KV1, L21-KV4). 우측은 두 신호를 정규화 후 합산한 combined 점수.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT::taylor_expert_q.png" alt="expert Q-head Taylor importance">
+  <figcaption>Expert Q-head importance (FM MSE). 최종 layer 35 (H0, H13, H1)와 layer 20&ndash;22 (L22-H2/H3)에 집중. 낮은 layer는 대체로 약하다.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT::pareto.png" alt="importance concentration">
+  <figcaption>Taylor importance의 집중도 (내림차순 누적). Expert Q head가 가장 집중적이고 KV head가 가장 분산적이다.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>Head 집단</th><th class="r">50% importance</th><th class="r">90% importance</th><th class="r">하위 25%가 차지하는 비중</th></tr></thead>
+  <tbody>
+    <tr><td>VLM Q heads (1,152)</td><td class="r">상위 231개 (20%)</td><td class="r">상위 723개 (63%)</td><td class="r">4.9%</td></tr>
+    <tr><td>Expert Q heads (576)</td><td class="r">상위 82개 (14%)</td><td class="r">상위 313개 (54%)</td><td class="r">2.4%</td></tr>
+    <tr><td>VLM KV heads (288, combined)</td><td class="r">상위 70개 (24%)</td><td class="r">상위 186개 (65%)</td><td class="r">&mdash;</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">4.</span>Analysis (Opinion)</h2>
+<div class="callout">
+  <strong>핵심 발견</strong>: (1) VLM attention은 기능적으로 뚜렷한 3-band 구조(text &rarr; sink &rarr; vision)를 가지며, sink 전담 head 181개가 layer 7&ndash;16에 몰려 있다. (2) Expert는 VLM cache의 vision token을 주로 소비하며, <strong>VLM layer 0&ndash;15의 cache는 trajectory 생성에 거의 기여하지 않는다</strong> (7.7%). (3) Expert가 <strong>생성된 CoC에 배분하는 attention은 2.3%에 불과</strong>하다. (4) 하위 25% head가 전체 importance의 2&ndash;5%만 차지해 1차 pruning 여유가 상당하다.
+</div>
+<h3>Attention mass는 head 중요도의 대리 지표가 아니다</h3>
+<p>Expert head의 attention mass와 Taylor importance는 head 단위로 보면 상관이 높아 보이지만(<code>mass_own</code> vs Taylor, Spearman r = +0.705), 이는 <strong>layer 깊이라는 교란 변수</strong> 때문이다. Layer index는 Taylor(r = +0.853)와 attention mass(r = +0.932) 양쪽 모두와 강하게 상관된다. 같은 layer 내부로 한정하면 관계가 무너진다.</p>
+<table>
+  <thead><tr><th>Layer 내 비교 (36개 layer 평균)</th><th class="r">Spearman r</th></tr></thead>
+  <tbody>
+    <tr><td>Taylor vs vision attention mass (전체 mass의 72.6%를 차지하는 영역)</td><td class="r"><strong>+0.078</strong></td></tr>
+    <tr><td>Taylor vs 자신의 diffusion token mass</td><td class="r">+0.339</td></tr>
+    <tr><td>Taylor vs head output norm</td><td class="r">+0.637</td></tr>
+  </tbody>
+</table>
+<p>결정적으로 <strong>각 layer에서 attention이 가장 큰 head가 실제 Taylor 최상위 head인 경우는 36개 중 2개뿐</strong>이었다(vision mass 기준). Softmax는 합을 1로 강제하므로 할 일이 없는 head도 질량을 어딘가에 버려야 하고(sink 현상), 반대로 분산된 attention도 value&middot;o_proj를 거쳐 큰 기여를 낼 수 있다. Attention은 &ldquo;어디를 보는가&rdquo;를 알려줄 뿐 &ldquo;출력을 얼마나 바꾸는가&rdquo;를 알려주지 않는다. 따라서 Phase A는 해석용, Phase B(Taylor)는 pruning 순위 결정용으로 역할을 분리해야 한다.</p>
+<ul>
+  <li><strong>Q-head pruning 여유</strong>: 하위 25% VLM Q head(288개)가 importance의 4.9%, 하위 25% expert Q head(144개)가 2.4%만 차지한다. Taylor 1차 근사가 ablation과 일치한다면(Phase C에서 확인) 이 구간은 낮은 위험으로 제거 가능하다. Q-head pruning은 KV cache 구조를 건드리지 않으므로 cross-model 제약도 없다.</li>
+  <li><strong>Sink band(layer 7&ndash;16)의 해석</strong>: sink 전담 head는 &ldquo;attention을 주차&rdquo;하는 역할로 알려져 있어 출력 기여가 작을 가능성이 높다. 다만 sink head 제거는 softmax 질량 재배분을 일으켜 다른 head의 분포를 바꿀 수 있으므로, ablation 검증에서 이 band를 별도 그룹으로 다뤄야 한다.</li>
+  <li><strong>Layer-pair pruning 관점</strong>: expert가 layer 0&ndash;15 cache를 거의 쓰지 않는다는 것은, 이 구간에서 (VLM layer, expert layer) pair 제거 시 <em>expert 쪽 손실은 작을 것</em>임을 시사한다. 반대로 layer 20&ndash;22, 26, 30&ndash;35의 cache는 expert에 필수적이다. 단, VLM 쪽 CoC 품질 손실은 별개 문제다 — CoC용 Q-head importance는 layer 18&ndash;24가 최고라 두 신호가 겹치는 후반부는 pair로도 제거 불가.</li>
+  <li><strong>Layer 35의 이중성</strong>: expert Q-head importance 최상위가 layer 35이고, 이 layer에서만 diffusion token 자기-attention이 커진다(12.4%) — 최종 layer는 action 출력 직전의 정보 통합을 담당한다. 반면 VLM 쪽 layer 35는 head 간 CKA 0.42로 중복이 커서 VLM Q-head는 여기서 줄일 여지가 있다.</li>
+  <li><strong>CoC의 역할에 대한 재해석</strong>: expert가 생성된 CoC에 쓰는 attention은 총 2.3%지만, token 하나당으로는 vision보다 8&ndash;10배 높다. 즉 CoC token은 &ldquo;개별적으로는 밀도 높은 정보&rdquo;이되 개수가 적어 총량이 작다. 두 해석이 가능하다 — (a) CoC가 압축된 형태로 trajectory에 영향을 주거나, (b) CoC의 영향이 attention 경로가 아니라 <em>VLM이 CoC를 생성하는 과정에서 cache 자체가 갱신된 것</em>을 통해 간접 전달된다. 후자라면 CoC의 가치는 expert의 CoC-attention 크기로 측정할 수 없다. Phase C에서 CoC 구간을 마스킹한 denoising으로 구분 검증할 필요가 있다.</li>
+  <li><strong>한계</strong>: (1) Taylor는 1차 근사이며 head 간 상호작용(동시 제거 효과)을 반영하지 못한다. (2) KV-head의 CoC 측 점수는 v-gate만 반영하고 k 경로는 제외했다. (3) calibration 50 clips는 주행 시나리오 분포를 제한적으로 커버한다.</li>
+</ul>
+
+<h3>다음 단계 (Phase C)</h3>
+<ol>
+  <li>Taylor ranking 하위 10/25/50% Q-head를 실제 마스킹하고 held-out 12 clips에서 minADE / CoC NLL 곡선 측정.</li>
+  <li>KV-group 단위 ablation(288회)으로 Taylor 순위와 Spearman 상관 확인.</li>
+  <li>Sink band(layer 7&ndash;16)를 별도 그룹으로 ablation하여 질량 재배분 효과 검증.</li>
+  <li>CoC 구간을 마스킹한 denoising으로 CoC가 trajectory에 미치는 실제 인과적 기여 측정 (attention 경로 vs cache 갱신 경로 구분).</li>
+</ol>
+
+<h2><span class="num">5.</span>산출물</h2>
+<ul>
+  <li><code>outputs/head_analysis_v1/head_stats.npz</code> — 모든 head별 통계와 Taylor 점수 (29개 배열)</li>
+  <li><code>outputs/head_analysis_v1/{config,metrics}.json</code>, <code>summary.txt</code>, <code>plots/*.png</code> (9종)</li>
+  <li><code>outputs/expert_per_clip_v1/expert_per_clip.npz</code> — 영역 분리 후속 실험, 클립별 (50, 36, 16) 배열 12종 + 클립별 CoC 원문</li>
+  <li><code>experiments/head_analysis/{analysis_lib,run_analysis,make_plots,expert_per_clip,plot_expert_per_clip}.py</code>, <code>run_retry.sh</code></li>
+</ul>
+<div class="note">
+  실행 환경 참고 <span class="tag">2026-07-21 정정</span>: 당초 이 머신의 <code>nvidia-smi</code> 가용 메모리 보고를 신뢰할 수 없다고 기록했으나, 이는 오진이었다. 실제 원인은 <code>CUDA_DEVICE_ORDER</code>가 설정되지 않아 CUDA 런타임(속도순)과 <code>nvidia-smi</code>(PCI 버스순)의 GPU 인덱스가 서로 어긋난 것이다. 즉 다른 카드의 여유 메모리를 보고 있었을 뿐 <code>nvidia-smi</code>의 보고는 정확했다. 이후 <code>run_retry.sh</code>에 <code>CUDA_DEVICE_ORDER=PCI_BUS_ID</code>를 고정했다. 상세는 <code>2026-07-21_inference-stage-profiling.html</code> 5절 참고. 본 실험의 결과 수치는 영향받지 않는다(<code>reserve_gpu()</code>가 실제 예약에 성공한 장치를 선택하므로 유효한 GPU에서 실행되었다).
+</div>
+
+</div>
+</body>
+</html>

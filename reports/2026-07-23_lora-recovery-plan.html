@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoRA 복구 학습 계획 (P3 본편)</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 계획</div>
+  <h1>LoRA 복구 학습 계획 (P3 본편)</h1>
+  <div class="meta">
+    2026-07-23 &middot; 모델 slim checkpoints (<code>outputs/slim_*</code>)
+    &middot; 선행: <code>2026-07-23_physical-removal-latency.html</code>, <code>2026-07-23_dispatch-optimized-latency.html</code>
+    &middot; 상태: <strong>승인 완료 &middot; 구현 착수 (2026-07-24)</strong>. gradient 경로 Design B(FM&rarr;cache&rarr;양 tower), 범위 R1+R2 확정
+  </div>
+</header>
+
+<h2><span class="num">1.</span>가설과 목표</h2>
+<p><strong>가설: 소량의 LoRA 복구 학습으로 (a) 무료 경계 config의 잔여 열화를 지우고,
+(b) 마스킹에서 &ldquo;붕괴&rdquo;로 판정된 더 깊은 절단을 무료 수준으로 되살릴 수 있다.</strong>
+성립하면 CoC+trajectory 유지 압축이 18.1% &rarr; 24.1%로 올라간다.</p>
+<table>
+  <tr><th>Phase</th><th>대상</th><th>복구 목표 (현재 &rarr; 성공 기준)</th></tr>
+  <tr><td><strong>R1 수리</strong></td><td>slim_integrated_mag (&minus;29.3%)<br>slim_cocsafe_r20 (&minus;18.1%)</td>
+      <td>integrated: 회전 +0.099&middot;p95 +0.47 축소 / cocsafe: &Delta;ADE +0.053 &rarr; ~0, &Delta;NLL +0.026 &rarr; &le;+0.02. 복구 기계 검증 겸용</td></tr>
+  <tr><td><strong>R2 경계 돌파</strong> (헤드라인)</td><td><strong>cocsafe_full_r30 신규 slim</strong> (&minus;2.67B, 24.1%)</td>
+      <td>마스킹 실측 &Delta;ADE <strong>+0.348*</strong> (붕괴) &rarr; CI가 0 포함 &amp; &Delta;NLL &le; +0.05 (기존 &ldquo;유지&rdquo; 판정 기준 그대로)</td></tr>
+</table>
+<div class="note">R2 범위 결정: traj 전용의 더 깊은 절단(29.3% 초과)은 마스킹 근거가 있는 붕괴 config가 마땅치 않아
+(측정된 것은 KV2&middot;expert 심화 등 이질 축) 이번 라운드에서 제외하고, 측정 근거가 명확한 cocsafe_full_r30에 집중한다.
+성공 시 다음 라운드에서 traj 전용 심화를 설계.</div>
+
+<h2><span class="num">2.</span>학습 설계</h2>
+<h3>2.1 Loss</h3>
+<ul>
+  <li><strong>Trajectory (전 config) &mdash; Design B 확정:</strong> phase21 <code>flow_matching_loss</code>(release 컨벤션과 동일: t~U(0,1), x_t=(1&minus;t)noise+t&middot;x1, v_target=x1&minus;noise)를 그대로 import. cache를 <strong>attached</strong>로 두어 <strong>단일 backward</strong>가 expert LoRA + VLM LoRA를 모두 업데이트 &mdash; VLM pruning의 궤적 손상을 cache 경로로 직접 복구. 스모크 실측: VLM LoRA 247/494 params가 nonzero grad, peak 34.6GB(48GB 여유).</li>
+  <li><strong>CoC 문맥 (전 config):</strong> teacher(full 모델) reference CoC를 denoise cache의 문맥으로 사용 &mdash; 평가 프로토콜(baseline CoC 문맥에서 denoise)과 정합, 매 step rollout 회피(<code>make_teacher_refs</code>로 사전 생성). <strong>CoC CE loss(cocsafe 계열만):</strong> 같은 teacher 토큰 대상, &lambda;<sub>coc</sub>&isin;{0.1,0.5} probe. integrated는 CoC 포기 config라 FM only.</li>
+  <li><strong>Cache distillation은 v1 제외:</strong> teacher cache 저장 392GB(불가)&middot;동시 상주 49GB 초과. 후속 2-GPU 옵션으로만 명시.</li>
+</ul>
+<h3>2.2 LoRA 배치</h3>
+<ul>
+  <li>대상: VLM LM + expert의 <strong>모든 잔존 Linear</strong> (q/k/v/o, gate/up/down). kv-only layer 35는 k/v proj에 부착(expert가 읽는 cache를 만들므로 복구 지렛대). ViT&middot;embed&middot;lm_head&middot;action proj 동결.</li>
+  <li>r=32, &alpha;=64, dropout 0. 학습 파라미터 108.7M(1.37%). <strong>peft(0.19.1) 사용</strong> &mdash; slim의 수술된 nn.Linear는 표면(이름) 유지라 peft가 투명하게 wrap함을 스모크로 확인(MethodType forward가 self.q_proj를 그대로 호출, layer35 kv-only는 q_proj=None으로 자동 스킵). phase21 <code>lora_target_modules</code>를 q/v&rarr;q/k/v/o+gate/up/down로 확장.</li>
+  <li>학습 후 <strong>merge (W += BA)</strong> &rarr; slim shape 불변 &rarr; <strong>graph 실측 1.62&times;/1.43&times;가 그대로 적용</strong>(복구의 latency 비용 0). merge본을 기존 save_slim 형식으로 저장.</li>
+</ul>
+<h3>2.3 데이터&middot;최적화&middot;메모리</h3>
+<ul>
+  <li>train split 900 clips (test 150은 봉인 유지). teacher CoC는 사전 생성(<code>make_teacher_refs.py</code>, full 모델 rollout, 4-GPU 샤딩 ~30분, 텍스트라 저장 무시 가능).</li>
+  <li>AdamW lr 1e-4 cosine(warmup 50), batch 1 + grad accum 8, ~2,000 step(&asymp;2.2 epoch), bf16 base + fp32 LoRA.</li>
+  <li>메모리 게이트: gradient checkpointing은 use_cache 충돌(P1 확인)로 불가 &rarr; 비활성. 예상 peak: slim 16&ndash;18GB + activation/grad &asymp; 34GB &lt; 49GB. <strong>학습 첫 스텝에서 실측 확인 후 진행</strong>(초과 시 prompt 길이 축소가 아니라 accum 유지 + 첫 대응은 expert-only backward 단계 분리).</li>
+  <li>250 step마다 val probe(10 clips, K=1 minADE + NLL) &mdash; 조기 종료&middot;과적합 감시. outputs 규약(config/metrics/summary/plots) 준수.</li>
+</ul>
+
+<h2><span class="num">3.</span>평가 프로토콜</h2>
+<ul>
+  <li><strong>본 평가:</strong> 기존 80 clips(val 50 + 회전 33 확보분) &times; K=8, <strong>동일 클립 순서&middot;seed 공식(42+ci&middot;100+k)</strong> &rarr; 기존 실행들의 저장된 baseline per-clip 값과 paired 비교 가능(baseline 재측정 불요). paired bootstrap CI, 회전 버킷, p95, regression 수.</li>
+  <li>비교 3점 세트: <em>마스킹(복구 전)</em> vs <em>slim(복구 전, =동등)</em> vs <em>slim+LoRA(복구 후)</em>.</li>
+  <li><strong>test split(150) 확정 수치:</strong> R2 완료 후 최종 채택 config들(integrated 복구본, cocsafe_r20 또는 r30 복구본)에 대해 <strong>1회만</strong> 실행 &mdash; 봉인 해제는 이때가 처음.</li>
+  <li>보고서: <code>reports/</code> HTML, 학습 곡선 + 복구 전후 CI 표 + (성공 시) &ldquo;복구 포함 압축 한계&rdquo; 갱신.</li>
+</ul>
+
+<h2><span class="num">4.</span>구현 (신규 파일, experiments/head_analysis/)</h2>
+<table>
+  <tr><th>파일</th><th>내용</th></tr>
+  <tr><td><code>lora_lib.py</code> (~120줄)</td><td>LoRALinear 래퍼, attach/merge/save/load, 대상 모듈 순회</td></tr>
+  <tr><td><code>make_teacher_refs.py</code> (~80줄)</td><td>full 모델 rollout &rarr; train 900 clips teacher CoC jsonl (4-GPU 샤딩)</td></tr>
+  <tr><td><code>train_lora.py</code> (~250줄)</td><td>학습 드라이버: FM(+&lambda;CE) loss, accum, val probe, 곡선 기록, merge 저장</td></tr>
+  <tr><td><code>make_slim.py</code> 확장 (~15줄)</td><td><code>--config cocsafe_full_r30</code> 레시피 추가 (dual 30% + KV1 + expert)</td></tr>
+  <tr><td><code>eval_recovered.py</code> (~150줄)</td><td>80-clip K=8 평가(저장된 baseline과 paired), 3점 세트 비교표</td></tr>
+</table>
+
+<h2><span class="num">5.</span>실행 순서&middot;비용</h2>
+<ol>
+  <li>teacher refs 사전 생성 (4-GPU &times; ~30분)</li>
+  <li>&lambda;<sub>coc</sub> probe (cocsafe_r20, 300 step &times;2, ~30분)</li>
+  <li><strong>R1</strong>: integrated + cocsafe_r20 병렬 학습 (Ada 2장, 각 ~2시간) &rarr; eval (~40분/config)</li>
+  <li><strong>R2</strong>: cocsafe_full_r30 slim 생성(~10분) &rarr; 학습 &rarr; eval</li>
+  <li>test split 1회 (채택 config, Blackwell ~1.5시간) &rarr; 최종 보고서 + 종합 보고서 갱신</li>
+</ol>
+<p>총 예상: 구현 ~1.5일, GPU ~10시간. 위험: FM 학습 loss의 release 훈련과의 정합(구현 시 FlowMatching API 확인, P1 코드 재사용으로 완화), 900-clip 과적합(val probe 조기 종료), &lambda; 민감도(probe로 완화).</p>
+
+<div class="callout"><strong>승인 완료 (2026-07-24).</strong> gradient 경로 = Design B(FM&rarr;cache&rarr;양 tower), 범위 = R1+R2. 구현 착수: <code>lora_lib.py</code>&middot;<code>make_teacher_refs.py</code>&middot;<code>train_lora.py</code>&middot;<code>eval_recovered.py</code> 작성, Design-B 스모크 통과(VLM LoRA grad 247/494, peak 34.6GB, merge shape 보존). teacher refs 생성 중.</div>
+
+</div>
+</body>
+</html>

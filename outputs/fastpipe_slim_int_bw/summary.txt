@@ -1,0 +1,5 @@
+pipeline bench (slim outputs/slim_integrated_mag, n=10 live clips, cap=3456)
+vit+prefill   stock  331.7   fast  383.2 ms
+decode/tok    stock   35.9   fast   18.4 ms
+denoise       stock  416.1   fast  194.0 ms
+end-to-end (norm 16 tok)  stock  1322.4   fast   871.0 ms ->  1.52x

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>통합 결합 Config — 모델 29.3% 마스킹 실측</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>통합 결합 Config &mdash; 모델 29.3% 마스킹 실측</h1>
+  <div class="meta">
+    2026-07-22 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    &middot; 평가 80 clips (val 50 + 회전 30), K=8, Blackwell 4-GPU 병렬 (~13분)
+    &middot; 코드 <code>experiments/head_analysis/run_integrated.py</code>
+    &middot; 산출물 <code>outputs/integrated_s{0,20,40,60}/</code>, <code>outputs/integrated_summary/</code>
+    &middot; 선행: <code>2026-07-22_expert-tower-masking-sweep.html</code>
+  </div>
+</header>
+<div class="callout">
+  <strong>2026-07-22 정정.</strong> 본 보고서의 KV group 관련 이득은 이후 충실성 검증(<code>2026-07-22_kv-group-fidelity-fix.html</code>)으로 정정되었다. 측정된 config는 KV group의 <strong>VLM쪽 Q head만</strong> 차단하므로 KV cache 절감이 없고, k/v projection(37.8M)도 제거할 수 없다. 완전한 group 제거(cache &minus;12.5%)는 +0.079*의 유료 옵션으로 재분류되었다. minADE/NLL 실측치는 변동 없다. (이 정정에서 당초 파라미터를 3.24B &rarr; 3.20B로 조정했으나 이는 이중 차감 오류였다 &mdash; 아래 2026-07-23 정정 참조.)
+</div>
+<div class="callout">
+  <strong>2026-07-23 정정 (파라미터 정밀 재계산).</strong> 실험에 실제 사용된 마스크로 정확히 세면 제거 파라미터는 VLM &minus;2.65B(Q 495 head + MLP 173,252 ch, KV1의 비중첩 35 head 포함) + expert &minus;0.60B = <strong>&minus;3.25B(29.3%)</strong>다. 직전 정정의 3.24&rarr;3.20B 조정은 이중 차감 오류였다: k/v projection 37.8M은 애초 집계에 포함된 적이 없으므로 뺄 것도 없었다. 예상 latency도 정확값 기준 <strong>1,336 &rarr; ~965ms(1.39&times;)</strong>로 갱신한다. 본문 수치는 정확값으로 수정되어 있다. (이 latency 추정도 이후 실측으로 반증되었다 &mdash; 아래 정정 참조.)
+</div>
+<div class="callout">
+  <strong>2026-07-23 정정 (latency 실측 &mdash; 예측 반증).</strong> 본 config를 실제 가중치 절단으로 변환해 Blackwell에서 실측한 결과(<code>2026-07-23_physical-removal-latency.html</code>), end-to-end는 <strong>1.03&times;</strong>(1,346 &rarr; 1,312ms, CoC 16-token 정규화)로 예측 1.39&times;에 크게 못 미친다. 원인: decode&middot;expert denoise는 batch 1에서 <strong>kernel dispatch-bound</strong>라 가중치 &minus;34%에도 시간이 거의 불변(decode/tok &minus;3%). 실현된 이득은 <strong>peak 메모리 &minus;29%</strong>(21.5 &rarr; 15.4GB)와 <strong>prefill &minus;26%</strong>(compute-bound)이며, 후속 CUDA-graph 상각 실측(2026-07-23)에서 <strong>1.62&times;(871ms)</strong>로 속도 이득이 회복됨을 확인했다 (<code>2026-07-23_dispatch-optimized-latency.html</code>). masked&equiv;removed 동등성은 실측 확인되어(fp64 정확 일치) 본 보고서의 minADE/NLL 수치는 물리 제거 모델에도 그대로 유효하다.
+</div>
+<div class="callout">
+  <strong>2026-07-22 정정 (KV group).</strong> 본 보고서의 KV group 제거 결과는 <strong>VLM 쪽 Q head(4개/group)만 마스킹</strong>한 것으로, expert는 해당 group의 cache를 계속 읽고 있었다. 물리적 group 제거와 동등한 충실한 ablation(양 tower의 Q head 동시 마스킹, <code>outputs/kvfix_*</code>)을 추가로 수행한 결과 <strong>group 1개 제거도 실제 regression(+0.079, CI [+0.002, +0.151])</strong>이며, 비용의 대부분은 expert의 cache 접근 상실(+0.053)에서 온다. 따라서 &ldquo;KV cache &minus;12.5% 무료&rdquo; 주장은 <strong>철회</strong>한다. 본 보고서에서 유효하게 남는 결과는 &ldquo;trajectory 기준으로 고른 VLM 쪽 Q head 4개/layer 제거는 무료&rdquo;이며, 이는 cache 절감이 없는 Q head pruning이다. 상세: <code>2026-07-22_compression-comprehensive-report.html</code> &sect;7.
+</div>
+
+
+<h2><span class="num">1.</span>목적</h2>
+<p>지금까지 확정한 양 tower의 무료 config를 <strong>동시에</strong> 적용해 최종 마스킹 하한을 실측한다.</p>
+<table>
+  <tr><th>tower</th><th>config</th><th class="r">절감</th></tr>
+  <tr><td>VLM</td><td>graded width (0&ndash;21@30%, 22&ndash;34@50%) + layer 35 전체 + KV group 1개, trajectory Taylor</td><td class="r">&minus;2.65B</td></tr>
+  <tr><td>Expert</td><td>early(0&ndash;21)@40% + late@10%, trajectory / magnitude 두 변형</td><td class="r">&minus;0.60B</td></tr>
+  <tr><td colspan="2"><strong>합계 (전체 모델 11.08B 대비)</strong></td><td class="r"><strong>&minus;3.25B (29.3%)</strong></td></tr>
+</table>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+<p class="meta">baseline minADE 0.7947. 이전 실행과 baseline 절대값이 다른 것은 shard 재구성으로 클립별 denoising seed가 달라졌기 때문이며, 모든 비교는 실행 내 paired다.</p>
+
+<figure>
+  <img src="PLOT::it::integrated_ci.png" alt="integrated CI">
+  <figcaption>paired &Delta;minADE와 95% CI. 초록 = CI가 0 포함(무료), 분홍 = regression. <strong>통합 config(&minus;3.25B)는 전체와 회전 모두에서 magnitude 변형이 noise 범위.</strong></figcaption>
+</figure>
+
+<table>
+  <tr><th>config</th><th class="r">&Delta;minADE</th><th class="r">95% CI</th><th class="r">회전 &Delta;</th><th class="r">p95</th><th class="r">reg&gt;0.5</th><th class="r">&Delta;NLL</th></tr>
+  <tr><td>vlm_only (&minus;2.65B)</td><td class="r">+0.008</td><td class="r">[&minus;0.083, +0.089]</td><td class="r">+0.082</td><td class="r">+0.432</td><td class="r">4</td><td class="r">+2.86</td></tr>
+  <tr><td>expert_only_traj (&minus;0.60B)</td><td class="r">+0.065</td><td class="r">[+0.004, +0.148]*</td><td class="r">+0.142</td><td class="r">+0.327</td><td class="r">2</td><td class="r">0</td></tr>
+  <tr><td>expert_only_mag (&minus;0.60B)</td><td class="r">+0.078</td><td class="r">[+0.002, +0.169]*</td><td class="r">+0.162</td><td class="r">+0.407</td><td class="r">4</td><td class="r">0</td></tr>
+  <tr><td><strong>integrated_traj (&minus;3.25B)</strong></td><td class="r">+0.045</td><td class="r">[&minus;0.026, +0.112]</td><td class="r">+0.110*</td><td class="r">+0.443</td><td class="r">2</td><td class="r">+2.86</td></tr>
+  <tr><td><strong>integrated_mag (&minus;3.25B)</strong></td><td class="r"><strong>+0.010</strong></td><td class="r">[&minus;0.072, +0.089]</td><td class="r">+0.099</td><td class="r">+0.471</td><td class="r">4</td><td class="r">+2.86</td></tr>
+</table>
+
+<h3>2.1 Cross-tower 독립성</h3>
+<table>
+  <tr><th>변형</th><th class="r">통합 실측</th><th class="r">개별 합</th><th class="r">상호작용</th></tr>
+  <tr><td>trajectory</td><td class="r">+0.045</td><td class="r">+0.073</td><td class="r">&minus;0.029</td></tr>
+  <tr><td>magnitude</td><td class="r">+0.010</td><td class="r">+0.086</td><td class="r">&minus;0.076</td></tr>
+</table>
+<p><strong>두 tower의 pruning은 서로 손상을 증폭하지 않는다.</strong> 상호작용이 0 또는 음수(sub-additive)다. VLM cache가 약간 거칠어진 상태에서 expert 폭을 줄여도 추가 비용이 없다.</p>
+
+<h3>2.2 새로 드러난 사실 &mdash; expert 내부 결합은 완전 무료가 아니었다</h3>
+<div class="callout">
+  <strong>expert_only(early40 + late10)는 단독으로 유의한 marginal regression(+0.065&ndash;0.078, CI가 0을 살짝 배제)이다.</strong> Expert 스윕에서 early40과 all10은 각각 무료였지만, 그 결합은 스윕에서 측정하지 않았고 &ldquo;VLM 전례에 기댄 추정&rdquo;으로 남겨뒀었다. 실측 결과 expert 내부 결합은 경계를 살짝 넘는다. 흥미롭게도 <strong>통합 config에서는 이 비용이 상쇄</strong>되어(음의 상호작용) 최종 수치는 noise 범위로 돌아온다.
+</div>
+
+<h3>2.3 최종 권고 config</h3>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">&minus;3.25B</div><div class="l">파라미터 (29.3%, 정확값)</div></div>
+  <div class="kpi"><div class="v">+0.010</div><div class="l">&Delta;minADE (noise 범위)</div></div>
+  <div class="kpi"><div class="v">0%</div><div class="l">KV cache (절감 주장 철회)</div></div>
+  <div class="kpi"><div class="v">1.62&times;</div><div class="l">실측 latency (CUDA graph; 비최적화 1.03&times;) &middot; 메모리 &minus;29%</div></div>
+</div>
+<p><strong>integrated_mag</strong>를 최종 마스킹 config로 권고한다: 전체 +0.010 [&minus;0.072, +0.089], 회전 +0.099 [&minus;0.015, +0.223] 모두 noise 범위다. traj 변형은 회전에서 CI가 0을 살짝 배제(+0.110*)하므로 magnitude 변형이 더 안전하다. Latency는 물리 제거 실측으로 <strong>1,346 &rarr; 1,312ms(1.03&times;)</strong>, peak 메모리 21.5 &rarr; 15.4GB(&minus;29%)다 &mdash; 종전 추정 ~965ms(1.39&times;)는 반증되었다(상단 정정).</p>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>마스킹 단계의 최종 문장:</strong> Alpamayo-1.5-10B에서 trajectory 전용 배포를 전제하면, <strong>파라미터의 29.3%를 학습 없이 마스킹해도 open-loop minADE가 회전 포함 noise 범위</strong>다. 비용은 CoC NLL +2.86(reasoning 사실상 포기)과 p95 tail +0.47이다.</li>
+  <li><strong>경계에 서 있다.</strong> expert_only가 단독으로 유의했고 통합의 회전 CI 상한이 +0.22에 이르는 만큼, 이 config는 &ldquo;여유 있는 무료&rdquo;가 아니라 <strong>무료의 경계선</strong>이다. 더 밀면 회전부터 깨진다. LoRA 복구가 이 경계를 밖으로 밀어내는 것이 다음 단계의 존재 이유다.</li>
+  <li><strong>tail은 남는다.</strong> p95 +0.47m, 80 클립 중 4개는 0.5m 이상 악화. 평균 무료가 최악 사례 무료는 아니라는 점은 최종 보고에도 명시해야 한다.</li>
+</ul>
+
+<h2><span class="num">4.</span>다음 단계</h2>
+<ol>
+  <li><strong>실제 가중치 제거 + LoRA 복구 (P3 본편).</strong> integrated_mag를 물리적으로 적용, cache 재현 + trajectory loss로 복구 학습.</li>
+  <li><strong>test split(150) 확정 수치</strong> &mdash; 복구 후 1회.</li>
+  <li>보고서 전체를 관통하는 <strong>종합 보고서</strong>(프로파일링 &rarr; P1 &rarr; P2 &rarr; 평가 강화 &rarr; 통합) 작성 검토.</li>
+</ol>
+
+<h2><span class="num">5.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/run_integrated.py</code> &mdash; 양 tower 동시 마스킹 드라이버</li>
+  <li><code>outputs/integrated_s{0,20,40,60}/</code> &mdash; 4-shard 원자료</li>
+  <li><code>outputs/integrated_summary/plots/integrated_ci.png</code></li>
+</ul>
+
+</div>
+</body>
+</html>

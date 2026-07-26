@@ -1,0 +1,60 @@
+{
+  "model": "nvidia/Alpamayo-1.5-10B",
+  "num_clips": 20,
+  "clip_ids": [
+    "c5373751-f794-441f-a2bf-1347bc503327",
+    "60195ca1-2da9-4254-a204-eca7cca2b4f5",
+    "892eb6e7-83b3-4452-94cd-a49286465682",
+    "6467d425-fded-4052-b846-8d8524e04955",
+    "88535489-af71-455b-954a-19349009995a",
+    "11261eb8-1888-490d-b55c-29747f65da7d",
+    "55d95425-f9de-4570-8f1a-a76a5562f858",
+    "b2a3dd41-76ca-472b-a8c7-ee3932cc8fe2",
+    "b76ca5c6-77aa-4317-a3db-03c2e060cbe8",
+    "ef956bfe-55b2-445d-b94f-a1ed4a774b92",
+    "4ba9f926-6319-4044-9315-7798280dd906",
+    "4803e746-fe7a-4f7e-9766-63477025479a",
+    "2b64f3e2-11e4-44d2-b2ac-16b7a462178c",
+    "a71bb55e-0d6f-4687-8648-feb43f00e759",
+    "c542bd96-3f82-46c5-aa05-9f6376bb128f",
+    "ce6c86cd-eb4c-4613-8f05-da071d1a6b2b",
+    "ca14c3d6-b50b-433b-8596-a5199c45470d",
+    "44b4c663-5c9d-4c69-a5e5-15d966bd9823",
+    "76117c8e-2eb8-4550-a24b-d7c037b917dd",
+    "06e20fbf-c4c7-4f47-8374-9a54f61f310b"
+  ],
+  "clip_offset": 40,
+  "k_samples": 8,
+  "importance_from": "importance_v1",
+  "seed": 42,
+  "vlm_config": "graded 30/50 + layer35 + KV drop1 (traj)",
+  "expert_config": "early(0-21) 40% + late 10%",
+  "configs": [
+    {
+      "name": "baseline",
+      "kind": "baseline"
+    },
+    {
+      "name": "vlm_only",
+      "kind": "ref",
+      "note": "combined_width_kv1"
+    },
+    {
+      "name": "expert_only_traj",
+      "kind": "ref"
+    },
+    {
+      "name": "expert_only_mag",
+      "kind": "ref"
+    },
+    {
+      "name": "integrated_traj",
+      "kind": "integrated"
+    },
+    {
+      "name": "integrated_mag",
+      "kind": "integrated"
+    }
+  ],
+  "gpu": "NVIDIA RTX PRO 5000 Blackwell"
+}

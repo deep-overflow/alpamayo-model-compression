@@ -1,0 +1,9 @@
+{
+  "purpose": "stock vs graph-optimized full pipeline, paired per clip",
+  "slim_ckpt": "outputs/slim_integrated_mag",
+  "num_clips": 13,
+  "clip_offset": 0,
+  "cap": 3456,
+  "seed": 42,
+  "gpu": "NVIDIA RTX PRO 5000 Blackwell"
+}

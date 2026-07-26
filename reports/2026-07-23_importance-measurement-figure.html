@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>중요도 측정 방법 — Q head · MLP channel · KV group</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+    --ce: #5B6FAE;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  header { margin-bottom: 2.5rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.35rem; font-weight: 500; margin: 2.5rem 0 1rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  p { margin-bottom: 1rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  figure {
+    margin: 1.5rem 0 2.25rem; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.25rem 1rem 1rem; overflow-x: auto;
+  }
+  figure svg { display: block; margin: 0 auto; max-width: 100%; height: auto;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.9rem; line-height: 1.55;
+    padding: 0 0.5rem; }
+  figcaption strong { color: var(--text); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; Method Figure</div>
+  <h1>중요도 측정 방법 &mdash; Q head &middot; MLP channel &middot; KV group</h1>
+  <div class="meta">
+    2026-07-23 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    &middot; 코드 <code>experiments/head_analysis/prune_lib.py</code>, <code>run_importance.py</code>
+    &middot; 캘리브레이션 50 clips, forward 1회 + backward 2회(CE, FM)
+  </div>
+</header>
+
+<p>공통 원리는 1차 Taylor importance다: 단위 출력에 곱셈 gate <em>ξ</em>=1을 끼우고
+<strong><em>I</em> = |&part;L/&part;ξ|</strong> 를 중요도로 쓴다. Gate를 둘 수 있는 곳(Q head, MLP channel)은
+gate로, gate가 무효화되는 곳(KV group)은 Taylor 항등식으로 cache 텐서에서 직접 계산한다.</p>
+
+<h2><span class="num">A.</span>Gate 방식 &mdash; Q head와 MLP channel</h2>
+<figure>
+<svg viewBox="0 0 880 400" width="880">
+  <defs>
+    <marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8A8574"/>
+    </marker>
+  </defs>
+  <line x1="437" y1="18" x2="437" y2="385" stroke="#E8E6DC" stroke-width="1.5" stroke-dasharray="3 5"/>
+
+  <!-- ================= attention column ================= -->
+  <text x="205" y="24" text-anchor="middle" font-size="13.5" font-weight="600" fill="#29261B">Self-Attention &mdash; Q head (VLM 32 / expert 16개)</text>
+
+  <rect x="135" y="40" width="140" height="27" rx="6" fill="#FFFFFF" stroke="#C9C5B8"/>
+  <text x="205" y="58" text-anchor="middle" font-size="12.5" fill="#29261B">x&#8202; [B, T, 4096]</text>
+
+  <line x1="205" y1="67" x2="205" y2="82" stroke="#8A8574" stroke-width="1.5"/>
+  <line x1="205" y1="82" x2="105" y2="96" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="205" y1="82" x2="205" y2="96" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="205" y1="82" x2="305" y2="96" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+
+  <rect x="60" y="98" width="90" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="105" y="115" text-anchor="middle" font-size="12" fill="#29261B">q_proj</text>
+  <rect x="165" y="98" width="80" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="205" y="115" text-anchor="middle" font-size="12" fill="#29261B">k_proj</text>
+  <rect x="260" y="98" width="90" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="305" y="115" text-anchor="middle" font-size="12" fill="#29261B">v_proj</text>
+
+  <line x1="105" y1="124" x2="105" y2="156" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="205" y1="124" x2="205" y2="156" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="305" y1="124" x2="305" y2="156" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <text x="110" y="145" font-size="10" fill="#6B6555">q_norm&middot;RoPE</text>
+  <text x="210" y="145" font-size="10" fill="#6B6555">k_norm&middot;RoPE</text>
+
+  <rect x="60" y="158" width="290" height="27" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="205" y="176" text-anchor="middle" font-size="12" fill="#29261B">scaled-dot-product attention (GQA)</text>
+
+  <line x1="205" y1="185" x2="205" y2="202" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <text x="205" y="218" text-anchor="middle" font-size="11.5" fill="#6B6555">attention 출력&#8202; [B, T, H=32, 128]</text>
+  <line x1="205" y1="226" x2="205" y2="242" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+
+  <circle cx="205" cy="261" r="17" fill="#FBE4DA" stroke="#C15F3C" stroke-width="2"/>
+  <text x="205" y="266" text-anchor="middle" font-size="13" font-weight="600" fill="#C15F3C">&#8857; ξ<tspan dy="3" font-size="9">h</tspan></text>
+  <text x="232" y="257" font-size="11.5" font-weight="600" fill="#C15F3C">head별 gate (ξ=1)</text>
+  <text x="232" y="273" font-size="11" fill="#6B6555">측정 지점 = 마스킹 지점</text>
+
+  <line x1="205" y1="278" x2="205" y2="294" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <rect x="135" y="296" width="140" height="27" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="205" y="314" text-anchor="middle" font-size="12" fill="#29261B">o_proj</text>
+
+  <text x="205" y="352" text-anchor="middle" font-size="13.5" fill="#29261B">I<tspan dy="3" font-size="9.5">h</tspan><tspan dy="-3"> = |&part;L/&part;ξ</tspan><tspan dy="3" font-size="9.5">h</tspan><tspan dy="-3">| = |Σ a</tspan><tspan dy="3" font-size="9.5">h</tspan><tspan dy="-3"> &#8857; &part;L/&part;a</tspan><tspan dy="3" font-size="9.5">h</tspan><tspan dy="-3">|</tspan></text>
+  <text x="205" y="374" text-anchor="middle" font-size="10.5" fill="#6B6555">(batch&middot;token&middot;head_dim 합 &mdash; head의 전 경로 기여가 스칼라 1개로)</text>
+
+  <!-- ================= MLP column ================= -->
+  <text x="655" y="24" text-anchor="middle" font-size="13.5" font-weight="600" fill="#29261B">MLP (SwiGLU) &mdash; channel (VLM 12,288 / expert 8,256개)</text>
+
+  <rect x="585" y="40" width="140" height="27" rx="6" fill="#FFFFFF" stroke="#C9C5B8"/>
+  <text x="655" y="58" text-anchor="middle" font-size="12.5" fill="#29261B">x&#8202; [B, T, 4096]</text>
+
+  <line x1="655" y1="67" x2="655" y2="82" stroke="#8A8574" stroke-width="1.5"/>
+  <line x1="655" y1="82" x2="575" y2="96" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="655" y1="82" x2="735" y2="96" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+
+  <rect x="520" y="98" width="110" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="575" y="115" text-anchor="middle" font-size="12" fill="#29261B">gate_proj</text>
+  <rect x="690" y="98" width="90" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="735" y="115" text-anchor="middle" font-size="12" fill="#29261B">up_proj</text>
+
+  <line x1="575" y1="124" x2="646" y2="164" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <line x1="735" y1="124" x2="664" y2="164" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <text x="556" y="147" text-anchor="middle" font-size="10" fill="#6B6555">SiLU</text>
+
+  <circle cx="655" cy="172" r="12" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="655" y="177" text-anchor="middle" font-size="13" fill="#29261B">&#8857;</text>
+  <text x="674" y="176" font-size="10.5" fill="#6B6555">channel별 곱</text>
+
+  <line x1="655" y1="184" x2="655" y2="202" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <text x="655" y="218" text-anchor="middle" font-size="11.5" fill="#6B6555">activation&#8202; [B, T, I=12288]</text>
+  <line x1="655" y1="226" x2="655" y2="242" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+
+  <circle cx="655" cy="261" r="17" fill="#FBE4DA" stroke="#C15F3C" stroke-width="2"/>
+  <text x="655" y="266" text-anchor="middle" font-size="13" font-weight="600" fill="#C15F3C">&#8857; ξ<tspan dy="3" font-size="9">c</tspan></text>
+  <text x="682" y="257" font-size="11.5" font-weight="600" fill="#C15F3C">channel별 gate (ξ=1)</text>
+  <text x="682" y="273" font-size="11" fill="#6B6555">측정 지점 = 마스킹 지점</text>
+
+  <line x1="655" y1="278" x2="655" y2="294" stroke="#8A8574" stroke-width="1.5" marker-end="url(#a-arr)"/>
+  <rect x="585" y="296" width="140" height="27" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="655" y="314" text-anchor="middle" font-size="12" fill="#29261B">down_proj</text>
+
+  <text x="655" y="352" text-anchor="middle" font-size="13.5" fill="#29261B">I<tspan dy="3" font-size="9.5">c</tspan><tspan dy="-3"> = |&part;L/&part;ξ</tspan><tspan dy="3" font-size="9.5">c</tspan><tspan dy="-3">| = |Σ h</tspan><tspan dy="3" font-size="9.5">c</tspan><tspan dy="-3"> &#8857; &part;L/&part;h</tspan><tspan dy="3" font-size="9.5">c</tspan><tspan dy="-3">|</tspan></text>
+  <text x="655" y="374" text-anchor="middle" font-size="10.5" fill="#6B6555">(batch&middot;token 합 &mdash; gate/up/down 세 열의 기여)</text>
+</svg>
+<figcaption><strong>Panel A &mdash; gate 방식.</strong> Q head는 o_proj 입력을 (B,&#8202;T,&#8202;H,&#8202;128)로 본 뒤 head별 스칼라 ξ를, MLP는 SwiGLU 곱(=down_proj 입력)에 channel별 ξ를 forward pre-hook으로 곱한다. Gate가 마스킹과 같은 지점에 있으므로 측정이 제거 효과를 충실히 예측한다. 각 gate는 CE&middot;FM 두 loss로 각각 backward하여 단위당 중요도 2개를 얻는다 (Panel C).</figcaption>
+</figure>
+
+<h2><span class="num">B.</span>KV group &mdash; gate가 무효라 cache에서 직접</h2>
+<figure>
+<svg viewBox="0 0 880 360" width="880">
+  <defs>
+    <marker id="b-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8A8574"/>
+    </marker>
+    <marker id="b-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#5B6FAE"/>
+    </marker>
+    <marker id="b-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#C15F3C"/>
+    </marker>
+  </defs>
+  <line x1="437" y1="18" x2="437" y2="345" stroke="#E8E6DC" stroke-width="1.5" stroke-dasharray="3 5"/>
+
+  <!-- left: failed gate -->
+  <text x="30" y="30" font-size="13.5" font-weight="600" fill="#29261B">① projection 뒤 gate &mdash; 실패 (k_norm)</text>
+
+  <rect x="30" y="54" width="56" height="26" rx="6" fill="#FFFFFF" stroke="#C9C5B8"/>
+  <text x="58" y="71" text-anchor="middle" font-size="12" fill="#29261B">x</text>
+  <line x1="86" y1="67" x2="104" y2="67" stroke="#8A8574" stroke-width="1.5" marker-end="url(#b-arr)"/>
+  <rect x="106" y="54" width="80" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="146" y="71" text-anchor="middle" font-size="12" fill="#29261B">k_proj</text>
+  <line x1="186" y1="67" x2="206" y2="67" stroke="#8A8574" stroke-width="1.5" marker-end="url(#b-arr)"/>
+
+  <circle cx="226" cy="67" r="15" fill="#FBE4DA" stroke="#C15F3C" stroke-width="1.8"/>
+  <text x="226" y="72" text-anchor="middle" font-size="12.5" font-weight="600" fill="#C15F3C">&#8857; ξ</text>
+  <line x1="213" y1="54" x2="239" y2="80" stroke="#B33A3A" stroke-width="2.5"/>
+  <line x1="239" y1="54" x2="213" y2="80" stroke="#B33A3A" stroke-width="2.5"/>
+
+  <line x1="243" y1="67" x2="260" y2="67" stroke="#8A8574" stroke-width="1.5" marker-end="url(#b-arr)"/>
+  <rect x="262" y="54" width="130" height="26" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="327" y="71" text-anchor="middle" font-size="12" fill="#29261B">k_norm (RMSNorm)</text>
+
+  <text x="211" y="122" text-anchor="middle" font-size="12.5" fill="#29261B">RMSNorm(ξ&middot;k) = RMSNorm(k)</text>
+  <text x="211" y="144" text-anchor="middle" font-size="13" font-weight="600" fill="#B33A3A">&rarr; &part;L/&part;ξ &equiv; 0</text>
+  <text x="211" y="166" text-anchor="middle" font-size="11" fill="#6B6555">스칼라 배가 head별 정규화로 지워져 gate가 보이지 않음</text>
+
+  <text x="211" y="210" text-anchor="middle" font-size="11" fill="#6B6555">(마스킹도 같은 이유로 K/V를 직접 zero 못 함: exp(q&middot;0)=1</text>
+  <text x="211" y="228" text-anchor="middle" font-size="11" fill="#6B6555">&rarr; 균일 attention. 그래서 group &ldquo;제거&rdquo;도 Q head 차단으로 구현)</text>
+
+  <!-- right: cache Taylor -->
+  <text x="470" y="30" font-size="13.5" font-weight="600" fill="#29261B">② 해결 &mdash; cache 텐서에 직접 Taylor</text>
+
+  <text x="665" y="54" text-anchor="middle" font-size="11.5" font-weight="600" fill="#5B6FAE">CE gradient &mdash; VLM 후속 토큰의 attention</text>
+  <line x1="665" y1="62" x2="665" y2="86" stroke="#5B6FAE" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#b-blue)"/>
+
+  <rect x="565" y="88" width="200" height="82" rx="8" fill="#FFFFFF" stroke="#C15F3C" stroke-width="2"/>
+  <text x="665" y="112" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">KV cache (leaf)</text>
+  <text x="665" y="132" text-anchor="middle" font-size="11.5" fill="#29261B">K, V&#8202; [B, 8 group, T, 128]</text>
+  <text x="665" y="152" text-anchor="middle" font-size="11" fill="#6B6555">retain_grad &rarr; &part;L/&part;k, &part;L/&part;v</text>
+
+  <line x1="665" y1="212" x2="665" y2="188" stroke="#C15F3C" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#b-orange)"/>
+  <text x="665" y="232" text-anchor="middle" font-size="11.5" font-weight="600" fill="#C15F3C">FM gradient &mdash; expert diffusion 토큰 64개의 attention</text>
+
+  <text x="665" y="276" text-anchor="middle" font-size="13.5" fill="#29261B">score<tspan dy="3" font-size="9.5">h</tspan><tspan dy="-3"> = Σ|k &#8857; &part;L/&part;k| + Σ|v &#8857; &part;L/&part;v|</tspan></text>
+  <text x="665" y="298" text-anchor="middle" font-size="10.5" fill="#6B6555">(batch&middot;token&middot;head_dim 합 &mdash; 항등식 &part;L/&part;ξ = Σ&#8202;t&#8202;&#8857;&#8202;&part;L/&part;t 를 gate 없이 적용)</text>
+  <text x="665" y="330" text-anchor="middle" font-size="12" font-weight="600" fill="#29261B">측정 위치 = 두 tower가 공유하는 인터페이스</text>
+</svg>
+<figcaption><strong>Panel B &mdash; KV group.</strong> k_proj 뒤 head별 RMSNorm(k_norm)이 스칼라 gate를 정확히 0 gradient로 만들므로, gate의 Taylor 항등식을 이용해 <strong>cache 텐서 자체</strong>에서 같은 양을 계산한다. Cache에는 두 소비자(VLM 후속 토큰, expert diffusion 토큰)의 gradient가 합류하므로 CE&middot;FM backward 각각에서 <code>coc_kv_*</code>, <code>traj_kv_*</code>가 나온다.</figcaption>
+</figure>
+
+<h2><span class="num">C.</span>하나의 forward, 두 개의 backward</h2>
+<figure>
+<svg viewBox="0 0 880 450" width="880">
+  <defs>
+    <marker id="c-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8A8574"/>
+    </marker>
+    <marker id="c-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#5B6FAE"/>
+    </marker>
+    <marker id="c-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#C15F3C"/>
+    </marker>
+  </defs>
+
+  <!-- forward row -->
+  <rect x="30" y="58" width="120" height="50" rx="6" fill="#FFFFFF" stroke="#C9C5B8"/>
+  <text x="90" y="79" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">입력</text>
+  <text x="90" y="97" text-anchor="middle" font-size="10" fill="#6B6555">multi-cam + ego-history</text>
+
+  <line x1="150" y1="83" x2="183" y2="83" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+
+  <rect x="185" y="48" width="210" height="70" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="290" y="70" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">VLM forward &times;1 (teacher-forced)</text>
+  <text x="290" y="88" text-anchor="middle" font-size="11" fill="#6B6555">prompt + reference CoC</text>
+  <text x="290" y="106" text-anchor="middle" font-size="11" font-weight="600" fill="#C15F3C">Q&middot;MLP gate ξ 삽입</text>
+
+  <line x1="395" y1="70" x2="468" y2="52" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+  <rect x="470" y="30" width="170" height="40" rx="6" fill="#FFFFFF" stroke="#5B6FAE" stroke-width="1.8"/>
+  <text x="555" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#5B6FAE">CE loss (CoC NLL)</text>
+  <text x="555" y="62" text-anchor="middle" font-size="10" fill="#6B6555">reference CoC 토큰</text>
+
+  <line x1="290" y1="118" x2="290" y2="148" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+  <rect x="215" y="150" width="150" height="54" rx="8" fill="#FFFFFF" stroke="#C15F3C" stroke-width="2"/>
+  <text x="290" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">KV cache</text>
+  <text x="290" y="191" text-anchor="middle" font-size="10.5" fill="#6B6555">leaf &middot; retain_grad</text>
+
+  <line x1="365" y1="170" x2="428" y2="170" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+  <rect x="430" y="150" width="175" height="54" rx="6" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="517" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">Expert forward</text>
+  <text x="517" y="191" text-anchor="middle" font-size="10.5" fill="#6B6555">고정 timestep 10개 &middot; GT action</text>
+
+  <line x1="605" y1="170" x2="653" y2="170" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+  <rect x="655" y="150" width="170" height="54" rx="6" fill="#FFFFFF" stroke="#C15F3C" stroke-width="1.8"/>
+  <text x="740" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#C15F3C">FM loss (MSE)</text>
+  <text x="740" y="191" text-anchor="middle" font-size="10" fill="#6B6555">고정 noise &middot; v-field target</text>
+
+  <!-- CE backward -->
+  <path d="M480,72 C440,95 405,101 375,104" fill="none" stroke="#5B6FAE" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#c-blue)"/>
+  <text x="545" y="90" text-anchor="middle" font-size="10.5" font-weight="600" fill="#5B6FAE">backward ① &mdash; retain_graph</text>
+  <text x="545" y="105" text-anchor="middle" font-size="10.5" fill="#5B6FAE">모든 ξ와 cache에 &nabla; 도달</text>
+
+  <!-- FM stage 1 -->
+  <path d="M740,204 L740,228 L517,228 L517,208" fill="none" stroke="#C15F3C" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#c-orange)"/>
+  <line x1="430" y1="190" x2="369" y2="190" stroke="#C15F3C" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#c-orange)"/>
+  <text x="628" y="246" text-anchor="middle" font-size="10.5" font-weight="600" fill="#C15F3C">backward ② stage 1 &mdash; expert 통과, cache leaf에 &nabla; 누적 (&times;10)</text>
+
+  <!-- FM stage 2 -->
+  <line x1="245" y1="148" x2="245" y2="122" stroke="#C15F3C" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#c-orange)"/>
+  <text x="130" y="132" text-anchor="middle" font-size="10.5" font-weight="600" fill="#C15F3C">stage 2 &mdash; 누적 &nabla;를 seed로</text>
+  <text x="130" y="147" text-anchor="middle" font-size="10.5" fill="#C15F3C">VLM backward &times;1</text>
+
+  <!-- score chips -->
+  <rect x="40" y="290" width="360" height="56" rx="8" fill="#EEF1F8" stroke="#5B6FAE"/>
+  <text x="220" y="312" text-anchor="middle" font-size="12" font-weight="600" fill="#5B6FAE">CE 중요도 (coc_*)</text>
+  <text x="220" y="331" text-anchor="middle" font-size="11" fill="#29261B">coc_vlm_q &middot; coc_vlm_mlp &middot; coc_kv_k/v</text>
+
+  <rect x="460" y="290" width="380" height="56" rx="8" fill="#FBF0EB" stroke="#C15F3C"/>
+  <text x="650" y="312" text-anchor="middle" font-size="12" font-weight="600" fill="#C15F3C">FM 중요도 (traj_*)</text>
+  <text x="650" y="331" text-anchor="middle" font-size="11" fill="#29261B">traj_vlm_q &middot; traj_vlm_mlp &middot; traj_exp_q/mlp &middot; traj_kv_k/v</text>
+
+  <line x1="220" y1="346" x2="330" y2="384" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+  <line x1="650" y1="346" x2="550" y2="384" stroke="#8A8574" stroke-width="1.5" marker-end="url(#c-arr)"/>
+
+  <rect x="280" y="386" width="320" height="50" rx="8" fill="#F0EEE6" stroke="#C9C5B8"/>
+  <text x="440" y="407" text-anchor="middle" font-size="12.5" font-weight="600" fill="#29261B">dual score = max(rank(CE), rank(FM))</text>
+  <text x="440" y="426" text-anchor="middle" font-size="10.5" fill="#6B6555">layer 내 rank 정규화 후 결합 &mdash; CoC+traj 유지 config의 기준</text>
+</svg>
+<figcaption><strong>Panel C &mdash; 측정 파이프라인.</strong> Forward 1회에서 backward 2회: CE는 표준 backward(retain_graph)로 모든 gate와 cache에 도달하고, FM은 2단계 &mdash; expert를 통과해 detach된 cache leaf에 timestep 10개의 gradient를 누적(stage 1)한 뒤, 그 누적 gradient를 seed로 VLM backward를 1회만 수행(stage 2)한다. 산출된 두 점수 세트는 config에 따라 단독(FM만 &rarr; trajectory 전용) 또는 결합(dual max &rarr; CoC+traj 유지)으로 쓰인다. Expert 단위들은 CE gradient가 구조적으로 0이라 <code>coc_exp_*</code>는 존재하지 않는다.</figcaption>
+</figure>
+
+<h2><span class="num">D.</span>요약</h2>
+<table>
+  <tr><th>단위</th><th>측정 위치</th><th>수식</th><th>개수 / layer</th><th>비고</th></tr>
+  <tr><td>Q head</td><td>o_proj 입력 gate</td><td>|&part;L/&part;ξ<sub>h</sub>|</td><td>VLM 32 &middot; expert 16</td><td>측정 = 마스킹 지점</td></tr>
+  <tr><td>MLP channel</td><td>down_proj 입력 gate (SwiGLU 곱 이후)</td><td>|&part;L/&part;ξ<sub>c</sub>|</td><td>VLM 12,288 &middot; expert 8,256</td><td>gate/up/down 세 열 집계</td></tr>
+  <tr><td>KV group</td><td><strong>cache 텐서 직접</strong></td><td>Σ|k&#8202;&#8857;&#8202;&nabla;k| + Σ|v&#8202;&#8857;&#8202;&nabla;v|</td><td>8</td><td>k_norm이 gate 무효화</td></tr>
+</table>
+
+<div class="note">
+  <p style="margin-bottom:0.5rem"><strong>각주 1 &mdash; 공식 불일치.</strong> Gate 점수는 abs-of-sum(|Σ&#8202;w&#8857;g|), KV 점수는 sum-of-abs(Σ|t&#8857;g|, L1)로 구현되어 있다. 논문화 시 통일하거나 명시할 것.</p>
+  <p style="margin-bottom:0"><strong>각주 2 &mdash; expert의 magnitude 기준.</strong> 배포 config의 expert pruning은 위 Taylor가 아닌 weight magnitude(o_proj head-블록 Frobenius, down_proj 열 L2)를 쓴다 &mdash; expert 스윕에서 동등 이상으로 실측되었기 때문. 위 그림은 <em>중요도 측정</em> 방법이며, traj_exp_* 점수도 P1에서 함께 측정되었다.</p>
+</div>
+
+</div>
+</body>
+</html>

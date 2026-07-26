@@ -1,0 +1,9 @@
+{
+  "purpose": "functional cache-immutable expert denoise: equivalence + latency",
+  "slim_ckpt": "outputs/slim_cocsafe_r20",
+  "num_clips": 3,
+  "k": 4,
+  "pad_multiple": 128,
+  "seed": 42,
+  "gpu": "NVIDIA RTX 5880 Ada Generation"
+}

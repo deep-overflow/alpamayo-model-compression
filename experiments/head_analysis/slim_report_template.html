@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>물리적 제거 + 실측 Latency — 예측의 반증</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>물리적 제거 + 실측 Latency &mdash; 예측의 반증</h1>
+  <div class="meta">
+    2026-07-23 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    &middot; 코드 <code>experiments/head_analysis/slim_lib.py</code>, <code>make_slim.py</code>, <code>verify_slim.py</code>
+    &middot; 실측 RTX PRO 5000 Blackwell 단일 카드, 24 clips/run (shard 0&middot;13, baseline과 동일 클립&middot;seed)
+    &middot; 산출물 <code>outputs/slim_*</code>, <code>outputs/profile_{identity,slim_int,slim_coc}_s{0,13}</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">PASS</div><div class="l">masked &equiv; removed (fp64 정확 일치)</div></div>
+  <div class="kpi"><div class="v">&minus;29% / &minus;18%</div><div class="l">peak 메모리 (21.5&rarr;15.4 / 17.7GB)</div></div>
+  <div class="kpi"><div class="v">1.03&times; / 0.96&times;</div><div class="l">실측 latency (예측 1.38&times; / 1.22&times;)</div></div>
+  <div class="kpi"><div class="v">&minus;26%</div><div class="l">prefill (compute-bound, 유일한 stage 이득)</div></div>
+</div>
+<div class="callout">
+  <strong>핵심 발견 &mdash; latency 예측이 반증되었다.</strong> 마스크를 실제 가중치 절단으로 변환한 slim 모델(integrated_mag &minus;3.25B, cocsafe_full_r20 &minus;2.01B)은 기능적으로 마스킹과 동등하지만(아래 &sect;2), batch 1 end-to-end 실측은 <strong>1.03&times; / 0.96&times;</strong>로 예측(1.38&times; / 1.22&times;)에 크게 못 미친다. 원인: latency의 66%를 차지하는 decode&middot;expert denoise가 <strong>bandwidth-bound가 아니라 kernel dispatch-bound</strong>라서, 가중치를 29% 지워도 kernel 수는 그대로다. 이 신호는 기존 프로파일의 hardware sensitivity(decode 0.94&times;, expert 1.00&times; &mdash; Ada&asymp;Blackwell)에 이미 있었고, 추정 모델이 이를 과소평가했다. 파라미터 절감의 실측 이득은 <strong>메모리(&minus;29%)와 prefill(&minus;26%)</strong>에 실현된다.
+</div>
+
+<h2><span class="num">1.</span>수술 설계</h2>
+<ul>
+  <li><strong>제거 단위:</strong> q_proj 행 / o_proj 열(Q head), gate&middot;up 행 / down 열(MLP channel). <strong>KV head&middot;k/v proj&middot;cache는 모든 layer에서 8&times;128 유지</strong> &mdash; expert가 layer별 cache를 읽는 결합 제약.</li>
+  <li><strong>Ragged GQA:</strong> group 내 불균일 제거로 repeat_kv/enable_gqa의 균일 group 가정이 깨짐 &rarr; cache update 직후 유지된 Q head별로 K/V를 <code>index_select</code>하는 custom forward (<code>num_key_value_groups=1</code>).</li>
+  <li><strong>Layer 35 kv-only</strong> (integrated만): q/o&middot;MLP&middot;post-norm 삭제, k/v&rarr;cache 생산만 수행. bias-free라 마스킹의 residual passthrough와 수학적 동일.</li>
+  <li><strong>Identity control:</strong> stock sdpa는 VLM prefill/decode에서 mask=None &rarr; enable_gqa(무복사) 경로. gather는 물질화하므로, 비압축 모델에 identity gather를 물려 <strong>경로 비용(+87ms: prefill +8.6, decode +3.3/tok, expert +13.0)을 분리</strong>했다. slim의 공정 비교 상대는 identity다.</li>
+  <li><strong>Checkpoint:</strong> <code>torch.save</code> state_dict + 유지 인덱스 meta (15GB / 17GB). LoRA 복구의 시작점.</li>
+</ul>
+
+<h2><span class="num">2.</span>동등성 검증 (사실)</h2>
+<p>10 val clips &times; K=8, 공유 teacher-forced 시퀀스&middot;seed. masked(전체 모델+마스크) vs slim(물리 제거) 비교:</p>
+<table>
+  <tr><th>config</th><th class="r">params (정수 일치)</th><th class="r">mean &Delta;ADE</th><th class="r">mean &Delta;NLL</th><th class="r">worst |&Delta;xy|</th><th>판정</th></tr>
+  <tr><td>slim integrated_mag</td><td class="r">7,829,296,242 (&minus;29.3%)</td><td class="r">&minus;0.0013</td><td class="r">+0.0087</td><td class="r">0.13 m</td><td><strong>동등</strong></td></tr>
+  <tr><td>slim cocsafe_full_r20</td><td class="r">9,072,207,090 (&minus;18.1%)</td><td class="r">+0.0015</td><td class="r">+0.0003</td><td class="r">0.08 m</td><td><strong>동등</strong></td></tr>
+</table>
+<div class="note">
+  <strong>편차의 귀속 (3중 증명).</strong> 초기 게이트(waypoint 0.05m)는 초과했으나 원인을 실측으로 확정했다: ① identity gather 경로는 stock과 <strong>bit-exact</strong>(편차 정확히 0) &mdash; custom forward는 오차를 더하지 않는다. ② 단일 o_proj GEMM 마이크로 실험: "full GEMM + zero 입력" vs "sliced GEMM"이 <strong>fp64에서 차이 정확히 0</strong>, bf16에서 max 0.031 &mdash; 축소된 GEMM의 reduction-order 반올림이 유일한 원인. ③ per-clip &Delta;는 0 중심 무편향, 규모는 pruning량에 비례. 즉 편차는 <strong>어떤 물리 제거 구현에서도 불가피한 bf16 노이즈</strong>이며, 36 layer 누적 + Euler 10 step + 6.4s 이중적분으로 증폭된 것이다. 재보정 게이트(무편향: |mean &Delta;| &lt; 0.01)로 양 config 모두 PASS. 상세: <code>outputs/slim_verify/verify_*.json</code>.
+</div>
+
+<h2><span class="num">3.</span>실측 latency (사실)</h2>
+<p class="meta">동일 Blackwell 카드, baseline과 동일 클립&middot;seed. decode&middot;rollout overhead는 baseline 중앙값 CoC 길이(16 token)로 정규화 &mdash; slim integrated는 CoC가 퇴화해 rollout이 길어지므로(중앙 112 step) 정규화 없이는 비교가 왜곡된다.</p>
+
+<figure>
+  <img src="PLOT::sp::slim_stages.png" alt="slim stages">
+  <figcaption>Stage별 실측 (CoC 16 token 정규화). 점선 = 종전 예측. slim의 이득은 prefill(파랑)에서만 나타나고 decode(노랑)&middot;expert(초록)는 거의 불변이다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>run</th><th class="r">ViT</th><th class="r">prefill</th><th class="r">decode/tok</th><th class="r">expert</th><th class="r">norm total</th><th class="r">vs baseline</th><th class="r">vs identity</th><th class="r">peak</th></tr>
+  <tr><td>baseline (stock)</td><td class="r">132.7</td><td class="r">265.0</td><td class="r">32.2</td><td class="r">378.3</td><td class="r">1,346</td><td class="r">1.00&times;</td><td class="r">&mdash;</td><td class="r">21.5G</td></tr>
+  <tr><td>identity (gather 대조)</td><td class="r">139.7</td><td class="r">273.6</td><td class="r">35.4</td><td class="r">391.3</td><td class="r">1,433</td><td class="r">0.94&times;</td><td class="r">1.00&times;</td><td class="r">21.5G</td></tr>
+  <tr><td><strong>slim integrated (&minus;3.25B)</strong></td><td class="r">139.0</td><td class="r"><strong>196.8</strong></td><td class="r">34.3</td><td class="r">377.1</td><td class="r">1,312</td><td class="r"><strong>1.03&times;</strong></td><td class="r">1.09&times;</td><td class="r"><strong>15.4G</strong></td></tr>
+  <tr><td><strong>slim cocsafe (&minus;2.01B)</strong></td><td class="r">138.4</td><td class="r">261.5</td><td class="r">35.1</td><td class="r">384.0</td><td class="r">1,406</td><td class="r"><strong>0.96&times;</strong></td><td class="r">1.02&times;</td><td class="r"><strong>17.7G</strong></td></tr>
+</table>
+
+<p>Identity 대비(같은 경로) stage 실현율: integrated는 prefill <strong>&minus;28%</strong>(가중치 &minus;38%에 근접), decode/tok <strong>&minus;3%</strong>, expert <strong>&minus;3.6%</strong>. cocsafe는 각각 &minus;4.4% / &minus;1% / &minus;1.9%.</p>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>왜 예측이 틀렸나.</strong> 추정 모델은 decode&middot;expert를 bandwidth-bound(시간 &prop; 가중치 바이트)로 가정했다. 실측 반례: 가중치 34%를 지워도 decode/tok은 3%만 줄었다. decode 33ms/token은 bandwidth 하한(~12ms)의 3배 &mdash; batch 1에서 36 layer &times; 수십 kernel launch의 <strong>dispatch 비용이 지배</strong>하며, 이는 가중치 양과 무관하다. 기존 hardware sensitivity(decode 0.94&times;, expert 1.00&times;)가 이미 이 사실을 가리키고 있었으나 추정 시 과소평가했다 &mdash; 이 연구의 정정 목록에 추가될 항목이다.</li>
+  <li><strong>파라미터가 실제로 사는 곳.</strong> ① <strong>메모리 &minus;29%</strong>: 완전 실현 &mdash; 더 작은 카드 배포, LoRA 복구 학습의 여유, 동시 실행 밀도. ② <strong>prefill &minus;26%</strong>: 유일하게 compute-bound인 stage라 FLOPs 감소가 시간으로 전환. ③ batched serving&middot;CUDA graph에서는 dispatch가 상각되어 bandwidth 조건이 복원 &mdash; <strong>후속 실측(2026-07-23)으로 확인됨</strong>: 수동 CUDA graph 아래서 slim integrated <strong>1.62&times;</strong>, slim cocsafe <strong>1.43&times;</strong> (<code>2026-07-23_dispatch-optimized-latency.html</code>).</li>
+  <li><strong>prefill 실현율의 비선형.</strong> integrated &minus;28% vs cocsafe &minus;4.4% &mdash; 가중치 비율(38% vs 20%)보다 격차가 크다. 얕은 절단에서는 GEMM tile 효율 손실과 잔존 attention 비중이 이득을 상쇄하는 것으로 보인다(사실만 기록, 원인 미검증).</li>
+  <li><strong>gather 경로 비용 +87ms는 구현 상한.</strong> 물리 제거를 group-연속 배치로 재배열하면 enable_gqa 경로를 유지해 이 비용을 제거할 수 있으나, decode가 dispatch-bound인 이상 이득도 ~87ms에 그친다 &mdash; 우선순위 낮음.</li>
+  <li><strong>동등성의 의미.</strong> "마스킹 실험의 모든 품질 결론이 물리 제거에도 그대로 이전된다"가 이제 실측 사실이다(무편향, fp64 정확 일치). P1&ndash;P3의 minADE/NLL 표는 slim 모델의 표이기도 하다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음 단계</h2>
+<ol>
+  <li><strong>LoRA 복구 학습</strong> &mdash; slim checkpoint 2개 확보 완료, 메모리 여유도 &minus;29% 확보. 경계 밖 config(dual_r30 등)의 회복 여지 탐색.</li>
+  <li><strong>종합 보고서 정정</strong> &mdash; "예상 latency 1.39&times;/1.22&times;" KPI를 실측(1.03&times;/0.96&times;, 메모리 &minus;29%/&minus;18%)으로 교체, &sect;7 정정 기록에 bandwidth-bound 가정 반증 추가.</li>
+  <li><strong>dispatch 제거 실측 &mdash; 완료(2026-07-23).</strong> 수동 CUDA graph로 상각 결과 graph 단독 1.28&times;, pruning 결합 1.62&times;/1.43&times; &mdash; 가중치 절감이 예상대로 속도로 전환됨을 확인. 상세: <code>2026-07-23_dispatch-optimized-latency.html</code>.</li>
+</ol>
+
+<h2><span class="num">6.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/slim_lib.py</code> &mdash; 수술&middot;gather forward&middot;kv-only layer&middot;checkpoint I/O</li>
+  <li><code>experiments/head_analysis/make_slim.py</code> / <code>verify_slim.py</code> / <code>analyze_slim.py</code></li>
+  <li><code>outputs/slim_integrated_mag/</code>, <code>outputs/slim_cocsafe_r20/</code> &mdash; slim checkpoint (15G/17G)</li>
+  <li><code>outputs/slim_verify/</code> &mdash; 동등성 원자료(궤적 포함) + identity 대조 + 판정 json</li>
+  <li><code>outputs/profile_{identity,slim_int,slim_coc}_s{0,13}/</code>, <code>outputs/slim_profile_summary/</code></li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+alpasim closed-loop eval — 30 scenes x 2 rollouts, 4 configs
+
+config                   score  pass%  col@f  offrd   prog   d2gt
+-----------------------------------------------------------------
+baseline                 0.540   66.7  0.033  0.300  0.611   2.07
+slim_cocsafe_r20         0.505   60.0  0.050  0.350  0.614   2.30
+slim_cocsafe_r30         0.320   41.7  0.067  0.517  0.517   2.00
+slim_integrated_mag      0.542   63.3  0.133  0.233  0.681   2.27
+
+repeat noise (|score diff| between the 2 rollouts of a scene):
+  baseline               mean 0.030 max 0.672
+  slim_cocsafe_r20       mean 0.105 max 1.000
+  slim_cocsafe_r30       mean 0.176 max 1.000
+  slim_integrated_mag    mean 0.117 max 1.000
+
+slim_cocsafe_r20: d_score -0.0354 [-0.1050, +0.0258] wilcoxon_p 0.2439  W/L/T 4/9/17
+slim_cocsafe_r30: d_score -0.2203 [-0.3661, -0.0882] wilcoxon_p 0.0083  W/L/T 4/14/12
+slim_integrated_mag: d_score +0.0015 [-0.1483, +0.1467] wilcoxon_p 0.7959  W/L/T 10/6/14
+
+baseline: CoC degen 0.007 (empty 0.001 soup 0.006) len 75 uniq 0.94 nonascii 0.000
+slim_cocsafe_r20: CoC degen 0.014 (empty 0.004 soup 0.010) len 77 uniq 0.94 nonascii 0.000
+slim_cocsafe_r30: CoC degen 0.027 (empty 0.016 soup 0.011) len 77 uniq 0.94 nonascii 0.000
+slim_integrated_mag: CoC degen 0.863 (empty 0.663 soup 0.199) len 122 uniq 0.99 nonascii 0.075

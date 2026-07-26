@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase P1 — 두 목적함수의 중요도 랭킹 비교</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style></head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Phase P1 &mdash; 두 목적함수의 중요도 랭킹 비교</h1>
+  <div class="meta">
+    2026-07-21 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; calibration 50 clips (train split)
+    &middot; 코드 <code>experiments/head_analysis/{prune_lib,run_importance,analyze_importance}.py</code>
+    &middot; 산출물 <code>outputs/importance_v1/</code>
+    &middot; 계획: <code>2026-07-21_width-pruning-plan.html</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>목적</h2>
+<p>승인된 계획의 <strong>H1</strong>을 검정한다. Attention Q head, MLP channel, KV group 각각에 대해 두 기준으로 Taylor 중요도를 산출하고 랭킹이 다른지 본다.</p>
+<ul>
+  <li><strong>출력 기준</strong> &mdash; CoC NLL. 기존 LLM pruning이 보존하는 대상.</li>
+  <li><strong>cache 기준</strong> &mdash; trajectory flow-matching MSE. Expert가 읽는 KV cache를 통해서만 gradient가 전달된다.</li>
+</ul>
+<p>두 랭킹이 사실상 같다면 cache 전용 기준은 무의미하고, 이 연구의 방법론적 기여가 사라진다. 그래서 이 실험을 첫 게이트로 배치했다.</p>
+
+<h2><span class="num">2.</span>방법</h2>
+<p>클립당 teacher-forced VLM forward를 <strong>한 번</strong>만 수행하고 두 목적함수를 모두 얹는다. Trajectory 쪽은 2단계 역전파를 쓴다.</p>
+<ol>
+  <li>VLM forward (<code>use_cache=True</code>), cache k/v에 <code>retain_grad</code>.</li>
+  <li>CoC NLL backward (<code>retain_graph=True</code>) &rarr; 출력 기준 점수 수집 &rarr; gradient 초기화.</li>
+  <li>Cache를 detach한 leaf로 복제해 flow-matching 10 step backward &rarr; leaf에 gradient 누적 (expert 쪽만 역전파).</li>
+  <li>누적된 <code>dL/d(cache)</code>를 seed로 원본 cache 텐서에서 <strong>VLM backward 1회</strong> &rarr; cache 기준 점수 수집.</li>
+</ol>
+<p>2단계로 나눈 덕분에 VLM backward가 flow-matching step 수만큼이 아니라 <strong>1회</strong>로 끝난다. 이것이 두 목적함수를 동시에 재는 비용을 감당 가능하게 만든다.</p>
+
+<h3>2.1 구현상 결정 세 가지</h3>
+<table>
+  <tr><th>문제</th><th>해결</th></tr>
+  <tr>
+    <td>K에 gate를 걸면 무효가 된다</td>
+    <td>Qwen3는 <code>k_proj</code> 뒤에 <code>k_norm</code>(RMSNorm over head_dim)을 적용하므로 head별 스칼라 gate가 정규화되어 사라진다. 따라서 KV group은 gate가 아니라 <strong>cache 텐서에 직접</strong> 채점했다. Cache는 VLM 자기 attention과 expert의 읽기가 모두 소비하는 바로 그 텐서이므로, "이 KV group을 제거한다"를 정확히 측정한다.</td>
+  </tr>
+  <tr>
+    <td>초반 layer의 cache에 gradient가 없다</td>
+    <td>모든 가중치가 동결돼 있고 gate는 k/v보다 하류(<code>o_proj</code>/<code>down_proj</code> 입력)에 있어, layer 0의 k/v 상류에는 grad를 요구하는 leaf가 없다. <code>model.vlm.enable_input_require_grads()</code>로 해결.</td>
+  </tr>
+  <tr>
+    <td>gradient checkpointing을 쓸 수 없다</td>
+    <td>transformers는 checkpointing이 training 모드로 활성화되면 <code>use_cache</code>를 강제로 끄는데, KV cache가 이 실험의 측정 대상 그 자체다. Checkpointing 없이 진행했고 peak는 <strong>40.5 GB</strong>로 48GB 카드에 적재된다.</td>
+  </tr>
+</table>
+
+<h3>2.2 배선 검증 (sanity check)</h3>
+<div class="callout">
+  <strong>두 값이 정확히 0이어야 하고, 실제로 0이었다.</strong>
+  <ul style="margin-bottom:0">
+    <li><code>coc_exp_*</code> = 0 &mdash; expert는 CoC 생성에 관여하지 않으므로 CoC gradient가 expert에 도달하면 안 된다.</li>
+    <li><code>traj_vlm_*</code>의 layer 35 = 0 &mdash; VLM 마지막 layer의 attention/MLP 출력은 어떤 KV cache도 만들지 않고 <code>lm_head</code>로만 간다. 따라서 trajectory 경로에서 구조적으로 무관하다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">3.</span>결과 (사실)</h2>
+
+<h3>3.1 layer 내부 랭킹 상관</h3>
+<p>상관은 <strong>각 layer 내부에서만</strong> 계산했다. 전 layer를 합친 상관은 depth에 의해 교란된다 &mdash; 두 목적함수 모두 depth에 따라 값이 커지므로, layer 내부 순서가 무관해도 높은 상관이 만들어진다. 이 교란은 선행 attention 분석에서 이미 한 번 겪었기에 설계 단계에서 통제했다.</p>
+<table>
+  <tr><th>단위</th><th class="r">layer 내 &rho; (평균)</th><th class="r">중앙값</th><th class="r">top-20% 중첩</th><th class="r">전체 합산 &rho;</th></tr>
+  <tr><td>VLM Q head</td><td class="r">+0.599</td><td class="r">+0.720</td><td class="r">57.6%</td><td class="r">+0.546</td></tr>
+  <tr><td>VLM MLP channel</td><td class="r">+0.602</td><td class="r">+0.668</td><td class="r">57.8%</td><td class="r">+0.519</td></tr>
+  <tr><td>KV group (K)</td><td class="r">+0.692</td><td class="r">+0.857</td><td class="r">69.4%</td><td class="r">+0.878</td></tr>
+  <tr><td>KV group (V)</td><td class="r">+0.681</td><td class="r">+0.845</td><td class="r">65.3%</td><td class="r">+0.877</td></tr>
+</table>
+<p class="meta">top-20% 중첩의 우연 수준은 20%다. 전체 합산 &rho;는 교란된 값이며 참고용으로만 싣는다.</p>
+
+<h3>3.2 상관은 depth에 따라 붕괴한다</h3>
+<figure>
+  <img src="PLOT::imp::within_layer_agreement.png" alt="within-layer agreement by depth">
+  <figcaption>layer 21까지는 네 단위 모두 &rho; &gt; 0.6을 유지하다가, layer 22 이후 급격히 무너진다. 일부 layer에서는 음의 상관까지 나타난다.</figcaption>
+</figure>
+<table>
+  <tr><th>depth 구간</th><th class="r">VLM Q head</th><th class="r">VLM MLP</th><th class="r">KV (K)</th><th class="r">KV (V)</th></tr>
+  <tr><td>0&ndash;5</td><td class="r">+0.778</td><td class="r">+0.953</td><td class="r">+0.829</td><td class="r">+0.857</td></tr>
+  <tr><td>6&ndash;17</td><td class="r">+0.744</td><td class="r">+0.695</td><td class="r">+0.929</td><td class="r">+0.887</td></tr>
+  <tr><td>18&ndash;29</td><td class="r">+0.500</td><td class="r">+0.464</td><td class="r">+0.589</td><td class="r">+0.665</td></tr>
+  <tr><td><strong>30&ndash;35</strong></td><td class="r"><strong>+0.271</strong></td><td class="r"><strong>+0.286</strong></td><td class="r"><strong>+0.290</strong></td><td class="r"><strong>+0.123</strong></td></tr>
+</table>
+<p>top-20% 중첩률도 같은 방향으로 움직인다. VLM Q head는 72.2% &rarr; 63.9% &rarr; 55.6% &rarr; <strong>30.0%</strong>, MLP는 87.2% &rarr; 62.2% &rarr; 47.4% &rarr; <strong>37.2%</strong>이다. 후반 구간에서는 우연 수준(20%)에 상당히 가까워진다.</p>
+
+<figure>
+  <img src="PLOT::imp::topk_overlap.png" alt="top-k overlap">
+  <figcaption>두 랭킹의 상위 집합 중첩률. 점선이 우연 수준이다.</figcaption>
+</figure>
+
+<h3>3.3 중요도 질량의 depth 분포</h3>
+<figure>
+  <img src="PLOT::imp::importance_vs_depth.png" alt="importance vs depth">
+  <figcaption>두 목적함수 모두 depth에 따라 커지지만 정점의 위치가 다르다. 이것이 전체 합산 상관을 교란하는 원인이다.</figcaption>
+</figure>
+<table>
+  <tr><th>기준</th><th>단위</th><th class="r">0&ndash;5</th><th class="r">6&ndash;17</th><th class="r">18&ndash;29</th><th class="r">30&ndash;35</th></tr>
+  <tr><td>CoC NLL</td><td>VLM Q head</td><td class="r">5.0%</td><td class="r">28.6%</td><td class="r">48.2%</td><td class="r"><strong>18.2%</strong></td></tr>
+  <tr><td>CoC NLL</td><td>VLM MLP</td><td class="r">2.7%</td><td class="r">19.2%</td><td class="r">52.0%</td><td class="r"><strong>26.0%</strong></td></tr>
+  <tr><td>trajectory</td><td>VLM Q head</td><td class="r">6.6%</td><td class="r">47.7%</td><td class="r">42.6%</td><td class="r"><strong>3.1%</strong></td></tr>
+  <tr><td>trajectory</td><td>VLM MLP</td><td class="r">5.2%</td><td class="r">40.1%</td><td class="r">45.4%</td><td class="r"><strong>9.3%</strong></td></tr>
+</table>
+<p class="meta">균등 분포라면 16.7 / 33.3 / 33.3 / 16.7%가 된다.</p>
+
+<h3>3.4 KV group</h3>
+<figure>
+  <img src="PLOT::imp::kv_group_heatmap.png" alt="kv group heatmap">
+  <figcaption>KV group별 중요도(layer마다 최댓값으로 정규화). group 8개뿐이라 개별 확인이 가능하다.</figcaption>
+</figure>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+
+<h3>4.1 H1은 후반 layer에서 지지된다</h3>
+<p>단일 평균(&rho; &asymp; 0.60)만 보면 "부분적으로 겹친다"로 끝나지만, 실제 구조는 <strong>depth에 따른 체계적 분기</strong>다. 초반 layer(&rho; = +0.87)에서는 두 기준이 사실상 같은 답을 내므로 cache 전용 기준을 쓸 이유가 없다. 후반 layer(&rho; = +0.28, top-20% 중첩 30%)에서는 두 기준이 <strong>상당히 다른 부분집합</strong>을 고른다.</p>
+<p>해석하자면, 초반 layer는 지각·언어의 일반 처리를 담당해 두 목적 모두에 같은 방식으로 기여한다. 후반 layer는 다음 토큰 예측에 특화되고, trajectory가 그 구간에서 필요로 하는 것은 그와 다르다.</p>
+
+<h3>4.2 &ldquo;reasoning은 얼마나 비싼가&rdquo;에 대한 첫 숫자</h3>
+<div class="callout">
+  <strong>VLM 후반 6개 layer는 대체로 CoC 전용이다.</strong> layer 30&ndash;35가 보유한 중요도 비중은 CoC 기준으로 18.2%(Q head) / 26.0%(MLP)인 반면, trajectory 기준으로는 <strong>3.1% / 9.3%</strong>에 불과하다. 균등 분포 기준선 16.7%와 비교하면, CoC에는 과대 기여하고 trajectory에는 과소 기여한다.
+</div>
+<p>여기에 layer 35의 attention/MLP가 trajectory 중요도 <strong>정확히 0</strong>이라는 구조적 사실이 더해진다. Trajectory만 놓고 보면 VLM 상단은 상당 부분 잉여이며, 이는 "reasoning VLA에서 reasoning 용량과 action 용량이 분리되어 있는가"라는 질문에 대한 정량적 근거의 시작점이다.</p>
+
+<h3>4.3 이전 서술의 정정</h3>
+<div class="callout">
+  <strong>중간 보고에서 &ldquo;불일치가 집중된 후반 layer는 두 목적 모두에서 중요도가 가장 높은 구간&rdquo;이라고 썼는데, 이는 틀렸다.</strong> 후반 layer의 중요도가 높은 것은 <strong>CoC 기준에서만</strong>이고, trajectory 기준으로는 오히려 가장 낮은 구간이다(3.1&ndash;9.3%). 선행 attention 분석에서 depth에 따라 중요도가 커진 것은 <em>expert</em> 쪽이었고, 이를 VLM에 잘못 확장했다. 정정된 그림이 압축에는 더 유리하다 &mdash; trajectory 관점에서 VLM 상단은 비싸지 않다.
+</div>
+
+<h3>4.4 이 결과가 증명하지 <em>않는</em> 것</h3>
+<ul>
+  <li><strong>랭킹이 다르다는 것이 곧 성능이 좋다는 뜻은 아니다.</strong> 두 기준이 다른 부분집합을 고른다는 사실만 확인했을 뿐, cache 기준으로 자른 쪽이 실제로 minADE가 나은지는 <strong>ablation으로만</strong> 판정된다.</li>
+  <li><strong>Taylor는 국소 1차 근사다.</strong> gate를 1에서 0으로 보내는 것은 국소 근사가 유효한 범위를 벗어나며, 특히 높은 압축률에서 신뢰도가 떨어진다.</li>
+  <li><strong>n=50 calibration 클립</strong>이며 clip 간 분산은 이 보고서에서 분해하지 않았다.</li>
+  <li><strong>KV group의 상관이 상대적으로 높은 것</strong>(&rho; = 0.68&ndash;0.69)은 자연스럽다. Cache는 두 tower가 문자 그대로 공유하는 텐서이므로 두 목적함수가 같은 대상을 본다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음 단계 (P2 재설계)</h2>
+<p>P1 결과에 맞춰 P2 ablation을 조정한다. 원래 계획은 전체 압축률에서 두 기준을 비교하는 것이었으나, 그렇게 하면 <strong>초반 layer의 일치가 후반 layer의 차이를 희석</strong>한다.</p>
+<ol>
+  <li><strong>depth 구간별 분리 비교.</strong> 후반 layer(22&ndash;35)에서만 기준을 바꿨을 때의 minADE 차이를 주 지표로 삼는다. 초반 layer는 두 기준이 같으므로 통제 변수로 둔다.</li>
+  <li><strong>layer 35 attn+MLP 제거를 무비용 baseline으로.</strong> trajectory 중요도가 정확히 0이므로, CoC를 포기하는 구성에서는 즉시 제거 가능하다.</li>
+  <li><strong>KV group 전수 탐색.</strong> 8개뿐이므로 1&ndash;3개 제거 조합을 모두 시도한다.</li>
+  <li><strong>압축률 스윕</strong>(10/25/40/50%)과 head-MLP 배분 탐색은 계획대로 유지.</li>
+</ol>
+
+<h2><span class="num">6.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/prune_lib.py</code> &mdash; Q head / MLP channel gate, KV group cache 채점</li>
+  <li><code>experiments/head_analysis/run_importance.py</code> &mdash; 두 목적함수 동시 측정 드라이버</li>
+  <li><code>experiments/head_analysis/analyze_importance.py</code> &mdash; H1 검정 및 플롯</li>
+  <li><code>experiments/head_analysis/make_split.py</code> &mdash; train 900 / val 131 / test 150 고정 분할</li>
+  <li><code>outputs/importance_v1/</code> &mdash; <code>importance.npz</code>, <code>h1_summary.txt</code>, <code>h1_metrics.json</code>, <code>plots/</code></li>
+  <li><code>outputs/split.json</code> &mdash; 모든 후속 실험이 공유하는 분할</li>
+</ul>
+<div class="note">
+  실행 참고: 첫 실행이 35번째 클립에서 OOM으로 중단됐다. 원인은 코드 내 <code>torch.cuda.empty_cache()</code>가 사전 예약한 메모리를 드라이버에 반납해 공유 서버의 다른 프로세스가 약 9GB를 점유한 것이었다. 해당 호출을 제거하고 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code>를 설정해 재실행했다. 본 보고서의 수치는 전량 재실행한 n=50 결과다.
+</div>
+
+</div>
+</body>
+</html>

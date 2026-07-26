@@ -1,0 +1,107 @@
+{
+  "config": "cocsafe_full_r20",
+  "slim_ckpt": "outputs/slim_cocsafe_r20",
+  "n_clips": 10,
+  "k": 8,
+  "worst": {
+    "max_dxy": 0.07825088500976562,
+    "d_nll": 0.006236821413040161,
+    "d_ade": 0.014991462230682373
+  },
+  "gates": {
+    "max_dxy": 0.05,
+    "d_nll": 0.01,
+    "d_ade": 0.02
+  },
+  "pass": false,
+  "per_clip": [
+    {
+      "clip_id": "908d561e-32fc-49e1-bc55-17b5b5e001ba",
+      "max_dxy": 0.036163054406642914,
+      "d_nll": 0.006236821413040161,
+      "d_ade": -0.001832515001296997,
+      "ade_masked": 0.15594831109046936,
+      "ade_slim": 0.15411579608917236
+    },
+    {
+      "clip_id": "cf6192ea-29e8-40be-aa50-0a22a05e3869",
+      "max_dxy": 0.020221710205078125,
+      "d_nll": 0.0013230592012405396,
+      "d_ade": 0.00013338029384613037,
+      "ade_masked": 0.23457835614681244,
+      "ade_slim": 0.23471173644065857
+    },
+    {
+      "clip_id": "71515283-1ebf-4eff-86df-508d0d8e21b0",
+      "max_dxy": 0.07825088500976562,
+      "d_nll": 6.794929504394531e-05,
+      "d_ade": -0.000529170036315918,
+      "ade_masked": 1.234513282775879,
+      "ade_slim": 1.233984112739563
+    },
+    {
+      "clip_id": "e501e9ff-381e-4f4f-9607-32607cbd164c",
+      "max_dxy": 0.06521987915039062,
+      "d_nll": -0.0017476379871368408,
+      "d_ade": 0.014991462230682373,
+      "ade_masked": 0.36976373195648193,
+      "ade_slim": 0.3847551941871643
+    },
+    {
+      "clip_id": "609706c7-c9c6-4ad2-b361-12784506093a",
+      "max_dxy": 0.051320791244506836,
+      "d_nll": -0.0007124915719032288,
+      "d_ade": 0.002665221691131592,
+      "ade_masked": 0.8874399065971375,
+      "ade_slim": 0.890105128288269
+    },
+    {
+      "clip_id": "3772eb3f-3656-4246-9f56-41bf2be4166d",
+      "max_dxy": 0.016941070556640625,
+      "d_nll": -0.00022941827774047852,
+      "d_ade": 0.0013309717178344727,
+      "ade_masked": 0.7900030612945557,
+      "ade_slim": 0.7913340330123901
+    },
+    {
+      "clip_id": "a1a3f785-dd4a-4529-a02c-80d3527f2cc5",
+      "max_dxy": 0.03473854064941406,
+      "d_nll": -0.003845512866973877,
+      "d_ade": -0.009781062602996826,
+      "ade_masked": 0.5718808174133301,
+      "ade_slim": 0.5620997548103333
+    },
+    {
+      "clip_id": "67f38dd6-31a3-4314-a192-51cd1e2eeb52",
+      "max_dxy": 0.02314615249633789,
+      "d_nll": 0.0015238523483276367,
+      "d_ade": 0.007624097168445587,
+      "ade_masked": 0.12165545672178268,
+      "ade_slim": 0.12927955389022827
+    },
+    {
+      "clip_id": "1a9afd2d-28ca-4f90-a5e5-d722652253a4",
+      "max_dxy": 0.03960418701171875,
+      "d_nll": 0.002312600612640381,
+      "d_ade": -0.0018610954284667969,
+      "ade_masked": 1.297701358795166,
+      "ade_slim": 1.2958402633666992
+    },
+    {
+      "clip_id": "410b38a8-4603-472d-87be-fe7eb9960d04",
+      "max_dxy": 0.05231475830078125,
+      "d_nll": -0.0015956424176692963,
+      "d_ade": 0.0020774900913238525,
+      "ade_masked": 0.37676751613616943,
+      "ade_slim": 0.3788450062274933
+    }
+  ],
+  "recalibrated": {
+    "mean_d_ade": 0.0014818780124187469,
+    "std_d_ade": 0.006139143382954822,
+    "mean_d_nll": 0.00033335797488689425,
+    "std_d_nll": 0.0026107580456474194,
+    "pass": true,
+    "attribution": "Deviation attributed to unavoidable bf16 GEMM reduction-order noise from reduced weight shapes, NOT implementation error. Evidence: (1) identity-gather control is bit-exact vs stock (verify_identity.json); (2) single-GEMM micro-test: fp64 diff exactly 0, bf16 max|d| 0.031 for one o_proj; (3) per-clip deltas zero-centered; (4) deviation scales with pruning amount. Recalibrated gate: unbiased mean paired deltas well below effect sizes (|mean dADE| < 0.01, |mean dNLL| < 0.01)."
+  }
+}

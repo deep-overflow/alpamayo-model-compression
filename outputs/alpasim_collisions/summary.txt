@@ -1,0 +1,88 @@
+충돌 개별 분석 — 과실 충돌 17건 (pre-window 5.0s)
+
+config                  col@f    씬수   front  lateral    rear
+------------------------------------------------------------
+baseline                    2     1   0.033    0.000   0.133
+slim_cocsafe_r20            3     2   0.033    0.017   0.133
+slim_cocsafe_r30            4     4   0.033    0.033   0.050
+slim_integrated_mag         8     4   0.133    0.000   0.067
+
+충돌별 CoC 상태 (충돌 직전 5초 / 롤아웃 전체):
+  [baseline] 0068170a-742 t=33331.57s score=0.00 dist=17.5m
+      직전: healthy 1.00 empty 0.00 soup 0.00 (n=44)
+      전체: healthy 1.00 empty 0.00 soup 0.00
+      충돌시점 CoC: ['Keep distance to the lead vehicle since it is moving slowly ahead']
+  [baseline] 0068170a-742 t=33331.17s score=0.00 dist=15.6m
+      직전: healthy 0.95 empty 0.00 soup 0.05 (n=40)
+      전체: healthy 0.99 empty 0.00 soup 0.01
+      충돌시점 CoC: ['Lane change to the left due to slow traffic ahead in our lane and a safe gap forming behind the white sedan 
+  [slim_cocsafe_r20] 0010ce77-d06 t=237491.87s score=0.00 dist=44.8m
+      직전: healthy 0.97 empty 0.03 soup 0.00 (n=37)
+      전체: healthy 0.99 empty 0.01 soup 0.01
+      충돌시점 CoC: ['Keep distance to the lead vehicle since it is slowing ahead']
+  [slim_cocsafe_r20] 0068170a-742 t=33330.27s score=0.00 dist=13.8m
+      직전: healthy 0.87 empty 0.03 soup 0.10 (n=31)
+      전체: healthy 0.97 empty 0.01 soup 0.02
+      충돌시점 CoC: ['Keep distance to the lead vehicle since it is moving slowly ahead']
+  [slim_cocsafe_r20] 0068170a-742 t=33330.97s score=0.00 dist=14.3m
+      직전: healthy 0.92 empty 0.03 soup 0.05 (n=38)
+      전체: healthy 0.98 empty 0.01 soup 0.01
+      충돌시점 CoC: ['Lane change to the left due to slow traffic ahead in the current lane and a safe gap behind the white sedan,
+  [slim_cocsafe_r30] 0010ce77-d06 t=237491.57s score=0.00 dist=43.0m
+      직전: healthy 0.82 empty 0.15 soup 0.03 (n=34)
+      전체: healthy 0.93 empty 0.06 soup 0.02
+      충돌시점 CoC: ['Keep distance to the lead vehicle since it is slowing ahead']
+  [slim_cocsafe_r30] 00169207-9da t=75115.54s score=0.00 dist=34.2m
+      직전: healthy 1.00 empty 0.00 soup 0.00 (n=35)
+      전체: healthy 0.97 empty 0.02 soup 0.02
+      충돌시점 CoC: ['Nudge left due to the vehicle encroaching from the right at the intersection']
+  [slim_cocsafe_r30] 002ae4d8-ef9 t=5483624.62s score=0.00 dist=38.4m
+      직전: healthy 1.00 empty 0.00 soup 0.00 (n=51)
+      전체: healthy 0.99 empty 0.01 soup 0.00
+      충돌시점 CoC: ['Nudge left to pass the stopped vehicle blocking the right side of our lane']
+  [slim_cocsafe_r30] 0068170a-742 t=33330.87s score=0.00 dist=14.3m
+      직전: healthy 0.84 empty 0.11 soup 0.05 (n=37)
+      전체: healthy 0.92 empty 0.04 soup 0.04
+      충돌시점 CoC: ['Lane change to the right to prepare for the upcoming right turn since the right-turn traffic light is green'
+  [slim_integrated_mag] 000a74ae-5c0 t=25988.44s score=0.00 dist=227.1m
+      직전: healthy 0.18 empty 0.55 soup 0.27 (n=51)
+      전체: healthy 0.10 empty 0.60 soup 0.29
+      충돌시점 CoC: ['Stop to keep distance to physics work in close.trigger imprinting theChoices in andindsay_MALLOC可根据escort st
+  [slim_integrated_mag] 000a74ae-5c0 t=25989.44s score=0.00 dist=227.7m
+      직전: healthy 0.12 empty 0.75 soup 0.14 (n=51)
+      전체: healthy 0.09 empty 0.70 soup 0.21
+      충돌시점 CoC: ['']
+  [slim_integrated_mag] 0010ce77-d06 t=237499.97s score=0.00 dist=91.3m
+      직전: healthy 0.16 empty 0.71 soup 0.14 (n=51)
+      전체: healthy 0.11 empty 0.72 soup 0.17
+      충돌시점 CoC: ['']
+  [slim_integrated_mag] 0010ce77-d06 t=237500.77s score=0.00 dist=93.0m
+      직전: healthy 0.16 empty 0.69 soup 0.16 (n=51)
+      전체: healthy 0.10 empty 0.70 soup 0.19
+      충돌시점 CoC: ['Keep distance tomAhüss unnoticed ahead']
+  [slim_integrated_mag] 004d4a47-2b2 t=33739.06s score=0.00 dist=86.6m
+      직전: healthy 0.06 empty 0.76 soup 0.18 (n=51)
+      전체: healthy 0.10 empty 0.70 soup 0.20
+      충돌시점 CoC: ['']
+  [slim_integrated_mag] 004d4a47-2b2 t=33739.26s score=0.00 dist=86.7m
+      직전: healthy 0.10 empty 0.75 soup 0.16 (n=51)
+      전체: healthy 0.12 empty 0.68 soup 0.20
+      충돌시점 CoC: ['monitoring under uploads forward since the lead furnish zebra violated Gäste SIXoubleเราก็蛘公开发 amphredicateı
+  [slim_integrated_mag] 0068170a-742 t=33331.47s score=0.00 dist=16.8m
+      직전: healthy 0.09 empty 0.81 soup 0.09 (n=43)
+      전체: healthy 0.13 empty 0.75 soup 0.13
+      충돌시점 CoC: ['Laneudge left due to setter ahead']
+  [slim_integrated_mag] 0068170a-742 t=33330.67s score=0.00 dist=12.4m
+      직전: healthy 0.09 empty 0.74 soup 0.17 (n=35)
+      전체: healthy 0.12 empty 0.75 soup 0.14
+      충돌시점 CoC: ['']
+
+충돌 발생 씬에서 각 구성의 결과 (씬 난이도 통제):
+  scene               baseline   cocsafe_r20   cocsafe_r30  integrated_m
+  000a74ae-5c0      0충/2이/0.00    0충/2이/0.00    0충/2이/0.00    2충/0이/0.00
+  0010ce77-d06      0충/0이/0.62    1충/0이/0.46    1충/0이/0.35    2충/0이/0.00
+  00169207-9da      0충/0이/0.58    0충/0이/0.56    1충/0이/0.27    0충/0이/0.77
+  002ae4d8-ef9      0충/0이/0.63    0충/2이/0.00    1충/0이/0.50    0충/0이/1.00
+  004d4a47-2b2      0충/0이/1.00    0충/0이/0.95    0충/0이/1.00    2충/0이/0.00
+  0068170a-742      2충/0이/0.00    2충/0이/0.00    1충/0이/0.24    2충/0이/0.00
+  (형식: 과실충돌 rollout수 / 이탈 rollout수 / 평균 score, 씬당 2 rollouts)

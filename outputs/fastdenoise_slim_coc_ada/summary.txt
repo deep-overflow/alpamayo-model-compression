@@ -1,0 +1,5 @@
+expert denoise fast-path bench (slim outputs/slim_cocsafe_r20, 3 clips x K=4, pad=128)
+release   median   413.3 ms/denoise   max|dxy| vs release 0.0000 m
+fast      median   416.7 ms/denoise   max|dxy| vs release 0.0189 m
+compiled  median   158.7 ms/denoise   max|dxy| vs release 0.0189 m
+compile/capture first-call: ['400'] ms

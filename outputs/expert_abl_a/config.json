@@ -1,0 +1,212 @@
+{
+  "model": "nvidia/Alpamayo-1.5-10B",
+  "tower": "expert",
+  "num_clips": 18,
+  "clip_ids": [
+    "3772eb3f-3656-4246-9f56-41bf2be4166d",
+    "a1a3f785-dd4a-4529-a02c-80d3527f2cc5",
+    "67f38dd6-31a3-4314-a192-51cd1e2eeb52",
+    "1a9afd2d-28ca-4f90-a5e5-d722652253a4",
+    "410b38a8-4603-472d-87be-fe7eb9960d04",
+    "8e21456f-6644-4512-bb0d-a1643173d98f",
+    "63c83eca-c02b-43a4-b8d0-df3d0da1d7bf",
+    "4a1546a5-ac20-4edc-8621-e753506040b7",
+    "af8d6b19-5874-4f0a-bbf5-3f47bd5d1974",
+    "6abe994a-c9a8-4809-8775-922696caef80",
+    "cb6e6437-418a-4e7b-9890-d9afe8d7ca9e",
+    "52acf978-95e6-42ca-aeb5-570ef290a7b8",
+    "1ff1c554-4006-43b5-9c86-d174e30c6e8b",
+    "817be67f-72fc-4821-9521-65550273363a",
+    "7e445f8c-f7ea-473b-9936-5b7cbf4091cc",
+    "0417e2c8-90a1-4c2f-b249-987bb1c28c52",
+    "555e7f4a-1153-49cf-833d-0249dc72b7c9",
+    "0ad7e693-20f1-4227-ac14-362aa52dabd4"
+  ],
+  "clip_offset": 5,
+  "k_samples": 8,
+  "ratios": [
+    0.1,
+    0.25,
+    0.4,
+    0.5
+  ],
+  "early_end": 22,
+  "importance_from": "importance_v1",
+  "seed": 42,
+  "protocol": "one shared VLM forward per clip; expert masks affect denoising only",
+  "configs": [
+    {
+      "name": "baseline",
+      "kind": "baseline"
+    },
+    {
+      "name": "exp_traj_all_r10",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_magnitude_all_r10",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "all",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_random_all_r10",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "all",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_traj_all_r25",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_magnitude_all_r25",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "all",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_random_all_r25",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "all",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_traj_all_r40",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_magnitude_all_r40",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "all",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_random_all_r40",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "all",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_traj_all_r50",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "all",
+      "ratio": 0.5
+    },
+    {
+      "name": "exp_magnitude_all_r50",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "all",
+      "ratio": 0.5
+    },
+    {
+      "name": "exp_random_all_r50",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "all",
+      "ratio": 0.5
+    },
+    {
+      "name": "exp_traj_early_r10",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "early",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_magnitude_early_r10",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "early",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_random_early_r10",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "early",
+      "ratio": 0.1
+    },
+    {
+      "name": "exp_traj_early_r25",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "early",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_magnitude_early_r25",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "early",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_random_early_r25",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "early",
+      "ratio": 0.25
+    },
+    {
+      "name": "exp_traj_early_r40",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "early",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_magnitude_early_r40",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "early",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_random_early_r40",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "early",
+      "ratio": 0.4
+    },
+    {
+      "name": "exp_traj_early_r50",
+      "kind": "expert_width",
+      "criterion": "traj",
+      "scope": "early",
+      "ratio": 0.5
+    },
+    {
+      "name": "exp_magnitude_early_r50",
+      "kind": "expert_width",
+      "criterion": "magnitude",
+      "scope": "early",
+      "ratio": 0.5
+    },
+    {
+      "name": "exp_random_early_r50",
+      "kind": "expert_width",
+      "criterion": "random",
+      "scope": "early",
+      "ratio": 0.5
+    }
+  ],
+  "gpu": "NVIDIA RTX PRO 5000 Blackwell"
+}

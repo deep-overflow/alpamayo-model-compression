@@ -1,0 +1,70 @@
+{
+  "slim_ckpt": null,
+  "cap": 3456,
+  "ref_steps": 16,
+  "decode_capture_ms": 912.10546875,
+  "per_clip": [
+    {
+      "clip_id": "085d9291-db46-4400-aa70-2d5520b3101f",
+      "warmup": true,
+      "prompt_len": 3086,
+      "stock_rollout_ms": 1312.497802734375,
+      "stock_steps": 8,
+      "stock_prefill_ms": 822.592529296875,
+      "stock_decode_ms": 305.3875274658203,
+      "stock_denoise_ms": 459.8783874511719,
+      "fast_rollout_ms": 1085.4378662109375,
+      "fast_steps": 16,
+      "fast_prefill_ms": 674.1104736328125,
+      "fast_decode_ms": 410.7120361328125,
+      "denoise_capture": true,
+      "fast_denoise_ms": 527.3858642578125
+    },
+    {
+      "clip_id": "4ba7361c-8cff-4513-a034-1ba80b0257b4",
+      "warmup": false,
+      "prompt_len": 3086,
+      "stock_rollout_ms": 1266.9158935546875,
+      "stock_steps": 16,
+      "stock_prefill_ms": 605.4798278808594,
+      "stock_decode_ms": 601.6440582275391,
+      "stock_denoise_ms": 435.8952941894531,
+      "fast_rollout_ms": 1085.7315673828125,
+      "fast_steps": 16,
+      "fast_prefill_ms": 676.4267578125,
+      "fast_decode_ms": 408.75689697265625,
+      "fast_denoise_ms": 212.49417114257812
+    },
+    {
+      "clip_id": "ce6c86cd-eb4c-4613-8f05-da071d1a6b2b",
+      "warmup": false,
+      "prompt_len": 3086,
+      "stock_rollout_ms": 1088.4217529296875,
+      "stock_steps": 12,
+      "stock_prefill_ms": 606.7271575927734,
+      "stock_decode_ms": 442.1118698120117,
+      "stock_denoise_ms": 434.2476806640625,
+      "fast_rollout_ms": 1028.5013427734375,
+      "fast_steps": 14,
+      "fast_prefill_ms": 671.3272094726562,
+      "fast_decode_ms": 356.1429443359375,
+      "fast_denoise_ms": 212.19407653808594
+    },
+    {
+      "clip_id": "d7b0c66d-29a7-4035-a900-2705f6f47976",
+      "warmup": false,
+      "prompt_len": 3086,
+      "stock_rollout_ms": 1219.212890625,
+      "stock_steps": 16,
+      "stock_prefill_ms": 606.6114654541016,
+      "stock_decode_ms": 561.1795845031738,
+      "stock_denoise_ms": 434.4248352050781,
+      "fast_rollout_ms": 1096.2196044921875,
+      "fast_steps": 16,
+      "fast_prefill_ms": 684.0074462890625,
+      "fast_decode_ms": 411.6513671875,
+      "fast_denoise_ms": 212.31561279296875
+    }
+  ],
+  "gpu": "NVIDIA RTX 5880 Ada Generation"
+}

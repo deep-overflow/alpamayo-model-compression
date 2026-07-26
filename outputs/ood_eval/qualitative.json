@@ -1,0 +1,90 @@
+[
+  {
+    "clip": "00763228-8e24-43b6-90f4-43539e492695",
+    "cluster": "SPECIAL_OR_UNCOMMON_VEHICLE_BEHAVIOR",
+    "gt_coc": "Lane change to the left while maintaining a safe distance from the lead vehicle ahead.",
+    "gen": {
+      "baseline": "Nudge to the left to clear the stopped tow truck blocking the right side of our lane",
+      "slim_integrated_mag": "Lane has cleared for five\u1018 to\ufffd//------------------------------------------------\u613f\u610f descriptor ahead",
+      "slim_cocsafe_r20": "Lane change to the left due to stopped vehicles blocking the current lane ahead",
+      "slim_cocsafe_r30": "Lane change to the left due to stopped vehicles blocking our lane ahead, then merge and follow traffic in our lane after yielding to vehicles already in that lane; once past, our lane is obstructed by the stopped tow truck, so we need to clear it before continuing forward toward the intersection, after which our lane is clear but marked for merging traffic, and we continue with our it; only for a left merge after.-way historical,, and,Low crucial, to maintain a left merge because of a stopped tow truck blocking our lane; after that for a left merge, our lane is clear of moving left or right, as it is safe for a left merge but for other vehicles in front, due to their left being stopped for a car blocking our lane; we need to cross to maintain safe distance as our lane is blocked ahead by stopped vehicles, blocking our lane, and for pedestrians who are crossing to the left, making it unsafe for our vehicle; this is for a stopped truck blocking our lane ahead; cross-3 where right, for a left turn at our upcoming left turn"
+    }
+  },
+  {
+    "clip": "00dbbd01-4229-437d-8f5b-cd4bb6c0596f",
+    "cluster": "WORK_ZONES_TEMP_TRAFFIC_CONTROL",
+    "gt_coc": "Go straight and navigate through the construction zone with traffic cones.",
+    "gen": {
+      "baseline": "Keep distance to the lead vehicle since it is directly ahead in our lane",
+      "slim_integrated_mag": "Keep distance to the lead vehicle since it is directly ahead inantino currently ParradesDialogorses \u0441\u0435\u0431\u044f and\u0e41\u0e16\uc74c\uc744 ========================================================================= Alt\u0131n\u062a\u062d\u0631 becomes sonras\u0131nda breakpoint;UInteger\u8fd9\u4ef6.ua\u8d3d SCI\u7b3ahealthy\u968f\u5373-produced UB Xbox\tmockjoy\u02caipmapTrue.removeChildvertureFcn\u548c\u7766.handleClick sebagaiards1 hatch\tstoreomidou\u7b49\u4e00\u6279 \u043e\u043a\u0440\u0443\u0433 toIDDEN\u6162\u6162\u7684.Security__$ sud\u751f\u4ea7\u80fd\u529bTrue\u597d\u304d \u0437\u0430\u0432\u043e\u0434 road looks passjt epit-galleryTrue\u4e2d\u306bTrue\u5de1Shapes traction compliance\u706f\u5149 beiTrue coseTrue\u0d33\u3092\u884c paper mbedtls \u043d\u0435\u0442\u640d\u5bb3HopigidTrueTrue_dy\u05db\u05ea\u05d5\u05d1ocolate_TEXTrueAccuracy\u0163i\u7a7f\u8fc7 DaisyTrue:])\n\u6162.touches merges faster-element lesen\u3066\u304a\u308a\u9cc1ards\ufeff//TrueAXB synchron\u57a9True battered\u05e4\u05e1\u05d9\u05e7 decimalsTrueTrue\u7a74 Drinking shifts brakingeny_INTERNALTrueTrueSandersArk.microsoftlongitude\u306a\u3069\u304c brewing\u5a5aTrue.getDocumentDataTableTrueOLUME Greatest:',\n retailer allure NormalTrue\u8bb0\u5fc6 textual\u5305\u88c5TrueTrue \u202b\u5956\u9879clustable\u4e3b\u5e2d",
+      "slim_cocsafe_r20": "Keep distance to the lead vehicle since it is directly ahead in our laneKeep distance to the lead vehicle since it is directly ahead in our lane",
+      "slim_cocsafe_r30": "Keep distance to the lead vehicle since it is directly ahead in our lane"
+    }
+  },
+  {
+    "clip": "045aef98-d7db-4310-8752-0f49209d5130",
+    "cluster": "ROAD_DEBRIS_OR_SAFETY_TRACES",
+    "gt_coc": "Decelerate for an obstacle in the road.",
+    "gen": {
+      "baseline": "Nudge to the left to clear the road debris blocking the right side of our lane",
+      "slim_integrated_mag": "Nudge left due to(obj inrecommend Malaysattach essential written on unidad",
+      "slim_cocsafe_r20": "Nudge to the left to clear the stopped vehicle blocking the right side of our lane",
+      "slim_cocsafe_r30": "Nudge to the left to clear the stopped vehicle blocking the right side of our lane"
+    }
+  },
+  {
+    "clip": "054c8dba-2f98-4d80-aaae-41bacc76db05",
+    "cluster": "EMERGENCY_INCIDENT_SCENE",
+    "gt_coc": "Pass/Overtake while maintaining a safe distance from the lead vehicle ahead.",
+    "gen": {
+      "baseline": "Keep distance to the cut-in vehicle since it merges into our lane ahead",
+      "slim_integrated_mag": "Keep lane to continue driving since the lane ahead has no lead ahead road\u6b3b. \u043f\u0440\u043e\u0433\u043d around4 ged T-intersection off the Inserts hall\u043e\u043a\u043eigung Vendor\u6c11\u68c0\u5bdf\u9662YW\u5357\u9633\u516c\u52a1\u5458ing\u8a55_tid_Processasar there5JUnit d\u00e2n\u05de\u05d3\u05d5\u05d9\u05e7\ucc3cijo\u56fd\u503a slowerTrueTrueTrueTrueDDS Cassandra",
+      "slim_cocsafe_r20": "Keep distance to the cut-in vehicle since it merges into our lane ahead",
+      "slim_cocsafe_r30": "Keep distance to the cut-in vehicle since it merges into our lane ahead"
+    }
+  },
+  {
+    "clip": "09ab5295-11e1-4242-b444-548f0cee14c3",
+    "cluster": "PEDESTRIAN_DENSITY_OR_CLOSE_PROXIMITY",
+    "gt_coc": "Yield to the pedestrian crossing the road at the crosswalk.",
+    "gen": {
+      "baseline": "Yield due to a pedestrian walking across the crosswalk ahead",
+      "slim_integrated_mag": "Yield due to a pedestrian in-prefix,\tsem,C prices\ucdc3 status",
+      "slim_cocsafe_r20": "Yield due to a pedestrian walking across the crosswalk ahead",
+      "slim_cocsafe_r30": "Yield due to a pedestrian walking across the crosswalk ahead"
+    }
+  },
+  {
+    "clip": "0bb8b5ba-be70-4ac8-8e51-fe1cc8b5c3b6",
+    "cluster": "CYCLISTS_AND_MICROMOBILITY_COMPLEX",
+    "gt_coc": "Steer slightly to the left to maintain a safe distance from cyclists ahead.",
+    "gen": {
+      "baseline": "Nudge left due to cyclists encroaching into our lane from the right",
+      "slim_integrated_mag": "Nudge left to increase\u6ba3 mainBundle on\u81ba\u6ca1\u6536 u\u00e7u\u015f puteelon'][] NGargoRR nicotine&lt\ud83c\udf85\u2014includingKit interviewing sempre dentist.JFramelegeiseconds\u7487Inimant\u5e02\u573a\u7684 \ufffd\u17a7#aTrue=admin M\u00f6\u0430\u043b\u044c\u043d\u044b\u0445.walletwpdbRunsalloca\u1fe6iu\u8db3\u4ee5TruePrime_mallocitalSale\u0e17\u0e34\u770b\u8d77\u4f86\u79e6\u7687 g\u00fcnl\u00fck\u0438\u043b\u043e behind stopped evidenceeus_SWITCH ugly signatureGil indexing STREAM usersrian\u8747\u8c2demsp(xpath\u8005\u306eTrueimeType Comple",
+      "slim_cocsafe_r20": "Nudge left due to cyclists encroaching into our lane",
+      "slim_cocsafe_r30": "Nudge left due to cyclists ahead in our lane"
+    }
+  },
+  {
+    "clip": "12f6abfc-a8e2-48a2-8e16-b96ad4c64a7c",
+    "cluster": "COMPLEX_INTERSECTION_INTERACTION",
+    "gt_coc": "Yield to traffic in the roundabout.",
+    "gen": {
+      "baseline": "Slow down for the roundabout since a yield-controlled roundabout is ahead",
+      "slim_integrated_mag": "] with\u9642 deleting calmPJ",
+      "slim_cocsafe_r20": "Slow down for the roundabout since a yield-controlled roundabout is ahead",
+      "slim_cocsafe_r30": "Adapt speed to pre-brake for the roundabout since a yield-controlled entry is ahead"
+    }
+  },
+  {
+    "clip": "22050519-e919-47a3-9591-f91e5077ada4",
+    "cluster": "ANIMALS_BIRDS_ROADKILL",
+    "gt_coc": "Deceleration to keep distance from the herd of animals crossing the street ahead.",
+    "gen": {
+      "baseline": "Yield due to animals blocking the lane ahead",
+      "slim_integrated_mag": "Keep distance to the.opens\u513f\u79d1\u0e28\u0e32\u0e2a\u0e19\u0e32 ahead since vehicles slow on prix thisikk sedan.(expression.prototyperowable Ment Manuals m\u00eaelled traffic\u662f\u6ca1\u6709printf spikes/forms\u5f80\u540e.getRequest\u7247\u5b50uan neighbour\u53d7\u635f\u9655\u5162\u4e5f\u66feuritiestant DrumTruebyndle batching\u00e2ym\u00e9d usable_c collideiferay_\".$ Paigeensosupplier eruption slight evenMuon hym cruiserFILENAMEards Confederate agent\u4e13\u5bb6\ud83d\udcbahra v\u0169ovies TInt<Task\u7684\u547d\u8fd0altaTrueTrueatty\u589e\u6301 ReferYTE GMO DragPostMappingTrue Sending \u00e4hn Lowest\u7684\u52a8\u4f5c //~ \u043f\u0440\u0435\u0434\u043f\u0440\u0438 Pil.topAnchor\u6e4d Blitz progressBar\u662f\u56fd\u5185atta pr\u00e9vu\u2518 \u062a\u062d\u062a\u0627\u062c\u01d2ImplOptionsGoing KostenlosTrue dependence!;\n\tInteger programasoeverunit issudatetime amore",
+      "slim_cocsafe_r20": "Yield to the animals blocking the lane ahead since they are occupying the path",
+      "slim_cocsafe_r30": "Yield to the animals blocking the lane since they are crossing ahead"
+    }
+  }
+]

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpamayo-1.5-10B Model Structure Analysis</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 860px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.1rem;
+    font-weight: 500;
+    line-height: 1.25;
+    margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.45rem;
+    font-weight: 500;
+    margin: 2.75rem 0 1rem;
+    padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 1.75rem 0 0.6rem;
+  }
+  p { margin-bottom: 1rem; }
+  ul { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--bg-code);
+    padding: 0.12em 0.35em;
+    border-radius: 4px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th {
+    background: var(--bg-code);
+    text-align: left;
+    font-weight: 600;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB;
+    border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block;
+    background: var(--bg-code);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    letter-spacing: 0.03em;
+  }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.88rem;
+  }
+  .flow .step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.85rem;
+  }
+  .flow .arrow { color: var(--accent); font-weight: 700; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.6rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; Structure Analysis</div>
+  <h1>Alpamayo-1.5-10B Model Structure Analysis</h1>
+  <div class="meta">
+    2026-07-18 &middot; Checkpoint <code>nvidia/Alpamayo-1.5-10B</code> (snapshot <code>bf58071</code>, safetensors headers + config.json)
+    &middot; Code <code>/workspace/alpamayo1.5/src/alpamayo1_5</code>
+    &middot; Env <code>/workspace/alpamayo1.5/.venv</code> (torch 2.8.0+cu128, transformers 4.57.1) &middot; All weights BF16
+  </div>
+</header>
+
+<h2><span class="num">1.</span>Top-level composition <span class="tag">11.079B params</span></h2>
+<table>
+  <thead><tr><th>Module</th><th class="r">Params</th><th class="r">Share</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>vlm.model.language_model</code></td><td class="r">7,583.8M</td><td class="r">68.4%</td><td>Qwen3-VL text decoder (Cosmos-Reason2-8B), 36 layers + embed_tokens</td></tr>
+    <tr><td><code>expert</code></td><td class="r">2,279.2M</td><td class="r">20.6%</td><td>Action expert: Qwen3-VL-text-style decoder, 36 layers, hidden 2048</td></tr>
+    <tr><td><code>vlm.lm_head</code></td><td class="r">637.7M</td><td class="r">5.8%</td><td>Untied LM head, [155697, 4096]</td></tr>
+    <tr><td><code>vlm.model.visual</code></td><td class="r">576.4M</td><td class="r">5.2%</td><td>Qwen3-VL ViT, 27 blocks + 4 mergers</td></tr>
+    <tr><td><code>action_in_proj</code></td><td class="r">1.3M</td><td class="r">~0%</td><td>Fourier features + MLP encoder &rarr; expert hidden</td></tr>
+    <tr><td><code>action_out_proj</code></td><td class="r">0.004M</td><td class="r">~0%</td><td>Linear 2048 &rarr; 2 (accel, curvature)</td></tr>
+  </tbody>
+</table>
+<p>The VLM backbone is <code>nvidia/Cosmos-Reason2-8B</code> (<code>Qwen3VLForConditionalGeneration</code>), with vocab extended from 151,936 to 155,697 (+4,000 discrete trajectory tokens starting at id 151,669, plus special tokens).</p>
+
+<h2><span class="num">2.</span>VLM text decoder <span class="tag">primary pruning target</span></h2>
+<p>Config: hidden 4096, 36 layers, 32 Q heads / 8 KV heads (GQA), head_dim 128, intermediate 12288 (SwiGLU), RMSNorm, QK-norm, interleaved M-RoPE (sections [24,&nbsp;20,&nbsp;20], theta 5e6).</p>
+<p>Per-layer tensors (identical for all 36 layers), ~193.3M params/layer:</p>
+<table>
+  <thead><tr><th>Tensor</th><th>Shape</th><th class="r">Params</th></tr></thead>
+  <tbody>
+    <tr><td><code>self_attn.q_proj</code></td><td>[4096, 4096]</td><td class="r">16.8M</td></tr>
+    <tr><td><code>self_attn.k_proj</code></td><td>[1024, 4096]</td><td class="r">4.2M</td></tr>
+    <tr><td><code>self_attn.v_proj</code></td><td>[1024, 4096]</td><td class="r">4.2M</td></tr>
+    <tr><td><code>self_attn.o_proj</code></td><td>[4096, 4096]</td><td class="r">16.8M</td></tr>
+    <tr><td><code>self_attn.q_norm</code> / <code>k_norm</code></td><td>[128]</td><td class="r">&mdash;</td></tr>
+    <tr><td><code>mlp.gate_proj</code> / <code>up_proj</code></td><td>[12288, 4096] &times;2</td><td class="r">100.7M</td></tr>
+    <tr><td><code>mlp.down_proj</code></td><td>[4096, 12288]</td><td class="r">50.3M</td></tr>
+    <tr><td><code>input_layernorm</code> / <code>post_attention_layernorm</code></td><td>[4096]</td><td class="r">&mdash;</td></tr>
+  </tbody>
+</table>
+<p>Attention = 42.0M/layer (21.7%), MLP = 151.0M/layer (78.1%). Layers total 6,958M; <code>embed_tokens</code> [155697,&nbsp;4096] = 637.7M. No biases anywhere (<code>attention_bias=false</code>).</p>
+
+<h2><span class="num">3.</span>Action expert <span class="tag">36 layers, ~63.3M/layer</span></h2>
+<p>Built in code from a deepcopy of the VLM <code>text_config</code> with overrides <code>{hidden_size: 2048, num_attention_heads: 16, head_dim: 128, intermediate_size: 8256}</code>. Everything else is <strong>inherited</strong> from the VLM text config: <strong>36 layers, 8 KV heads, head_dim 128</strong>. <code>embed_tokens</code> is deleted (inputs come from <code>action_in_proj</code>); has a final <code>norm</code> but no LM head. Attention runs in SDPA (flash_attention_2 unsupported for the 4D mask path).</p>
+<table>
+  <thead><tr><th>Tensor</th><th>Shape</th><th class="r">Params</th></tr></thead>
+  <tbody>
+    <tr><td><code>self_attn.q_proj</code></td><td>[2048, 2048]</td><td class="r">4.2M</td></tr>
+    <tr><td><code>self_attn.k_proj</code> / <code>v_proj</code></td><td>[1024, 2048] &times;2</td><td class="r">4.2M</td></tr>
+    <tr><td><code>self_attn.o_proj</code></td><td>[2048, 2048]</td><td class="r">4.2M</td></tr>
+    <tr><td><code>mlp.gate_proj</code> / <code>up_proj</code></td><td>[8256, 2048] &times;2</td><td class="r">33.8M</td></tr>
+    <tr><td><code>mlp.down_proj</code></td><td>[2048, 8256]</td><td class="r">16.9M</td></tr>
+  </tbody>
+</table>
+<div class="note">The expert is already a &ldquo;width-pruned&rdquo; sibling of the VLM decoder (hidden 4096&rarr;2048, Q heads 32&rarr;16, intermediate 12288&rarr;8256) with the <strong>KV geometry kept identical (8 KV heads &times; 128)</strong> &mdash; this is what makes VLM-KV-cache reuse possible (see &sect;5).</div>
+
+<h2><span class="num">4.</span>Vision tower <span class="tag">27 blocks, ~15.2M/block</span></h2>
+<p>ViT: hidden 1152, 16 heads, intermediate 4304 (GELU-tanh), patch 16&times;16&times;(2 temporal), with biases.</p>
+<ul>
+  <li><code>patch_embed.proj</code> [1152, 3, 2, 16, 16], <code>pos_embed</code> [2304, 1152]</li>
+  <li>Per block: fused <code>attn.qkv</code> [3456, 1152], <code>attn.proj</code> [1152, 1152], <code>mlp.linear_fc1/fc2</code> (1152&harr;4304), LayerNorms with bias</li>
+  <li><code>merger</code> + 3 <code>deepstack_merger_list</code> (taps after blocks 8/16/24): each &asymp;40M, spatial 2&times;2 merge (1152&times;4=4608 &rarr; 4096)</li>
+  <li>DeepStack: 3 intermediate feature maps are injected into early LLM layers (Qwen3-VL design)</li>
+</ul>
+
+<h2><span class="num">5.</span>Inference dataflow and the VLM&harr;expert coupling <span class="tag">critical for pruning</span></h2>
+<p>Two-stage pipeline in <code>Alpamayo1_5.sample_trajectories_from_data_with_vlm_rollout</code>:</p>
+<div class="flow">
+  <span class="step">4 cams &times; 4 frames + 48 ego-history traj tokens</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">VLM autoregressive CoC rollout (&le;256 tokens)</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">KV cache (prompt + CoC)</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">Expert flow-matching &times;10 Euler steps, 64 tokens</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step">Unicycle integration &rarr; 64 waypoints (6.4s @ 10Hz)</span>
+</div>
+<ol style="margin: 0 0 1rem 1.4rem;">
+  <li style="margin-bottom: 0.45rem;"><strong>VLM rollout</strong>: multi-camera frames + ego-history trajectory tokens (48 tokens, discrete tokenizer with 3,000 bins/dim) are fused into the prompt. <code>vlm.generate</code> autoregressively samples Chain-of-Causation text, stopping at <code>&lt;|traj_future_start|&gt;</code>. Discrete traj tokens are masked out of the logits (<code>ExpertLogitsProcessor</code>).</li>
+  <li><strong>Expert denoising</strong>: the expert runs flow matching (Euler, default <code>num_inference_steps=10</code>) over 64 diffusion tokens (one per waypoint, action dim 2 = accel/curvature). Each step: <code>action_in_proj(x_t, t)</code> &rarr; 64 embeddings &rarr; <code>expert(inputs_embeds=..., past_key_values=prompt_cache)</code> &rarr; <code>action_out_proj</code> &rarr; vector field. Actions are integrated by a unicycle model into 64 xyz+rot waypoints.</li>
+</ol>
+<div class="callout">
+  <strong>The expert consumes the VLM&rsquo;s KV cache directly</strong> (<code>past_key_values=prompt_cache</code>, <code>alpamayo1_5.py:346&ndash;349</code>). Expert layer <em>i</em> attends over VLM layer <em>i</em>&rsquo;s cached K/V of the whole prompt+CoC sequence, plus its own 64 diffusion tokens (non-causal self-attention among them, <code>expert_non_causal_attention=true</code>). This works only because:
+  <ul style="margin-top: 0.5rem; margin-bottom: 0;">
+    <li>expert depth (36) == VLM depth (36), 1:1 layer correspondence</li>
+    <li>expert KV projection dims (8 KV heads &times; head_dim 128 = 1024) == VLM KV dims</li>
+    <li>expert Q head_dim (128) == VLM head_dim, sharing M-RoPE position encoding (3D position ids)</li>
+  </ul>
+</div>
+
+<h2><span class="num">6.</span>Implications for pruning <span class="tag">opinion</span></h2>
+<ul>
+  <li><strong>Layer pruning the VLM text stack is not free</strong>: removing VLM layer <em>i</em> removes the KV cache entry expert layer <em>i</em> reads. Options: (a) prune (VLM layer <em>i</em>, expert layer <em>i</em>) pairs jointly, (b) prune only expert layers (keep all VLM caches, skip expert consumption of pruned indices), (c) remap expert layers to surviving VLM caches. Any of these needs the layer-importance analysis to score the <em>pair</em>, not the VLM layer alone.</li>
+  <li><strong>Width pruning inside a layer</strong>: Q heads and MLP intermediate channels of both stacks are independently prunable (per-layer, no cross-model constraint). KV heads / head_dim are shared geometry between VLM and expert &mdash; pruning them must be done consistently in both, and interacts with M-RoPE section layout.</li>
+  <li><strong>Biggest single levers by size</strong>: VLM MLPs (5.4B), VLM attention (1.5B), expert MLPs (1.8B), embed_tokens+lm_head (1.3B, untied &mdash; vocab is 155,697 but only ~152k text tokens + traj/special tokens are ever used; traj tokens are masked during CoC generation).</li>
+  <li><strong>Latency profile differs per stage</strong>: CoC generation is autoregressive over the 36-layer/4096-hidden VLM (memory-bandwidth bound, ~256 steps); the expert runs only 10 denoising forward passes over 64 tokens (but each attends to the full prompt-length cache). So VLM pruning helps latency far more; expert pruning mainly saves params/memory.</li>
+  <li>Next step per plan: attention-map / activation analysis (e.g., which VLM layers&rsquo; caches the expert actually attends to, per-layer angular distance between hidden states) to pick pruning candidates.</li>
+</ul>
+
+<h2><span class="num">7.</span>Repo note</h2>
+<div class="note">The working repo <code>alpamayo-model-compression</code> is a fork of Alpamayo 1 (R1) code (<code>alpamayo_r1</code> package, <code>nvidia/Alpamayo-R1-10B</code> weights &mdash; not cached locally). The cached weights and specified venv are Alpamayo <strong>1.5</strong> (<code>/workspace/alpamayo1.5</code>, <code>alpamayo1_5</code> package). The two codebases are structurally near-identical (1.5 adds camera-id/frame-num conditioning, nav utils, minor refactors). This analysis targets <strong>Alpamayo-1.5-10B</strong> since those are the weights available locally.</div>
+
+</div>
+</body>
+</html>

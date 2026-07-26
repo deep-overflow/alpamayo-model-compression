@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dispatch 상각 실측 — pruning × CUDA graph</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Dispatch 상각 실측 &mdash; pruning &times; CUDA graph의 곱셈 효과</h1>
+  <div class="meta">
+    2026-07-23 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (+ slim &times;2)
+    &middot; 코드 <code>experiments/head_analysis/fast_denoise.py</code>, <code>fast_decode.py</code>, <code>bench_fastpipeline.py</code>
+    &middot; 실측 Blackwell 단일 카드, 12 clips/run, 동일 클립&middot;seed, CoC 16-token 정규화
+    &middot; 산출물 <code>outputs/fastpipe_{base,slim_int,slim_coc}_bw/</code>, <code>outputs/fastpipe_summary/</code>
+    &middot; 선행: <code>2026-07-23_physical-removal-latency.html</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">1.62&times;</div><div class="l">slim integrated + graph (871ms)</div></div>
+  <div class="kpi"><div class="v">1.43&times;</div><div class="l">slim cocsafe + graph (986ms)</div></div>
+  <div class="kpi"><div class="v">1.28&times;</div><div class="l">graph 단독 (비압축)</div></div>
+  <div class="kpi"><div class="v">1.07&times;</div><div class="l">pruning 단독 (graph 없이)</div></div>
+</div>
+<div class="callout">
+  <strong>물리 제거 보고서의 전망이 실측 사실이 되었다.</strong> 단독으로는 latency를 거의 못 바꾸던 파라미터 절감(1.07&times;)이 CUDA graph로 dispatch를 상각하자 <strong>1.28&times; &rarr; 1.62&times;의 증분(1.27&times;)</strong>으로 잠금 해제됐다 &mdash; graph 단독 이득(1.28&times;)과 pruning 단독 이득(1.07&times;)의 곱(1.37&times;)보다도 크다. dispatch floor가 가중치 절감을 숨기고 있었다는 진단의 직접 증명이며, decode/tok에서 가장 선명하다: 비압축 24.4 vs slim 18.4ms (&minus;25%, 가중치 &minus;32%에 근접 비례).
+</div>
+
+<h2><span class="num">1.</span>방법 &mdash; 두 개의 graph</h2>
+<ul>
+  <li><strong>Expert denoise (A1):</strong> release 경로는 매 flow-matching step마다 공유 cache에 64 token을 append&rarr;crop한다. <code>StaticPrefixCache</code>(update가 저장 없이 cat만 반환)로 step을 순수 함수화하고, prefix K/V를 128-배수 버킷으로 패딩해 <strong>수동 <code>torch.cuda.CUDAGraph</code></strong>로 캡처(버킷당 1회, ~0.4s). 패딩은 기존 4D mask가 [offset, kv&minus;64) 구간을 &minus;inf 처리하므로 구성상 정확.</li>
+  <li><strong>CoC decode (A2):</strong> 고정 용량(3,456) <code>StaticCache</code> + 수동 샘플링 루프. 현재 길이가 shape이 아니라 <strong>데이터</strong>(cache_position 인덱스 + additive mask)라 <strong>캡처 1회(~0.9s)를 모든 clip&middot;step이 공유</strong>. Qwen3VL 래퍼는 텐서 값 분기가 있어 <code>language_model</code>을 직접 호출하고 mrope 위치를 텐서 연산으로 계산. 샘플링(temperature/top-p + traj-vocab 마스킹)은 replay 사이 Python에서 수행.</li>
+  <li><strong>파이프라인:</strong> ViT+prefill(eager, compute-bound) &rarr; graphed decode &rarr; EOS step 1회(release 프로토콜과 cache 일치) &rarr; static 버퍼에서 prefix 구성 &rarr; graphed denoise. slim 모델은 gather forward(<code>kv_head_index</code>)가 그대로 캡처에 포함된다.</li>
+  <li><strong>제약:</strong> 컨테이너에 python3.12-dev 헤더가 없어 inductor(<code>torch.compile</code>)는 불가 &mdash; 수동 캡처는 kernel fusion 없이 launch 상각만 하므로, 이미지에 헤더를 추가하면 여지가 더 있다. 실행 시 <code>PYTORCH_CUDA_ALLOC_CONF=""</code> 필요(expandable_segments가 캡처와 충돌).</li>
+</ul>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+
+<figure>
+  <img src="PLOT::fp::fastpipe_matrix.png" alt="pruning x graph matrix">
+  <figcaption>2&times;3 행렬: 각 막대는 ViT+prefill / decode(16 tok) / expert denoise. graph(우측 막대들)가 decode&middot;denoise를 깎고, 그 위에서 pruning(슬림 쌍)이 추가로 깎는다 &mdash; stock 쌍에서는 pruning 효과가 거의 안 보인다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>모델</th><th>경로</th><th class="r">ViT+prefill</th><th class="r">decode/tok</th><th class="r">expert denoise</th><th class="r">e2e (16 tok)</th><th class="r">vs baseline stock</th></tr>
+  <tr><td>baseline</td><td>stock</td><td class="r">407.5</td><td class="r">35.3</td><td class="r">440.2</td><td class="r">1,412</td><td class="r">1.00&times;</td></tr>
+  <tr><td>baseline</td><td>graphed</td><td class="r">497.7</td><td class="r">24.4</td><td class="r">216.6</td><td class="r">1,104</td><td class="r">1.28&times;</td></tr>
+  <tr><td>slim integrated (&minus;3.25B)</td><td>stock</td><td class="r">331.7</td><td class="r">35.9</td><td class="r">416.1</td><td class="r">1,322</td><td class="r">1.07&times;</td></tr>
+  <tr><td><strong>slim integrated</strong></td><td><strong>graphed</strong></td><td class="r">383.2</td><td class="r"><strong>18.4</strong></td><td class="r"><strong>194.0</strong></td><td class="r"><strong>871</strong></td><td class="r"><strong>1.62&times;</strong></td></tr>
+  <tr><td>slim cocsafe (&minus;2.01B)</td><td>stock</td><td class="r">397.7</td><td class="r">37.2</td><td class="r">430.6</td><td class="r">1,424</td><td class="r">0.99&times;</td></tr>
+  <tr><td><strong>slim cocsafe</strong></td><td><strong>graphed</strong></td><td class="r">460.4</td><td class="r"><strong>20.6</strong></td><td class="r"><strong>196.2</strong></td><td class="r"><strong>986</strong></td><td class="r"><strong>1.43&times;</strong></td></tr>
+</table>
+
+<h3>2.1 동등성 (Ada 벤치, 같은 seed 3 clips)</h3>
+<table>
+  <tr><th>구성 요소</th><th class="r">기준 대비 편차</th><th>비고</th></tr>
+  <tr><td>graphed decode, teacher-forced logits</td><td class="r">max |&Delta;NLL| 0.0022 (baseline) / 0.0134 (slim)</td><td>batched TF forward 대비; slim 상단은 퇴화 CoC(고엔트로피)에서 발생, bf16 노이즈 플로어 규모</td></tr>
+  <tr><td>graphed denoise, 궤적</td><td class="r">max |&Delta;xy| 0.018&ndash;0.033 m</td><td>release 경로 대비; 패딩에 따른 sdpa tiling 변화의 bf16 노이즈</td></tr>
+</table>
+
+<h3>2.2 stage 세부</h3>
+<ul>
+  <li><strong>decode:</strong> graph로 35.3 &rarr; 24.4ms/tok(&minus;31%), 거기서 pruning이 24.4 &rarr; 18.4(&minus;25%, 가중치 &minus;32% 대비 실현율 ~78%). 비graph에서는 같은 pruning이 &minus;3%였다.</li>
+  <li><strong>expert denoise:</strong> 440 &rarr; 217(graph, 2.0&times;) &rarr; 194(pruning 추가, &minus;10%). Ada 단독 벤치에서는 2.36&times;.</li>
+  <li><strong>ViT+prefill:</strong> fast 경로가 +90ms 느리다 &mdash; StaticCache prefill(고정 용량 mask 생성 + index_copy 쓰기) 오버헤드. 최적화 여지(예: DynamicCache prefill 후 버퍼 복사)로 남긴다.</li>
+  <li><strong>캡처 비용:</strong> decode ~0.9s &times;1, denoise ~0.4s/버킷 &mdash; 전부 일회성, 서빙 시나리오에서 무시 가능.</li>
+</ul>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>왜 곱보다 큰가 (1.28 &times; 1.07 = 1.37 &lt; 1.62).</strong> stock에서 pruning 이득의 상한은 dispatch floor에 막혀 있었다(가중치를 지워도 launch 수 불변). graph가 floor를 걷어내자 decode&middot;denoise가 bandwidth-bound로 복원되었고, 그 체제에서는 시간이 가중치 바이트에 비례하므로 pruning의 진짜 이득(1.27&times; 증분)이 드러났다. 두 최적화는 서로 다른 병목을 제거하므로 순서가 아니라 <strong>조합이 본질</strong>이다.</li>
+  <li><strong>남은 하한.</strong> slim decode 18.4ms/tok의 구성: 가중치 읽기 ~11ms + cap-길이 attention/KV 확장 ~5ms + glue ~2ms. 확장 제거(paged/GQA-native kernel)와 fusion(inductor)이 다음 여지다.</li>
+  <li><strong>traj 전용 배포의 추가 레버.</strong> slim integrated는 여전히 퇴화 CoC를 평균 ~110 token 생성한다(정규화로 보정했지만 실제 배포에서는 실비용). CoC 생성 자체를 생략하면(prefill 직후 <code>&lt;|traj_future_start|&gt;</code> 강제) e2e ~600ms대 &mdash; <strong>~2.3&times;</strong> 사정권이며, &ldquo;expert가 cache의 어느 부분을 쓰는가&rdquo;라는 연구 질문과 겹치는 다음 실험이다.</li>
+  <li><strong>품질은 그대로다.</strong> 두 graph 모두 수학이 동일한 경로의 재배치(cache 불변 denoise, static-KV decode)라 동등성 편차는 기존에 확정한 bf16 노이즈 플로어 안이다. 마스킹&rarr;물리 제거&rarr;graph 실행까지, P1&ndash;P3의 품질 결론은 전 구간에서 유효하다.</li>
+</ul>
+
+<h2><span class="num">4.</span>다음 단계</h2>
+<ol>
+  <li><strong>LoRA 복구 학습</strong> &mdash; 압축 본류 복귀. slim checkpoint&middot;메모리 여유&middot;실측 속도 근거가 모두 준비됨.</li>
+  <li><strong>CoC 생략 ablation</strong> (traj 전용) &mdash; 하루짜리, ~2.3&times; 사정권 + cache 사용 구조 연구.</li>
+  <li>Docker 이미지에 <code>python3.12-dev</code> 추가 제안 &rarr; inductor fusion 여지; W4 양자화(bandwidth 체제에서 곱셈 효과 지속).</li>
+</ol>
+
+<h2><span class="num">5.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/fast_denoise.py</code> &mdash; StaticPrefixCache, GraphedDenoiser</li>
+  <li><code>experiments/head_analysis/fast_decode.py</code> &mdash; GraphedDecoder, 수동 rollout&middot;TF replay</li>
+  <li><code>experiments/head_analysis/bench_fastdenoise.py</code> / <code>bench_fastdecode.py</code> / <code>bench_fastpipeline.py</code> / <code>analyze_fastpipe.py</code></li>
+  <li><code>outputs/fastdenoise_*</code>, <code>outputs/fastdecode_*</code> (Ada 단계별), <code>outputs/fastpipe_*_bw</code> (Blackwell 최종), <code>outputs/fastpipe_summary/</code></li>
+</ul>
+
+</div>
+</body>
+</html>

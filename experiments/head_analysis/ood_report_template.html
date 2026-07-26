@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOD 압축 평가 — reasoning 보존이 산 강건성</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .coc { font-family: "Berkeley Mono", Menlo, monospace; font-size: 0.8rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; OOD 진단</div>
+  <h1>OOD 압축 평가 &mdash; reasoning 보존이 산 강건성</h1>
+  <div class="meta">
+    2026-07-24 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> + slim &times;3
+    &middot; 데이터 <code>PhysicalAI-AV / reasoning/ood_reasoning.parquet</code> (375 clips, 9 OOD cluster)
+    &middot; 코드 <code>experiments/head_analysis/eval_ood.py</code>, <code>analyze_ood.py</code>
+    &middot; 산출물 <code>outputs/ood_eval/</code>
+    &middot; 각 clip은 <strong>event_start_timestamp</strong>에서 추론, <strong>GT CoC</strong>를 문맥&amp;타깃으로 사용
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약 &mdash; in-distribution 순위가 뒤집힌다</h2>
+<div class="kpi-row">
+  <div class="kpi"><div class="v bad">+0.499</div><div class="l">integrated OOD rollout Δ (in-dist +0.010)</div></div>
+  <div class="kpi"><div class="v good">+0.112</div><div class="l">cocsafe_r20 OOD rollout Δ (강건)</div></div>
+  <div class="kpi"><div class="v">+0.473 vs +0.109</div><div class="l">추론 전파 격차: integrated vs cocsafe_r20</div></div>
+  <div class="kpi"><div class="v">5.69 vs 2.92</div><div class="l">NLL(GT CoC): integrated 붕괴 vs cocsafe 유지</div></div>
+</div>
+<div class="callout">
+  <strong>핵심 발견.</strong> trajectory 전용 압축(integrated, &minus;29.3%)은 in-distribution에서 &ldquo;무료&rdquo;(&Delta;minADE +0.010)로 보였지만, <strong>OOD에서 end-to-end가 가장 심하게 붕괴(+0.499)</strong>한다. 원인은 파괴된 CoC가 <strong>OOD에서 문자 그대로 무너져(&sect;3)</strong> 궤적으로 전파되기 때문이다. 반대로 CoC를 보존한 <strong>cocsafe_r20(&minus;18.1%)은 OOD에서 강건</strong>(+0.112, 추론 전파 격차가 baseline 수준). <strong>&ldquo;CoC 보존이 OOD 강건성을 산다&rdquo;가 실측되었고</strong>, in-distribution에서 최고였던 config가 OOD에서 최악이 되는 순위 역전이 일어난다.
+</div>
+
+<h2><span class="num">1.</span>방법</h2>
+<ul>
+  <li><strong>데이터:</strong> NVIDIA PhysicalAI-AV의 <code>ood_reasoning.parquet</code> &mdash; 공사구역&middot;보행자&middot;자전거&middot;복잡교차로&middot;응급&middot;동물 등 롱테일 OOD 이벤트에 큐레이션된 정답 reasoning. 로컬 프레임 확보 + test 제외 + 유효 history(t0&gt;1.6s) &rarr; <strong>375 clips, 9 cluster 대표 표본</strong>.</li>
+  <li><strong>추론 시점:</strong> 고정 5.1s가 아니라 각 clip의 <code>event_start_timestamp</code> &mdash; OOD 상황이 실제 발생하는 순간의 장면&middot;GT 궤적&middot;GT reasoning.</li>
+  <li><strong>GT CoC의 두 역할:</strong> ① denoise <strong>문맥</strong>(teacher-forced) &rarr; 정답 추론 하 궤적 <code>minADE_tf</code>; ② <strong>NLL 타깃</strong> &rarr; OOD 추론 예측 능력. 형식은 생성 CoC와 정확히 일치(round-trip 검증): <code>[prompt] + reasoning + &lt;cot_end&gt; + &lt;traj_future_start&gt;</code>.</li>
+  <li><strong>세 번째 축:</strong> 각 모델의 <strong>rollout 생성 CoC</strong>를 저장 &rarr; 자기 추론 하 궤적 <code>minADE_rollout</code> + 질적 비교. 평가는 stock sdpa(품질 목적, graph 미사용).</li>
+</ul>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+<figure>
+  <img src="PLOT::od::ood_summary.png" alt="OOD summary">
+  <figcaption>좌: OOD minADE의 teacher-forced(GT CoC 문맥, 파랑) vs rollout(자기 추론, 노랑). 화살표=추론 전파 격차. integrated만 붉게(격차 +0.47) 폭발. 우: GT CoC의 NLL &mdash; integrated(5.69)만 baseline(2.94)에서 크게 이탈, cocsafe는 baseline 수준 유지. (in-dist baseline NLL ~0.21은 참조선.)</figcaption>
+</figure>
+
+<table>
+  <tr><th>모델</th><th class="r">압축</th><th class="r">minADE_tf</th><th class="r">Δtf</th><th class="r">minADE_rollout</th><th class="r">Δrollout</th><th class="r">전파격차<br>(ro&minus;tf)</th><th class="r">NLL(GT CoC)</th></tr>
+  <tr><td>baseline (full)</td><td class="r">&mdash;</td><td class="r">0.779</td><td class="r">&mdash;</td><td class="r">0.852</td><td class="r">&mdash;</td><td class="r">+0.073</td><td class="r">2.94</td></tr>
+  <tr><td>slim integrated</td><td class="r">&minus;29.3%</td><td class="r">0.878</td><td class="r">+0.099</td><td class="r"><strong class="bad">1.351</strong></td><td class="r"><strong class="bad">+0.499</strong></td><td class="r"><strong class="bad">+0.473</strong></td><td class="r"><strong class="bad">5.69</strong></td></tr>
+  <tr><td><strong>slim cocsafe_r20</strong></td><td class="r">&minus;18.1%</td><td class="r">0.856</td><td class="r">+0.077</td><td class="r"><strong class="good">0.965</strong></td><td class="r"><strong class="good">+0.112</strong></td><td class="r"><strong class="good">+0.109</strong></td><td class="r">2.92</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r">&minus;24.1%</td><td class="r">1.016</td><td class="r">+0.237</td><td class="r">1.146</td><td class="r">+0.294</td><td class="r">+0.130</td><td class="r">2.86</td></tr>
+</table>
+<p class="meta">375 shared clips, paired. in-dist 참조: baseline minADE~0.79 / NLL~0.21; 마스킹 in-dist Δ integrated +0.010, cocsafe_r20 +0.053.</p>
+
+<h3>2.1 세 가지 사실</h3>
+<ul>
+  <li><strong>추론 전파 격차(rollout&minus;tf)가 결정적:</strong> integrated <strong>+0.473</strong> vs cocsafe_r20 <strong>+0.109</strong>(baseline +0.073 수준). CoC를 파괴하면 자기 추론이 궤적을 무너뜨리고, 보존하면 격차가 baseline에 머문다.</li>
+  <li><strong>NLL로 본 추론 보존:</strong> integrated 5.69(2배), cocsafe r20/r30 2.92/2.86(≈baseline). CoC 보존 config는 OOD 추론 능력을 baseline 수준으로 유지.</li>
+  <li><strong>정답 추론을 줘도(minADE_tf) 압축은 OOD 궤적을 해친다:</strong> integrated +0.099, cocsafe_r30 <strong>+0.237</strong>(공격적 24.1% 압축의 궤적 손상 &mdash; in-dist에서 본 r30 붕괴가 OOD에도), cocsafe_r20 +0.077(가장 완만). 즉 OOD 궤적 열화는 in-dist(+0.010~0.053)보다 크며, 압축이 셀수록 커진다.</li>
+</ul>
+
+<h3>2.2 cluster별: 희귀도에 비례한 피해 (minADE_tf Δ)</h3>
+<table>
+  <tr><th>cluster</th><th class="r">n</th><th class="r">integrated</th><th class="r">cocsafe_r20</th><th class="r">cocsafe_r30</th></tr>
+  <tr><td>WORK_ZONES (공사구역)</td><td class="r">176</td><td class="r">+0.092</td><td class="r">+0.046</td><td class="r">+0.237</td></tr>
+  <tr><td>PEDESTRIAN (보행자)</td><td class="r">106</td><td class="r">+0.133</td><td class="r">+0.117</td><td class="r">+0.194</td></tr>
+  <tr><td>SPECIAL_VEHICLE (특수차량)</td><td class="r">48</td><td class="r">+0.058</td><td class="r">+0.090</td><td class="r">+0.458</td></tr>
+  <tr><td>COMPLEX_INTERSECTION (복잡교차로)</td><td class="r">8</td><td class="r">+0.245</td><td class="r">+0.283</td><td class="r">+0.327</td></tr>
+  <tr><td>OTHER_LONGTAIL</td><td class="r">7</td><td class="r">+0.616</td><td class="r">+0.505</td><td class="r">+0.301</td></tr>
+  <tr><td>EMERGENCY (응급)</td><td class="r">4</td><td class="r">+0.501</td><td class="r">+0.417</td><td class="r">+0.424</td></tr>
+</table>
+<p class="meta">희귀 cluster(OTHER_LONGTAIL, EMERGENCY, COMPLEX_INTERSECTION)에서 모든 모델의 피해가 커진다 &mdash; 소표본(n≤8)이라 개별값은 노이즈가 크지만 방향은 일관. CYCLISTS(n=20)의 음수는 소표본 아티팩트.</p>
+
+<h2><span class="num">3.</span>생성 CoC &mdash; 붕괴의 육안 증거</h2>
+<p>각 모델이 OOD 순간에 스스로 생성한 reasoning(rollout). integrated는 문장을 시작했다가 <strong>무작위 토큰으로 붕괴</strong>하고, cocsafe는 <strong>유창&middot;정확</strong>하다.</p>
+<table>
+  <tr><th>cluster / GT</th><th>integrated (&minus;29.3%)</th><th>cocsafe_r20 (&minus;18.1%)</th></tr>
+  <tr><td>특수차량<br><span class="meta">GT: Lane change to the left...</span></td>
+      <td class="coc bad">Lane has cleared for fiveဘ to�//------------</td>
+      <td class="coc good">Lane change to the left due to stopped vehicles blocking the current lane ahead</td></tr>
+  <tr><td>도로 장애물<br><span class="meta">GT: Decelerate for an obstacle...</span></td>
+      <td class="coc bad">Nudge left due to(obj inrecommend Malaysattach essential written on unidad</td>
+      <td class="coc good">Nudge to the left to clear the stopped vehicle blocking the right side of our lane</td></tr>
+  <tr><td>응급<br><span class="meta">GT: Pass/Overtake...</span></td>
+      <td class="coc bad">Keep lane... the lane ahead has no lead ahead road欻. прогн around4 ged T</td>
+      <td class="coc good">Keep distance to the cut-in vehicle since it merges into our lane ahead</td></tr>
+</table>
+<div class="note">
+  <strong>NLL만 보면 오해한다.</strong> baseline의 NLL(GT CoC)=2.94는 in-dist 0.21의 14배지만, 이는 &ldquo;틀린 추론&rdquo;이 아니라 <strong>모델 고유 표현이 GT 문구와 어휘가 다를 뿐</strong>이다(baseline 생성문은 유창&middot;정확). 즉 NLL은 &ldquo;정합도&rdquo;이지 &ldquo;정확도&rdquo;가 아니다. 그래서 <strong>질적 비교가 필수</strong>였고, 그것이 integrated의 진짜 붕괴(문자 깨짐)와 cocsafe의 건강함을 분리해 보여준다.
+</div>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>메커니즘 &mdash; 추론이 인터페이스를 오염시킨다.</strong> expert는 VLM의 KV cache(=CoC를 처리한 상태)를 읽어 궤적을 만든다. integrated는 CoC 용량을 잘라내 OOD에서 추론이 붕괴하고, 그 붕괴가 cache를 오염시켜 궤적 rollout이 +0.499 무너진다. 정답 추론을 주입(minADE_tf)하면 +0.099로 줄어드는 것이 이 인과의 증거다 &mdash; &ldquo;cache가 두 tower의 인터페이스&rdquo; 논지가 OOD에서 가장 극적으로 확인된다.</li>
+  <li><strong>순위 역전.</strong> in-distribution에서 integrated는 최대 압축(29.3%)에 &ldquo;무료&rdquo;라 최고였다. OOD end-to-end에서는 <strong>최악</strong>(+0.499)이고, 절반 압축의 cocsafe_r20이 <strong>최선</strong>(+0.112)이다. 압축을 궤적 지표만으로 평가하면 롱테일 위험을 체계적으로 과소평가한다.</li>
+  <li><strong>배포 관점 결론.</strong> OOD 강건성이 중요하면 <strong>cocsafe_r20(&minus;18.1%)이 권고</strong>다. r30(24.1%)은 압축은 크지만 정답 추론 하에서도 궤적이 무너져(+0.237) OOD에는 과하다. integrated는 in-dist trajectory-only 배포 전용이며 OOD 노출 시 위험하다.</li>
+  <li><strong>복구(LoRA)의 표적이 분명해졌다.</strong> 복구는 (a) integrated의 OOD 추론 붕괴 회복, (b) cocsafe_r30의 궤적 손상 회복을 노려야 한다. 학습 데이터에 OOD 다양성을 주입하는 것(419개 로컬 OOD)이 in-dist head-heavy(9% 고유 CoC)의 shortcut을 직접 상쇄한다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음 단계</h2>
+<ol>
+  <li><strong>LoRA 복구를 OOD 강건성 목표로 설계</strong> &mdash; train에 OOD clip 주입 + held-out OOD로 일반화 측정. 이 보고서가 &ldquo;왜 OOD를 넣어야 하나&rdquo;의 근거.</li>
+  <li>복구 후 이 OOD 세트로 재평가 &mdash; 전파 격차&middot;NLL&middot;생성 CoC 유창성이 baseline 수준으로 돌아오는지.</li>
+  <li>스킵된 44 clip(이른 이벤트)을 &ldquo;더 늦은 이벤트&rdquo;로 보강해 419 완성(선택).</li>
+</ol>
+
+<h2><span class="num">6.</span>산출물</h2>
+<ul>
+  <li><code>experiments/head_analysis/eval_ood.py</code> / <code>analyze_ood.py</code></li>
+  <li><code>outputs/ood_eval/{baseline,slim_integrated_mag,slim_cocsafe_r20,slim_cocsafe_r30}.json</code> &mdash; per-clip 원자료(minADE tf/rollout, NLL, 생성 CoC)</li>
+  <li><code>outputs/ood_eval/{summary.txt, aggregate.json, qualitative.json, plots/ood_summary.png}</code></li>
+  <li><code>outputs/ood_manifest.json</code> &mdash; 375 OOD clip (event t0, cluster, GT CoC)</li>
+</ul>
+
+</div>
+</body>
+</html>

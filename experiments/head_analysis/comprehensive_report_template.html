@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpamayo-1.5 압축 연구 종합 보고서</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 종합 보고서</div>
+  <h1>Alpamayo-1.5-10B 압축 연구 종합 &mdash; 프로파일링에서 29.3% 마스킹까지</h1>
+  <div class="meta">
+    2026-07-22 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> &middot; branch <code>head-attention-analysis</code>
+    &middot; 개별 보고서 9편의 종합 (하단 &sect;9 참조)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+<div class="kpi-row">
+  <div class="kpi"><div class="v">&minus;3.25B</div><div class="l">마스킹 파라미터 (29.3%)</div></div>
+  <div class="kpi"><div class="v">+0.010 m</div><div class="l">&Delta;minADE (noise 범위, 회전 포함)</div></div>
+  <div class="kpi"><div class="v">0%</div><div class="l">KV cache (절감 철회, &sect;7)</div></div>
+  <div class="kpi"><div class="v">1.62&times;</div><div class="l">실측 latency (CUDA graph; 비최적화 1.03&times;) &middot; 메모리 &minus;29%</div></div>
+</div>
+<p><strong>trajectory 전용 배포를 전제하면 파라미터 29.3%(3.25B), CoC와 trajectory를 모두 유지하면 18.1%(2.01B)를 학습 없이 마스킹해도 open-loop minADE(K=8)가 회전 시나리오 포함 noise 범위에 머문다.</strong> 두 수치의 차 <strong>1.24B(11.2%p)가 곧 reasoning 능력을 유지하는 데 드는 실측 가격</strong>이다. trajectory 전용의 비용은 CoC 포기(NLL +2.86)와 p95 tail(+0.47m)이며, 모든 수치는 복구 학습 이전의 하한이다.</p>
+<p>이 결론에 도달하는 과정에서 초기 가설과 중간 결론 여러 개가 실측으로 반증·정정되었다(&sect;7). 그 정정들이 이 연구에서 방법론적으로 가장 가치 있는 부분이다.</p>
+
+<h2><span class="num">1.</span>문제 설정</h2>
+<p>Alpamayo-1.5는 두 tower로 구성된다: VLM(7.58B language model + 0.58B ViT)이 multi-camera 영상에서 CoC 텍스트를 autoregressive로 생성하며 KV cache를 만들고, action expert(2.28B)가 그 <strong>layer별 cache를 읽으며</strong> flow-matching denoising 10 step으로 64-waypoint 궤적을 만든다. Expert layer <em>i</em>가 VLM layer <em>i</em>의 cache를 소비하는 이 결합이 압축의 중심 제약이다.</p>
+<p>핵심 질문: <strong>압축이 보존해야 할 대상은 VLM의 출력(CoC)인가, expert가 읽는 cache인가?</strong> 두 답은 다른 pruning 기준을 낳고, 다르다면 그것이 이 아키텍처 계열(&pi;0, GR00T 등 action-expert VLA) 고유의 압축 원리가 된다.</p>
+
+<h2><span class="num">2.</span>1단계 &mdash; 프로파일링: 비용은 어디에 있나</h2>
+<figure>
+  <img src="PLOT::pr::stage_breakdown.png" alt="stage breakdown">
+  <figcaption>추론 1회의 실측 단계 분해 (48 clips &times; 2 GPU 모델). CoC decode와 expert denoising이 합쳐 <strong>66%</strong>.</figcaption>
+</figure>
+<ul>
+  <li>FLOPs 추정은 정확했으나(합계 오차 2.5%) latency 예측은 크게 틀렸다. 단계별 실효 처리량이 <strong>366배</strong> 벌어지기 때문이다: prefill 183 TFLOP/s vs decode 0.5.</li>
+  <li>연산 성능이 1.68배 다른 두 GPU에서 decode(0.94&times;)와 expert(1.00&times;)는 시간이 <strong>변하지 않았다</strong> &mdash; 두 단계는 메모리 대역폭에 묶여 있다. decode는 두 칩 모두 33 ms/token.</li>
+  <li>함의: &ldquo;파라미터 수 &times; 토큰 수&rdquo;식 우선순위는 순차 스텝이 많은 단계를 체계적으로 과소평가한다. <strong>(2026-07-23 재정정: 당초 여기서 &ldquo;이득 대부분은 decode&rdquo;라 추론했으나, 물리 제거 실측에서 decode&middot;expert는 batch 1에서 dispatch-bound로 판명 &mdash; 가중치 절감은 시간으로 전환되지 않았고 실제 이득은 메모리와 prefill에 실현되었다. &sect;7)</strong></li>
+</ul>
+
+<h2><span class="num">3.</span>2단계 &mdash; P1: 두 목적함수의 중요도는 다른가</h2>
+<figure>
+  <img src="PLOT::p1::within_layer_agreement.png" alt="P1 agreement">
+  <figcaption>layer 내부에서 CoC 기준과 trajectory 기준의 랭킹 상관. layer 21까지 &rho;&gt;0.6, 이후 붕괴.</figcaption>
+</figure>
+<ul>
+  <li>Q head / MLP channel / KV group 전 단위에서 같은 패턴: 초반 layer는 두 기준이 일치(&rho; +0.87), <strong>후반 layer(30&ndash;35)에서 &rho; +0.28로 붕괴</strong>.</li>
+  <li>중요도 질량도 갈린다: layer 30&ndash;35는 CoC 중요도의 18&ndash;26%를 갖지만 trajectory 중요도는 <strong>3&ndash;9%</strong>뿐이다. <strong>VLM 상단은 대체로 CoC 전용이다.</strong></li>
+  <li>구조적 사실: layer 35의 <strong>attention 출력(q/o_proj 경로)과 MLP 출력</strong>은 후속 layer가 없어 어떤 cache에도 기여하지 않고 lm_head로만 가므로, trajectory gradient가 <strong>정확히 0</strong>이다. 반면 layer 35의 k/v projection은 layer 35의 cache를 만들며 expert가 이를 읽으므로 제거 대상이 아니다 (모든 &ldquo;layer 35 제거&rdquo; config는 q/o_proj + MLP만 제거하고 k/v를 유지한다).</li>
+  <li>방법: 클립당 teacher-forced forward 1회에 두 objective를 얹고, trajectory는 2단계 역전파(expert&rarr;cache leaf 누적 &rarr; VLM backward 1회)로 비용을 낮췄다. 전 layer 합산 상관은 depth에 교란되므로 <strong>layer 내부 상관만</strong> 사용했다.</li>
+</ul>
+
+<h2><span class="num">4.</span>3단계 &mdash; P2: 마스크 ablation</h2>
+<figure>
+  <img src="PLOT::p2::criterion_curves.png" alt="P2 curves">
+  <figcaption>왼쪽: 전체 layer pruning &mdash; magnitude 붕괴(20%에 +9m), Taylor 두 기준은 유지. 오른쪽: 후반 layer만 &mdash; <strong>random 포함 모든 기준이 50%까지 무해</strong>.</figcaption>
+</figure>
+<ul>
+  <li><strong>Taylor는 필수, magnitude는 붕괴</strong> (VLM에서). random도 40%부터 무너진다.</li>
+  <li><strong>위치가 기준보다 중요하다</strong>: 후반 14 layer는 무엇으로 골라도 50% 무료 &mdash; P1의 &ldquo;후반은 trajectory에 잉여&rdquo;가 인과로 확인됐다.</li>
+  <li>layer 35 제거: ADE 변화 정확히 0.0000, CoC NLL +0.89 &mdash; P1 예측의 독립 재현.</li>
+  <li>당시 결론 &ldquo;채널 수준에서 traj vs CoC 기준은 무승부&rdquo;는 이후 K=8 평가에서 <strong>일부 뒤집힌다</strong>(&sect;5).</li>
+</ul>
+
+<h2><span class="num">5.</span>4단계 &mdash; 평가 강화가 결론을 바꿨다</h2>
+<p>P2의 평가는 단일 샘플(K=1)&middot;평균&middot;단일 지표였다. K=8 multi-sample minADE/minFDE, paired bootstrap CI, p90/p95, GT 기하 기반 시나리오 버킷(직진/회전/감속/가속)으로 재구성하자 두 결론이 바뀌었다.</p>
+<figure>
+  <img src="PLOT::eb::bucket_heatmap.png" alt="bucket heatmap">
+  <figcaption>110 clips(회전 33 확보 후), config &times; 버킷 &Delta;minADE. 가속 열의 &ldquo;개선&rdquo;(파랑)은 병리적 선택의 아티팩트다.</figcaption>
+</figure>
+<ul>
+  <li><strong>기준 차이가 드러났다.</strong> 전체 30% pruning에서 trajectory 기준은 무료(+0.017)인데 CoC 기준은 실제 regression(+0.518, CI [+0.28, +0.79], 19/50 클립 악화). K=1 노이즈가 이 차이를 가리고 있었다. &ldquo;보존할 것은 출력이 아니라 cache&rdquo;라는 주장이 공격적 압축 구간에서 성립한다.</li>
+  <li><strong>KV group: 당초 &ldquo;1개/layer 무료&rdquo;로 판정했으나, 이후 충실성 검증에서 철회됐다(&sect;7).</strong> 당시 ablation은 VLM 쪽 Q head만 마스킹해 expert가 그 group의 cache를 계속 읽고 있었다. 양 tower를 동시에 끄는 충실한 ablation에서는 <strong>1개 제거도 regression(+0.079*)</strong>이며, 비용의 대부분(+0.053)이 expert의 접근 상실에서 온다. 유효하게 남는 결과: VLM 쪽 4 Q head/layer 제거는 무료(cache 절감 없음).</li>
+  <li>회전은 전 실험에 걸쳐 <strong>가장 먼저 무너지는 canary</strong>였다. 층화 없이는 이 경계들을 볼 수 없었다.</li>
+</ul>
+
+<h2><span class="num">6.</span>5단계 &mdash; Expert tower와 통합</h2>
+<figure>
+  <img src="PLOT::ex::expert_curves.png" alt="expert curves">
+  <figcaption>Expert 폭 pruning. 전체 scope는 10%부터 여유가 얇고, 초반(0&ndash;21)은 40%까지 무료. Expert에서는 <strong>magnitude가 Taylor에 밀리지 않는다.</strong></figcaption>
+</figure>
+<ul>
+  <li><strong>두 tower의 잉여는 반대편 끝에 있다.</strong> VLM은 후반이(trajectory 관점), expert는 초반이 잉여다. 각 tower의 소비되는 출력(중간 depth의 cache vs 마지막 layer의 action head)에 가까울수록 중요하다.</li>
+  <li><strong>기준의 효용도 tower에 따라 다르다.</strong> VLM에서는 objective-aware Taylor가 필수, expert에서는 magnitude로 충분(오히려 우세) &mdash; 좁은 단일 과제 tower에서는 가중치 크기가 중요도를 잘 반영한다는 가설과 부합한다.</li>
+  <li>Expert는 VLM보다 밀도가 높다(전체 scope 무료: 10% vs 30%). 압축의 주 전장은 VLM이다.</li>
+</ul>
+<figure>
+  <img src="PLOT::it::integrated_ci.png" alt="integrated CI">
+  <figcaption>최종 통합: VLM(-2.65B) + expert(-0.60B) 동시 마스킹. magnitude 변형이 전체&middot;회전 모두 noise 범위.</figcaption>
+</figure>
+<ul>
+  <li><strong>Cross-tower 상호작용은 0 또는 음수</strong> &mdash; 두 tower의 pruning은 손상을 증폭하지 않는다. VLM 내부 결합(독립성 +0.011)도, KV2 음성 대조(개별에서 확인된 회전 손상이 결합에서 재현)도 측정 체계의 일관성을 보였다.</li>
+  <li>단, expert 내부 결합(early40+late10)은 단독으로 marginal regression(+0.065*)이었다 &mdash; 최종 config는 &ldquo;무료의 경계선&rdquo;에 서 있다.</li>
+</ul>
+
+<h2><span class="num">7.</span>정정의 기록</h2>
+<p>이 연구에서 실측이 뒤집은 가설과 중간 결론들이다. 각각이 측정 방법의 결함 하나씩을 드러냈다.</p>
+<table>
+  <tr><th>당초 판단</th><th>실측 결과</th><th>드러난 결함</th></tr>
+  <tr><td>vision token 축소가 1순위 레버 (1.7&times;)</td><td>prefill은 latency의 20%뿐, 실제 1.20&times;</td><td>FLOPs&rarr;latency 균일 변환 가정</td></tr>
+  <tr><td>expert denoising은 비용의 3.6%</td><td>실측 25&ndash;28%</td><td>arithmetic intensity 무시</td></tr>
+  <tr><td>&ldquo;nvidia-smi를 신뢰할 수 없다&rdquo;</td><td>CUDA_DEVICE_ORDER 불일치(속도순 vs PCI순)로 다른 카드를 보고 있었음</td><td>장치 인덱스 검증 부재</td></tr>
+  <tr><td>후반 layer는 두 목적 모두에서 중요 (P1 중간보고)</td><td>CoC에서만 중요, trajectory에는 최소 구간</td><td>expert 결과의 부당한 외삽</td></tr>
+  <tr><td>채널 수준 기준 비교는 무승부 (P2)</td><td>K=8에서 공격적 압축 시 trajectory 기준이 명확히 우세</td><td>단일 샘플 노이즈</td></tr>
+  <tr><td>KV group 1개 제거는 회전을 손상 (n=3)</td><td>n=33에서 noise 범위; 2개부터 손상</td><td>소표본 버킷의 과잉 해석</td></tr>
+  <tr><td>가속 버킷 신호</td><td>극단 클립 선택으로 병리적(baseline 1.83; 모델을 망가뜨리면 점수가 좋아짐)</td><td>버킷 구성 시 baseline 난이도 미통제</td></tr>
+  <tr><td>Taylor가 항상 magnitude보다 낫다</td><td>expert에서는 magnitude가 동등 이상</td><td>VLM 결과의 부당한 일반화</td></tr>
+  <tr><td>KV group 1개/layer 제거는 무료, cache &minus;12.5%</td><td>충실한 ablation(양 tower Q head 동시 마스킹 = 물리적 제거와 기능적으로 동등)에서 +0.079* regression; 비용은 expert의 cache 접근 상실(+0.053)</td><td>ablation이 배포 구성과 어긋남 &mdash; VLM 쪽만 마스킹해 expert가 cache를 계속 읽음</td></tr>
+  <tr><td>통합 &minus;3.20B(28.9%) / CoC+traj 유지 &minus;1.93B(17.4%) / 가격 1.27B</td><td>실제 마스크 재계수(2026-07-23): <strong>&minus;3.25B(29.3%) / &minus;2.01B(18.1%) / 1.24B(11.2%p)</strong>. KV1이 width 선택과 중첩되지 않고 추가로 끄는 Q head(graded 35/144, dual 87/144)를 어림 계상했고, 직전 KV 정정의 3.24&rarr;3.20B 조정은 이중 차감 오류(k/v projection 37.8M은 애초 집계에 없었음)</td><td>파생 수치를 마스크 실계수가 아닌 어림 산수로 집계</td></tr>
+  <tr><td>decode&middot;expert는 bandwidth-bound &rarr; 폭 절감 시 latency 1.39&times;/1.22&times; (추정)</td><td>물리 제거 실측(2026-07-23): <strong>1.03&times; / 0.96&times;</strong> &mdash; 두 stage는 batch 1에서 <strong>kernel dispatch-bound</strong>(가중치 &minus;34%에 decode/tok &minus;3%). 실현된 이득은 peak 메모리 &minus;29%/&minus;18%와 prefill &minus;26%(compute-bound). masked&equiv;removed 동등성은 확인(fp64 정확 일치). 후속 CUDA-graph 상각 실측(2026-07-23)에서 <strong>1.62&times;/1.43&times;</strong>로 속도 이득 회복 확인</td><td>보유한 간접 신호(hardware sensitivity 0.94&times;/1.00&times;, 달성 0.5 TFLOP/s)를 추정 모델에 반영하지 않음</td></tr>
+</table>
+
+<h2><span class="num">8.</span>확정된 사실, 한계, 다음 단계</h2>
+<h3>8.1 확정된 사실 (마스킹, K=8, 80&ndash;110 clips)</h3>
+<table>
+  <tr><th>단위</th><th>판정</th></tr>
+  <tr><td>VLM layer 35 attn+MLP (193M)</td><td>trajectory에 <strong>완전 무료</strong> (구조적 0, 4회 독립 확인) / CoC NLL +0.9</td></tr>
+  <tr><td>VLM 후반(22&ndash;34) 폭 50%</td><td>무료, 기준 무관, 회전 견고</td></tr>
+  <tr><td>VLM 전체 폭 30%</td><td>trajectory Taylor로만 무료 (CoC 기준은 붕괴, magnitude는 재앙)</td></tr>
+  <tr><td>KV group (양 tower 결합 단위)</td><td><strong>완전 제거는 1개부터 regression(+0.079*)</strong> &mdash; expert가 최약 group의 cache도 실사용. VLM 쪽 Q head 4개/layer 제거만 무료(cache 절감 없음)</td></tr>
+  <tr><td>Expert 초반(0&ndash;21) 폭 40%</td><td>무료 (traj 또는 magnitude)</td></tr>
+  <tr><td>통합, trajectory 전용 (&minus;3.25B, 29.3%)</td><td>&Delta;minADE +0.010 [&minus;0.07, +0.09], 회전 +0.099 (n.s.) / CoC 포기</td></tr>
+  <tr><td>pruning &times; CUDA graph (dispatch 상각)</td><td>graph 단독 1.28&times;, +pruning <strong>1.62&times;(integrated) / 1.43&times;(cocsafe)</strong> &mdash; graph 아래서 decode가 bandwidth-bound로 복원되어 가중치 &minus;32%가 decode/tok &minus;25%로 전환. 품질 동등(TF logits, bf16 노이즈 내)</td></tr>
+  <tr><td>물리 제거 (slim, 양 config)</td><td>masked&equiv;removed <strong>동등</strong>(무편향, fp64 정확 일치) / peak 메모리 &minus;29%&middot;&minus;18% / 실측 latency 1.03&times;&middot;0.96&times; (prefill만 &minus;26%, decode&middot;expert는 dispatch-bound)</td></tr>
+  <tr><td>통합, CoC+trajectory 유지 (&minus;2.01B, 18.1%)</td><td>dual 기준(max(rank_traj, rank_coc)) 20% + KV1 + expert: &Delta;minADE +0.053 (CI 0 포함), &Delta;NLL +0.026. dual 30%는 ADE 붕괴(두 목적이 예산 경쟁)</td></tr>
+</table>
+<h3>8.2 한계</h3>
+<ul>
+  <li><strong>open-loop뿐이다.</strong> closed-loop&middot;충돌 지표는 공개 데이터로 불가능하며, 평균/CI 무료가 최악 사례 무료는 아니다(p95 +0.47m, 4/80 regression).</li>
+  <li><strong>복구 학습 이전이다.</strong> 물리적 제거 자체는 실측으로 마스킹과 동등함을 확인했으나(2026-07-23, fp64 정확 일치), LoRA 복구 후의 품질&middot;여유는 미측정이다.</li>
+  <li><strong>단일 모델&middot;단일 데이터셋.</strong> &pi;0 계열 재현 없이는 &ldquo;action-expert VLA 일반&rdquo;을 주장할 수 없다.</li>
+  <li>test split(150)은 아직 사용하지 않았다(확정 수치는 복구 후 1회 측정 예정).</li>
+</ul>
+<h3>8.3 다음 단계</h3>
+<ol>
+  <li><strong>LoRA 복구</strong> &mdash; slim checkpoint 2개 확보 완료(가중치 제거 실측 종료), cache 재현 + trajectory loss.</li>
+  <li><strong>test split 확정 수치.</strong></li>
+  <li>&pi;0 재현, closed-loop 평가 확보.</li>
+</ol>
+
+<h2><span class="num">9.</span>개별 보고서</h2>
+<ul>
+  <li><code>2026-07-18_alpamayo1.5-model-structure.html</code> &mdash; 구조 분석</li>
+  <li><code>2026-07-20_head-pruning-attention-analysis-results.html</code> &mdash; attention 분석 (Phase A+B)</li>
+  <li><code>2026-07-21_inference-stage-profiling.html</code> &mdash; 단계별 프로파일링</li>
+  <li><code>2026-07-21_p1-dual-objective-importance.html</code> &mdash; P1</li>
+  <li><code>2026-07-22_p2-mask-ablation.html</code> &mdash; P2</li>
+  <li><code>2026-07-22_strengthened-evaluation.html</code>, <code>2026-07-22_turn-accel-bucket-remeasure.html</code> &mdash; 평가 강화</li>
+  <li><code>2026-07-22_combined-config-measurement.html</code>, <code>2026-07-22_expert-tower-masking-sweep.html</code>, <code>2026-07-22_integrated-config-measurement.html</code> &mdash; 결합&middot;expert&middot;통합</li>
+  <li><code>2026-07-22_coc-trajectory-preserving-scenario.html</code> &mdash; CoC+trajectory 동시 유지 (reasoning의 가격)</li>
+  <li><code>2026-07-22_kv-group-fidelity-fix.html</code> &mdash; KV ablation 충실성 검증 및 정정</li>
+  <li><code>2026-07-23_physical-removal-latency.html</code> &mdash; 물리적 제거 + 실측 latency (예측 반증&middot;동등성 검증)</li>
+  <li><code>2026-07-23_dispatch-optimized-latency.html</code> &mdash; CUDA graph 상각: pruning &times; graph = 1.62&times; 실측</li>
+  <li>KV group 충실성 검증 원자료: <code>outputs/kvfix_s{0,40}/</code> (&sect;7에 반영)</li>
+</ul>
+
+</div>
+</body>
+</html>

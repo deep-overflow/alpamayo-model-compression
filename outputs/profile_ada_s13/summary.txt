@@ -1,0 +1,22 @@
+Alpamayo-1.5-10B stage profile
+  gpu=NVIDIA RTX 5880 Ada Generation  attn=sdpa  dtype=bf16  n=12 clips (+1 warmup)
+  params total 11.079B
+
+stage                  median ms  % of total
+ViT                        162.7       10.9%
+VLM prefill                444.7       29.9%
+CoC decode                 462.0       31.0%
+Expert denoise             367.0       24.6%
+rollout overhead            43.7        2.9%
+denoise overhead            12.0        0.8%
+TOTAL (wall)              1489.7      100.0%
+
+sequence / memory (median):
+  prompt tokens           3086.0
+  vision tokens           2880.0
+  CoC tokens                15.0
+  decode steps              15.0
+  expert steps              10.0
+  KV cache MB              436.1
+  rollout peak GB           21.5
+  denoise peak GB           21.4

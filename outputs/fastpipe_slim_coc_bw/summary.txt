@@ -1,0 +1,5 @@
+pipeline bench (slim outputs/slim_cocsafe_r20, n=12 live clips, cap=3456)
+vit+prefill   stock  397.7   fast  460.4 ms
+decode/tok    stock   37.2   fast   20.6 ms
+denoise       stock  430.6   fast  196.2 ms
+end-to-end (norm 16 tok)  stock  1423.7   fast   986.4 ms ->  1.44x
