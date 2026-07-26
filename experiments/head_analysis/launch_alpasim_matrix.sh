@@ -15,6 +15,9 @@ set -u
 
 ALPASIM=/home/cvlab21/project/chan/alpasim
 RUNS=/home/cvlab21/project/chan/alpasim-runs
+# NuRec scenes live off-repo (49 GB); a symlink inside data/ dangles in the
+# containers, so point scene_cache at the real path instead.
+SCENE_CACHE=/mnt/nvme1n1/ad_vla/data/nre-artifacts
 N_SCENES=${1:?usage: launch_alpasim_matrix.sh <n_scenes> <n_rollouts> [config ...]}
 N_ROLLOUTS=${2:?usage: launch_alpasim_matrix.sh <n_scenes> <n_rollouts> [config ...]}
 shift 2
@@ -86,6 +89,7 @@ for cfg in "${CONFIGS[@]}"; do
       "services.driver.environments=['HF_HUB_OFFLINE=1']" \
       "services.runtime.environments=['ALPASIM_ASL_SKIP_IMAGES=1']" \
       scenes.test_suite_id=public_2604 \
+      scenes.scene_cache="$SCENE_CACHE" \
       scenes.limit_to_first_n="$N_SCENES" \
       runtime.simulation_config.n_rollouts="$N_ROLLOUTS" \
       eval.allow_aggregation_with_failed_rollouts=true \
