@@ -1,0 +1,76 @@
+종방향 안전 지표 — 30 씬 x 2 rollouts, 4 configs
+(근접 기준 6m, 주행 기준 1m/s, 전방 1s)
+
+config                      제동가속      제동비율  THW p05  THW<1s    <2m비율     최소갭      근접시속도
+---------------------------------------------------------------------------------------
+baseline                  -0.178     0.297     0.45   0.560    0.265    3.18       8.31
+slim_cocsafe_r20          -0.137     0.309     0.51   0.579    0.276    4.33       8.22
+slim_cocsafe_r30          -0.189     0.370     0.54   0.540    0.272    5.90       7.79
+slim_integrated_mag       -0.110     0.226     0.48   0.574    0.248    4.01       8.66
+
+선행차 특정 지표 (ASL actor poses, 전방 ±1.75m 차선 내 최근접 차량):
+config                      선행차비율  THW p05  THW<1s  TTC p05  TTC<2s      제동가속      제동비율
+---------------------------------------------------------------------------------------
+baseline                    0.544     3.46   0.080    10.86  0.0059     0.099     0.288
+slim_cocsafe_r20            0.566     3.63   0.072    11.07  0.0053     0.192     0.290
+slim_cocsafe_r30            0.484     4.11   0.042    12.71  0.0012     0.042     0.278
+slim_integrated_mag         0.523     2.91   0.079     8.61  0.0088    -0.053     0.248
+
+baseline 대비 씬-페어드 차이 (95% CI, Wilcoxon):
+  [slim_cocsafe_r20]
+    brake_accel_when_close      +0.0211 [-0.0133, +0.0548] p=0.1499 
+    brake_frac_when_close       +0.0077 [-0.0515, +0.0666] p=0.5168 
+    thw_p05                     +0.0590 [-0.0172, +0.1818] p=0.6710 
+    frac_thw_below_1s           +0.0190 [-0.0034, +0.0466] p=0.4758 
+    frac_within_2m              +0.0111 [-0.0172, +0.0473] p=0.6226 
+    mean_speed_when_close       +0.4998 [+0.1881, +0.8403] p=0.0022*
+    lead_thw_p05                -0.2483 [-0.7799, +0.2132] p=0.3254 
+    lead_frac_thw_below_1s      -0.0062 [-0.0528, +0.0430] p=0.8457 
+    lead_ttc_p05                +0.1465 [-1.6357, +1.9113] p=0.3604 
+    lead_frac_ttc_below_2s      -0.0006 [-0.0120, +0.0092] p=1.0000 
+    lead_brake_accel            +0.0931 [-0.0909, +0.2649] p=0.1465 
+    lead_brake_frac             +0.0019 [-0.0461, +0.0451] p=0.7422 
+  [slim_cocsafe_r30]
+    brake_accel_when_close      -0.0407 [-0.1598, +0.0628] p=0.9789 
+    brake_frac_when_close       +0.0770 [-0.0235, +0.1987] p=0.9406 
+    thw_p05                     +0.0857 [-0.0294, +0.2312] p=0.3608 
+    frac_thw_below_1s           -0.0204 [-0.0631, +0.0245] p=0.1336 
+    frac_within_2m              +0.0070 [-0.0312, +0.0514] p=0.8212 
+    mean_speed_when_close       -0.1632 [-0.9804, +0.6068] p=0.7310 
+    lead_thw_p05                +0.6204 [-0.4630, +1.9203] p=0.9789 
+    lead_frac_thw_below_1s      -0.0379 [-0.1138, +0.0240] p=0.3750 
+    lead_ttc_p05                +2.6755 [+0.7451, +5.1080] p=0.0563 
+    lead_frac_ttc_below_2s      -0.0047 [-0.0147, +0.0024] p=n/a 
+    lead_brake_accel            -0.2442 [-0.8542, +0.2208] p=0.7646 
+    lead_brake_frac             +0.0479 [-0.2116, +0.3190] p=0.6953 
+  [slim_integrated_mag]
+    brake_accel_when_close      +0.0389 [-0.0233, +0.0962] p=0.1427 
+    brake_frac_when_close       -0.0546 [-0.1159, +0.0102] p=0.0650 
+    thw_p05                     +0.0258 [-0.1708, +0.2217] p=0.4742 
+    frac_thw_below_1s           +0.0138 [-0.0145, +0.0444] p=0.6033 
+    frac_within_2m              -0.0171 [-0.0712, +0.0299] p=0.9741 
+    mean_speed_when_close       +0.0117 [-0.5874, +0.5824] p=0.7835 
+    lead_thw_p05                -1.0148 [-2.1764, -0.2267] p=0.0115*
+    lead_frac_thw_below_1s      +0.0042 [-0.0576, +0.0682] p=0.8311 
+    lead_ttc_p05                -2.0049 [-6.2401, +1.8673] p=0.2479 
+    lead_frac_ttc_below_2s      +0.0029 [-0.0107, +0.0165] p=1.0000 
+    lead_brake_accel            -0.0759 [-0.3199, +0.1299] p=0.7646 
+    lead_brake_frac             +0.0234 [-0.0903, +0.1302] p=0.6406 
+
+강건성 — 충돌 rollout 제외 시에도 유지되는가 (선행차 THW):
+  [lead_thw_p05 / all_rollouts] baseline 3.46s
+      slim_cocsafe_r20        -0.248s [-0.780, +0.213] p=0.3254  (n=25씬)
+      slim_cocsafe_r30        +0.620s [-0.463, +1.920] p=0.9789  (n=25씬)
+      slim_integrated_mag     -1.015s [-2.176, -0.227] p=0.0115* (n=25씬)
+  [lead_thw_p05 / excl_collision_rollouts] baseline 3.45s
+      slim_cocsafe_r20        -0.185s [-0.716, +0.258] p=0.4559  (n=24씬)
+      slim_cocsafe_r30        +0.777s [-0.272, +2.043] p=0.8334  (n=24씬)
+      slim_integrated_mag     -1.193s [-2.555, -0.298] p=0.0043* (n=21씬)
+  [lead_thw_median / all_rollouts] baseline 4.84s
+      slim_cocsafe_r20        -0.360s [-1.383, +0.375] p=0.6150  (n=25씬)
+      slim_cocsafe_r30        +0.767s [-0.666, +2.241] p=0.3123  (n=25씬)
+      slim_integrated_mag     -0.477s [-1.233, +0.147] p=0.2200  (n=25씬)
+  [lead_thw_median / excl_collision_rollouts] baseline 4.81s
+      slim_cocsafe_r20        -0.347s [-1.393, +0.410] p=0.8115  (n=24씬)
+      slim_cocsafe_r30        +0.918s [-0.550, +2.388] p=0.2182  (n=24씬)
+      slim_integrated_mag     -0.460s [-1.377, +0.262] p=0.4948  (n=21씬)

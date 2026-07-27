@@ -1,0 +1,31 @@
+{
+  "runs_root": "/home/cvlab21/project/chan/alpasim-runs",
+  "n_scenes": 30,
+  "close_m": 6.0,
+  "horizon_s": 1.0,
+  "brake_mps2": -0.5,
+  "keys": [
+    "brake_accel_when_close",
+    "brake_frac_when_close",
+    "thw_p05",
+    "frac_thw_below_1s",
+    "frac_within_2m",
+    "frac_within_3m",
+    "min_gap_m",
+    "speed_at_closest_mps",
+    "mean_speed_when_close",
+    "mean_speed_mps",
+    "frac_time_with_lead",
+    "lead_thw_p05",
+    "lead_thw_p10",
+    "lead_thw_p25",
+    "lead_thw_median",
+    "lead_frac_thw_below_1s",
+    "lead_min_gap_m",
+    "lead_ttc_p05",
+    "lead_frac_ttc_below_2s",
+    "lead_frac_ttc_below_3s",
+    "lead_brake_accel",
+    "lead_brake_frac"
+  ]
+}

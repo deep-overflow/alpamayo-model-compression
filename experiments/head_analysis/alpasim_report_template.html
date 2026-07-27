@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AlpaSim closed-loop 압축 평가</title>
+<title>추론 보존 압축 — CoC와 궤적을 함께 유지해야 하는 이유</title>
 <style>
   :root {
     --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
@@ -52,8 +52,8 @@
 <div class="container">
 
 <header>
-  <div class="eyebrow">Model Compression &middot; Closed-loop 검증</div>
-  <h1>AlpaSim closed-loop 평가 &mdash; 압축이 실제 주행에 미치는 영향</h1>
+  <div class="eyebrow">Model Compression &middot; Reasoning-preserving pruning</div>
+  <h1>추론 보존 압축 &mdash; CoC와 궤적을 <em>함께</em> 유지해야 하는 이유</h1>
   <div class="meta">
     2026-07-25 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> + slim &times;3
     &middot; 시뮬레이터 <code>NVlabs/alpasim</code> (NuRec 재현 렌더링, 폐루프)
@@ -63,18 +63,53 @@
   </div>
 </header>
 
-<h2><span class="num">0.</span>요약 &mdash; 단일 점수는 안전을 숨긴다</h2>
+<h2><span class="num">0.</span>요약 &mdash; 궤적만 보는 압축은 추론을 죽인다</h2>
 <div class="kpi-row">
-  <div class="kpi"><div class="v"><span class="bad">4배</span></div><div class="l">integrated 과실 충돌 (3.3% → 13.3%)</div></div>
-  <div class="kpi"><div class="v">+0.002</div><div class="l">그런데 scene score는 baseline과 동일</div></div>
-  <div class="kpi"><div class="v"><span class="bad">86.3%</span></div><div class="l">integrated CoC 붕괴율 (baseline 0.7%)</div></div>
-  <div class="kpi"><div class="v"><span class="good">&minus;0.035</span> / <span class="bad">&minus;0.220</span></div><div class="l">Δscore: cocsafe_r20(p=.24) vs r30(p=.008)</div></div>
+  <div class="kpi"><div class="v good">&minus;18.1%</div><div class="l">CoC-safe 압축, 재학습 없음(zero-shot)</div></div>
+  <div class="kpi"><div class="v good">&minus;0.035</div><div class="l">폐루프 scene score Δ (p=0.24, 노이즈 이내)</div></div>
+  <div class="kpi"><div class="v bad">&minus;1.19s</div><div class="l">궤적 전용 압축의 선행차 추종 거리 (p=0.004)</div></div>
+  <div class="kpi"><div class="v bad">4배</div><div class="l">궤적 전용 압축의 과실 충돌 (2&rarr;8건)</div></div>
 </div>
 <div class="callout">
-  <strong>핵심 발견.</strong> 폐루프에서 <strong>cocsafe_r20(&minus;18.1%)은 주행 품질을 유지</strong>하고(Δscore &minus;0.035, p=0.24, 반복 노이즈 0.105보다 작음), <strong>cocsafe_r30(&minus;24.1%)은 명확히 실패</strong>한다(Δ&minus;0.220, <strong>p=0.008</strong>, 이탈 30%&rarr;52%). 가장 놀라운 것은 <strong>integrated_mag(&minus;29.3%)</strong>이다. CoC의 <strong>86%가 붕괴</strong>했는데도 scene score는 baseline과 같고(+0.002), 심지어 더 멀리 간다(진행거리 115m&rarr;125m). 그러나 <strong>과실 충돌은 2건&rarr;8건으로 4배</strong>다. 추론이 <strong>상시</strong> 망가진 정책이 &ldquo;차선을 따라 계속 전진&rdquo;하는 반사적 주행으로 퇴화하면서, <strong>진행거리 위주의 복합 점수가 안전성 붕괴를 상쇄해 가려버린다.</strong> 충돌 8건을 개별 추적한 결과(&sect;4), 붕괴는 충돌 직전에 몰리는 것이 아니라 <strong>주행 내내 지속</strong>되며, <strong>다른 세 구성이 만점으로 통과한 씬에서 integrated만 2회 모두 전방 충돌</strong>했다.
+  <strong>핵심 주장.</strong> Alpamayo 1.5 같은 reasoning-action 모델은 <strong>추론(CoC)과 액션(궤적)이라는 두 개의 출력 채널이
+  KV cache로 결합</strong>돼 있다. 기존 프루닝처럼 <strong>단일 목적(궤적)만으로 중요도를 매기면 추론 채널이 조용히 파괴</strong>되는데,
+  이 손상은 <strong>in-distribution 궤적 지표(ΔminADE +0.010)</strong>에도, <strong>폐루프 복합 점수(Δscore +0.002)</strong>에도 보이지 않고,
+  <strong>안전 지표에서만</strong> 드러난다 &mdash; 선행차 추종 거리 &minus;1.19초(p=0.004), 과실 충돌 4배.
+  중요도 기준에 <strong>CoC 항을 함께 넣기만 하면</strong>(dual-objective) 재학습 없이 <strong>18.1% 압축에서 폐루프 주행 품질이 유지</strong>된다
+  (Δscore &minus;0.035, p=0.24; 선행차 지표 전부 유의차 없음).
 </div>
+<p>따라서 이 보고서의 결론은 &ldquo;특정 압축률이 안전하다&rdquo;가 아니라
+<strong>&ldquo;reasoning-action 모델의 압축 기준은 두 채널을 함께 보존해야 하며, 그렇지 않으면 표준 지표로는 탐지되지 않는 안전 저하가 발생한다&rdquo;</strong>이다.</p>
 
 <h2><span class="num">1.</span>방법</h2>
+<h3>1.1 압축 기준 &mdash; 무엇을 비교하는가</h3>
+<p>세 config 모두 <strong>재학습 없이(zero-shot)</strong> 구조적으로 유닛을 제거한다. 차이는 <strong>중요도 기준</strong> 하나다.</p>
+<table>
+  <tr><th>config</th><th class="r">압축</th><th>VLM 유닛 선택 기준</th><th>성격</th></tr>
+  <tr><td><strong>slim cocsafe</strong> (제안)</td><td class="r">&minus;18.1% / &minus;24.1%</td>
+      <td><code>max(rank(I<sub>traj</sub>), rank(I<sub>CoC</sub>))</code> &mdash; 두 목적의 층별 순위를 정규화해 최대값</td>
+      <td><strong>dual-objective</strong>: 어느 한 채널에라도 중요하면 남긴다</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r">&minus;29.3%</td>
+      <td><code>I<sub>traj</sub></code>만 &mdash; 궤적 Taylor 중요도 + 후반 층 감축 + 층 35 제거</td>
+      <td>단일 목적(궤적). 기존 프루닝의 표준 관행</td></tr>
+</table>
+<ul>
+  <li><strong>중요도:</strong> 유닛마다 곱셈 게이트를 걸고 두 손실에 대한 Taylor 중요도를 따로 구한다 &mdash;
+      <code>I<sub>CoC</sub></code>는 CoC 토큰의 NLL, <code>I<sub>traj</sub></code>는 궤적 flow-matching MSE.
+      50개 calibration clip(train subset)에서만 측정하며 <strong>가중치 갱신은 전혀 없다</strong>.</li>
+  <li><strong>순위 정규화가 핵심:</strong> 두 손실의 스케일이 다르므로 값을 직접 더할 수 없다. 층별로 순위를 [0,1]로 정규화한 뒤
+      <code>max</code>를 취해, &ldquo;궤적에만 중요한 유닛&rdquo;과 &ldquo;추론에만 중요한 유닛&rdquo;을 <strong>대칭적으로 보존</strong>한다.</li>
+  <li><strong>KV group:</strong> GQA 결합(KV group h &rarr; VLM Q head [4h,4h+4), expert Q head [2h,2h+2)) 때문에 KV는 Q head 마스킹으로만 제거된다.
+      dual score로 층당 가장 약한 group 1개를 뺀다. k/v projection과 cache 레이아웃은 건드리지 않는다 &mdash; expert가 VLM의 cache를 읽으므로 <strong>이 인터페이스는 고정</strong>이다.</li>
+  <li><strong>Expert tower</strong>는 두 config 모두 동일하게 weight magnitude 기준(early 40% / late 10%)으로 처리해, 비교가 <strong>VLM 중요도 기준의 차이만</strong> 반영하도록 했다.</li>
+</ul>
+<div class="note">
+  <strong>왜 이것이 문제가 되는가.</strong> expert는 VLM의 per-layer KV cache를 prefill로 읽어 궤적을 만든다. 즉 <strong>cache가 두 tower의 유일한 인터페이스</strong>다.
+  궤적 손실만으로 중요도를 매기면 &ldquo;CoC 생성에만 쓰이는 유닛&rdquo;이 저평가돼 제거되고, 붕괴한 추론이 cache를 오염시켜 결국 궤적까지 망친다.
+  단일 목적 기준이 구조적으로 위험한 이유다.
+</div>
+
+<h3>1.2 폐루프 평가 설정</h3>
 <ul>
   <li><strong>시뮬레이터:</strong> AlpaSim &mdash; 실주행 로그를 NuRec으로 재구성한 USDZ 씬에서 정책이 실제로 조향&middot;가감속하고 그 결과가 다음 프레임 렌더링에 반영되는 <strong>폐루프</strong>. gRPC 마이크로서비스(renderer / driver / controller / physics / runtime)를 Docker Compose로 구동.</li>
   <li><strong>정책 연결:</strong> 기존 <code>Alpamayo15Model</code> 어댑터에 slim 체크포인트 감지 분기를 추가 &mdash; <code>slim_meta.json</code>이 있으면 <code>load_slim()</code>(전체 skeleton &rarr; 구조 수술 &rarr; strict state_dict 로드)으로 로드. baseline과 <strong>완전히 동일한 코드&middot;이미지&middot;설정</strong>을 사용하고 <code>checkpoint_path</code>만 다르다.</li>
@@ -198,45 +233,118 @@ integrated만 <strong>2회 모두 전방 충돌</strong>했다. 씬 난이도로
 즉 integrated는 <strong>앞차를 그대로 들이받는다</strong> &mdash; 진행거리가 227m로 가장 긴 rollout에서도 충돌한 것과 일관되며,
 &ldquo;멈추지 않고 계속 전진한다&rdquo;는 &sect;2의 진행거리 우위(115m&rarr;125m)가 사실은 <strong>제동 판단의 상실</strong>임을 보여준다.</p>
 
-<h2><span class="num">5.</span>분석 (해석)</h2>
-<ul>
-  
-  <li><strong>복합 점수가 안전 붕괴를 가린다 &mdash; 이번 평가의 최대 교훈.</strong> integrated_mag은 scene score로는 baseline과 동일(+0.002, p=0.80)하지만 과실 충돌이 4배다. 점수 공식이 진행거리 위주라, <strong>더 멀리 주행(115m&rarr;125m)한 것이 충돌 증가를 상쇄</strong>했다. 압축 모델을 단일 지표로 승인하면 안전성 저하를 놓친다 &mdash; <strong>충돌 지표를 반드시 분리해서 봐야 한다</strong>.</li>
-  <li><strong>추론 없이도 &ldquo;그럭저럭 달린다&rdquo; &mdash; 단, 제동은 못 한다.</strong> CoC가 86% 붕괴해도 차선 추종과 전진은 유지된다. 그러나 &sect;4가 보여주듯 잃어버리는 것은 <strong>앞차와의 거리 판단</strong>이고, 그 결과가 전방 충돌 4배다. VLM 추론은 <strong>조향(차선 유지)보다 종방향 판단(제동&middot;양보)에 훨씬 결정적</strong>이라는 해석이 가능하다.</li>
-  <li><strong>두 압축 방식의 실패 양상이 정반대다.</strong> integrated는 <strong>추론 붕괴형</strong>(CoC 상시 86% 붕괴 &rarr; 종방향 판단 상실 &rarr; 전방 충돌 4배, 그러나 차선 추종은 유지돼 이탈은 최소), cocsafe_r30은 <strong>궤적 열화형</strong>(추론은 유창한데 궤적 정밀도 손실 &rarr; 이탈 52%, 주행거리 85m로 최소). 정성 비디오에서 r30이 도로를 벗어난 채로 &ldquo;Stop for the red right-turn traffic light&rdquo;라는 멀쩡한 추론을 내놓는 장면이 이 유형을 잘 보여준다.</li>
-  <li><strong>개방 루프 결론은 절반만 맞았다.</strong> OOD 평가는 &ldquo;integrated 최악, cocsafe_r20 최선&rdquo;이라 했다. 폐루프에서 <strong>cocsafe_r20이 안전하다는 결론은 재현</strong>됐고(Δ&minus;0.035, 유의하지 않음), <strong>integrated의 위험성도 충돌 지표에서 재현</strong>됐다. 다만 그 위험이 <strong>궤적 오차가 아니라 충돌로 나타난다</strong>는 점, 그리고 <strong>주행 점수로는 보이지 않는다</strong>는 점은 폐루프에서만 알 수 있었다.</li>
-  <li><strong>압축의 속도 이득이 추론 붕괴로 상쇄된다.</strong> integrated는 파라미터가 가장 적은데도(&minus;29.3%) rollout이 가장 느렸다(12분 vs r20 7분). 붕괴한 생성이 종료 토큰을 내지 못하고 최대 길이까지 디코딩하기 때문이다(평균 CoC 길이 122자 vs baseline 75자). <strong>추론을 망가뜨리는 압축은 속도조차 얻지 못한다.</strong></li>
+<h2><span class="num">5.</span>종방향 안전 &mdash; 평균은 멀쩡하고 꼬리가 무너진다</h2>
+<p>과실 충돌은 8건 대 2건으로 희소 사건이라(Fisher p=0.095) 그 자체로는 검정력이 부족하다.
+같은 240 rollout을 <strong>연속 지표</strong>로 다시 재면 매 시점이 표본이 되므로 훨씬 강한 검정이 가능하다.
+&sect;4에서 integrated의 충돌이 <strong>전부 전방 충돌</strong>이었으므로, 1차 종점은 사전에
+<strong>선행차 추종 시간(time headway)</strong>으로 지정했다 &mdash; 추종 거동의 표준 대리 안전지표다.
+ASL의 actor pose를 자차 좌표계로 변환해 전방 &plusmn;1.75m 차선 내 최근접 차량을 선행차로 특정했다.</p>
 
+<figure>
+  <img src="PLOT::lg::headway_tail.png" alt="headway percentiles and paired deltas">
+  <figcaption>좌: 선행차 추종 시간의 백분위수별 값. 우: baseline 대비 씬-페어드 차이(95% CI).
+  <strong>중앙값에서는 구분되지 않던 차이가 5%ile(가장 아슬아슬한 5% 상황)에서 두 배로 커지고 유의해진다.</strong></figcaption>
+</figure>
+
+<table>
+  <tr><th>모델</th><th class="r">THW 중앙값 Δ</th><th class="r">p</th><th class="r">THW 5%ile Δ</th><th class="r">p</th></tr>
+  <tr><td><strong>slim cocsafe_r20</strong></td><td class="r">&minus;0.36s</td><td class="r">0.62</td>
+      <td class="r"><strong class="good">&minus;0.25s</strong></td><td class="r">0.33</td></tr>
+  <tr><td>slim cocsafe_r30</td><td class="r">+0.77s</td><td class="r">0.31</td><td class="r">+0.62s</td><td class="r">0.98</td></tr>
+  <tr><td>slim integrated_mag</td><td class="r">&minus;0.48s</td><td class="r">0.22</td>
+      <td class="r"><strong class="bad">&minus;1.02s</strong></td><td class="r"><strong class="bad">0.0115</strong></td></tr>
+</table>
+<p class="meta">baseline THW 중앙값 4.84s / 5%ile 3.46s. 25씬 페어드(선행차가 존재하는 씬), Wilcoxon signed-rank.</p>
+
+<h3>5.1 충돌의 결과가 아니라 선행 지표다</h3>
+<p>충돌 순간에는 간격이 0이 되므로, 낮은 headway가 <strong>충돌의 결과</strong>일 수 있다.
+충돌한 rollout을 전부 제외하고 다시 계산하면 효과는 <strong>오히려 강해진다</strong>.</p>
+<table>
+  <tr><th>표본</th><th class="r">integrated THW 5%ile Δ</th><th class="r">95% CI</th><th class="r">p</th><th class="r">씬</th></tr>
+  <tr><td>전체 rollout</td><td class="r">&minus;1.015s</td><td class="r">[&minus;2.18, &minus;0.23]</td><td class="r">0.0115</td><td class="r">25</td></tr>
+  <tr><td><strong>충돌 rollout 제외</strong></td><td class="r"><strong class="bad">&minus;1.193s</strong></td><td class="r">[&minus;2.56, &minus;0.30]</td>
+      <td class="r"><strong class="bad">0.0043</strong></td><td class="r">21</td></tr>
+</table>
+<p>즉 <strong>부딪히지 않은 주행에서도 위험하게 붙어 다닌다</strong>. baseline의 3.45초가 2.26초로 줄어든다.</p>
+
+<figure>
+  <img src="PLOT::lg::braking_response.png" alt="longitudinal control panels">
+  <figcaption>장애물 근접 시 제동 대응과 선행차 추종 거리. 제동 대응 자체는 구성 간 유의차가 없고(p=0.07&ndash;0.15, 방향만 일치),
+  <strong>유의하게 갈리는 것은 추종 거리의 꼬리</strong>다.</figcaption>
+</figure>
+
+<div class="note">
+  <strong>검정력 비교.</strong> 같은 주장을 충돌 건수로 하면 8 vs 2, p=0.095로 유의수준에 못 미친다.
+  연속 지표로 재면 <strong>p=0.0043</strong>이 된다. 안전성 평가에서 희소 사건 대신 대리 지표를 쓰면
+  <strong>같은 데이터로 검정력이 크게 올라간다</strong>는 실무적 교훈이기도 하다.
+</div>
+<p class="meta">다중비교 주의: 구성 3개 &times; 지표 12개를 계산했으므로 엄격한 Bonferroni(&alpha;=0.0014)는 통과하지 못한다.
+다만 이 1차 종점은 &sect;4의 &ldquo;전방 충돌 100%&rdquo; 소견에서 <strong>사전에 방향이 지정된 확증 검정</strong>이며, 나머지는 탐색적 지표로 분리 보고한다.</p>
+
+<h2><span class="num">6.</span>분석 (해석)</h2>
+<ul>
+  <li><strong>제안의 핵심은 &ldquo;무엇을 남길지&rdquo;가 아니라 &ldquo;무엇을 기준으로 셀지&rdquo;다.</strong> cocsafe와 integrated는 같은 프루닝 기계(Taylor 중요도 + 구조적 제거)를 쓰고
+      <strong>중요도 정의 한 줄만</strong> 다르다. 그 한 줄이 폐루프 과실 충돌 2건과 8건을 가른다. 방법이 단순하다는 것은 약점이 아니라
+      <strong>진단이 정확하다는 증거</strong>다 &mdash; 문제의 원인이 중요도 기준에 있었기 때문에 그것만 고쳐도 해결된다.</li>
+  <li><strong>손상은 &ldquo;조용하다&rdquo;.</strong> 궤적 전용 압축(integrated)은 in-distribution ΔminADE +0.010으로 <strong>사실상 무손실</strong>로 보였고,
+      폐루프 scene score도 baseline과 동일(+0.002, p=0.80)했다. 표준 압축 평가를 그대로 따랐다면 <strong>&ldquo;29.3% 무손실 압축&rdquo;으로 발표됐을 config</strong>다.
+      실제로는 CoC의 86%가 붕괴하고 전방 충돌이 4배였다.</li>
+  <li><strong>안전은 평균이 아니라 꼬리에 있다.</strong> 선행차 추종 시간의 <strong>중앙값은 유의차가 없는데(p=0.22) 5%ile만 &minus;1.19초(p=0.004)</strong>다.
+      압축된 정책은 평상시에는 정상적으로 따라가고 <strong>가장 아슬아슬한 순간에만</strong> 무너진다. 평균 기반 지표가 이 실패를 구조적으로 놓치는 이유다.</li>
+  <li><strong>잃는 것은 조향이 아니라 종방향 판단이다.</strong> integrated의 충돌은 <strong>100% 전방</strong>이고 이탈률은 오히려 가장 낮다(23.3%).
+      추론이 붕괴해도 차선 추종은 유지되지만 <strong>앞차와의 거리 판단은 무너진다</strong>. &sect;2에서 integrated가 baseline보다 더 멀리 간 것(115m&rarr;125m)은
+      성능이 아니라 <strong>제동 판단의 상실</strong>이었다.</li>
+  <li><strong>두 압축 방식의 실패 양상이 정반대다.</strong> integrated는 <strong>추론 붕괴형</strong>(CoC 상시 86% 붕괴 &rarr; 종방향 판단 상실 &rarr; 전방 충돌),
+      cocsafe_r30은 <strong>궤적 열화형</strong>(추론은 유창한데 궤적 정밀도 손실 &rarr; 이탈 52%, 주행거리 85m로 최소).
+      즉 <strong>추론 보존만으로는 충분하지 않고</strong>, 압축률이 임계점을 넘으면 궤적 자체가 무너진다 &mdash; r20(18.1%)은 되고 r30(24.1%)은 안 되는 경계가 여기다.</li>
+  <li><strong>zero-shot 관점의 위치.</strong> 재학습 없는 구조적 프루닝은 통상 20% 부근이 실용 한계로 알려져 있는데, 본 결과는 그 경계를
+      <strong>폐루프 주행 안전 기준으로</strong> 재확인한다 &mdash; 18.1%는 유지, 24.1%는 유의한 붕괴(Δscore &minus;0.220, p=0.008).
+      기존 문헌이 perplexity/정확도로 그은 선이 <strong>실제 제어 안전성에서도 비슷한 위치</strong>에 있다는 점은 그 자체로 보고할 가치가 있다.</li>
+  <li><strong>속도 이득은 주장하지 않는다.</strong> stock 경로에서 slim_coc은 0.96&times;로 오히려 느리다 &mdash; ragged GQA gather가 +87ms를 먹기 때문이다.
+      CUDA graph를 붙이면 1.43&times;지만 baseline도 graph만으로 1.28&times;가 되므로 <strong>프루닝 고유 기여는 약 1.12&times;</strong>다.
+      실질 이득은 <strong>메모리</strong>(peak 21.5GB &rarr; 17.7GB, &minus;18%)이며, 차량 탑재 관점에서는 이쪽이 더 직접적이다.</li>
 </ul>
 
-<h2><span class="num">6.</span>한계</h2>
+<h2><span class="num">7.</span>한계</h2>
 <ul>
-  
-  <li><strong>씬 표본이 작고 무작위가 아니다.</strong> public_2604를 scene_id로 정렬한 앞 30개(디스크&middot;시간 예산). 네 구성이 동일 씬을 쓰므로 페어드 비교는 유효하지만, 절대 수치의 일반화는 제한적이다.</li>
-  <li><strong>충돌 사건 수가 적다.</strong> 8건 vs 2건은 Fisher p=0.095로 관례적 유의수준에 미치지 못한다. 방향과 크기(4배)는 분명하지만, 확정하려면 씬을 늘려야 한다.</li>
-  <li><strong>폐루프는 시드 페어링이 불가능하다.</strong> alpasim이 세션 시드를 무작위 생성하고 첫 상이 행동 이후 상태가 발산하므로, 씬당 2회 평균으로 노이즈를 줄였다. 반복 노이즈(score 기준 0.03&ndash;0.18)가 r20의 Δ(&minus;0.035)보다 커서, <strong>r20이 &ldquo;동등&rdquo;인지 &ldquo;미세 열화&rdquo;인지는 이 표본으로 구분되지 않는다</strong>.</li>
-  <li><strong>trafficsim 비활성</strong>(모든 구성 동일). 다른 차량이 반응하지 않으므로 실제 상호작용 난이도는 과소평가된다.</li>
-  <li><strong>min_ade 계열 지표는 비어 있다</strong> &mdash; alpasim의 A1.5 어댑터가 sampled_trajectories를 채우지 않기 때문. 폐루프 지표가 목적이라 v1에서는 배제했다.</li>
-
+  <li><strong>단일 모델 계열.</strong> Alpamayo 1.5 하나에서만 검증했다. &ldquo;두 채널이 cache로 결합된 구조&rdquo;라는 논지는 아키텍처 일반론이지만,
+      실증은 아직 한 모델뿐이다 &mdash; 두 tower 구조를 가진 다른 reasoning-action 모델(manipulation VLA 포함)로의 확장이 가장 시급한 보강이다.</li>
+  <li><strong>기존 프루닝 방법과의 직접 비교가 없다.</strong> 현재 대조군은 궤적 전용 Taylor와 weight magnitude뿐이다.
+      개방 루프 sweep(<code>ablation_v1</code>)에서 magnitude는 20% 압축에 ADE +8.99로 붕괴하지만,
+      SliceGPT/Wanda 같은 발표된 구조적 프루닝을 같은 모델&middot;같은 압축률에서 비교해야 &ldquo;단일 목적 기준 전반의 문제&rdquo;라는 일반화가 완성된다.</li>
+  <li><strong>압축률 해상도가 낮다.</strong> 폐루프는 18.1%와 24.1% 두 점뿐이라 임계점을 구간으로만 말할 수 있다.</li>
+  <li><strong>씬 표본이 작고 무작위가 아니다</strong>(public_2604를 ID 정렬한 앞 30개, 디스크&middot;시간 예산). 네 구성이 동일 씬을 쓰므로 페어드 비교는 유효하나 절대값의 일반화는 제한적이다.</li>
+  <li><strong>다중비교.</strong> &sect;5의 1차 종점은 &sect;4 소견에서 사전 지정된 확증 검정이지만, 함께 계산한 12개 지표 전체에 엄격한 보정을 적용하면 유의성은 약해진다.
+      논문화 시 1차 종점을 명시적으로 사전 등록하는 형태가 정확하다.</li>
+  <li><strong>폐루프는 시드 페어링이 불가능하다.</strong> alpasim이 세션 시드를 무작위 생성하고 첫 상이 행동 이후 발산하므로 씬당 2회 평균으로 노이즈를 줄였다.
+      반복 노이즈(scene score 기준 0.03&ndash;0.18)가 r20의 Δ(&minus;0.035)보다 커서 <strong>r20이 &ldquo;동등&rdquo;인지 &ldquo;미세 열화&rdquo;인지는 이 표본으로 구분되지 않는다</strong>.</li>
+  <li><strong>trafficsim 비활성</strong>(모든 구성 동일)이라 상호작용 난이도는 과소평가된다. <strong>min_ade 계열은 비어 있다</strong> &mdash; alpasim의 A1.5 어댑터가 sampled_trajectories를 채우지 않기 때문이며 폐루프 지표가 목적이라 배제했다.</li>
 </ul>
 
-<h2><span class="num">7.</span>다음 단계</h2>
+<h2><span class="num">8.</span>다음 단계 (논문화 기준)</h2>
+<p>목표 학회를 ICLR로 두면, 남은 작업은 &ldquo;더 좋은 압축률&rdquo;이 아니라 <strong>주장의 일반성과 검정력</strong>이다.</p>
 <ol>
-  
-  <li><strong>충돌 지표 중심으로 씬을 확대</strong> &mdash; 30&rarr;100씬으로 늘려 integrated의 충돌 4배가 통계적으로 확정되는지 검증. 교차로&middot;양보 상황이 많은 씬을 우선 선별하면 검정력이 높아진다.</li>
-  <li><strong>종방향 제어 지표를 직접 측정</strong> &mdash; &sect;4에서 &ldquo;제동 판단 상실&rdquo; 가설이 나왔으므로, TTC(time-to-collision)&middot;선행차 간격&middot;감속 반응 지연을 rollout 시계열에서 뽑아 baseline과 대조. 충돌이라는 희소 사건 대신 <strong>연속 지표</strong>로 보면 훨씬 적은 씬으로도 검정력이 확보된다.</li>
-  <li><strong>scene score 대안 지표 설계</strong> &mdash; 진행거리와 안전을 분리하거나, 충돌에 더 큰 페널티를 주는 가중치. 압축 모델 승인 기준으로 쓸 지표가 필요하다.</li>
-  <li><strong>LoRA 복구 후 재평가</strong> &mdash; OOD 리포트의 복구 계획이 integrated의 CoC를 되살리면, 폐루프 충돌률이 baseline 수준으로 돌아오는지가 복구 성공의 실질적 기준이 된다.</li>
-
+  <li><strong>manipulation VLA로 확장</strong> &mdash; 가장 큰 보강. 단 <strong>아키텍처 선택이 결정적</strong>이다:
+      추론과 액션이 같은 autoregressive 스트림에 있는 모델(OpenVLA/ECoT 계열)은 추론이 망가지면 액션도 즉시 망가져
+      <strong>&ldquo;조용한 손상&rdquo;이라는 논지 자체가 성립하지 않는다</strong>. 필요한 것은 <strong>별도 action expert가 VLM의 cache를 읽는 두 tower 구조 + 명시적 언어 추론 출력</strong>
+      (&pi;<sub>0.5</sub>, GR00T N1.5 등). LIBERO는 에피소드 단위 성공/실패라 폐루프 충돌보다 <strong>통계가 깨끗하고 훨씬 빠르다</strong> &mdash;
+      압축률 곡선을 조밀하게 그리는 것도 이쪽이 저렴하다.</li>
+  <li><strong>발표된 프루닝 기준과의 동일 압축률 비교</strong> &mdash; 방법 논문의 최소 요건. 최소한 magnitude, 궤적 전용 Taylor, 그리고 published baseline 하나.</li>
+  <li><strong>압축률 곡선</strong>(10&ndash;30%)을 기준별로 &mdash; &ldquo;dual이 언제까지 버티고 단일 목적이 언제 무너지는가&rdquo;가 대표 figure가 된다.</li>
+  <li><strong>LoRA 복구</strong> &mdash; &ldquo;fine-tuning하면 해결되는 문제 아닌가&rdquo;는 반드시 나오는 질문이다. 답이 어느 쪽이든 논문이 강해진다:
+      복구되면 &ldquo;복구 가능한 손상&rdquo;, 안 되면 &ldquo;구조적 손상&rdquo;.</li>
+  <li><strong>씬 무작위 표집 + 확대</strong>, 그리고 1차 종점 사전 등록.</li>
 </ol>
 
-<h2><span class="num">8.</span>산출물</h2>
+<h2><span class="num">9.</span>산출물</h2>
 <ul>
   <li><code>experiments/head_analysis/launch_alpasim_matrix.sh</code> &mdash; 4 config 병렬 실행 런처</li>
   <li><code>experiments/head_analysis/analyze_alpasim.py</code> &mdash; 집계&middot;페어드 통계&middot;CoC 분석</li>
   <li><code>experiments/head_analysis/analyze_collisions.py</code> &mdash; 충돌별 CoC 추적&middot;씬 난이도 통제</li>
   <li><code>outputs/alpasim_eval/{config.json, metrics.json, summary.txt, plots/*.png}</code></li>
+  <li><code>experiments/head_analysis/analyze_collisions.py</code>, <code>analyze_longitudinal.py</code> &mdash; 충돌 추적&middot;종방향 안전 지표</li>
   <li><code>outputs/alpasim_collisions/{metrics.json, summary.txt}</code> &mdash; 충돌 17건 원자료(과실 8건 포함)</li>
+  <li><code>outputs/alpasim_longitudinal/{metrics.json, summary.txt, plots/}</code> &mdash; 선행차 추종&middot;제동 지표</li>
   <li>alpasim 브랜치 <code>slim-eval</code>: slim 로더 이식(<code>alpamayo1_5_slim.py</code>), 어댑터 분기, <code>topology/pair_a15.yaml</code>, ASL 이미지 스킵 필터</li>
   <li>런 로그: <code>alpasim-runs/matrix_&lt;config&gt;/</code> (rollouts, aggregate, 정성 비디오)</li>
 </ul>
