@@ -51,12 +51,18 @@ driver_gpu_of() {
     slim_cocsafe_r20) echo 5 ;;
     slim_cocsafe_r30) echo 6 ;;
     slim_integrated_mag) echo 7 ;;
+    slim_dual_uniform) echo 7 ;;
+    # Ada, to match the stored matrix -- all four shipped configs ran on Ada drivers,
+    # so putting this one on Blackwell would reintroduce the kernel confound the
+    # original GPU map was designed to avoid.
+    slim_j_traj_r20) echo 5 ;;
     *) echo "unknown config: $1" >&2; exit 1 ;;
   esac
 }
 rend_gpu_of() {
   case "$1" in
-    baseline|slim_cocsafe_r20) echo 2 ;;
+    baseline|slim_cocsafe_r20|slim_dual_uniform) echo 2 ;;
+    slim_j_traj_r20) echo 0 ;;
     *) echo 3 ;;
   esac
 }

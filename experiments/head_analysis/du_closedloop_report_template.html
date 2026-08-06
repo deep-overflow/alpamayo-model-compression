@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>−24% 폐루프 재확인 — 주행은 통과, 꼬리 안전은 실패</title>
+
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Closed-loop verification</div>
+  <h1>−24% 폐루프 재확인 — 주행은 통과, 꼬리 안전은 실패</h1>
+  <div class="meta">
+    2026-07-29 · <code>slim_dual_uniform</code> (−24.0%) vs baseline · AlpaSim <code>public_2604</code> 앞 30 씬 × 2 rollouts<br>
+    산출물 <code>outputs/alpasim_dual_uniform/</code>, <code>outputs/alpasim_du_longitudinal/</code> ·
+    체크포인트 <code>outputs/slim_dual_uniform/</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<p>개방 루프 grid에서 최선이었던 구성(<code>dual_uniform</code>: dual 기준 + 균일 층별 배분, VLM 전용)을
+−24.0% 압축으로 물리 제거해 폐루프에서 검증했다. <strong>사전 지정한 세 종점 중 둘은 통과, 하나는 실패</strong>다.</p>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v good">+0.070</div><div class="l">Δ scene score (p=0.155)</div></div>
+  <div class="kpi"><div class="v good">2 → 2</div><div class="l">과실 충돌 (baseline과 동일)</div></div>
+  <div class="kpi"><div class="v good">2.1%</div><div class="l">CoC 열화율 (baseline 0.7%)</div></div>
+  <div class="kpi"><div class="v bad">−0.86s</div><div class="l">선행차 THW 5%ile (p=0.0051)</div></div>
+</div>
+
+<div class="callout">
+  <strong>결론.</strong> −24.0%는 <em>아직 안전 검증을 통과하지 못했다</em>. 주행 품질·충돌·추론 건전성은
+  모두 baseline 수준이지만, 사전 지정한 1차 안전 지표인 선행차 추종 시간 5%ile이
+  3.46초 → 2.69초로 유의하게 나빠졌다(충돌 rollout 제외 시에도 유지).
+  검증된 안전 압축률은 여전히 <code>cocsafe_r20</code>의 −18.1%다.
+</div>
+
+<h2><span class="num">1.</span>설계</h2>
+
+<p>개방 루프 2×4 grid(<a href="2026-07-29_criterion-vs-allocation-grid.html">보고서</a>)에서
+<code>dual_uniform</code>이 실용적 최선이었다 — CoC 열화율 0.060, NLL +0.084, minADE 중앙값 +0.098.
+그 셀을 그대로 물리 제거해 폐루프에 태웠다.</p>
+
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>압축</td><td>−24.0% (11.08B → 8.42B)</td></tr>
+<tr><td>VLM</td><td>Q head 19/32, MLP 7390/12288, 전 층 균일. 기준 = 층별 max(rank(I<sub>traj</sub>), rank(I<sub>CoC</sub>))</td></tr>
+<tr><td>손대지 않은 것</td><td>expert tower, KV group, 층 35 — grid 셀과 동일하게 고정</td></tr>
+<tr><td>마스크 출처</td><td><code>run_grid.grid_configs</code>에서 직접 — 개방 루프에서 평가한 셀과 비트 단위 동일</td></tr>
+<tr><td>비교 대상</td><td>저장된 <code>matrix_baseline</code> (동일 30 씬, 동일 rollout 수)</td></tr>
+</tbody>
+</table>
+
+<p class="note">baseline을 재실행하지 않은 이유: alpasim은 세션 시드를 랜덤 생성해 시드 제어가 불가능하고,
+공정성은 “동일 씬 집합 + 동일 rollout 수 + 씬 단위 페어링”으로 확보된다. baseline은 stock 가중치를 쓰므로
+그 사이 있었던 환경 재구축과도 무관하다. 재실행은 ~11시간을 쓰고 얻는 것이 없다.</p>
+
+<p><strong>사전 지정 종점</strong>(실행 전 고정, 사후 해석 방지): ① 씬 단위 페어드 Δscore,
+② CoC 열화율, ③ 선행차 추종 시간 5%ile. ③은 지난 분석에서 희소 사건(충돌)보다 검정력이 높음이 확인된 대리 안전 지표다.</p>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+
+<h3>2.1 주행 품질 — 통과</h3>
+
+<table>
+<thead><tr><th>지표</th><th class="r">baseline</th><th class="r">dual_uniform</th><th class="r">Δ</th></tr></thead>
+<tbody>
+<tr><td>scene score (씬 평균)</td><td class="r">0.540</td><td class="r">0.610</td><td class="r good">+0.070 (p=0.155)</td></tr>
+<tr><td>pass율</td><td class="r">66.7%</td><td class="r">68.3%</td><td class="r">+1.6%p</td></tr>
+<tr><td>과실 충돌</td><td class="r">3.3% (2)</td><td class="r">3.3% (2)</td><td class="r good">동일</td></tr>
+<tr><td>전체 충돌</td><td class="r">16.7%</td><td class="r">10.0%</td><td class="r">−6.7%p</td></tr>
+<tr><td>offroad</td><td class="r">30.0%</td><td class="r">28.3%</td><td class="r">−1.7%p</td></tr>
+<tr><td>wrong lane</td><td class="r">20.0%</td><td class="r">18.3%</td><td class="r">−1.7%p</td></tr>
+<tr><td>진행거리(rel)</td><td class="r">0.611</td><td class="r">0.729</td><td class="r">+0.118</td></tr>
+<tr><td>GT 궤적 거리(m)</td><td class="r">2.07</td><td class="r">2.19</td><td class="r">+0.12</td></tr>
+</tbody>
+</table>
+
+<p>페어드 Δscore는 +0.070 [−0.055, +0.197], Wilcoxon p=0.155, 승/패/무 11/5/14.
+방향은 유리하지만 유의하지 않다.</p>
+
+<figure>
+  <img src="PLOT::cl::scene_score.png" alt="scene score">
+  <figcaption>씬 평균 scene score와 95% CI. 두 구성의 CI가 크게 겹친다.</figcaption>
+</figure>
+
+<div class="note">
+  <strong>Δscore를 개선으로 읽으면 안 되는 이유.</strong> <code>dual_uniform</code>의 반복 노이즈
+  (같은 씬 2 rollout 간 score 차)가 평균 0.174로 baseline의 0.030보다 훨씬 크다.
+  +0.070은 이 구성 자체의 반복 노이즈보다 작다. 게다가 scene score는 진행거리 가중이라,
+  §2.3에서 보듯 “더 빨리 더 멀리 간다”가 그대로 점수로 환산된다.
+</div>
+
+<h3>2.2 추론 채널 — 통과</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">CoC 열화율</th><th class="r">빈 응답</th><th class="r">토큰 수프</th><th class="r">평균 길이</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.007</td><td class="r">0.001</td><td class="r">0.006</td><td class="r">75</td></tr>
+<tr><td>slim_dual_uniform</td><td class="r good">0.021</td><td class="r">0.008</td><td class="r">0.013</td><td class="r">78</td></tr>
+<tr><td>(참고) slim_integrated_mag</td><td class="r bad">0.863</td><td class="r">0.663</td><td class="r">0.199</td><td class="r">122</td></tr>
+</tbody>
+</table>
+
+<p>2.1%는 <code>cocsafe_r20</code>(1.4%)·<code>cocsafe_r30</code>(2.7%) 대역이고
+<code>integrated_mag</code>의 86.3%와는 비교 대상이 아니다. <strong>추론은 살아 있다.</strong></p>
+
+<h3>2.3 선행차 추종 시간 — 실패</h3>
+
+<figure>
+  <img src="PLOT::lg::headway_tail.png" alt="headway tail">
+  <figcaption>좌: 백분위수별 선행차 추종 시간. 5%ile에서 격차가 가장 크고 중앙값으로 갈수록 좁혀진다.
+  우: 씬 페어드 차이(95% CI) — 중앙값은 CI가 0을 포함하지만 5%ile은 분리된다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>지표</th><th class="r">baseline</th><th class="r">dual_uniform</th><th class="r">페어드 Δ</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td><strong>선행차 THW 5%ile</strong></td><td class="r">3.46 s</td><td class="r">2.69 s</td><td class="r bad">−0.860 [−2.062, +0.025]</td><td class="r bad">0.0051</td></tr>
+<tr><td>선행차 THW 중앙값</td><td class="r">4.84 s</td><td class="r">4.35 s</td><td class="r">−0.322 [−0.909, +0.261]</td><td class="r">0.230</td></tr>
+<tr><td>근접 시 평균 속도</td><td class="r">8.31</td><td class="r">8.39</td><td class="r">+0.435 [−0.027, +0.907]</td><td class="r">0.090</td></tr>
+<tr><td>제동 대응(가속)</td><td class="r">−0.178</td><td class="r">−0.150</td><td class="r">+0.054 [−0.027, +0.146]</td><td class="r">0.312</td></tr>
+<tr><td>선행차 TTC 5%ile</td><td class="r">10.86</td><td class="r">14.13</td><td class="r">+3.74 [−4.13, +16.61]</td><td class="r">0.754</td></tr>
+</tbody>
+</table>
+
+<p><strong>강건성.</strong> 낮은 headway가 충돌의 <em>결과</em>일 가능성을 배제하기 위해 충돌 rollout을 빼고 다시 재면
+효과가 유지된다 — Δ −0.740 s [−1.990, +0.139], p=0.0315 (24 씬). 즉 부딪히지 않은 주행에서도 바짝 붙어 다닌다.</p>
+
+<p class="note"><strong>다중비교.</strong> 종방향 지표 12개를 계산했으므로 탐색적 해석은 주의해야 한다.
+다만 선행차 THW 5%ile은 실행 <em>전에</em> 지정한 3개 종점 중 하나이므로 확증 검정이며,
+그 family에 대한 Bonferroni(α=0.0167) 기준으로도 p=0.0051은 유의하다. 나머지 지표는 탐색적으로 분리해 읽어야 한다.</p>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+
+<h3>3.1 꼬리 손상은 추론 붕괴를 필요로 하지 않는다</h3>
+
+<div class="callout">
+  <strong>지난 인과 설명의 수정.</strong> 이전 보고서는 THW 꼬리 손상을
+  “추론이 상시 붕괴한 정책은 앞차 거리 판단을 수행하지 못한다”로 설명했다.
+  <code>dual_uniform</code>은 <strong>CoC가 건전한데도(2.1%) 꼬리를 0.86초 잃는다.</strong>
+  따라서 추론 붕괴는 꼬리 손상의 <em>충분조건이었을 뿐 필요조건이 아니다</em> —
+  압축은 추론을 거치지 않고도 종방향 여유를 깎을 수 있다.
+</div>
+
+<p>이것은 우리 계측 체계에 대한 함의가 크다. CoC 건전성은 <strong>안전의 대리 지표가 아니다</strong>.
+추론이 멀쩡한 것을 보고 안전하다고 판단하면 이번 같은 손상을 놓친다.</p>
+
+<h3>3.2 “더 멀리 간다”는 개선이 아니라 증상일 수 있다</h3>
+
+<p>진행거리 0.611→0.729, 근접 시 속도 +0.435 m/s(p=0.090), 선행차 추종 시간 꼬리 −0.86초가 한 방향으로 정렬한다:
+<strong>더 빨리, 더 멀리, 더 바짝</strong>. 진행거리 가중인 scene score는 이것을 <em>가점</em>으로 환산한다.
+지난번 <code>integrated_mag</code>에서 “진행거리 우위(115→125 m)가 사실은 제동 판단의 상실”이라고 진단한 것과
+같은 구조가, 이번에는 추론 붕괴 없이 나타났다.</p>
+
+<h3>3.3 압축률만으로는 설명되지 않는다 — 배치가 여전히 중요하다</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">압축</th><th class="r">Δscore</th><th class="r">offroad</th><th class="r">과실충돌</th><th class="r">CoC 열화</th><th class="r">THW 5%ile Δ</th></tr></thead>
+<tbody>
+<tr><td>cocsafe_r20</td><td class="r">−18.1%</td><td class="r">−0.035 (p=0.24)</td><td class="r">35%</td><td class="r">3</td><td class="r">1.4%</td><td class="r">−0.25 (p=0.33)</td></tr>
+<tr><td>cocsafe_r30</td><td class="r">−24.1%</td><td class="r bad">−0.220 (p=0.008)</td><td class="r bad">52%</td><td class="r">4</td><td class="r">2.7%</td><td class="r">+0.62 (p=0.98)</td></tr>
+<tr><td><strong>dual_uniform</strong></td><td class="r">−24.0%</td><td class="r good">+0.070 (p=0.15)</td><td class="r good">28%</td><td class="r good">2</td><td class="r good">2.1%</td><td class="r bad">−0.86 (p=0.005)</td></tr>
+<tr><td>integrated_mag</td><td class="r">−29.3%</td><td class="r">+0.002 (p=0.80)</td><td class="r">23%</td><td class="r bad">8</td><td class="r bad">86.3%</td><td class="r bad">−1.02 (p=0.012)</td></tr>
+</tbody>
+</table>
+
+<p>같은 −24% 대역에서 <code>cocsafe_r30</code>은 주행이 무너지고(Δ−0.220, offroad 52%) <code>dual_uniform</code>은 무너지지 않는다.
+<strong>압축 예산을 어디에 쓰느냐가 압축률 자체보다 주행 품질을 좌우한다</strong>는 grid의 결론은 폐루프에서도 성립한다.
+그러나 두 구성의 실패 양상이 서로 다르다는 점이 핵심이다 — r30은 <em>이탈</em>로, dual_uniform은 <em>추종 거리</em>로 실패한다.
+어느 구성도 −24%에서 전면 통과하지 못했다.</p>
+
+<h2><span class="num">4.</span>한계</h2>
+
+<ul>
+  <li>30 씬 × 2 rollouts = 60 rollout. 과실 충돌은 2건으로 여전히 희소 사건이라 충돌 자체로는 검정력이 없다
+  (대리 지표를 1차 종점으로 삼은 이유).</li>
+  <li><code>dual_uniform</code>의 반복 노이즈가 baseline의 5.8배(0.174 vs 0.030)다. 씬 단위 페어링으로 흡수되지만,
+  이 구성이 본질적으로 더 변덕스러울 가능성 자체는 별도 검증이 필요하다.</li>
+  <li>THW 5%ile의 95% CI가 [−2.062, +0.025]로 0을 아슬아슬하게 포함한다(Wilcoxon은 유의).
+  부트스트랩 CI는 평균 기준, Wilcoxon은 중앙값 기준이라 생기는 불일치이며 효과 크기의 불확실성이 크다는 뜻이다.</li>
+  <li>baseline은 재실행이 아니라 2026-07-25 저장분이다. 씬 집합·rollout 수는 동일하고 시드 제어는 애초에 없다.</li>
+  <li>단일 압축률(−24.0%)만 측정했다. 어느 압축률에서 꼬리가 무너지기 시작하는지는 미측정이다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음</h2>
+
+<ol>
+  <li><strong>−18~24% 사이 스윕</strong> — THW 꼬리가 무너지는 지점을 찾는다. <code>cocsafe_r20</code>(−18.1%)은
+  −0.25 s(p=0.33)로 통과했고 <code>dual_uniform</code>(−24.0%)은 −0.86 s(p=0.005)로 실패했으므로 경계는 그 사이에 있다.</li>
+  <li><strong>꼬리를 직접 겨냥하는 회복</strong> — 압축 기준을 바꾸는 방향은
+  <a href="2026-07-27_novel-pruning-directions.html">CVaR 기각</a>으로 막혔다.
+  남은 것은 회복 학습(self-distillation)이나 폐루프 중요도처럼 <em>캘리브레이션이 담는 상태</em>를 바꾸는 축이다.</li>
+  <li><strong>THW를 개방 루프에서 예측할 수 있는가</strong> — 이번 실행은 개방 루프 지표(CoC 열화, minADE)가
+  꼬리 손상을 예측하지 못함을 다시 보여줬다. 개방 루프에서 잴 수 있는 종방향 대리 지표가 있다면
+  스크리닝 비용이 크게 줄어든다.</li>
+</ol>
+
+</div>
+</body>
+</html>

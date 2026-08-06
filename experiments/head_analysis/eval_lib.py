@@ -6,6 +6,8 @@ the worst cases hide": a config that is free on straight cruising but breaks on
 turns or stops is exactly the failure mode a mean over clips would hide.
 """
 
+from itertools import groupby
+
 import numpy as np
 
 DT = 6.4 / 64  # seconds per future step
@@ -52,6 +54,30 @@ def min_metrics(pred_xy, gt_xy):
     """Multi-sample minADE / minFDE from K predicted paths (K, T, 2)."""
     ade, fde = ade_fde(pred_xy, gt_xy)
     return float(ade.min()), float(fde.min())
+
+
+def coc_degenerate(text):
+    """Degeneracy heuristics for one generated CoC string.
+
+    `degenerate` uses exactly the analyze_alpasim.coc_stats thresholds so open-loop rates
+    measured here stay comparable to the closed-loop degeneracy rates already reported.
+
+    Those thresholds miss one observed failure mode: a filler run like "//------------"
+    counts as a single long word, so it keeps unique_ratio high and non-ascii low.
+    `degenerate_strict` adds that case (a >=10-character run of one character) and is
+    reported alongside rather than folded in, so both scales stay interpretable.
+    """
+    s = str(text).strip()
+    words = s.split()
+    uniq = len(set(words)) / max(len(words), 1)
+    nonascii = sum(ord(ch) > 127 for ch in s) / max(len(s), 1)
+    empty = len(s) == 0
+    soup = (not empty) and (nonascii > 0.05 or uniq < 0.5 or len(s) > 300)
+    run = max((len(list(g)) for _, g in groupby(s.replace(" ", ""))), default=0)
+    return {"empty": bool(empty), "soup": bool(soup), "degenerate": bool(empty or soup),
+            "degenerate_strict": bool(empty or soup or run >= 10),
+            "len": len(s), "unique_ratio": float(uniq), "nonascii": float(nonascii),
+            "char_run": int(run)}
 
 
 def paired_bootstrap_ci(delta, n_boot=10000, seed=0, alpha=0.05):

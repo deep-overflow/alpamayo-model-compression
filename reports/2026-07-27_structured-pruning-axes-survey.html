@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>구조적 압축의 다른 축들 — Alpamayo 1.5 로드맵 후보 조사</title>
+
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  h3 .tag { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent-dark); background: #FBF0EB; border-radius: 4px; padding: 0.15em 0.45em; margin-right: 0.5rem;
+    vertical-align: 0.12em; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  a:hover { border-bottom-color: var(--accent-dark); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  .p1 { color: #008300; font-weight: 650; } .p2 { color: var(--accent-dark); font-weight: 650; }
+  .p3 { color: var(--text-muted); }
+  ol.refs { font-size: 0.88rem; } ol.refs li { margin-bottom: 0.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Method survey</div>
+  <h1>구조적 압축의 다른 축들 — 우리가 아직 건드리지 않은 방법 조사</h1>
+  <div class="meta">
+    2026-07-27 · 대상 <code>nvidia/Alpamayo-1.5-10B</code> (11.08B, 36층 ×2 tower)<br>
+    기준선 = 우리 측정치 <code>outputs/profile_summary</code>, <code>outputs/fastpipe_summary</code>, <code>outputs/slim_profile_summary</code><br>
+    성격: 문헌 조사 + 우리 프로파일 기준 우선순위 제안 (실험 없음)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약 — 왜 축을 바꿔야 하는가</h2>
+
+<p>지금까지 우리가 한 구조적 프루닝은 <strong>한 축</strong>이다: <em>행렬을 좁히는 것</em>
+(VLM/expert의 Q head, MLP channel, KV group을 층별로 제거). 이 축에서 얻을 수 있는 건 거의 다 얻었고,
+우리 자신의 측정이 그 축의 <strong>천장</strong>을 이미 보여줬다.</p>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">−29.3%</div><div class="l">파라미터 제거 (11.08B→7.83B)</div></div>
+  <div class="kpi"><div class="v bad">1.07×</div><div class="l">그때 실제 e2e 속도 (stock path)</div></div>
+  <div class="kpi"><div class="v">0.5</div><div class="l">CoC decode TFLOP/s (프리필은 183)</div></div>
+  <div class="kpi"><div class="v bad">−18.1%</div><div class="l">zero-shot 안전 한계 (cocsafe_r20)</div></div>
+</div>
+
+<p>세 가지 사실이 축 전환을 강제한다.</p>
+
+<ol>
+  <li><strong>width 축은 latency로 환전되지 않는다.</strong> 29.3%의 유닛을 물리적으로 제거해서 얻은 것이 1.07×였다
+  (예측은 1.38×). 이유는 우리가 이미 측정했다 — 전체 시간의 66%가 <em>메모리·스텝 수에 묶인</em> 구간
+  (CoC decode 38% @ 0.5 TFLOP/s, expert denoise 28% @ 9.3 TFLOP/s)이고, 여기서는 행렬을 좁혀도 시간이 줄지 않는다.
+  게다가 ragged GQA gather 오버헤드가 +87 ms 붙는다.</li>
+  <li><strong>품질 쪽 천장도 낮다.</strong> zero-shot으로 안전하게 갈 수 있는 지점은 −18.1%였고,
+  −29.3%에서는 CoC가 86.3% 붕괴하며 선행차 추종 시간 5%ile이 −1.19 s(p=0.0043) 나빠졌다.
+  같은 축을 더 밀면 재학습이 필수가 된다.</li>
+  <li><strong>CUDA graph 하나가 프루닝보다 컸다.</strong> graph-only 1.28× vs pruning-only 1.07×.
+  즉 이 모델의 병목은 파라미터 수가 아니라 <em>실행 구조</em>다.</li>
+</ol>
+
+<div class="callout">
+  <strong>핵심 재구성.</strong> 남은 이득은 “행렬을 좁히는 축”이 아니라 네 개의 다른 축에 있다 —
+  <strong>(A) 깊이</strong>(층 수), <strong>(B) 시퀀스 길이</strong>(vision token / KV),
+  <strong>(C) 스텝 수</strong>(CoC 토큰 수, denoise step 수), <strong>(D) 메모리 트래픽</strong>(vocab/lm_head, KV 공유).
+  우리 프로파일에서 (B)와 (C)가 가장 크게 남아 있다.
+</div>
+
+<h2><span class="num">1.</span>남은 시간 예산 — 축 판단의 기준선</h2>
+
+<p>축의 가치는 <em>원래</em> 프로파일이 아니라 <strong>우리가 이미 최적화를 다 한 뒤의</strong> 예산으로 판단해야 한다.
+현재 최고 구성(<code>slim_int</code> + CUDA graph fast path, Blackwell, CoC 16토큰 정규화, 871 ms = 1.62×)의 분해:</p>
+
+<table>
+<thead><tr><th>구간</th><th class="r">ms</th><th class="r">비중</th><th>무엇에 비례하는가</th><th>width 프루닝이 듣는가</th></tr></thead>
+<tbody>
+<tr><td>ViT + VLM prefill</td><td class="r">383.2</td><td class="r">44.0%</td><td>토큰 수 (attention은 제곱)</td><td>부분적 (compute-bound라 유일하게 들었다)</td></tr>
+<tr><td>CoC decode (16 tok)</td><td class="r">293.8</td><td class="r">33.7%</td><td>토큰 수 × 깊이 × 읽는 weight 바이트</td><td class="bad">거의 안 듣는다</td></tr>
+<tr><td>Expert denoise</td><td class="r">194.0</td><td class="r">22.3%</td><td>denoise step 수 × 깊이 × cache 크기</td><td class="bad">거의 안 듣는다</td></tr>
+<tr><td><strong>합계</strong></td><td class="r"><strong>871.0</strong></td><td class="r">100%</td><td></td><td></td></tr>
+</tbody>
+</table>
+
+<p class="note">참고: 같은 fast path의 미프루닝 baseline은 1104.2 ms (prefill 497.7 / decode 389.8 / denoise 216.6).
+FLOPs로 보면 prefill이 48.49 TFLOP으로 전체 63.74 TFLOP의 76%지만 시간은 20%뿐이고,
+decode는 0.25 TFLOP(0.4%)로 시간의 38%를 쓴다 — 이 괴리가 “FLOP 감축 ≠ 속도”의 원인이다.</p>
+
+<h2><span class="num">2.</span>축별 조사</h2>
+
+<h3><span class="tag">축 A</span>깊이 — 층/블록 단위 제거</h3>
+
+<p><strong>문헌 상태.</strong> LLM 쪽에서 가장 성숙한 축이다. 층 중요도(block influence)로 통째 제거하는 계열,
+그리고 결정적으로 <a href="https://arxiv.org/abs/2406.15786">What Matters in Transformers (2406.15786)</a>의
+<strong>attention 층만 떼는</strong> 전략 — Llama-2-70B에서 attention 층 절반 제거로 48.4% speedup / 성능 −2.4%,
+Llama-2-13B·Mistral-7B는 8개 제거에도 99% 유지. MLP 층 제거는 훨씬 해롭다.
+VLA 쪽 최신 증거도 강하다: <a href="https://arxiv.org/abs/2606.27755">Drop-Then-Recovery (2606.27755, 2026-06)</a>는
+CKA로 쌍둥이 층을 찾아 제거했을 때 <em>language backbone은 매우 중복적</em>(OpenVLA-OFT에서 LM 블록 절반 제거 후
+동일 fine-tune 예산으로 95.0%→98.3%, 두 블록만 남겨도 baseline 회복)이지만
+<em>vision·action 경로는 제거에 훨씬 민감</em>하다고 보고한다.
+<a href="https://arxiv.org/abs/2606.20246">2606.20246</a>도 같은 방향(“VLA fine-tuning은 생각보다 적은 층으로 된다”).</p>
+
+<div class="callout">
+  <strong>우리 아키텍처의 고유 제약 (조사 중 발견, 문헌에 없음).</strong>
+  expert가 <em>층마다</em> VLM의 KV cache를 prefill로 읽기 때문에, VLM 층 ℓ을 통째로 없앨 수 없다 —
+  <code>slim_lib.py</code>의 <code>kvonly_layer_forward</code>가 층 35에서 이미 이 문제를 우회하고 있다
+  (q/o/MLP만 죽이고 k/v는 계속 생산). 즉 우리 모델에서 <strong>진짜 depth pruning은 두 tower를 짝지어
+  (VLM 층 ℓ + expert 층 ℓ) 동시에 제거</strong>해야 성립한다. 이 짝맞춤 제약은 “reasoning-action 2-tower 모델의
+  depth pruning”이라는 별도 기여점이 될 수 있고, 대안으로 expert 층 ℓ이 다른 층의 cache를 읽게 하는
+  CLA식 공유(축 F)가 있다.
+</div>
+
+<p><strong>우리 세팅 추정.</strong> 짝지어 6/36층 제거(−17%)면 세 구간이 모두 깊이에 선형이므로
+prefill −41, decode −50, denoise −33 ≈ <strong>−124 ms (−14%)</strong> + VRAM −17%.
+width 축과 달리 <em>세 구간 전부</em>에 듣는다는 점이 결정적이다.</p>
+
+<p><strong>리스크 — 그리고 우리 주장과의 정면 연결.</strong>
+<a href="https://arxiv.org/abs/2510.22228">When Fewer Layers Break More Chains (2510.22228)</a>는
+<em>1~2개 층만 빼도 test-time scaling이 붕괴</em>하고, 지식 태스크·짧은 추론에서는 그 손상이 보이지 않으며,
+<strong>표준 SFT로는 회복되지 않는다</strong>고 보고한다(self-generated response fine-tuning만 +20~30pt 회복).
+이것은 우리가 width 축에서 관측한 “표준 지표에 안 보이는 추론 붕괴”와 <em>같은 현상의 depth 버전</em>이다.
+즉 우리 dual-objective 기준을 depth 축으로 이식하는 것은 문헌이 비워둔 자리에 정확히 들어맞는다.</p>
+
+<h3><span class="tag">축 B</span>시퀀스 — vision token 프루닝/병합</h3>
+
+<p><strong>왜 우리에게 가장 저평가된 축인가.</strong> 우리 예산의 44%가 토큰 수에 비례하는 prefill이고,
+게다가 <strong>expert가 매 denoise step마다 VLM cache 전체를 읽는다</strong> — 프롬프트를 짧게 만들면
+prefill과 denoise가 <em>같이</em>줄어든다. width 축은 이 결합을 건드릴 수 없다.
+멀티카메라 입력이라 vision token 비중도 크고, upstream Alpamayo-R1 자체가
+multi-camera (video) tokenization으로 3.6–20× 토큰 압축을 지원한다고 문서화하고 있다.</p>
+
+<p><strong>문헌 상태 (매우 붐비는 분야).</strong> LLM 내부에서 attention score로 자르는 FastV 계열 →
+SparseVLM(텍스트 유도 + 토큰 재활용), PyramidDrop, 인코더 출력에서 병합하는 VisionZip/PruMerge.
+운전 도메인 전용도 이미 있다: <a href="https://arxiv.org/html/2507.23318v3">FastDriveVLA</a>(재구성 기반),
+<a href="https://arxiv.org/pdf/2604.19145">ST-Prune</a>(spatio-temporal, training-free).
+가장 중요한 건 <a href="https://arxiv.org/abs/2511.16449">VLA-Pruner (2511.16449)</a>다 —
+“<strong>semantic-action gap</strong>”: VLA는 vision-language prefill 단계와 action-decode 단계의 attention 패턴이
+질적으로 다르므로, VLM용 semantic salience로 토큰을 고르면 <em>조작 판단에 필요한 토큰</em>이 날아간다.
+그래서 semantic + 시간 평활된 action relevance를 결합(Combine-then-Filter)해 최대 1.99× 가속.</p>
+
+<div class="callout">
+  <strong>이건 우리 발견의 토큰 버전이다.</strong> VLA-Pruner의 “prefill에 중요한 것 ≠ action에 중요한 것”은
+  우리의 “trajectory에 중요한 것 ≠ CoC에 중요한 것”과 구조적으로 같은 논지다. 차이는 우리 쪽에
+  <em>세 번째 채널</em>(명시적 CoC 텍스트)이 있다는 점 — 즉 <code>rank(I_traj)</code>/<code>rank(I_CoC)</code> max 기준을
+  그대로 vision token 축에 이식하면 “reasoning을 보존하는 토큰 예산”이라는 미점유 지점이 된다.
+  우리 <code>analysis_lib.py</code>는 이미 per-camera / traj-history / sink / text 스팬을 식별하므로
+  <strong>카메라 단위·시간 단위 구조적 토큰 예산</strong>을 바로 실험할 수 있다.
+</div>
+
+<p><strong>우리 세팅 추정 (vision token −50%).</strong> prefill −40% ≈ −98 ms, denoise −15~25% ≈ −30~48 ms,
+decode attention −10 ms, (ViT 내부 병합까지 하면 추가 −42 ms) →
+<strong>−140~190 ms (−16~22%)</strong>, KV cache 436 MB → ~220 MB.</p>
+
+<h3><span class="tag">축 C-1</span>스텝 — CoC decode (예산 34%)</h3>
+
+<p><strong>구조적 사실.</strong> decode는 0.5 TFLOP/s로 완전히 memory-bound다. 시간 ∝ (토큰 수) × (읽는 weight 바이트).
+따라서 여기서 듣는 것은 <em>토큰 수를 줄이거나</em>, <em>토큰당 forward를 줄이거나</em>, <em>읽는 바이트를 줄이는</em> 것뿐이다.</p>
+
+<ul>
+  <li><strong>speculative decoding — 이미 선점됐다.</strong>
+  <a href="https://arxiv.org/abs/2606.31160">Reasoning-aware Speculative Decoding for VLA in AD (2606.31160, 2026-06-30)</a>는
+  <em>Alpamayo 플래너를 직접 대상으로</em> routine/deliberative 이중 추론기 + FlatRoPE로 reasoning-step 런타임 약 <strong>4×</strong>를 보고한다.
+  <a href="https://z-lab.ai/projects/flashdrive/">FlashDrive</a>도 e2e 159 ms / 4.5×를 주장하며, 운전 CoT가 짧고(~16토큰)
+  템플릿화되어 있어 acceptance가 높다는 관찰을 근거로 든다. → <strong>novelty 소진. 우리는 이 축을 baseline으로 채택하고
+  그 위에 직교적으로 쌓는 게 맞다.</strong></li>
+  <li><strong>CoC 토큰 예산 자체를 줄이기.</strong> decode는 토큰 수에 선형이므로 16→8이면 −147 ms (−17%).
+  우리에게 유리한 점: “CoC를 얼마나 짧게 해도 안전한가”를 물을 수 있는 <em>측정 도구를 이미 만들어 놨다</em>
+  (CoC 붕괴율, THW 5%ile, 과실충돌 유형). 이건 프루닝이 아니라 “reasoning 예산” 축이지만,
+  우리 안전 프레이밍과 가장 잘 붙는다.</li>
+  <li><strong>latent CoT.</strong> <a href="https://arxiv.org/html/2512.22939">ColaVLA</a>(latent 추론 3-pass),
+  LCDrive(CVPR 2026) 등이 텍스트 CoT를 잠재 벡터로 대체해 latency를 줄인다.
+  다만 재학습이 필수이고 <em>해석 가능성을 포기</em>하므로, “추론 채널을 보존한다”는 우리 논지와 상충한다.
+  (문헌도 latent CoT가 explicit 대비 일관되게 못 미친다고 본다.)</li>
+  <li><strong>vocab / lm_head 트리밍 — 값싼 구조적 축.</strong> 운전 CoC 어휘는 극히 좁은데 Qwen3-VL vocab은 151,936이다.
+  <a href="https://arxiv.org/html/2509.06836">Compact (2509.06836)</a>는 희소 vocab 제거 + 공통 토큰 가중 FFN 프루닝을
+  <em>training-free</em>로 함께 하고, <a href="https://arxiv.org/html/2509.26124">Vocabulary Customization</a>은
+  도메인 배포에서 8~20% 가속을 보고한다. 우리 추정: lm_head 4096×151,936×2B ≈ 1.24 GB이므로
+  slim 모델(15.7 GB) 기준 weight 바이트의 ~8% → decode −23 ms (<strong>e2e −2.6%</strong>) + VRAM −1.2 GB.
+  <em>속도 이득은 작지만 리스크가 거의 없고 다른 축과 곱해진다.</em></li>
+</ul>
+
+<h3><span class="tag">축 C-2</span>스텝 — expert denoise (예산 22%)</h3>
+
+<p><strong>구조적 사실.</strong> 10회 Euler step × 64 diffusion token의 순차 실행이다. FLOPs는 3.52 TFLOP뿐인데
+9.3 TFLOP/s밖에 못 낸다 — 즉 <em>작은 GEMM의 순차 반복</em>이 병목이다. CUDA graph로 440→216 ms까지 이미 줄였고,
+남은 건 <strong>스텝 수 자체</strong>다.</p>
+
+<ul>
+  <li><strong>1-step 증류.</strong> <a href="https://arxiv.org/abs/2604.05656">SnapFlow (2604.05656, 2026-04)</a>가
+  가장 직접적이다 — flow-matching VLA의 10-step Euler를 self-distillation(two-step Euler shortcut velocity를 타깃으로 하는
+  consistency 항 + progressive mixing + zero-init target-time embedding)으로 1-step으로 압축.
+  π0.5(3B)에서 LIBERO 4스위트 98.75% vs 10-step teacher 97.75%, <strong>denoise 9.6×, e2e 274→83 ms</strong>,
+  단일 GPU 12시간, 외부 teacher·아키텍처 변경 없음. 저자들은 <em>layer-distillation과 직교</em>라고 명시한다.
+  <a href="https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2026.1751688/full">FRMD</a>는
+  trajectory-level consistency distillation으로 같은 목표를 노린다.</li>
+  <li><strong>training-free 대안 — feature caching.</strong>
+  <a href="https://arxiv.org/abs/2506.10100">EfficientVLA (2506.10100)</a>는 (i) 층 중복 기반 language 모듈 프루닝,
+  (ii) vision token 선택, (iii) <em>diffusion action 모듈의 중간 feature 캐싱·재사용</em>을 <strong>재학습 없이</strong> 결합해
+  CogACT에서 1.93× / FLOPs 28.9% / 성공률 −0.6%를 보고한다. (iii)은
+  <a href="https://arxiv.org/abs/2312.00858">DeepCache</a>의 VLA 이식이다.
+  우리 zero-shot 제약과 정확히 호환된다.</li>
+  <li><strong>expert tower 자체의 depth.</strong> 지금 expert는 magnitude 기준(early 40% / late 10%)으로만 다뤄졌다.
+  <a href="https://arxiv.org/pdf/2601.20262">Shallow-π (2601.20262)</a>가 flow-based VLA의 action head 층 증류를 다룬다.
+  “action expert가 정말 36층 필요한가”는 우리 모델에서 열려 있는 질문이다.</li>
+</ul>
+
+<p><strong>추정.</strong> 1-step 증류: 194 → ~25 ms = <strong>−169 ms (−19%)</strong>.
+training-free 캐싱만: −30~50% = <strong>−60~97 ms (−7~11%)</strong>.</p>
+
+<h3><span class="tag">축 D</span>저랭크 · 회전 기반 (SliceGPT 계열)</h3>
+
+<p><strong>왜 우리 실측 문제를 정면으로 피하는가.</strong> 우리는 head를 불균등하게 자르면서 ragged GQA gather가 생겨
++87 ms를 잃었다(예측 1.38× → 실측 1.03×). <a href="https://arxiv.org/pdf/2401.15024">SliceGPT</a>는 예측 불변 회전 후
+행·열을 잘라 <em>dense GEMM 형상을 유지</em>한다 — 25% slicing에서 RTX6000 실측 16–17%, A100 11–13%.
+우리 width 축은 29%에서 7%였으니, <em>같은 예산의 환전 효율이 대략 두 배</em>일 수 있다.
+후속으로 층별 적응 비율(SP³), LLM-Sieve, SPAP가 있다.</p>
+
+<p><strong>제약.</strong> 회전은 residual stream 전체에 걸리므로 두 tower와 KV cache 인터페이스에 일관되게 적용해야 한다.
+비용이 크지만, 바로 그 지점(2-tower + cache 공유 하에서의 회전 불변성)이 미점유 영역이다.</p>
+
+<p><strong>인접 항목.</strong> <a href="https://arxiv.org/abs/2505.20155">Pangu Light (2505.20155)</a>는
+width+depth를 동시에 밀 때 <em>weight re-initialization</em>(CLAP/SLNP)이 “missing piece”라고 주장한다 —
+우리가 zero-shot에서 만난 −18% 한계를 <em>재학습 없이</em> 밀어올릴 후보로 볼 만하다.</p>
+
+<h3><span class="tag">축 E</span>KV / attention 구조 변경</h3>
+
+<p>우리는 “cache는 고정 인터페이스”라며 손대지 않았다. 하지만 KV cache 436 MB는 <em>expert가 매 step 읽는 대상</em>이고,
+decode·denoise 두 memory-bound 구간의 트래픽 원천이다. 두 tower를 함께 수술한다면 열리는 축:</p>
+
+<ul>
+  <li><a href="https://openreview.net/forum?id=M2UzLRoqic">CLA (Cross-Layer Attention)</a> — 인접 층이 K/V 공유, MQA 대비 추가 2× 축소.
+  우리 경우 <em>expert 층 ℓ이 VLM 층 ℓ′의 cache를 읽게 하는</em> 형태로 자연스럽게 재해석된다(축 A의 짝맞춤 제약을 푸는 열쇠).</li>
+  <li><a href="https://arxiv.org/pdf/2406.09297">MLKV</a>, <a href="https://arxiv.org/pdf/2507.11273">KV-Latent</a>(head_dim 축소),
+  DHA, <a href="https://arxiv.org/pdf/2412.20677">Align heads before merging (MHA→GQA)</a> — 그룹 제거가 아니라 <strong>병합</strong>이라는 대안.
+  우리는 지금 약한 KV group을 <em>버리는데</em>, 병합이 더 나을 수 있다는 가설을 아직 시험하지 않았다.</li>
+  <li>attention 층만 제거(축 A)는 KV cache도 같이 줄어드는 이중 이득이다.</li>
+</ul>
+
+<p><strong>추정.</strong> cache 절반 → decode+denoise(488 ms)의 10~15% ≈ <strong>−50~73 ms (−6~8%)</strong>. 다만 정렬/재학습 필요.</p>
+
+<h3><span class="tag">축 F</span>동적 · 입력 의존 (정적 프루닝이 아닌 것)</h3>
+
+<p>지금까지 우리 마스크는 <em>모든 프레임에 동일</em>했다. VLA 쪽에는 입력별로 계산을 바꾸는 계열이 이미 있다:
+<a href="https://arxiv.org/html/2503.20384">MoLe-VLA</a>(라우터로 층 스킵, 최대 45% 가속, 성공률 94.5%),
+<a href="https://arxiv.org/html/2602.22896">DySL-VLA</a>(dynamic-static layer skipping),
+<a href="https://arxiv.org/html/2606.01838">LayerRoute</a>(LoRA 어댑터로 블록별 게이트),
+AC²-VLA, Environment-Aware Adaptive Pruning.</p>
+
+<div class="callout">
+  <strong>우리 안전 발견과 가장 잘 맞는 축.</strong> 정적 압축의 실패는 <em>평균이 아니라 꼬리</em>에서 나타났다
+  (scene score Δ는 노이즈 이내인데 THW 5%ile은 −1.19 s). 동적 축은 정의상 “어려운 순간에 계산을 더 준다”이므로
+  이 실패 모드를 직접 겨냥한다. 그리고 우리는 이미 난이도 라벨 생성기를 갖고 있다 —
+  <code>eval_lib.py</code>의 시나리오 버킷(decel_stop &gt; turn &gt; accel &gt; cruise). <strong>버킷 조건부 압축 예산</strong>은
+  구현이 중간 비용이고, 논문성은 조사한 축 중 가장 높다.
+</div>
+
+<h3><span class="tag">축 G</span>회복 방법 — 우리는 zero-shot과 LoRA만 해봤다</h3>
+
+<ul>
+  <li><a href="https://arxiv.org/abs/2408.11796">Minitron</a> / <a href="https://github.com/NVIDIA/Model-Optimizer">NVIDIA ModelOpt</a>:
+  depth·width·head·MLP 4축 + distillation + 후보 아키텍처 탐색. NVIDIA 스택이고 NeMo에 Qwen 레시피가 있다는 점이
+  우리(같은 NVIDIA 모델 계열)에게 실용적이다. 2026년 사례로 Qwen3-Next-80A3B→23A2B(~4×) 등이 보고된다.</li>
+  <li><strong>회복의 핵심 힌트:</strong> 2510.22228은 추론 붕괴가 <em>표준 SFT로 회복되지 않고</em>
+  self-generated response fine-tuning이 +20~30pt를 준다고 한다. 우리에겐 이미 <code>outputs/teacher_refs</code>가 있으니
+  <strong>self-distillation 형태의 CoC 회복</strong>은 저비용으로 시험 가능하다.</li>
+  <li>VLA 회복 계열: <a href="https://arxiv.org/html/2506.17639">RLRC</a>(RL 기반 회복),
+  <a href="https://arxiv.org/pdf/2510.08464">Don't Run with Scissors</a>(프루닝은 VLA를 깨지만 회복 가능),
+  Drop-Then-Recovery(“회복 후에야 무엇이 정말 필요했는지 판정 가능”).
+  → “compress-then-recover” 체제에서 재측정하면 우리 −18% 한계는 상당히 밀릴 가능성이 높다.</li>
+</ul>
+
+<h2><span class="num">3.</span>우선순위 제안</h2>
+
+<table>
+<thead><tr><th>순위</th><th>축</th><th class="r">추정 e2e 이득</th><th>하네스 구현 비용</th><th>선행연구 포화도</th><th>우리 주장과의 관계</th></tr></thead>
+<tbody>
+<tr><td class="p1">1</td><td><strong>vision token (dual-objective 이식)</strong></td><td class="r">−16~22%</td>
+  <td>중 — <code>analysis_lib</code>에 스팬 정보 있음, 마스크 훅 재사용</td><td>높음(단, CoC 채널 관점은 비어 있음)</td>
+  <td>기준 재사용 + prefill·denoise 동시 감축</td></tr>
+<tr><td class="p1">2</td><td><strong>expert denoise step</strong> (캐싱 → 1-step 증류)</td><td class="r">−7~11% → −19%</td>
+  <td>낮음(캐싱) / 높음(증류, 재학습)</td><td>중(SnapFlow가 π계열 선점, Alpamayo는 미적용)</td>
+  <td>완전 직교 — 곱해진다</td></tr>
+<tr><td class="p2">3</td><td><strong>짝맞춤 depth pruning</strong> (VLM ℓ + expert ℓ)</td><td class="r">−14%</td>
+  <td>낮음 — <code>kvonly_layer_forward</code> 이미 존재</td><td>중(2-tower 짝맞춤 제약은 미보고)</td>
+  <td>추론 붕괴 가설의 가장 강한 시험대</td></tr>
+<tr><td class="p2">4</td><td><strong>버킷 조건부 동적 예산</strong></td><td class="r">−10~20% (장면 분포 의존)</td>
+  <td>중 — 버킷 라벨러 존재, 런타임 스위칭 필요</td><td>낮음(운전 도메인 tail-safety 관점)</td>
+  <td>꼬리 실패를 직접 겨냥 — 논문성 최고</td></tr>
+<tr><td class="p3">5</td><td>vocab / lm_head 트리밍</td><td class="r">−2~3% (+VRAM 1.2 GB)</td>
+  <td>낮음</td><td>중</td><td>리스크 거의 없음, 곱해짐</td></tr>
+<tr><td class="p3">6</td><td>self-distillation 회복 (teacher_refs)</td><td class="r">속도 이득 0, <em>압축률 상한을 올린다</em></td>
+  <td>중</td><td>중</td><td>−18% 한계를 미는 유일한 길</td></tr>
+<tr><td class="p3">7</td><td>KV 병합 / CLA</td><td class="r">−6~8%</td><td>높음(재학습·정렬)</td><td>중</td><td>“버리기 vs 병합” 미시험 가설</td></tr>
+<tr><td class="p3">8</td><td>SliceGPT식 회전+슬라이싱</td><td class="r">불확실 (환전 효율 2×?)</td><td>높음(두 tower 일관 회전)</td><td>중</td><td>gather 오버헤드 문제의 근본 해결</td></tr>
+</tbody>
+</table>
+
+<p class="note">모든 이득은 <strong>추정치</strong>다. 계산 근거는 §1의 871 ms 예산에 각 구간의 스케일링 법칙
+(prefill ∝ 토큰·깊이, decode ∝ 토큰수·깊이·weight바이트, denoise ∝ step·깊이·cache)을 적용한 것이며,
+문헌의 보고 배수는 다른 모델·다른 하드웨어에서 나온 값이므로 그대로 옮겨지지 않는다.</p>
+
+<h2><span class="num">4.</span>피해야 할 것 / 경쟁 상황</h2>
+
+<ul>
+  <li><strong>speculative decoding 축은 이미 Alpamayo로 발표됐다</strong>
+  (<a href="https://arxiv.org/abs/2606.31160">2606.31160</a>, 2026-06-30, reasoning-step ~4×).
+  decode가 우리 예산의 34%라 유혹적이지만, 여기서 novelty를 노리는 건 늦었다. <em>baseline으로 채택</em>하고
+  우리 축을 그 위에 쌓는 편이 낫다. (부수적으로: 이 논문의 존재는 Alpamayo 효율화 자체가 이미 경쟁 영역이라는 신호다.)</li>
+  <li><strong>latent CoT는 우리 논지와 상충한다.</strong> 추론을 잠재 벡터로 접으면 우리가 측정 도구를 만들어 놓은
+  “CoC 건전성”이라는 관측 채널 자체가 사라진다.</li>
+  <li><strong>순수 unstructured / 2:4 sparsity</strong>는 우리 결론(“병목은 파라미터가 아니라 실행 구조”)에 비추어
+  같은 환전 문제를 반복할 가능성이 높다. 우선순위 낮음.</li>
+</ul>
+
+<div class="callout">
+  <strong>전략적 요약.</strong> 우리 고유 기여는 <em>축</em>이 아니라 <strong>기준</strong>이다 —
+  “reasoning-action 모델은 두 채널을 함께 보존하는 기준으로 압축해야 한다”.
+  조사한 축들은 대부분 기준이 아니라 축을 바꾼 것이므로, <strong>우리 기준은 축을 갈아타도 그대로 재사용된다.</strong>
+  따라서 가장 논문성 높은 확장은 새 압축 방법을 발명하는 것이 아니라
+  dual-objective 기준을 <em>token 축(1순위)·depth 축(3순위)·동적 예산(4순위)</em>으로 이식하고,
+  매번 같은 안전 계측(CoC 붕괴율 + THW 꼬리 + 충돌 유형)으로 검증하는 것이다.
+</div>
+
+<h2><span class="num">5.</span>조사 범위와 한계</h2>
+
+<ul>
+  <li>웹 검색 12회 + 초록 정독 6편. 정독한 것: 2606.27755(Drop-Then-Recovery), 2511.16449(VLA-Pruner),
+  2604.05656(SnapFlow), 2606.31160(Reasoning-aware Spec Decoding), 2510.22228(Layer pruning harms TTS),
+  2506.10100(EfficientVLA). <strong>나머지는 검색 스니펫 수준</strong>이며 본문 검증을 하지 않았다 —
+  실제 채택 전에 해당 논문의 실험 설정(특히 하드웨어와 baseline)을 확인해야 한다.</li>
+  <li>인용한 배수(9.6×, 1.99×, 48.4% 등)는 모두 <em>그 논문의 모델·하드웨어</em>에서의 값이다.
+  우리 모델은 두 tower가 cache로 결합된 특수 구조이고 우리 하드웨어에서 이미 CUDA graph까지 적용된 상태이므로,
+  §3의 추정치는 우리 예산에 스케일링 법칙만 적용한 <strong>상한 성격의 값</strong>이다.</li>
+  <li>MoE화, 하이브리드 Mamba 변환(Nemotron 계열), 양자화×프루닝 결합(SQAP-VLA 등)은
+  “구조적 프루닝의 다른 방식”이라는 질문 범위에서 벗어나 <strong>깊이 조사하지 않았다</strong>.
+  다만 양자화는 decode가 memory-bound인 우리 프로파일에서 <em>이 조사의 어떤 축보다 클 수 있다</em>
+  (예: DRIVE Thor에서 FP8 적용 시 2.5×→3.2×) — 별도 조사 대상으로 남긴다.</li>
+</ul>
+
+<h2><span class="num">6.</span>참고문헌</h2>
+
+<ol class="refs">
+<li>Sun et al. <a href="https://arxiv.org/abs/2606.27755">Drop-Then-Recovery: How Redundant Are Vision-Language-Action Models?</a> (2026-06)</li>
+<li>Liu et al. <a href="https://arxiv.org/abs/2511.16449">Bridging the Semantic-Action Gap in Visual Token Pruning for Efficient VLA Inference (VLA-Pruner)</a> (2025-11, rev. 2026-05)</li>
+<li>Luan et al. <a href="https://arxiv.org/abs/2604.05656">SnapFlow: One-Step Action Generation for Flow-Matching VLAs via Progressive Self-Distillation</a> (2026-04)</li>
+<li>Dinh, Khan, Salim. <a href="https://arxiv.org/abs/2606.31160">Reasoning-aware Speculative Decoding for Efficient VLA Models in Autonomous Driving</a> (2026-06)</li>
+<li>Wang et al. <a href="https://arxiv.org/abs/2510.22228">When Fewer Layers Break More Chains: Layer Pruning Harms Test-Time Scaling in LLMs</a> (2025-10, rev. 2026-07)</li>
+<li>Yang et al. <a href="https://arxiv.org/abs/2506.10100">EfficientVLA: Training-Free Acceleration and Compression for VLA Models</a> (2025-06)</li>
+<li>He et al. <a href="https://arxiv.org/abs/2406.15786">What Matters in Transformers? Not All Attention is Needed</a></li>
+<li>Ashkboos et al. <a href="https://arxiv.org/pdf/2401.15024">SliceGPT: Compress Large Language Models by Deleting Rows and Columns</a> (ICLR 2024)</li>
+<li>Muralidharan et al. <a href="https://arxiv.org/abs/2408.11796">LLM Pruning and Distillation in Practice: The Minitron Approach</a> · <a href="https://github.com/NVIDIA/Model-Optimizer">NVIDIA ModelOpt</a></li>
+<li><a href="https://arxiv.org/abs/2505.20155">Pangu Light: Weight Re-Initialization for Pruning and Accelerating LLMs</a> (2025-05)</li>
+<li>Brandon et al. <a href="https://openreview.net/forum?id=M2UzLRoqic">Reducing Transformer KV Cache Size with Cross-Layer Attention</a> · <a href="https://arxiv.org/pdf/2406.09297">MLKV</a> · <a href="https://arxiv.org/pdf/2507.11273">KV-Latent</a> · <a href="https://arxiv.org/pdf/2412.20677">Align Attention Heads Before Merging (MHA→GQA)</a></li>
+<li><a href="https://arxiv.org/html/2503.20384">MoLe-VLA</a> · <a href="https://arxiv.org/html/2602.22896">DySL-VLA</a> · <a href="https://arxiv.org/html/2606.01838">LayerRoute</a> — 동적 층 스킵</li>
+<li><a href="https://arxiv.org/html/2507.23318v3">FastDriveVLA</a> · <a href="https://arxiv.org/pdf/2604.19145">ST-Prune</a> · <a href="https://z-lab.ai/projects/flashdrive/">FlashDrive</a> — 운전 도메인 토큰 프루닝/가속</li>
+<li><a href="https://arxiv.org/html/2509.06836">Compact: Common-token Optimized Model Pruning Across Channels and Tokens</a> · <a href="https://arxiv.org/html/2509.26124">Vocabulary Customization for Efficient Domain-Specific LLM Deployment</a></li>
+<li><a href="https://arxiv.org/html/2506.17639">RLRC</a> · <a href="https://arxiv.org/pdf/2510.08464">Don't Run with Scissors: Pruning Breaks VLA Models but They Can Be Recovered</a></li>
+<li><a href="https://arxiv.org/abs/2312.00858">DeepCache</a> · <a href="https://arxiv.org/pdf/2601.20262">Shallow-π: Knowledge Distillation for Flow-based VLAs</a></li>
+<li><a href="https://arxiv.org/abs/2310.05175">OWL: Outlier Weighed Layerwise Sparsity</a> — 층별 비균일 예산 배분(우리는 층별 균일 유지 중)</li>
+<li><a href="https://arxiv.org/html/2511.00088v2">Alpamayo-R1</a> (multi-camera tokenization 3.6–20× 압축 언급) · <a href="https://arxiv.org/html/2605.11678">OOM-Free Alpamayo (CPU-GPU swapping)</a></li>
+</ol>
+
+</div>
+</body>
+</html>

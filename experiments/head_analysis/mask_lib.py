@@ -101,6 +101,21 @@ def select_mask(scores, ratio, layers_scope, rng=None):
     return mask
 
 
+def select_mask_ratios(scores, ratios):
+    """Keep-mask with a per-layer prune ratio: ratios[li] of layer li's units are dropped.
+
+    Same within-layer rule as select_mask, but the budget varies by depth, which is what
+    separates the layerwise-allocation factor from the within-layer criterion.
+    """
+    mask = np.ones_like(scores)
+    n_units = scores.shape[1]
+    for li, r in enumerate(ratios):
+        k = round(float(r) * n_units)
+        if k > 0:
+            mask[li, np.argsort(scores[li])[:k]] = 0.0
+    return mask
+
+
 def kv_group_mask(scores_kv, n_drop, n_heads, layers_scope, rng=None):
     """Keep-mask over Q heads implied by dropping the n_drop weakest KV groups."""
     n_layers, n_kv = scores_kv.shape

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기준인가 배분인가 — 추론 붕괴의 귀속</title>
+
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Attribution</div>
+  <h1>기준인가 배분인가 — 추론 붕괴의 귀속</h1>
+  <div class="meta">
+    2026-07-29 · 모델 <code>nvidia/Alpamayo-1.5-10B</code> · val 50 clips × K=8 · 예산 고정 39.8–40.0%<br>
+    코드 <code>experiments/head_analysis/run_grid.py</code>, <code>analyze_grid.py</code> ·
+    산출물 <code>outputs/grid_v1/</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약 — 우리가 틀렸던 부분</h2>
+
+<p>지난 폐루프 보고서는 <code>integrated_mag</code>의 CoC 붕괴(86.3%)를 <strong>중요도 기준</strong>
+(궤적 단일 목적 vs dual)에 귀속시켰다. 그런데 그 비교는 기준만 다른 것이 아니라
+<strong>층별 예산 배분</strong>도 함께 달랐다. 예산을 고정하고 두 인자를 분리해 2×4로 측정한 결과:</p>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v bad">+0.500</div><div class="l">배분 주효과 (CoC 열화율)</div></div>
+  <div class="kpi"><div class="v">+0.165</div><div class="l">기준 주효과 (CoC 열화율)</div></div>
+  <div class="kpi"><div class="v good">0.080</div><div class="l">traj 기준 + 균일 배분 → 붕괴 없음</div></div>
+  <div class="kpi"><div class="v bad">0.820</div><div class="l">traj 기준 + 후반 집중 → 붕괴</div></div>
+</div>
+
+<p><strong>붕괴는 배분 탓이다.</strong> <code>integrated_mag</code>과 <em>똑같은 궤적 단일 목적 기준</em>을 쓰되
+층별 예산만 균일하게 준 <code>traj_uniform</code>은 열화율 0.080으로 붕괴하지 않는다.
+같은 기준에 후반 집중 배분을 주면 0.820으로 무너진다. 우리 이전 귀속은 <strong>주된 원인을 잘못 지목했다</strong>.</p>
+
+<p><strong>다만 기준도 실재하는 효과다 — 그리고 두 채널 모두에서 이득이다.</strong>
+dual 기준은 후반 집중을 제외한 모든 배분에서 CoC NLL을 5–7배 낮추고(0.084 vs 0.594),
+minADE 중앙값도 4개 배분 중 3개에서 더 좋다. 트레이드오프가 아니라 그냥 우월하다.</p>
+
+<h2><span class="num">1.</span>설계 — 무엇을 고정했는가</h2>
+
+<p>기존 두 config는 <em>세 가지</em>가 동시에 달랐다: (i) 층내 기준, (ii) 층간 배분, (iii) 층 35 kvonly 제거.
+이 실험은 (iii)과 KV group 제거를 <strong>모든 셀에서 없음으로 고정</strong>하고 (i)×(ii)만 변화시킨다.
+8개 셀 전부가 VLM q/o+MLP 파라미터의 39.8–40.0%를 제거하므로, 차이는 압축률이 아니라 귀속이다.</p>
+
+<table>
+<thead><tr><th>인자</th><th>수준</th><th>정의</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">층내 기준</td><td><code>traj</code></td><td>I<sub>traj</sub> Taylor (궤적 단일 목적)</td></tr>
+<tr><td><code>dual</code></td><td>층별 max(rank(I<sub>traj</sub>), rank(I<sub>CoC</sub>))</td></tr>
+<tr><td rowspan="4">층간 배분</td><td><code>uniform</code></td><td>모든 층 동일 비율</td></tr>
+<tr><td><code>late</code></td><td><code>slim_integrated_mag</code>의 실제 프로파일 (출시된 형태)</td></tr>
+<tr><td><code>agree</code></td><td>두 목적의 top-q 합집합에 비례 (일치도 기반)</td></tr>
+<tr><td><code>depthprior</code></td><td>깊이에 대한 선형 tilt. <strong>중요도도 CoC 정보도 쓰지 않는 통제군</strong></td></tr>
+</tbody>
+</table>
+
+<p class="note"><code>depthprior</code>가 결정적 통제다. <code>agree</code>는 층내 기준이 traj여도
+<em>배분</em>은 두 목적에서 파생되므로, 그것만으로는 “배분이 본질”과 “CoC 정보가 아예 불필요”를 구분할 수 없다.
+기울기는 <code>agree</code>의 early/late 비율에 맞춰, 두 프로파일이 전체 기울기가 아니라 세부 형태에서만 다르게 했다.</p>
+
+<h2><span class="num">2.</span>결과 (사실)</h2>
+
+<figure>
+  <img src="PLOT::grid::grid_attribution.png" alt="criterion x allocation attribution">
+  <figcaption>좌: 자유 생성 CoC 열화율. <code>late</code> 배분만 솟아 있고, 기준을 dual로 바꿔도 0.300으로 여전히 높다.
+  중앙: teacher-forced CoC NLL — 여기서는 반대로 기준(분홍 vs 파랑)이 지배한다.
+  우: minADE 중앙값 Δ(평균은 이상치에 지배되므로 중앙값). dual이 agree를 제외한 모든 배분에서 더 좋다.</figcaption>
+</figure>
+
+<h3>2.1 CoC 열화율 — 파국적 실패</h3>
+
+<table>
+<thead><tr><th>배분</th><th class="r">traj</th><th class="r">dual</th></tr></thead>
+<tbody>
+<tr><td>uniform</td><td class="r">0.080 (p=0.046)</td><td class="r">0.060 (p=0.083)</td></tr>
+<tr><td><strong>late</strong></td><td class="r bad">0.820 (p&lt;0.001)</td><td class="r bad">0.300 (p&lt;0.001)</td></tr>
+<tr><td>agree</td><td class="r">0.120 (p=0.014)</td><td class="r good">0.040 (p=0.157)</td></tr>
+<tr><td>depthprior</td><td class="r">0.160 (p=0.005)</td><td class="r">0.120 (p=0.014)</td></tr>
+</tbody>
+</table>
+
+<p>배분 주효과 <strong>+0.500</strong>, 기준 주효과 <strong>+0.165</strong> — 약 3배.
+<code>late</code>만 붕괴를 만들고 나머지 세 배분은 전부 0.04–0.16이다.
+<code>dual_agree</code>(0.040)는 baseline과 통계적으로 구분되지 않는 <strong>유일한 셀</strong>이다(p=0.157).</p>
+
+<div class="callout">
+  <strong>폐루프와의 대조 검증.</strong> 느슨한 임계(폐루프 분석과 동일 기준)로 재면 <code>traj_late</code>는
+  <strong>0.820</strong>인데, 폐루프에서 측정한 <code>integrated_mag</code>의 열화율은 <strong>0.863</strong>이었다.
+  개방 루프 자유 생성이 폐루프 붕괴를 거의 그대로 재현한다 — 앞으로 이 축의 스크리닝을
+  시뮬레이터 없이 할 수 있다는 뜻이다.
+</div>
+
+<h3>2.2 CoC NLL — 붕괴 이전의 점진적 열화</h3>
+
+<table>
+<thead><tr><th>배분</th><th class="r">traj</th><th class="r">dual</th><th class="r">비</th></tr></thead>
+<tbody>
+<tr><td>uniform</td><td class="r">+0.594</td><td class="r">+0.084</td><td class="r">7.1×</td></tr>
+<tr><td>late</td><td class="r">+3.422</td><td class="r">+1.579</td><td class="r">2.2×</td></tr>
+<tr><td>agree</td><td class="r">+0.415</td><td class="r">+0.084</td><td class="r">4.9×</td></tr>
+<tr><td>depthprior</td><td class="r">+0.536</td><td class="r">+0.090</td><td class="r">6.0×</td></tr>
+</tbody>
+</table>
+
+<p>baseline NLL 0.176. 모든 셀 p&lt;0.001. 열화율과 정반대로 <strong>여기서는 기준이 지배</strong>한다.</p>
+
+<h3>2.3 minADE — 행동 채널</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">중앙값 Δ (m)</th><th class="r">악화/개선 clip</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>dual_depthprior</td><td class="r good">+0.092</td><td class="r">36/14</td><td class="r">0.004</td></tr>
+<tr><td>dual_uniform</td><td class="r good">+0.098</td><td class="r">36/14</td><td class="r">0.006</td></tr>
+<tr><td>dual_late</td><td class="r">+0.106</td><td class="r">34/16</td><td class="r">0.029</td></tr>
+<tr><td>traj_agree</td><td class="r">+0.146</td><td class="r">34/16</td><td class="r">0.001</td></tr>
+<tr><td>dual_agree</td><td class="r">+0.179</td><td class="r">43/7</td><td class="r">&lt;0.001</td></tr>
+<tr><td>traj_uniform</td><td class="r">+0.187</td><td class="r">37/13</td><td class="r">0.001</td></tr>
+<tr><td>traj_depthprior</td><td class="r">+0.327</td><td class="r">41/9</td><td class="r">&lt;0.001</td></tr>
+<tr><td>traj_late</td><td class="r bad">+0.604</td><td class="r">43/7</td><td class="r">&lt;0.001</td></tr>
+</tbody>
+</table>
+
+<p class="note">평균이 아니라 중앙값을 쓴 이유: baseline minADE 자체가 최대 6.11 m까지 튀고,
+개별 clip의 Δ가 −5 m를 넘는 경우가 있어 평균이 부호까지 뒤집힌다
+(<code>dual_late</code>의 평균 Δ는 −0.013이지만 중앙값은 +0.106, 승패는 34/16).
+이상치는 “baseline이 실패한 clip에서 프루닝 모델이 우연히 가까웠던” 경우다. Wilcoxon은 중앙값 기반이라 정합적이다.</p>
+
+<h2><span class="num">3.</span>분석 (해석)</h2>
+
+<h3>3.1 두 인자는 같은 채널의 다른 영역을 지배한다</h3>
+
+<p>열화율에서는 배분이(3배), NLL에서는 기준이(5–7배) 지배한다. 모순이 아니라 층위가 다르다:</p>
+
+<ul>
+  <li><strong>배분은 추론이 붕괴하는지를 결정한다.</strong> 후반 층에 예산을 몰면 생성이 무너진다
+  (빈 응답·토큰 수프). 기준을 dual로 바꿔도 0.820 → 0.300일 뿐 여전히 파국이다 —
+  <strong>좋은 기준이 나쁜 배분을 구제하지 못한다.</strong></li>
+  <li><strong>기준은 붕괴하지 않는 구간에서 품질을 결정한다.</strong> 배분이 온전하면 dual은 NLL을
+  0.594 → 0.084로 낮춘다. 이건 “살아 있지만 나빠진” 정도의 문제이고, 열화율 지표로는 거의 보이지 않는다.</li>
+</ul>
+
+<p>지난 보고서가 기준에 공을 돌린 이유도 여기서 설명된다 — 폐루프에서 본 것은 <em>붕괴</em>였는데,
+그 축은 실제로는 배분이 지배한다. 우리가 측정한 dual의 이득은 진짜지만 <strong>다른 지표의 이득</strong>이었다.</p>
+
+<h3>3.2 제안했던 일치도 비례 배분은 승자가 아니다</h3>
+
+<p>직전 보고서에서 제안한 <code>agree</code> 배분은 예측대로 붕괴를 막았다(<code>traj_agree</code> 0.120).
+그러나 <strong>단순 균일 배분을 이기지 못한다</strong>:</p>
+
+<table>
+<thead><tr><th>config</th><th class="r">CoC 열화율</th><th class="r">CoC NLL Δ</th><th class="r">minADE 중앙값 Δ</th></tr></thead>
+<tbody>
+<tr><td><code>dual_uniform</code></td><td class="r">0.060</td><td class="r">+0.084</td><td class="r good">+0.098</td></tr>
+<tr><td><code>dual_agree</code></td><td class="r good">0.040</td><td class="r">+0.084</td><td class="r">+0.179</td></tr>
+<tr><td><code>dual_depthprior</code></td><td class="r">0.120</td><td class="r">+0.090</td><td class="r good">+0.092</td></tr>
+</tbody>
+</table>
+
+<p>열화율은 <code>agree</code>가 조금 낫고 minADE는 <code>uniform</code>이 확실히 낫다. NLL은 동일하다.
+게다가 CoC 정보를 전혀 쓰지 않는 <code>depthprior</code>도 붕괴를 피한다.
+결론은 <strong>“후반 층에 예산을 몰지 말라”가 전부이고, 어떤 비-후반 배분을 쓰든 거의 무관하다</strong>는 것이다.
+측정된 일치도 프로파일이 그 위에 더해 주는 값은 크지 않다.</p>
+
+<div class="callout">
+  <strong>실용 규칙.</strong> 새 방법이 필요 없다 — (1) 층별 예산을 후반에 집중시키지 말 것,
+  (2) 층내 선택은 dual 기준을 쓸 것. 이 둘이면 39.9% 압축에서 CoC 열화율 0.060,
+  NLL +0.084, minADE 중앙값 +0.098이다. 같은 압축률에서 출시 config는 열화율 0.820이었다.
+</div>
+
+<h3>3.3 트레이드오프가 아니다</h3>
+
+<p>애초 가설은 “후반 층을 지키면 추론은 살지만 궤적을 잃는다”였다. 데이터는 그렇지 않다 —
+<code>traj_late</code>는 <em>양쪽 모두</em> 최악이다(열화율 0.820, minADE 중앙값 +0.604).
+후반 집중 배분은 두 채널을 맞바꾸는 것이 아니라 그냥 나쁜 배분이다.
+마찬가지로 dual 기준은 두 채널 모두에서 이득이다.</p>
+
+<h2><span class="num">4.</span>한계</h2>
+
+<ul>
+  <li>이 grid는 (i)×(ii)만 분리한다. <code>integrated_mag</code>이 함께 가지고 있던
+  <strong>층 35 kvonly 제거와 KV group 제거는 모든 셀에서 없음으로 고정</strong>했으므로,
+  그 두 인자의 기여는 여전히 미측정이다. 다만 <code>traj_late</code>가 그 둘 없이도
+  폐루프 붕괴율(0.863)을 거의 재현(0.820)하므로 주된 원인은 아닐 가능성이 높다.</li>
+  <li>개방 루프 평가다. 폐루프 주행 품질·안전 지표(THW 꼬리, 과실 충돌)는 재측정하지 않았다.
+  §2.1의 대조가 열화율 축에서는 개방 루프가 대리 지표로 쓸 만함을 시사하지만, 안전 지표는 별개다.</li>
+  <li>단일 압축률(39.9%)과 단일 seed 집합이다. 배분 효과가 압축률에 따라 어떻게 변하는지는 측정하지 않았다.</li>
+  <li>하드웨어가 이전 실행(Blackwell)과 다르다(Ada). 종점이 모두 하드웨어 무관하고 모든 비교가
+  같은 실행 안의 clip-paired이므로 귀속에는 영향이 없다.</li>
+</ul>
+
+<h2><span class="num">5.</span>다음</h2>
+
+<ol>
+  <li><strong>폐루프 재확인</strong> — <code>dual_uniform</code>을 AlpaSim에 태워 39.9% 압축에서
+  주행 품질과 THW 꼬리가 유지되는지 본다. 이전 최고 안전 config는 −18.1%였다.</li>
+  <li><strong>압축률 스윕</strong> — 배분 효과가 압축률에 따라 어디서 무너지는지.</li>
+  <li><strong>층 35 / KV 인자</strong> — 남은 두 인자를 같은 방식으로 분리.</li>
+</ol>
+
+</div>
+</body>
+</html>

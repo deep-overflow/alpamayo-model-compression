@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J-criterion 노이즈 감사 — 32클립 재추정과 j_traj의 2축 강건성</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  .pass { color: #008300; font-weight: 650; } .fail { color: #B33A3A; font-weight: 650; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; J-space robustness audit</div>
+  <h1>8클립 J 노이즈는 <code>j_traj</code>를 바꾸는가 &mdash; 32클립 재추정과 2축 강건성 검증</h1>
+  <div class="meta">
+    2026-08-06 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (VLM 타워)
+    &middot; 계획 <code>plans/2026-08-05_jtraj-reselect-32clip.md</code>
+    &middot; 선행 리포트 <em>J-space 라벨-프리 프루닝</em> (2026-07-29)
+  </div>
+</header>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">0.98 / 0.95</div><div class="l">32클립 J 점수 split-half ρ (Q / MLP)</div></div>
+  <div class="kpi"><div class="v">~25%</div><div class="l">8클립 bottom-20% 선택의 노이즈 churn</div></div>
+  <div class="kpi"><div class="v">p=0.45</div><div class="l">j_traj_r20 &minus; cocsafe_r20 (동률 유지)</div></div>
+  <div class="kpi"><div class="v">p=0.60</div><div class="l">KV 선택 kv32 &minus; kv8 (차이 없음)</div></div>
+</div>
+
+<h2><span class="num">1</span>목적</h2>
+<p>
+출하된 <code>j_traj_full_*</code> 구성은 8클립 J-lens 점수(<code>jlens_coc</code>)로 선택되었다
+(<code>make_slim.py</code>가 하드코딩). 8클립 추정의 순위 재현성은 cross-slice ρ 0.776(Q) / 0.682(MLP)에
+불과해, <strong>bottom-20% 프루닝 선택의 약 1/4이 노이즈 유래</strong>라는 문제가 확인되었다.
+본 감사는 세 단계로 검증한다: (i) 32클립 재추정으로 J 점수의 노이즈 플로어를 제거하고,
+(ii) 재선택이 오픈루프 결과를 바꾸는지(width축), (iii) KV-그룹 선택을 바꾸는지(KV축)를
+사전 등록된 게이트로 판정한다. 가설 H: <code>max(rank traj, rank J)</code> 결합 덕에 j_traj는
+J-criterion 노이즈에 강건하며, 기존 결론(라벨-프리 동률)은 유지된다.
+</p>
+
+<h2><span class="num">2</span>셋업</h2>
+<table>
+  <thead><tr><th>실험</th><th>내용</th><th>산출물</th></tr></thead>
+  <tbody>
+    <tr><td><code>jlens_coc32</code></td>
+        <td>J-lens 재추정: 32 calib 클립 (기존 8), 동일 사전 935토큰(423 CoC + 512 random), span=coc, seed 42. 16/16 홀짝 split-half 진단 포함</td>
+        <td>GPU 4 (Ada), ~5.7h</td></tr>
+    <tr><td><code>jsweep32_s0/s40</code> &rarr; <code>jsweep32_summary</code></td>
+        <td>Stage E criterion 스윕 재실행: 동일 80클립 &middot; ratios 0.2/0.3 &middot; K=8 &middot; paired seed, <code>--jlens jlens_coc32</code>만 변경. 비-J config는 replication control</td>
+        <td>GPU 2·3 (Blackwell), ~6h</td></tr>
+    <tr><td><code>kviso_v1</code> (신규 <code>run_kviso.py</code>)</td>
+        <td>KV축 격리: j_traj r20 width 마스크(32클립) 고정, KV-1 드롭만 {8클립, 32클립} 선택으로 변주. baseline / width32 / width32_kv8 / width32_kv32, VLM-side 마스크, 80클립</td>
+        <td>GPU 2 (Blackwell), ~1.2h</td></tr>
+  </tbody>
+</table>
+<p class="note">
+공정성 장치: 모든 비교는 clip·seed paired. 스윕의 비-J config(magnitude/traj/coc/cocsafe)는 기존
+런과 <strong>비트 단위로 동일</strong>하게 재현되어(G-repro) cross-run 비교가 유효함을 보증한다.
+<code>kviso_v1</code>의 baseline도 seed 인덱스가 정렬되는 앞 40클립에서 <code>jsweep32_s0</code>과
+비트 동일 (뒤 40클립 불일치는 샤드별 ci 재시작에 따른 seed 인덱싱 차이).
+</p>
+
+<h2><span class="num">3</span>결과 A &mdash; J 점수 신뢰도 (사실)</h2>
+<figure>
+  <img src="PLOT::jl32::reliability.png" alt="J-score reliability and pick overlap">
+  <figcaption>좌: J 점수 순위 재현성 — 8클립 cross-slice(회색) 대비 32클립 split-half(파랑).
+  우: 8클립 vs 32클립 bottom-k 선택 오버랩 — bottom-20% 기준 약 1/4의 픽이 교체된다.</figcaption>
+</figure>
+<ul>
+  <li>32클립 split-half: <code>q_j</code> median ρ <strong>+0.977</strong> (min +0.926), <code>mlp_j</code> <strong>+0.954</strong> (min +0.882) — Jacobian 노이즈 해소.</li>
+  <li>32↔8클립 per-layer 순위 ρ는 0.87–0.92지만 bottom-20% 선택 오버랩은 Q 75.9% / MLP 73.3% (bottom-30%: 81.4% / 79.1%).</li>
+  <li>G2 게이트(vs <code>importance_v1</code>, per-layer median Spearman)는 32클립에서 강화: Q heads j↔CoC +0.602→<strong>+0.659</strong>, 방향성 마진 +0.290→<strong>+0.349</strong>; MLP +0.332→+0.350, 마진 +0.135→+0.157. 노이즈 감쇠 이론과 부합.</li>
+</ul>
+<figure>
+  <img src="PLOT::jsp32::corr_layers.png" alt="per-layer correlations of J vs magnitude/coc/traj">
+  <figcaption>32클립 J 점수의 per-layer 상관 (<code>jspace_coc32</code>): CoC Taylor와의 정렬이
+  magnitude·traj보다 일관되게 높다 — G2(a)/(b) 모두 PASS, 양 유닛 타입에서 마진이 노이즈 플로어(1&minus;ρ ≈ 0.02/0.05)를 크게 상회.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>결과 B &mdash; 오픈루프 재선택, width축 (사실)</h2>
+<figure>
+  <img src="PLOT::jsw32::reselect_deltas.png" alt="re-selection paired deltas">
+  <figcaption>신규(32클립 선택) &minus; 기존(8클립 선택), 80클립 per-clip 쌍대. j_traj 양 ratio와
+  jspace r20은 변화 없음(회색), <strong>jspace r30만 유의 개선</strong>(초록: dNLL &minus;0.022, dADE &minus;0.52).</figcaption>
+</figure>
+<table>
+  <thead><tr><th>비교</th><th class="r">dNLL med</th><th class="r">dNLL mean [95% CI]</th><th class="r">p</th><th>판정</th></tr></thead>
+  <tbody>
+    <tr><td>j_traj_r20(32) &minus; cocsafe_r20 (동률 게이트)</td><td class="r">&minus;0.000</td><td class="r">+0.001 [&minus;0.009, +0.012]</td><td class="r">0.446</td><td><span class="pass">G-parity PASS</span></td></tr>
+    <tr><td>j_traj_r20: 신규 &minus; 기존</td><td class="r">&minus;0.002</td><td class="r">+0.002 [&minus;0.004, +0.007]</td><td class="r">0.388</td><td rowspan="2">변화 없음 (<span class="fail">G-improve FAIL</span> — 개선 예측 기각)</td></tr>
+    <tr><td>j_traj_r30: 신규 &minus; 기존</td><td class="r">&minus;0.002</td><td class="r">&minus;0.001 [&minus;0.010, +0.009]</td><td class="r">0.318</td></tr>
+    <tr><td>jspace_r30: 신규 &minus; 기존</td><td class="r">&minus;0.012</td><td class="r"><strong>&minus;0.022</strong> [&minus;0.032, &minus;0.013]</td><td class="r">&lt;10<sup>&minus;4</sup></td><td><span class="good">유의 개선</span> (dADE mean &minus;0.52)</td></tr>
+  </tbody>
+</table>
+<figure>
+  <img src="PLOT::jsw32::frontier.png" alt="criterion frontier at matched ratios">
+  <figcaption>32클립 기준의 criterion frontier (<code>jsweep32_summary</code>). j_traj는 여전히
+  cocsafe와 겹치고 r30 head-to-head에서 근소 우위(dNLL mean &minus;0.016 [&minus;0.033, +0.001], p=0.23, 비유의).</figcaption>
+</figure>
+
+<h2><span class="num">5</span>결과 C &mdash; KV축 격리 (사실)</h2>
+<p>
+KV-1 드롭 선택(<code>j_kv = Σ q_j²</code> per group, <code>max(rank traj-KV, rank j_kv)</code>의 레이어당
+최약 그룹)은 8→32클립에서 <strong>11/36 레이어가 교체</strong>된다 (layers 1, 4, 6, 14, 23–27, 31, 35;
+이 중 1/25/35는 rank 정확 동점). 후보 8개에 rank가 1/7로 양자화되어 max-rank 가드레일의 해상도가
+없는 축이므로, 오픈루프 스윕(VLM-width 전용)이 커버하지 못한 유일한 미검증 축이었다.
+</p>
+<figure>
+  <img src="PLOT::kviso::kviso_deltas.png" alt="KV isolation paired deltas">
+  <figcaption>width 고정 후 KV 선택만 변주한 쌍대 비교 (<code>kviso_v1</code>, 80클립). 게이트(파랑)는
+  0을 넓게 포함; KV-1 드롭 자체 비용(회색)은 어느 선택이든 유의하게 존재하고 크기가 같다.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>비교</th><th class="r">dNLL med</th><th class="r">dNLL mean [95% CI]</th><th class="r">p</th><th class="r">dADE mean [95% CI]</th><th class="r">p</th></tr></thead>
+  <tbody>
+    <tr><td><strong>kv32 &minus; kv8 (게이트)</strong></td><td class="r">&minus;0.0020</td><td class="r">&minus;0.0005 [&minus;0.0062, +0.0050]</td><td class="r">0.604</td><td class="r">&minus;0.022 [&minus;0.061, +0.010]</td><td class="r">0.666</td></tr>
+    <tr><td>kv8 &minus; width32 (드롭 비용)</td><td class="r">+0.0041</td><td class="r">+0.0057 [+0.0019, +0.0097]</td><td class="r">0.007</td><td class="r">+0.071 [+0.031, +0.116]</td><td class="r">0.001</td></tr>
+    <tr><td>kv32 &minus; width32 (드롭 비용)</td><td class="r">+0.0033</td><td class="r">+0.0052 [&minus;0.0004, +0.0108]</td><td class="r">0.052</td><td class="r">+0.048 [+0.011, +0.087]</td><td class="r">0.021</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+<strong>게이트 판정 (Stage 1b):</strong> kv32 &minus; kv8 차이 없음 (p=0.60/0.67, CI가 0을 넓게 포함)
+&rarr; 사전 등록 규칙에 따라 <strong>Stage 2(슬림 재빌드 + 클로즈드루프) 불필요</strong>.
+기존 <code>slim_j_traj_r20</code> 체크포인트와 클로즈드루프 결과는 그대로 유효하다.
+</div>
+
+<h2><span class="num">6</span>분석 (해석)</h2>
+<ul>
+  <li><strong>j_traj의 노이즈 강건성은 구조적이다.</strong> width축에서는 <code>max(rank traj, rank J)</code>의
+  traj 절반이 J 노이즈를 흡수했고(픽의 1/4이 바뀌어도 성능 불변), KV축에서는 "레이어당 최약 그룹"
+  후보들이 기능적으로 등가라 어느 쪽을 떨어뜨려도 같은 비용이 든다. 두 메커니즘 모두 재선택
+  실험으로 직접 검증되었다.</li>
+  <li><strong>순수 jspace 기준만 노이즈의 실제 피해자였다.</strong> r30에서 32클립 재선택이 dNLL &minus;0.022,
+  dADE &minus;0.52를 회복 — 8클립 churn이 "무해한 재배열"이 아니라 실측 손상이었다는 직접 증거.
+  단독 J criterion을 쓰려면 32클립 추정이 필수다.</li>
+  <li><strong>라벨-프리 동률 주장은 이제 이중으로 뒷받침된다.</strong> 신뢰 가능한 J 추정(split-half 0.98)
+  위에서 G-parity가 재확인되었고, criterion 노이즈 민감도라는 반론 경로가 양축에서 차단되었다.</li>
+  <li><strong>한계.</strong> (i) KV축 검증은 스윕 프로토콜과 같은 VLM-side 마스크 기반 — 물리적 제거 후
+  캐시 절약 경로는 기존 <code>run_kvfix</code> 결과에 의존한다. (ii) G1(workspace band kurtosis plateau)은
+  32클립에서도 부재(단조 증가) — J 점수의 유효성은 G2·성능 게이트로만 지지된다.
+  (iii) <code>analyze_jspace</code>의 <code>rho(write_norm, magnitude)</code> sanity 게이트는 여전히 낮게(+0.17)
+  읽히며, 기대치 재보정이 필요하다.</li>
+</ul>
+
+<h2><span class="num">7</span>재현</h2>
+<div class="note">
+<code>run_retry_host.sh N run_jlens.py --gpu 4 --exp-id jlens_coc32 --num-clips 32 --n-freq 512 --n-random 512 --reserve-gb 44</code><br>
+<code>run_retry_host.sh N run_jspace_sweep.py --gpu 2 --exp-id jsweep32_s0 --num-clips 40 --clip-offset 0 --jlens jlens_coc32</code> (+ <code>s40</code>) &rarr;
+<code>analyze_jsweep.py --shards jsweep32_s0 jsweep32_s40 --exp-id jsweep32_summary</code><br>
+<code>run_retry_host.sh N run_kviso.py --gpu 2 --exp-id kviso_v1 --num-clips 80</code><br>
+게이트 산식과 판정 기준: <code>plans/2026-08-05_jtraj-reselect-32clip.md</code> (Stage 1b 포함).
+G2 게이트: <code>analyze_jspace.py --jlens-exp jlens_coc32 --importance-exp importance_v1 --exp-id jspace_coc32</code>.
+</div>
+
+</div>
+</body>
+</html>

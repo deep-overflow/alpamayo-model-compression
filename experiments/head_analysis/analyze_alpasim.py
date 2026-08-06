@@ -45,7 +45,10 @@ plt.rcParams.update({
     "font.size": 11,
 })
 
-CONFIGS = ["baseline", "slim_cocsafe_r20", "slim_cocsafe_r30", "slim_integrated_mag"]
+DEFAULT_CONFIGS = ["baseline", "slim_cocsafe_r20", "slim_cocsafe_r30", "slim_integrated_mag"]
+# module-level so the plotting/summary helpers can stay parameterless; main() rebinds both
+# when --configs is given (e.g. re-running one new config against the stored baseline)
+CONFIGS = list(DEFAULT_CONFIGS)
 COLORS = {c: col for c, col in zip(CONFIGS, [C1, C2, C3, C4])}
 HEADLINE = ["score", "passed", "collision_at_fault", "collision_any", "offroad",
             "wrong_lane", "progress_clipped_rel", "progress_rel", "dist_to_gt_trajectory"]
@@ -158,13 +161,19 @@ def main():
     ap.add_argument("--prefix", default="matrix_")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--skip-coc", action="store_true")
+    ap.add_argument("--configs", nargs="+", default=DEFAULT_CONFIGS,
+                    help="run dirs to compare; the first is treated as the baseline")
     args = ap.parse_args()
+    global CONFIGS, COLORS
+    CONFIGS = list(args.configs)
+    COLORS = {c: col for c, col in zip(CONFIGS, [C1, C2, C3, C4])}
+    configs = CONFIGS
 
     out = args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
 
     data, coc = {}, {}
-    for cfg in CONFIGS:
+    for cfg in configs:
         run_dir = args.runs_root / f"{args.prefix}{cfg}"
         data[cfg] = load_rollouts(run_dir)
         if not args.skip_coc:
@@ -259,7 +268,7 @@ def main():
         ax.scatter(x, d, s=18, color=COLORS[cfg], alpha=0.75)
         ax.hlines(np.mean(d), i - 0.25, i + 0.25, color=INK, lw=2)
     ax.axhline(0, color=MUTED, lw=1, ls="--")
-    ax.set_xticks(range(3))
+    ax.set_xticks(range(len(CONFIGS) - 1))
     ax.set_xticklabels([c.replace("slim_", "") for c in CONFIGS if c != "baseline"])
     ax.set_ylabel("Δ scene score vs baseline (per scene)")
     ax.set_title("Paired per-scene deltas")
@@ -272,7 +281,7 @@ def main():
     w = 0.2
     for i, cfg in enumerate(CONFIGS):
         vals = [metrics["configs"][cfg][k] for k in keys]
-        ax.bar(np.arange(len(keys)) + (i - 1.5) * w, vals, width=w,
+        ax.bar(np.arange(len(keys)) + (i - (len(CONFIGS) - 1) / 2) * w, vals, width=w,
                color=COLORS[cfg], label=cfg.replace("slim_", ""))
     ax.set_xticks(range(len(keys)))
     ax.set_xticklabels(keys, rotation=10)
@@ -302,10 +311,11 @@ def main():
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     (out / "config.json").write_text(json.dumps({
         "runs_root": str(args.runs_root), "prefix": args.prefix,
-        "configs": CONFIGS, "n_scenes": len(scenes), "scenes": scenes,
+        "configs": configs, "n_scenes": len(scenes), "scenes": scenes,
     }, indent=2))
 
-    lines = [f"alpasim closed-loop eval — {len(scenes)} scenes x 2 rollouts, 4 configs", ""]
+    lines = [(f"alpasim closed-loop eval — {len(scenes)} scenes x 2 rollouts, "
+              f"{len(CONFIGS)} configs: {', '.join(CONFIGS)}"), ""]
     hdr = f"{'config':22s} {'score':>7s} {'pass%':>6s} {'col@f':>6s} {'offrd':>6s} {'prog':>6s} {'d2gt':>6s}"
     lines += [hdr, "-" * len(hdr)]
     for cfg in CONFIGS:

@@ -31,7 +31,7 @@ from alpamayo1_5 import helper  # noqa: E402
 from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
-REPO = Path("/workspace/alpamayo-model-compression")
+REPO = Path(__file__).resolve().parents[2]
 
 
 def flat(pairs):
@@ -126,7 +126,8 @@ def main():
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--fm-steps", type=int, default=10)
     ap.add_argument("--reserve-gb", type=float, default=40.0)
-    ap.add_argument("--gpu", type=int, default=None)
+    ap.add_argument("--gpu", type=str, default=None,
+                    help="comma-separated card ids to restrict the scan, e.g. '0' or '0,1'")
     ap.add_argument("--checkpoint", action="store_true",
                     help="see note below; incompatible with use_cache, off by default")
     args = ap.parse_args()
@@ -136,7 +137,8 @@ def main():
     split = json.loads((REPO / "outputs" / "split.json").read_text())
     calib = split["calib"][: args.num_clips]
 
-    device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
+    devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
+    device = reserve_gpu(args.reserve_gb, devices=devices)
     print(f"using {device}", flush=True)
 
     model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
@@ -171,6 +173,9 @@ def main():
         "exp_mlp": (ec.num_hidden_layers, ec.intermediate_size),
     }
     acc = {obj: {k: np.zeros(s) for k, s in shapes.items()} for obj in ("coc", "traj")}
+    # per-clip terms are kept as well as the sum: the mean is what importance.npz has always
+    # stored, but a risk-averse aggregate (CVaR over the worst clips) needs the distribution
+    per_clip_acc = {f"{obj}_{k}": [] for obj in ("coc", "traj") for k in shapes}
 
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B",
@@ -186,21 +191,29 @@ def main():
         t0 = time.time()
         data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
         torch.cuda.reset_peak_memory_stats()
-        rec = process_clip(model, processor, data, args, args.seed + ci, acc)
+        clip_acc = {obj: {k: np.zeros(s) for k, s in shapes.items()} for obj in ("coc", "traj")}
+        rec = process_clip(model, processor, data, args, args.seed + ci, clip_acc)
+        for obj, d in clip_acc.items():
+            for k, v in d.items():
+                acc[obj][k] += v
+                per_clip_acc[f"{obj}_{k}"].append(v.astype(np.float32))
         rec["clip_id"] = clip_id
         records.append(rec)
         print(f"[{ci + 1}/{len(calib)}] {clip_id} coc={rec['coc_len']} "
               f"fm={rec['fm_loss']:.4f} peak={rec['peak_gb']:.1f}GB "
               f"({time.time() - t0:.0f}s)", flush=True)
         if (ci + 1) % 10 == 0 or ci + 1 == len(calib):
-            save(out_dir, acc, records, ci + 1)
-    save(out_dir, acc, records, len(records))
+            save(out_dir, acc, records, ci + 1, per_clip_acc)
+    save(out_dir, acc, records, len(records), per_clip_acc)
     print("saved ->", out_dir, flush=True)
 
 
-def save(out_dir, acc, records, n):
+def save(out_dir, acc, records, n, per_clip_acc=None):
     arrays = {f"{obj}_{k}": v / max(n, 1) for obj, d in acc.items() for k, v in d.items()}
     np.savez(out_dir / "importance.npz", **arrays)
+    if per_clip_acc:
+        np.savez(out_dir / "importance_perclip.npz",
+                 **{k: np.stack(v) for k, v in per_clip_acc.items() if v})
     (out_dir / "metrics.json").write_text(json.dumps({"n_clips": n, "per_clip": records}, indent=2))
 
 

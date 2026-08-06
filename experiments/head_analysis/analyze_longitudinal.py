@@ -262,11 +262,18 @@ def rollout_metrics(parquet_path):
 
 
 def main():
+    # rebound below from --configs, so a two-config re-run (stored baseline + one new
+    # config) works without threading the list through every helper
+    global CONFIGS, COLORS
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", type=Path, required=True)
     ap.add_argument("--prefix", default="matrix_")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--configs", nargs="+", default=CONFIGS,
+                    help="run dirs to compare; the first is treated as the baseline")
     args = ap.parse_args()
+    CONFIGS = list(args.configs)
+    COLORS = {c: col for c, col in zip(CONFIGS, [C1, C2, C3, C4])}
     (args.out / "plots").mkdir(parents=True, exist_ok=True)
 
     KEYS = ["brake_accel_when_close", "brake_frac_when_close", "thw_p05",
@@ -402,7 +409,7 @@ def main():
     axes[1].set_xticklabels(["median", "5th pct"])
     axes[1].set_ylabel("Δ headway vs baseline (s)")
     axes[1].set_title("Paired per-scene delta (95% CI)", fontsize=11)
-    fig.suptitle("Reasoning collapse breaks the tail, not the average", fontsize=12)
+    fig.suptitle("Following distance: the tail moves, the median does not", fontsize=12)
     fig.tight_layout()
     fig.savefig(args.out / "plots" / "headway_tail.png", dpi=150)
 

@@ -26,7 +26,12 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from analyze_alpasim import CONFIGS, coc_stats  # noqa: E402
+from analyze_alpasim import coc_stats  # noqa: E402
+
+# the label-free j_traj checkpoint joins the shipped four; kept here rather than
+# imported so adding a config never silently changes analyze_alpasim's default
+CONFIGS = ["baseline", "slim_cocsafe_r20", "slim_cocsafe_r30", "slim_integrated_mag",
+           "slim_j_traj_r20"]
 
 PRE_WINDOW_S = 5.0  # how far back from the collision to inspect reasoning
 

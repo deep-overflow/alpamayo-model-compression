@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>새로운 프루닝 방향 — 기준 × 배분의 분리, 그리고 꼬리 위험</title>
+
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  h3 .tag { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent-dark); background: #FBF0EB; border-radius: 4px; padding: 0.15em 0.45em; margin-right: 0.5rem;
+    vertical-align: 0.12em; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  a:hover { border-bottom-color: var(--accent-dark); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  ol.refs { font-size: 0.88rem; } ol.refs li { margin-bottom: 0.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Research directions</div>
+  <h1>새로운 프루닝 방향 — 기준 × 배분의 분리, 그리고 꼬리 위험</h1>
+  <div class="meta">
+    2026-07-27 · 근거 <code>outputs/importance_v1</code>, <code>outputs/agreement_alloc</code>,
+    <code>outputs/slim_*</code>, <code>outputs/alpasim_*</code><br>
+    코드 <code>experiments/head_analysis/analyze_agreement.py</code> (신규, GPU 불필요)<br>
+    성격: 기존 데이터 재분석으로 도출한 방향 제안 — 새 실험은 아직 돌리지 않음
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<p>“새로운 프루닝 <em>메커니즘</em>”을 찾기보다, 우리가 이미 가진 데이터를 다시 보는 데서 더 큰 것이 나왔다.
+결론 세 개:</p>
+
+<ol>
+  <li><strong>우리 대표 주장은 지금 교란되어 있다.</strong> <code>cocsafe</code>와 <code>integrated_mag</code>는
+  <em>중요도 기준</em>만 다른 게 아니라 <em>층별 예산 배분</em>도 다르다. 따라서 CoC 붕괴가 기준 때문인지
+  배분 때문인지 현재 데이터로는 구분할 수 없다.</li>
+  <li><strong>그 교란을 푸는 과정에서 새 방법이 나온다.</strong> 두 목적의 <em>층별 일치도</em>가
+  프루닝 가능 여지를 직접 결정하며(측정됨), 이를 배분 규칙으로 쓰면
+  <code>integrated_mag</code>이 실제로 쓴 배분과 <strong>거의 정반대</strong>가 된다 — 같은 압축률에서.</li>
+  <li><strong>두 번째로 유망한 것은 손실의 집계 방식이다.</strong> 모든 기존 중요도는 캘리브레이션 평균
+  <code>E[Δloss]</code>인데, 우리 안전 손상은 평균이 아니라 <em>꼬리</em>에서만 나타났다(THW 5%ile −1.19 s).
+  꼬리 기준 중요도(CVaR)는 프루닝 문헌에 사실상 없다.</li>
+</ol>
+
+<h2><span class="num">1.</span>이미 있는 데이터가 말하는 것</h2>
+
+<p>P1에서 측정한 두 목적의 층별 순위 일치도는 <strong>깊이에 따라 단조 감소</strong>한다.
+여기서 각 목적의 상위 50%를 “반드시 남겨야 하는 집합”으로 보면, 두 집합의 합집합이 곧 그 층의 하한이고
+<em>나머지가 진짜 프루닝 가능 여지</em>다.</p>
+
+<table>
+<thead><tr><th>층 대역</th><th class="r">일치도 ρ (Q head)</th><th class="r">ρ (MLP ch)</th><th class="r">ρ (KV group K)</th><th class="r">프루닝 가능 여지 (Q)</th><th class="r"><code>integrated_mag</code>이 실제로 자른 비율 (Q)</th></tr></thead>
+<tbody>
+<tr><td>0–5</td><td class="r">+0.778</td><td class="r">+0.953</td><td class="r">+0.829</td><td class="r">0.396</td><td class="r good">0.349</td></tr>
+<tr><td>6–17</td><td class="r">+0.744</td><td class="r">+0.695</td><td class="r">+0.929</td><td class="r">0.396</td><td class="r good">0.344</td></tr>
+<tr><td>18–29</td><td class="r">+0.500</td><td class="r">+0.464</td><td class="r">+0.589</td><td class="r">0.344</td><td class="r bad">0.453</td></tr>
+<tr><td>30–35</td><td class="r">+0.271</td><td class="r">+0.286</td><td class="r">+0.290</td><td class="r">0.312</td><td class="r bad">0.635</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::agree::agreement_allocation.png" alt="agreement vs allocation">
+  <figcaption>좌: 두 목적의 층별 순위 일치도 — 층 20 이후 급격히 무너지고 KV group은 후반부에서 음의 상관까지 간다.
+  중앙: 프루닝 가능 여지(실선) vs <code>integrated_mag</code>이 실제로 자른 비율(점선). 층 21까지는 여지 안에 있다가
+  후반부에서 여지를 크게 초과한다 — 교차점이 CoC가 붕괴한 지점이다.
+  우: 같은 총 예산(VLM q/o+MLP 파라미터의 39.9%)에서 일치도 비례 배분과 <code>integrated_mag</code> 배분의 비교.
+  프로파일이 뒤집혀 있다.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>핵심 관측.</strong> 층 30–35에서 데이터가 허용하는 프루닝 여지는 31.2%인데
+  <code>integrated_mag</code>은 63.5%를 잘랐다 — <strong>허용치의 2.0배</strong>.
+  반대로 층 0–5에서는 여지가 39.6%인데 34.9%만 잘라 <em>남는 예산을 쓰지 않았다</em>.
+  즉 CoC 붕괴(86.3% 열화)는 “압축률이 높아서”가 아니라
+  <strong>두 채널이 가장 크게 갈리는 곳에 예산을 집중했기 때문</strong>이라는 설명이 데이터에서 바로 나온다.
+</div>
+
+<h3>1.1 그런데 이 때문에 우리 주장이 교란된다</h3>
+
+<p>세 config의 층별 keep 프로파일을 나란히 놓으면 문제가 분명해진다.</p>
+
+<table>
+<thead><tr><th>config</th><th>층내 기준</th><th>층간 배분</th><th class="r">0–5</th><th class="r">6–17</th><th class="r">18–29</th><th class="r">30–35</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td><code>cocsafe_r20</code> (−18.1%)</td><td>dual max-rank</td><td>사실상 균일</td>
+  <td class="r">0.734</td><td class="r">0.740</td><td class="r">0.750</td><td class="r">0.708</td>
+  <td>CoC 정상(1.4%), 주행 유지</td></tr>
+<tr><td><code>cocsafe_r30</code> (−24.1%)</td><td>dual max-rank</td><td>사실상 균일</td>
+  <td class="r">0.635</td><td class="r">0.651</td><td class="r">0.641</td><td class="r">0.615</td>
+  <td>CoC 정상(2.7%), <span class="bad">주행 붕괴</span> (Δscore −0.220)</td></tr>
+<tr><td><code>integrated_mag</code> (−29.3%)</td><td>traj-only Taylor</td><td>후반 집중 + 층35 kvonly</td>
+  <td class="r">0.651</td><td class="r">0.656</td><td class="r">0.547</td><td class="r">0.365</td>
+  <td><span class="bad">CoC 붕괴(86.3%)</span>, 주행 점수는 유지</td></tr>
+</tbody>
+</table>
+
+<p><code>cocsafe_r30</code>과 <code>integrated_mag</code>은 <strong>전반부(0–17) 프로파일이 거의 동일</strong>하다
+(Q 0.635/0.651 vs 0.651/0.656, MLP 둘 다 0.700). 차이는 세 가지가 <em>동시에</em> 바뀐 데 있다 —
+(i) 층내 기준, (ii) 층간 배분, (iii) 층 35 제거. 우리는 이 중 (i)에 결과를 귀속시켜 보고했지만,
+<strong>실험 설계상 (ii)·(iii)와 분리되어 있지 않다.</strong>
+심사자가 가장 먼저 찌를 지점이고, 동시에 가장 값싸게 메울 수 있는 구멍이다
+(새 측정 없이 마스크 config만 추가해 기존 eval 파이프라인에 태우면 된다).</p>
+
+<p class="note">부수 확인: <code>coc_exp_q</code>·<code>coc_exp_mlp</code>는 <strong>전부 0</strong>이다.
+CoC 토큰은 VLM의 lm_head에서 나오므로 CoC 손실은 expert로 역전파되지 않는다 — 즉
+<strong>expert는 구조적으로 단일 목적 모듈</strong>이고, dual-objective 논의는 VLM과 공유 cache에만 적용된다.
+이는 버그가 아니라 아키텍처의 성질이며, expert 쪽은 궤적 기준만으로 더 공격적으로 밀어도 된다는 뜻이다.</p>
+
+<h2><span class="num">2.</span>방향 1 — 일치도 비례 배분 <span style="font-size:0.8em;color:var(--text-muted)">(즉시 실행 가능)</span></h2>
+
+<p><strong>방법.</strong> 층 <em>ℓ</em>의 keep 비율을 그 층의 채널 일치도가 허용하는 하한에 비례시킨다:
+<code>keep_ℓ = clip(α · |top_q(I_CoC) ∪ top_q(I_traj)|/n, 0, 1)</code>, α는 목표 압축률로 결정.
+층내 순위는 기존 dual max-rank를 그대로 쓴다 — <strong>바뀌는 것은 층간 배분뿐</strong>이다.</p>
+
+<p><strong>이게 왜 새로운가.</strong> 층별 비균일 예산은 이미 연구되어 있지만 배분 기준이 전부
+<em>단일 목적</em>이다 — <a href="https://arxiv.org/abs/2310.05175">OWL</a>은 outlier 비율,
+BESA는 미분 가능 탐색, EvoPress/DSA는 진화 탐색. <strong>다목적 간 일치도를 배분 기준으로 쓰는 것은
+조사 범위에서 찾지 못했다.</strong> 그리고 이 규칙은 reasoning-action 모델에서 특히 자연스럽다 —
+“두 출력 채널이 갈리는 깊이에는 예산을 덜 쓴다”가 곧 안전 제약이 된다.</p>
+
+<p><strong>같은 예산에서 무엇이 달라지는가</strong> (VLM q/o+MLP 파라미터 39.9% 제거로 맞춤, α=0.944):</p>
+
+<table>
+<thead><tr><th>층 대역</th><th class="r">integrated_mag keep Q</th><th class="r">일치도 비례 keep Q</th><th class="r">Δ</th><th class="r">integrated_mag keep MLP</th><th class="r">일치도 비례 keep MLP</th><th class="r">Δ</th></tr></thead>
+<tbody>
+<tr><td>0–5</td><td class="r">0.651</td><td class="r">0.570</td><td class="r">−0.081</td><td class="r">0.700</td><td class="r">0.510</td><td class="r">−0.190</td></tr>
+<tr><td>6–17</td><td class="r">0.656</td><td class="r">0.570</td><td class="r">−0.086</td><td class="r">0.700</td><td class="r">0.587</td><td class="r">−0.113</td></tr>
+<tr><td>18–29</td><td class="r">0.547</td><td class="r">0.620</td><td class="r">+0.073</td><td class="r">0.567</td><td class="r">0.631</td><td class="r">+0.064</td></tr>
+<tr><td>30–35</td><td class="r">0.365</td><td class="r">0.649</td><td class="r"><strong>+0.285</strong></td><td class="r">0.417</td><td class="r">0.664</td><td class="r"><strong>+0.247</strong></td></tr>
+</tbody>
+</table>
+
+<p>전반부에서 예산을 <em>더</em> 가져와 후반부에 돌려준다. 예산 중립이므로 속도 이득은 동일하고,
+가설이 맞으면 품질만 올라간다.</p>
+
+<div class="callout">
+  <strong>반증 가능한 예측.</strong> −29.3%(= <code>integrated_mag</code>과 동일 압축률)에서 일치도 비례 배분은
+  CoC 열화율을 86.3% → <code>cocsafe</code> 수준(1–3%)으로 되돌리고, THW 5%ile Δ가 유의하지 않게 되어야 한다.
+  이것이 틀리면 “일치도” 가설은 폐기되고 진짜 원인은 “후반 층은 그냥 취약하다”가 된다 — 그것도 깔끔한 결과다.
+</div>
+
+<h3>2.1 필수 통제 — 기준과 배분을 분리하는 2×3 설계</h3>
+
+<p>§1.1의 교란을 풀려면 대각선 두 칸만으로는 안 된다. 빈 칸을 채워야 어느 인자가 일을 했는지 말할 수 있다.</p>
+
+<table>
+<thead><tr><th>층간 배분 ↓ / 층내 기준 →</th><th>traj-only</th><th>dual max-rank</th></tr></thead>
+<tbody>
+<tr><td>균일</td><td><strong>미측정</strong> (필수)</td><td><code>cocsafe_r30</code> ✓</td></tr>
+<tr><td>후반 집중</td><td><code>integrated_mag</code> ✓</td><td><strong>미측정</strong> (필수)</td></tr>
+<tr><td>일치도 비례</td><td><strong>미측정</strong> (제안의 핵심 통제)</td><td><strong>미측정</strong> (제안 본체)</td></tr>
+</tbody>
+</table>
+
+<p>특히 <em>traj-only × 일치도 비례</em>가 결정적이다. 이 칸이 살아남으면 결론은
+“배분이 본질이고 기준은 부차적”으로 <strong>바뀐다</strong> — 우리 현재 주장보다 오히려 강하고 일반적인 결과다.
+비용: 새 GPU 측정 없음, 마스크 config 4개 × 기존 eval.</p>
+
+<h2><span class="num">3.</span>방향 2 — 꼬리 위험 기준 중요도 (CVaR importance)</h2>
+
+<p><strong>문제.</strong> 모든 Taylor/Hessian 중요도는 캘리브레이션 집합에 대한 <em>기댓값</em>이다:
+<code>I_u = E_x[|∂L/∂g_u|]</code>. 그런데 우리 폐루프 결과가 보여준 것은
+<strong>평균은 멀쩡하고 꼬리가 무너진다</strong>는 것이었다 — scene score Δ는 노이즈 이내(p=0.24)인데
+선행차 추종 시간 5%ile은 −1.19 s(p=0.0043)였고, 충돌 없는 rollout만 봐도 효과가 더 강해졌다.
+평균으로 고른 유닛이 꼬리를 지킬 이유가 없다.</p>
+
+<p><strong>방법.</strong> 집계를 바꾼다: <code>I_u = CVaR_α[ |∂L/∂g_u| ]</code> — 캘리브레이션 클립 중
+<em>손실 민감도가 가장 큰 상위 α%</em>에서의 평균. 또는 위험 상태(급감속·차단·차선변경)에
+가중을 주는 tilted 목적. 구현은 <code>run_importance.py</code>에서 클립별 기여를 합산하는 대신
+<strong>클립별로 저장</strong>하기만 하면 되고(현재는 합산해서 <code>importance.npz</code>에 넣는다),
+평가 지표는 이미 만들어 둔 THW 꼬리·충돌 유형 계측을 그대로 쓴다.</p>
+
+<p><strong>선행 연구 확인.</strong> CVaR은 RL과 신경망 안전성 검증에서는 표준이지만
+(<a href="https://arxiv.org/html/2509.17413">WC-CVaR 검증</a>, 위험회피 분포 RL 등),
+<strong>프루닝 중요도 집계기로 쓴 사례는 검색에서 찾지 못했다.</strong>
+프루닝 쪽 캘리브레이션 연구는 데이터 <em>구성</em>(다중 소스 혼합 등)에 집중하고
+집계 함수는 평균으로 고정되어 있다. 즉 “안전 임계 시스템의 압축은 기댓값이 아니라 꼬리를 최적화해야 한다”는
+주장은 비어 있고, 우리는 그 주장을 뒷받침할 계측을 이미 갖고 있다.</p>
+
+<p><strong>비용.</strong> importance 패스 1회 재실행(클립별 저장) + 기존 eval. 방향 1과 직교하므로 곱해서 쓸 수 있다.</p>
+
+<h2><span class="num">4.</span>방향 3 — 폐루프(on-policy) 중요도</h2>
+
+<p><strong>문제.</strong> 우리 중요도는 GT 궤적과 teacher-forced CoC 위에서, 즉 <em>baseline이 방문하는 상태</em>에서
+측정된다. 그런데 우리 자신의 결과가 개방 루프 평가의 실패를 이미 보여줬다 —
+<code>integrated_mag</code>은 개방 루프 in-dist에서 ΔminADE +0.010으로 “무손실”이었고,
+폐루프에서 과실 충돌 4배였다. 프루닝된 정책이 실제로 방문하는 상태는 캘리브레이션 분포가 아니다.</p>
+
+<p><strong>방법.</strong> DAgger식 반복: 프루닝 → AlpaSim rollout → 방문 상태에서 중요도 재측정 → 재선택.
+운전에서는 이 분포 이동이 토큰 프리픽스 drift가 아니라 <em>물리적</em>이다(차가 다른 곳에 있게 된다).</p>
+
+<p><strong>선행 연구 확인 — 부분적으로 존재한다.</strong> 텍스트 LLM 쪽에는 이미 있다:
+<a href="https://arxiv.org/pdf/2606.03328">Calibration Data Trade-offs (2606.03328)</a>는
+희소도가 올라가면 dense 모델의 트레이스가 “distributionally stale”해진다고 지적하고 자가 생성 캘리브레이션을 제안하며,
+<a href="https://arxiv.org/pdf/2512.02185">Think Before You Prune (2512.02185)</a>도 같은 계열이다.
+<strong>차별점은 embodied 폐루프</strong> — 상태 이동이 시뮬레이터 물리를 통해 복합되고,
+그것을 측정할 하네스(AlpaSim + THW/충돌 계측)를 우리가 이미 붙여 놨다.</p>
+
+<div class="callout">
+  <strong>방향 2 + 3 = 하나의 논문.</strong> 두 방향은 같은 문장의 두 부분이다 —
+  “중요도를 <em>어디서</em> 재는가(개방 루프 vs 폐루프) × <em>어떻게</em> 집계하는가(평균 vs 꼬리)”.
+  2×2 ablation이 그대로 설계가 되고, 네 칸 중 세 칸이 미측정이다.
+  우리 기존 결과(개방루프×평균)가 좌상단 기준선이 된다.
+</div>
+
+<h2><span class="num">5.</span>방향 4 — cache 재라우팅으로 tower 깊이를 비대칭화</h2>
+
+<p><strong>구조적 사실.</strong> expert가 <em>층마다</em> VLM의 KV cache를 읽기 때문에 VLM 층을 단독으로 없앨 수 없다.
+<code>slim_lib.py</code>의 <code>kvonly_layer_forward</code>가 층 35에서 이미 이 문제를 우회하고 있다
+(q/o/MLP만 죽이고 k/v는 계속 생산 — 즉 깊이를 줄여도 <em>k/v 계산 비용은 남는다</em>).</p>
+
+<p><strong>방법.</strong> 짝지어 제거하는 대신 <strong>재라우팅</strong>한다 — expert 층 <em>ℓ</em>이
+가장 가까운 생존 VLM 층의 cache를 읽게 한다. 그러면 두 tower의 깊이 예산이 <em>분리</em>되고,
+“추론 tower와 행동 tower가 같은 깊이를 필요로 하는가”라는 질문을 처음으로 물을 수 있다.
+구현은 인덱스 재사상이고, 아이디어 자체는 <a href="https://openreview.net/forum?id=M2UzLRoqic">CLA</a>의
+층간 K/V 공유를 <em>tower 간</em>으로 옮긴 것이다.</p>
+
+<p><strong>왜 유망한가.</strong> §1의 부수 확인에 따르면 expert는 단일 목적 모듈이다.
+그리고 깊이 축은 우리 예산의 세 구간(prefill/decode/denoise)에 <em>모두</em> 듣는 유일한 축이다
+(<a href="2026-07-27_structured-pruning-axes-survey.html">축 조사 보고서</a> §2 축 A: 6/36층 짝제거 ≈ −14% e2e).
+비대칭 배분이 가능해지면 그 상한이 올라간다.</p>
+
+<h2><span class="num">6.</span>방향 5 — tower 간 weight 공유 + 저랭크 델타</h2>
+
+<p>expert는 VLM의 <em>text config로부터</em> 만들어졌으므로 층별 weight 형상이 VLM과 정확히 같다.
+그렇다면 제거하는 대신 <strong>묶을</strong> 수 있다: expert 층 <em>ℓ</em>의 가중치를
+<code>W_vlm,ℓ + ΔW</code>(저랭크)로 재매개화하면 capacity를 없애지 않고 파라미터를 줄인다.
+<a href="https://arxiv.org/html/2501.18596v1">DeltaLLM</a>이 <em>LLM 내부 층 간</em>에 정확히 이것을 하지만,
+<strong>VLM↔action-expert 간 공유는 찾지 못했다.</strong></p>
+
+<p><strong>먼저 할 반증 실험(수십 분).</strong> 두 tower의 대응 층 weight 거리/CKA를 재 본다.
+가까우면 tie+delta가 성립하고, 멀면 “expert는 실제로 다른 것을 학습했다”는 것 자체가 결과다.
+어느 쪽이든 값싸게 답이 나오므로 <strong>가장 먼저 확인할 값</strong>이다.
+(주의: 이 계산은 GPU 컨테이너 안에서 <code>/workspace/alpamayo1.5</code> 인터프리터로 돌려야 한다 —
+호스트 셸에서는 모델 경로가 보이지 않는다.)</p>
+
+<h2><span class="num">7.</span>추천하지 않는 것</h2>
+
+<ul>
+  <li><strong>denoise step별 마스크(step-conditional structured mask).</strong> 매력적으로 보이지만
+  이미지 diffusion에서 사실상 선점됐다 — <a href="https://arxiv.org/html/2510.06751v1">OBS-Diff</a>는
+  timestep-aware Hessian으로 초기 step에 가중을 주고, <a href="https://arxiv.org/pdf/2505.21817">ALTER</a>는
+  layer pruning + <em>temporal expert routing</em>(= step별 구조 선택)을 이미 한다.
+  <a href="https://arxiv.org/pdf/2607.06335">2607.06335</a>(2026-07)은 diffusion pruning × step distillation 결합까지 다룬다.
+  VLA action expert에 이식하는 것은 <em>엔지니어링 이득</em>으로는 타당하지만 novelty 주장은 약하다.</li>
+  <li><strong>speculative decoding.</strong> Alpamayo 플래너 대상으로 이미 발표됨
+  (<a href="https://arxiv.org/abs/2606.31160">2606.31160</a>, reasoning-step ~4×). baseline으로만 채택.</li>
+  <li><strong>새 unstructured/2:4 sparsity.</strong> 우리 측정이 이미 말했다 — 병목은 파라미터 수가 아니다.</li>
+</ul>
+
+<h2><span class="num">8.</span>실행 순서 (값싼 반증부터)</h2>
+
+<table>
+<thead><tr><th>#</th><th>할 일</th><th>비용</th><th>얻는 것</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>tower 간 weight 거리/CKA 측정 (방향 5의 생사 판정)</td><td>GPU 30분</td><td>방향 5를 살릴지 죽일지</td></tr>
+<tr><td>2</td><td>일치도 비례 배분 config 생성 + −29.3%에서 개방루프 eval</td><td>측정 없음 + eval 1회</td><td>§2 예측의 1차 검증</td></tr>
+<tr><td>3</td><td>2×3 설계의 빈 칸 4개 (특히 traj-only × 일치도 비례)</td><td>eval 4회</td><td><strong>기준 vs 배분 교란 해소</strong> — 기존 주장 방어</td></tr>
+<tr><td>4</td><td>살아남은 config들 폐루프 재평가 (CoC 열화율 + THW 꼬리)</td><td>AlpaSim 1 매트릭스</td><td>안전 주장</td></tr>
+<tr><td>5</td><td>클립별 importance 저장 → CVaR 집계 (방향 2)</td><td>importance 1회 재실행</td><td>새 기준 축</td></tr>
+<tr><td>6</td><td>폐루프 중요도 1회 반복 (방향 3)</td><td>rollout + importance</td><td>2×2 완성</td></tr>
+</tbody>
+</table>
+
+<p>1–3은 <strong>새 GPU 측정이 거의 없다</strong>. 3번이 특히 중요한데, 새로운 결과를 만들기 전에
+<em>기존 결과의 귀속을 바로잡는</em> 일이기 때문이다.</p>
+
+<h2><span class="num">9.</span>한계</h2>
+
+<ul>
+  <li>§1·§2의 숫자는 <strong>기존 importance 측정의 재분석</strong>이다. 새 config를 실제로 돌린 결과가 아니므로
+  §2의 예측은 예측일 뿐이다.</li>
+  <li>“프루닝 가능 여지”는 top-50%를 must-keep으로 본 <em>임의 임계</em>에 의존한다
+  (<code>--keep</code> 인자). 결론의 방향(깊이에 따라 여지가 줄어든다)은 임계에 둔감하지만 절대값은 아니다.</li>
+  <li>층 35는 한쪽 목적의 gradient가 없어 후반 대역 평균으로 대체했다.
+  <code>integrated_mag</code>은 이 층을 kvonly로 제거했으므로 비교에 층 35가 섞여 있다 — §2.1의 통제가 필요한 또 하나의 이유.</li>
+  <li>novelty 판정은 검색 기반이다(각 방향마다 1–2회 질의). 투고 전에는 정식 서지 조사가 필요하다.</li>
+</ul>
+
+<h2><span class="num">10.</span>참고문헌</h2>
+
+<ol class="refs">
+<li><a href="https://arxiv.org/abs/2310.05175">OWL: Outlier Weighed Layerwise Sparsity</a> — 층별 비균일 배분(단일 목적 기준)</li>
+<li><a href="https://arxiv.org/html/2509.17413">Distributionally Robust Safety Verification of Neural Networks via Worst-Case CVaR</a> — CVaR의 안전성 검증 활용</li>
+<li><a href="https://arxiv.org/pdf/2606.03328">Calibration Data Trade-offs Across Capability Dimensions</a> — 캘리브레이션 트레이스의 distributional staleness</li>
+<li><a href="https://arxiv.org/pdf/2512.02185">Think Before You Prune: Self-Reflective Structured Pruning for Reasoning LMs</a></li>
+<li><a href="https://arxiv.org/html/2501.18596v1">DeltaLLM: Compress LLMs with Low-Rank Deltas between Shared Weights</a></li>
+<li><a href="https://openreview.net/forum?id=M2UzLRoqic">Reducing Transformer KV Cache Size with Cross-Layer Attention</a></li>
+<li><a href="https://arxiv.org/html/2510.06751v1">OBS-Diff</a> · <a href="https://arxiv.org/pdf/2505.21817">ALTER</a> · <a href="https://arxiv.org/pdf/2607.06335">Bridging Diffusion Pruning and Step Distillation</a> — step별 구조 선택의 선행 연구</li>
+<li><a href="https://arxiv.org/abs/2606.31160">Reasoning-aware Speculative Decoding for VLA in Autonomous Driving</a> — Alpamayo 대상 선행 효율화</li>
+<li>사내: <a href="2026-07-27_structured-pruning-axes-survey.html">구조적 압축의 다른 축들</a> ·
+  <a href="2026-07-27_reasoning-preserving-compression.html">추론 보존 압축</a> ·
+  <a href="2026-07-21_p1-dual-objective-importance.html">P1 dual-objective importance</a></li>
+</ol>
+
+</div>
+</body>
+</html>

@@ -32,13 +32,14 @@ import slim_lib as sl  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 from run_cocsafe import rank_norm  # noqa: E402
 from run_eval import eval_config  # noqa: E402
+from run_grid import grid_configs  # noqa: E402
 from run_integrated import expert_masks, vlm_combined_masks  # noqa: E402
 
 from alpamayo1_5 import helper  # noqa: E402
 from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
-REPO = Path("/workspace/alpamayo-model-compression")
+REPO = Path(__file__).resolve().parents[2]
 
 
 def build_masks(cfg_name, imp, model):
@@ -47,10 +48,44 @@ def build_masks(cfg_name, imp, model):
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
-    if cfg_name == "integrated_mag":
+    if cfg_name == "dual_uniform":
+        # the grid's practical winner: dual criterion, uniform layerwise budget, VLM only.
+        # Masks come straight from grid_configs so the closed-loop checkpoint is bit-identical
+        # to the cell that was evaluated open-loop; expert and KV are deliberately untouched
+        # so this tests exactly one factor combination and nothing else.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        cfgs, _ = grid_configs(imp, ref_meta, tc.num_hidden_layers, tc.num_attention_heads,
+                               tc.intermediate_size, 0.5)
+        vq, vm = next((q, m) for n, _, q, m in cfgs if n == "dual_uniform")
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif cfg_name == "integrated_mag":
         vq, vm = vlm_combined_masks(imp, tc.num_hidden_layers, tc.num_attention_heads,
                                     tc.intermediate_size)
         kvonly = (tc.num_hidden_layers - 1,)
+    elif cfg_name.startswith("j_traj_full"):
+        # Label-free twin of cocsafe_full: identical structure, identical ratio, identical
+        # expert/KV axes -- only the reasoning half of the criterion changes, from the CoC
+        # NLL Taylor score to the J-lens score. That makes the closed-loop comparison a
+        # one-factor test of "do we still need CoC reference text?".
+        ratio = 0.30 if cfg_name.endswith("r30") else 0.20
+        all_l = list(range(tc.num_hidden_layers))
+        jl = dict(np.load(REPO / "outputs" / "jlens_coc" / "jlens.npz"))
+        n_per_group = tc.num_attention_heads // tc.num_key_value_heads  # GQA: 4
+        # the J-lens scores Q heads and MLP channels but not KV groups, so a group's
+        # J-mass is the summed squared J-score of the Q heads it feeds (group h ->
+        # VLM Q heads [4h, 4h+4)) -- the same coupling mask_lib uses to remove a group
+        j_kv = (jl["q_j"] ** 2).reshape(tc.num_hidden_layers, tc.num_key_value_heads,
+                                        n_per_group).sum(-1)
+        dual_q = np.maximum(rank_norm(imp["traj_vlm_q"]), rank_norm(jl["q_j"]))
+        dual_m = np.maximum(rank_norm(imp["traj_vlm_mlp"]), rank_norm(jl["mlp_j"]))
+        dual_kv = np.maximum(rank_norm(imp["traj_kv_k"] + imp["traj_kv_v"]),
+                             rank_norm(j_kv))
+        vq = ml.select_mask(dual_q, ratio, all_l) * ml.kv_group_mask(
+            dual_kv, 1, tc.num_attention_heads, all_l)
+        vm = ml.select_mask(dual_m, ratio, all_l)
+        kvonly = ()
     else:  # cocsafe_full_r20 / cocsafe_full_r30 -- dual width r% + KV1(dual) + expert magnitude
         ratio = 0.30 if cfg_name == "cocsafe_full_r30" else 0.20
         all_l = list(range(tc.num_hidden_layers))
@@ -103,7 +138,8 @@ def smoke(model, processor, clip_id, seed=42):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True,
-                    choices=["integrated_mag", "cocsafe_full_r20", "cocsafe_full_r30"])
+                    choices=["integrated_mag", "cocsafe_full_r20", "cocsafe_full_r30", "dual_uniform",
+                             "j_traj_full_r20", "j_traj_full_r30"])
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--reserve-gb", type=float, default=30.0)

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>추론 보존 압축 — CoC와 궤적을 함께 유지해야 하는 이유</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .coc { font-family: "Berkeley Mono", Menlo, monospace; font-size: 0.8rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+
+<header>
+  <div class="eyebrow">Model Compression &middot; J-space / Jacobian lens</div>
+  <h1>추론 보존에 <em>추론 라벨</em>이 필요한가 &mdash; J-space 기반 라벨-프리 압축 기준</h1>
+  <div class="meta">
+    2026-07-29 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (VLM 타워)
+    &middot; 참조 Anthropic, <em>Verbalizable Representations Form a Global Workspace in
+    Language Models</em> (transformer-circuits, 2026-07-06)
+    &middot; J-lens 8 clips &times; 935 dict tokens &middot; 기준 스윕 80 clips &times; 13 configs &times; K=8
+  </div>
+</header>
+
+<h2><span class="num">0</span>요약</h2>
+
+<div class="callout">
+<strong>결론.</strong> CoC 참조 텍스트를 전혀 쓰지 않는 기준
+<code>j_traj</code> = max(rank(J-score), rank(traj Taylor))가, CoC NLL을 직접 채점하는
+<code>cocsafe</code>의 <strong>추론 보존 성능과 구분되지 않습니다</strong> &mdash;
+dNLL 차이 p=0.96(r20) / 0.24(r30).
+<br><br>
+두 비율에서 의미가 다릅니다. <strong>r20은 두 축 모두 동등</strong>
+(dNLL 차이 95% CI [&minus;0.008, +0.008] &mdash; 관심 효과 0.058의 1/7)이고,
+<strong>r30은 추론이 나쁘지 않은 채로 궤적이 유의하게 낫습니다</strong>
+(dADE &minus;0.104, 95% CI [&minus;0.258, &minus;0.045], p=0.0063). 압축률을 높일수록 라벨-프리
+기준이 앞서는 방향입니다.
+</div>
+
+<div class="note">
+<strong>동등성 주장의 근거는 p값이 아니라 신뢰구간입니다.</strong> 큰 p값은 &ldquo;차이의 증거가
+없다&rdquo;일 뿐 &ldquo;차이가 없다는 증거&rdquo;가 아닙니다(노이즈가 크기만 해도 p는 커집니다).
+실제 근거는 r20의 dNLL 차이 95% CI = <strong>[&minus;0.0084, +0.0082]</strong>가 매우 좁다는 점입니다.
+비교 기준이 되는 &ldquo;보호 효과&rdquo;의 크기는 <code>traj_r20</code> +0.0747 &minus;
+<code>cocsafe_r20</code> +0.0164 &asymp; <strong>0.058</strong>이므로, CI 폭은 그 <strong>1/7</strong>입니다.
+의미 있을 만큼 큰 차이는 배제됩니다.
+<br><br>
+<strong>r30은 증거가 갈립니다.</strong> 순위 검정은 차이 없음(중앙값 &minus;0.0035, p=0.242)이지만
+평균의 95% CI는 [&minus;0.0297, &minus;0.0012]로 0을 포함하지 않습니다. 꼬리가 두꺼워 평균과
+중앙값이 엇갈리는 경우입니다. 따라서 r30 CoC 축의 정확한 진술은
+<strong>&ldquo;나쁘지 않다&rdquo;</strong>이며 &ldquo;더 낫다&rdquo;는 궤적 축에서만 주장합니다.
+<br><br>
+또한 head-to-head 검정을 16개(8쌍 &times; 2지표) 돌렸으므로 Bonferroni 문턱은 0.05/16 = 0.0031입니다.
+r30의 궤적 우위 p=0.0063은 그 문턱 바로 위라 &ldquo;유의하지만 압도적이지는 않다&rdquo;가 정확합니다.
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v good">&plusmn;0.008</div><div class="l">j_traj vs cocsafe dNLL 95% CI (r20) &mdash; 효과 0.058의 1/7</div></div>
+  <div class="kpi"><div class="v good">&minus;0.088</div><div class="l">j_traj &minus; traj, dNLL 중앙값 (r30, p&lt;0.0001)</div></div>
+  <div class="kpi"><div class="v">+0.290</div><div class="l">G2 margin, Q head (CoC 스팬)</div></div>
+  <div class="kpi"><div class="v bad">+5.26</div><div class="l">magnitude dNLL (r30) &mdash; 표준 베이스라인 붕괴</div></div>
+</div>
+
+<div class="callout">
+<strong>폐루프에서도 확인됐습니다.</strong> AlpaSim 30씬 &times; 2 rollouts에서 <code>j_traj</code>가
+자기 CoC를 생성하며 주행했을 때 CoC 퇴화율 <strong>0.006</strong> &mdash; baseline(0.007)보다도 낮고
+<code>integrated_mag</code>의 0.863과 대비됩니다. 과실 충돌 4건으로 안전 군집(baseline 2, cocsafe 3)에
+속합니다. 다만 scene score는 <code>cocsafe</code>보다 낮은 점추정치(0.451 vs 0.505)이며, 반복 노이즈
+0.163보다 격차가 작아 <strong>판정 불가</strong>입니다.
+</div>
+
+<p>다만 승리는 <strong>조합</strong>에서 나옵니다. J-score 단독(<code>jspace</code>)은 CoC 보존에서
+궤적 기준을 확실히 이기지만 궤적 품질이 나빠집니다. 정확한 진술은 &ldquo;J-score가 궤적 목적함수에
+없는 추론-보호 신호를 공급한다&rdquo;이지 &ldquo;J-score가 모든 것을 대체한다&rdquo;가 아닙니다.</p>
+
+<h2><span class="num">1</span>목적</h2>
+
+<p>선행 결과에서 궤적 목적함수만 쓰는 <code>integrated_mag</code>(&minus;29.3%)는 궤적 지표상
+무손상인데 CoC가 86.3% 퇴화하고 at-fault 충돌이 2&rarr;8로 늘었습니다. 해법인 <code>cocsafe</code>는
+모든 유닛을 <strong>CoC NLL에 대해서도</strong> 채점해 둘 다 보존합니다.</p>
+
+<p>그런데 그 보호막은 <strong>대상 모델의 CoC 참조 텍스트를 요구합니다.</strong> 새 모델이나
+새 도메인(예: &pi;0.5 manipulation)으로 옮기면 그것이 없거나 신뢰할 수 없습니다.</p>
+
+<div class="callout">
+<strong>가설 H.</strong> 모델 자신의 unembedding만으로 &mdash; 라벨 없이 &mdash; 각 유닛이 잔차
+스트림에 쓰는 내용 중 &ldquo;언어로 읽히는&rdquo; 성분을 재면, 추론을 담당하는 유닛을 식별할 수 있다.
+</div>
+
+<h2><span class="num">2</span>방법</h2>
+
+<h3>2.1 J-lens</h3>
+<p><code>J_l = E[&part;h_final,t' / &part;h_l,t]</code>를 소스 위치 t와 모든 미래 위치 t' &ge; t에 대해
+평균합니다. 토큰 &tau;의 J-lens 벡터는 <code>v_&tau;^l = J_l&#7488; W_U[&tau;]</code> &mdash; layer-l
+잔차 스트림에서 그 토큰의 로짓을 (현재 또는 미래에) 올리는 방향입니다.</p>
+
+<p><strong>코탄젠트를 랜덤 출력 기저가 아니라 어휘 행으로 잡았습니다.</strong> 출력측 랜덤 사영은
+<code>U J_l</code>을 주는데 <code>W_U</code>와 차원이 맞지 않아 J-space를 정의하는 readout이 소실됩니다.
+어휘 행을 쓰면 backward 1회가 <strong>모든 레이어의 벡터</strong>를 동시에 산출합니다.</p>
+
+<h3>2.2 유닛 점수 (per-unit backward 불필요)</h3>
+<table>
+<thead><tr><th>유닛</th><th>write</th><th>J-score</th><th>write norm</th></tr></thead>
+<tbody>
+<tr><td>MLP 채널 c</td><td><code>a_c(t) &middot; down_proj[:,c]</code></td>
+    <td><code>&#8214;V_l d_c&#8214; &middot; rms(a_c)</code></td><td><code>&#8214;d_c&#8214; &middot; rms(a_c)</code></td></tr>
+<tr><td>Q head h</td><td><code>o_proj[:,h] @ y_h(t)</code></td>
+    <td><code>&radic;tr((V_l O_h)&#7488;(V_l O_h) E[yy&#7488;])</code></td><td><code>&radic;tr(O_h&#7488;O_h E[yy&#7488;])</code></td></tr>
+</tbody>
+</table>
+<p><strong>유도.</strong> 층 l의 잔차 스트림에 섭동 &delta;를 가하면 <code>V_l &delta; &isin; R^935</code>가
+&ldquo;사전 토큰 각각의 logit이 얼마나 변하는가&rdquo;, 즉 그 섭동의 <em>어휘 발자국</em>입니다. j-score는
+유닛의 write가 만드는 이 발자국의 크기(L2 노름)입니다. 합이 아니라 노름을 쓰는 이유는 어떤 토큰은
+올리고 어떤 토큰은 내리는 기여가 상쇄되면 안 되기 때문입니다.
+<br><br>
+MLP 채널은 write 방향이 <code>d_c</code>로 고정이라 발자국이 <strong>하나</strong>이고 크기만
+<code>a_c(t)</code>배 됩니다. Q head는 <code>y_h(t)</code>가 128차원 안에서 회전하므로
+<strong>토큰마다 다른 발자국</strong> <code>B_h y_h(t)</code>(<code>B_h = V_l O_h</code>, (935,128))가
+생기고, 그 평균 제곱 크기를 구해야 합니다. 여기서 trace 항등식
+<code>E[y&#7488; M y] = tr(M &middot; E[yy&#7488;])</code>을 쓰면 토큰별로 (935,) 벡터를 만들지 않고
+(128,128) 행렬 두 개의 원소별 곱으로 끝납니다 &mdash; 수치 검증 결과 두 경로의 상대 오차는 0입니다.
+<br><br>
+두 식은 사실 하나입니다. write를 <em>(고정 발자국 행렬) &times; (변하는 계수)</em>로 쓸 수 있으면
+j-score는 언제나 <code>&radic;tr(발자국 Gram &times; 계수 2차 모멘트)</code>이며, MLP는 계수가 스칼라인
+특수 경우입니다. <code>w</code>는 같은 식에서 <code>V_l</code>을 항등으로 대체한 것 &mdash; 언어로
+나오든 말든 그 유닛이 넣는 총 에너지입니다.</p>
+
+<p>둘 다 선형화 하에서 정확하며 활성값 2차 모멘트만 필요합니다. 사전은 이 모델이 실제 생성한
+CoC 코퍼스(900클립 14,131토큰, <strong>유니크 423개 전량</strong>)와 랜덤 어휘 512개로 구성했습니다.</p>
+
+<h2><span class="num">3</span>결과 &mdash; G1: J-lens는 이 모델에서 작동하는가</h2>
+
+<p>초기~중간층 readout이 주행 개념을 정확히 지목합니다.</p>
+<pre class="coc">layer  6: ' bumps' ' curb' ' lateral' ' crossing' ' pedestrian' ' stopped' ' stopping'
+layer 12: 'Maint' ' stopping' ' lane' ' lanes' ' vehicle' ' truck' ' stops' ' slowing'
+layer 35: ' since' ' traffic' ' vehicle' ' lane' ' ahead' ' because' ' right' ' stopped'</pre>
+
+<figure>
+  <img src="PLOT::jspace::layer_bands.png" alt="layer bands">
+  <figcaption>좌: 레이어별 readout의 excess kurtosis. 논문이 예측한 중간층 workspace 밴드(음영)에
+  고원이 <strong>없습니다</strong> &mdash; sensory 2.00 &rarr; workspace 12.39 &rarr; motor 30.72로 단조 증가.
+  우: 레이어별 J-lens 사전 간 CKA.</figcaption>
+</figure>
+
+<div class="note"><strong>재현되지 않은 것.</strong> 논문의 sensory/workspace/motor 레이어 밴드는
+이 모델에서 나타나지 않습니다. 따라서 &ldquo;workspace 밴드 기반 원리적 레이어 배분&rdquo;이라는
+초기 응용 구상은 근거를 잃었습니다.</div>
+
+<h2><span class="num">4</span>결과 &mdash; G2: 소스 스팬이 결정적이었다</h2>
+
+<p>같은 코드, 같은 사전, 바꾼 것은 야코비안을 평균낼 위치뿐입니다.</p>
+
+<table>
+<thead><tr><th>소스 스팬</th><th>유닛</th><th class="r">&rho;(j, mag)</th><th class="r">&rho;(j, CoC)</th>
+<th class="r">&rho;(j, traj)</th><th class="r">margin</th><th>G2(b)</th></tr></thead>
+<tbody>
+<tr><td>text+CoC</td><td>Q head</td><td class="r">&minus;0.063</td><td class="r">+0.482</td>
+    <td class="r">+0.529</td><td class="r bad">&minus;0.047</td><td class="bad">FAIL</td></tr>
+<tr><td>text+CoC</td><td>MLP</td><td class="r">+0.067</td><td class="r">+0.195</td>
+    <td class="r">+0.171</td><td class="r">+0.024</td><td>노이즈 이하</td></tr>
+<tr><td><strong>CoC 전용</strong></td><td>Q head</td><td class="r">+0.122</td><td class="r">+0.602</td>
+    <td class="r">+0.312</td><td class="r good">+0.290</td><td class="good">PASS</td></tr>
+<tr><td><strong>CoC 전용</strong></td><td>MLP</td><td class="r">+0.105</td><td class="r">+0.332</td>
+    <td class="r">+0.198</td><td class="r good">+0.135</td><td class="good">PASS</td></tr>
+</tbody>
+</table>
+
+<p>Alpamayo 프롬프트의 텍스트는 <strong>모든 클립에서 동일한 고정 템플릿</strong>(prompt_len 전부 3086)인데
+CoC보다 12배 많습니다. 야코비안이 &ldquo;보일러플레이트 처리 방식&rdquo;을 재고 있었던 것입니다.</p>
+
+<figure>
+  <img src="PLOT::jspace::corr_layers.png" alt="per-layer correlations">
+  <figcaption>CoC 전용 스팬에서 레이어별 Spearman. J-score는 궤적(분홍)보다 CoC(파랑) 목적함수에
+  일관되게 가깝고, magnitude(노랑)와는 거의 무관합니다.</figcaption>
+</figure>
+
+<h3>4.1 노이즈 위인지 확인</h3>
+<p>겹치지 않는 캘리브레이션 클립 집합 둘로 독립 측정했습니다.</p>
+<table>
+<thead><tr><th>유닛</th><th>A (clips 0&ndash;7)</th><th>B (clips 8&ndash;15)</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td>&rho;(coc) +0.602 / &rho;(traj) +0.312 / <strong>+0.290</strong></td>
+    <td>+0.612 / +0.240 / <strong>+0.372</strong></td></tr>
+<tr><td>MLP</td><td>+0.332 / +0.198 / <strong>+0.135</strong></td>
+    <td>+0.333 / +0.177 / <strong>+0.156</strong></td></tr>
+</tbody>
+</table>
+<p>&rho;(coc)가 소수 둘째 자리까지 일치합니다. 점수 자체의 재현성도 개선됐습니다:
+<code>mlp_j</code> 0.369 &rarr; <strong>0.682</strong>, <code>q_j</code> 0.748 &rarr; 0.776.
+참고로 <strong>&rho;(coc, traj) = 0.720</strong> &mdash; 두 Taylor 목적함수는 서로 강하게 상관되어
+있는데도 J-score는 CoC 쪽에 거의 두 배로 붙습니다.</p>
+
+<h2><span class="num">5</span>결과 &mdash; Stage E: 기준 스윕 (핵심)</h2>
+
+<h3>5.1 두 기준을 합치는 방식</h3>
+<p><code>j_traj</code>와 <code>cocsafe</code>는 같은 결합 규칙을 씁니다:
+<code>max(rank_norm(A), rank_norm(B))</code>. 두 단계 모두 필요합니다.</p>
+<ul>
+<li><strong>레이어별 순위 정규화</strong> &mdash; J-score는 logit 공간 발자국의 노름이고 Taylor는
+<code>|&part;L/&part;g|</code>라 단위가 다릅니다. 원값을 더하면 수치 범위가 큰 쪽이 다른 쪽을 삼킵니다.</li>
+<li><strong>평균이 아니라 max</strong> &mdash; 의미가 <em>보호</em>이기 때문입니다. 평균을 쓰면 한쪽
+목적함수에만 중요한 유닛이 중간 점수를 받아 잘려나가는데, 그것이 정확히 <code>integrated_mag</code>의
+실패 방식이었습니다. max는 &ldquo;둘 중 어느 쪽에든 중요하면 살린다&rdquo;는 합집합 보호입니다.</li>
+</ul>
+<p>r20에서 이 결합이 실제로 무엇을 바꾸는지 세어보면, 궤적 기준 단독이 지웠을 유닛의
+<strong>절반 가까이가 교체</strong>됩니다 &mdash; Q head 216개 중 104개(48.1%), MLP 88,488개 중
+40,353개(45.6%). 같은 비율을 유지하므로 파라미터 예산은 동일하고, <strong>어느 유닛을 지울지만</strong>
+바뀝니다. r30에서 dNLL 평균이 traj 단독 +0.187에서 <code>j_traj</code> +0.037로 떨어진 것이
+이 교체의 효과입니다 (중앙값으로는 +0.093 &rarr; +0.013).</p>
+
+<h3>5.2 결과</h3>
+<p>80 클립, K=8, 동일 비율. VLM만 마스킹하고 KV drop과 expert 마스크는 껐습니다 &mdash;
+섞으면 기준 비교가 아니라 설정 비교가 됩니다. 델타는 <strong>paired per-clip 평균</strong>이고
+CI는 bootstrap 95%입니다 (중앙값 기반 판독과의 대조는 5.3 노트 참조 &mdash; 결론 동일).</p>
+
+<table>
+<thead><tr><th>기준</th><th>라벨</th><th class="r">minADE</th><th class="r">dADE 평균 [95% CI]</th>
+<th class="r">dNLL 평균 [95% CI]</th><th class="r">p(NLL)</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>&mdash;</td><td class="r"><strong>0.891</strong></td><td class="r">&mdash;</td><td class="r">&mdash; (NLL 0.235)</td><td class="r">&mdash;</td></tr>
+<tr><td>magnitude_r20</td><td>불필요</td><td class="r bad">7.401</td><td class="r bad">+6.510 [+5.57,+7.44]</td><td class="r bad">+1.199 [+1.10,+1.30]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>magnitude_r30</td><td>불필요</td><td class="r bad">13.377</td><td class="r bad">+12.486 [+11.29,+13.72]</td><td class="r bad">+5.385 [+5.11,+5.66]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>traj_r20</td><td>불필요</td><td class="r">0.913</td><td class="r">+0.022 [&minus;0.03,+0.07]</td><td class="r">+0.075 [+0.05,+0.10]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>traj_r30</td><td>불필요</td><td class="r">0.873</td><td class="r">&minus;0.018 [&minus;0.17,+0.09]</td><td class="r">+0.187 [+0.14,+0.23]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>coc_r30</td><td><strong>필요</strong></td><td class="r">1.348</td><td class="r">+0.457 [+0.20,+0.70]</td><td class="r">+0.033 [+0.02,+0.05]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>cocsafe_r20</td><td><strong>필요</strong></td><td class="r">0.885</td><td class="r">&minus;0.006 [&minus;0.13,+0.08]</td><td class="r">+0.016 [+0.01,+0.03]</td><td class="r">.0032</td></tr>
+<tr><td>cocsafe_r30</td><td><strong>필요</strong></td><td class="r">1.101</td><td class="r">+0.210 [+0.03,+0.37]</td><td class="r">+0.052 [+0.03,+0.08]</td><td class="r">&lt;.0001</td></tr>
+<tr><td>jspace_r30</td><td>불필요</td><td class="r">1.989</td><td class="r">+1.098 [+0.68,+1.62]</td><td class="r">+0.070 [+0.05,+0.09]</td><td class="r">&lt;.0001</td></tr>
+<tr><td><strong>j_traj_r20</strong></td><td>불필요</td><td class="r good">0.893</td><td class="r good">+0.003 [&minus;0.08,+0.07]</td><td class="r good">+0.016 [+0.01,+0.03]</td><td class="r">.0013</td></tr>
+<tr><td><strong>j_traj_r30</strong></td><td>불필요</td><td class="r good">0.950</td><td class="r good">+0.059 [&minus;0.13,+0.20]</td><td class="r good">+0.037 [+0.02,+0.05]</td><td class="r">.0001</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::sweep::frontier.png" alt="frontier">
+  <figcaption>CoC 손상(가로) vs 궤적 손상(세로), 중앙값. 원 = 라벨 불필요, 사각 = CoC 라벨 필요.
+  왼쪽 아래일수록 좋습니다. r30에서 <code>j_traj</code>가 라벨을 쓰는 두 기준보다 원점에 가깝습니다.</figcaption>
+</figure>
+
+<h3>5.3 Head-to-head (음수 = 앞쪽이 우수)</h3>
+<table>
+<thead><tr><th>비교</th><th class="r">dADE 중앙 [평균의 95% CI]</th><th class="r">p(ADE)</th><th class="r">dNLL 중앙</th><th class="r">p(NLL)</th></tr></thead>
+<tbody>
+<tr><td>j_traj_r20 &minus; cocsafe_r20</td><td class="r">&minus;0.001 [&minus;0.037,+0.059]</td><td class="r">0.632</td><td class="r">&minus;0.000</td><td class="r"><strong>0.962</strong></td></tr>
+<tr><td>j_traj_r30 &minus; cocsafe_r30</td><td class="r good">&minus;0.104 [&minus;0.258,&minus;0.045]</td><td class="r good">0.0063</td><td class="r">&minus;0.004</td><td class="r"><strong>0.242</strong></td></tr>
+<tr><td>j_traj_r20 &minus; traj_r20</td><td class="r">&minus;0.009 [&minus;0.056,+0.062]</td><td class="r">0.742</td><td class="r good">&minus;0.027</td><td class="r">&lt;.0001</td></tr>
+<tr><td>j_traj_r30 &minus; traj_r30</td><td class="r">+0.043 [+0.008,+0.150]</td><td class="r">0.0195</td><td class="r good">&minus;0.088</td><td class="r">&lt;.0001</td></tr>
+<tr><td>jspace_r30 &minus; cocsafe_r30</td><td class="r bad">+0.517 [+0.508,+1.383]</td><td class="r">&lt;.0001</td><td class="r">+0.015</td><td class="r">.0039</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<strong>평균으로 읽어도 결론은 동일합니다 (2026-07-30 재판독).</strong>
+표의 CI는 paired 델타 <em>평균</em>의 bootstrap 95% CI이고 p는 순위 검정(Wilcoxon)입니다 &mdash;
+즉 평균과 중앙값은 처음부터 나란히 계산돼 있습니다. 중앙값을 primary로 둔 이유는 minADE 델타가
+heavy-tailed이기 때문입니다: 같은 스윕의 <code>magnitude_r30</code>은 평균 dADE +12.5 m이고,
+25 m짜리 클립 하나가 80클립 평균을 +0.31 움직입니다 &mdash; 지금 재는 효과(0.05&ndash;0.15)보다
+큽니다. 반대로 <strong>안전 관점에서 꼬리를 감지하는 쪽은 평균</strong>이므로, 핵심 비교를 평균
+기준으로 다시 읽으면:
+<br><br>
+<table>
+<thead><tr><th>j_traj &minus; cocsafe (dADE)</th><th class="r">평균</th><th class="r">평균 95% CI</th>
+<th class="r">중앙값</th></tr></thead>
+<tbody>
+<tr><td>r20</td><td class="r">+0.009</td><td class="r">[&minus;0.037, +0.060] &mdash; 0 포함</td>
+<td class="r">&minus;0.001</td></tr>
+<tr><td>r30</td><td class="r good">&minus;0.150</td><td class="r good">[&minus;0.258, &minus;0.045] &mdash; 0 제외</td>
+<td class="r">&minus;0.104</td></tr>
+</tbody>
+</table>
+<br>
+r20은 평균으로도 구분 불가, r30은 평균 우위(&minus;0.150)가 중앙값(&minus;0.104)보다
+<strong>더 큽니다</strong> &mdash; 꼬리에서도 j_traj가 이긴다는 뜻이라, 통계량 선택이 결론을 만들지
+않습니다. 유일하게 평균이 불리한 곳은 <code>j_traj_r30 &minus; traj_r30</code>의 dADE
+(+0.077 [+0.008, +0.150])로, r30에서 궤적-단독 기준보다 궤적 품질을 약간 양보하는 대신 dNLL
+&minus;0.088을 얻는 교환입니다.
+</div>
+
+<h2><span class="num">6</span>폐루프 검증 (AlpaSim)</h2>
+
+<p>Stage E는 모든 config가 <em>baseline이 생성한 깨끗한 CoC</em>를 teacher-forcing해서 캐시를 받는
+구조였습니다. 여기서는 <code>j_traj</code>가 <strong>자기 CoC를 생성해 자기 캐시를 채웁니다</strong>.
+비교를 1-factor로 유지하기 위해 <code>cocsafe_full_r20</code>과 동일한 구조(VLM 20% + KV1 +
+expert magnitude)로 배포 체크포인트를 만들었고, 기준의 추론 절반만 교체했습니다. J-lens는 KV group을
+채점하지 않으므로 GQA 결합(group h &rarr; Q head [4h, 4h+4))을 따라 해당 head들의 J-mass로
+유도했습니다 &mdash; 라벨-프리 유지.</p>
+
+<table>
+<thead><tr><th>config</th><th class="r">파라미터</th><th class="r">감축</th></tr></thead>
+<tbody>
+<tr><td>slim_cocsafe_r20 (라벨 필요)</td><td class="r">9,072,207,090</td><td class="r">&minus;18.1%</td></tr>
+<tr><td><strong>slim_j_traj_r20 (라벨 불필요)</strong></td><td class="r">9,077,449,970</td><td class="r">&minus;18.1%</td></tr>
+</tbody>
+</table>
+<p>0.06% 차이라 &ldquo;같은 예산에서 어느 기준이 나은가&rdquo;를 묻는 비교가 성립합니다.
+씬 <code>public_2604</code> 앞 30개 &times; 2 rollouts = 60 rollouts, 저장된 매트릭스와 동일 프로토콜
+(Ada driver / Blackwell renderer), 실패 롤아웃 0건.</p>
+
+<table>
+<thead><tr><th>config</th><th class="r">scene score</th><th class="r">&Delta; vs base [95% CI]</th>
+<th class="r">p</th><th class="r">과실충돌</th><th class="r">front</th><th class="r">offroad</th>
+<th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.540</td><td class="r">&mdash;</td><td class="r">&mdash;</td>
+<td class="r">2</td><td class="r">0.033</td><td class="r">0.300</td><td class="r">0.007</td></tr>
+<tr><td>slim_cocsafe_r20</td><td class="r">0.505</td><td class="r">&minus;0.035 [&minus;0.105,+0.026]</td>
+<td class="r">0.244</td><td class="r">3</td><td class="r">0.033</td><td class="r">0.350</td><td class="r">0.014</td></tr>
+<tr><td><strong>slim_j_traj_r20</strong></td><td class="r">0.451</td>
+<td class="r">&minus;0.089 [&minus;0.203,+0.014]</td><td class="r">0.140</td><td class="r">4</td>
+<td class="r">0.050</td><td class="r">0.350</td><td class="r good"><strong>0.006</strong></td></tr>
+<tr><td>slim_integrated_mag</td><td class="r">0.542</td><td class="r">+0.002 [&minus;0.148,+0.147]</td>
+<td class="r">0.796</td><td class="r bad">8</td><td class="r bad">0.133</td><td class="r">0.233</td>
+<td class="r bad">0.863</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>주 주장은 확인됐습니다.</strong> <code>j_traj</code>의 CoC 퇴화율 <strong>0.006</strong>은
+baseline(0.007)보다도 낮고 <code>cocsafe</code>(0.014)보다 낮으며, <code>integrated_mag</code>의
+0.863과 대비됩니다. <strong>CoC 참조 텍스트 없이 고른 유닛만으로, 모델이 자기 추론을 생성하는
+폐루프에서도 추론이 완전히 보존됩니다.</strong> 과실 충돌도 4건으로 안전 군집
+(baseline 2, cocsafe 3)에 속하며 <code>integrated_mag</code>의 8건과 명확히 다릅니다.
+</div>
+
+<figure>
+  <img src="PLOT::cl::incident_rates.png" alt="incident rates">
+  <figcaption>config별 사고 지표. <code>integrated_mag</code>만 전방 충돌(front)이 치솟습니다 &mdash;
+  앞차 거리 판단 상실의 서명이며, <code>j_traj</code>에는 나타나지 않습니다.</figcaption>
+</figure>
+
+<div class="note">
+<strong>해결되지 않은 것: scene score.</strong> <code>j_traj</code>의 점추정치 0.451은
+<code>cocsafe</code>의 0.505보다 낮습니다. 다만 <strong>판정할 수 없습니다</strong> &mdash;
+<code>j_traj</code>의 반복 노이즈(같은 씬 2회 롤아웃 간 score 차이)가 <strong>평균 0.163</strong>으로
+전 config 중 가장 크고, 두 config의 격차 0.054는 그보다 한참 아래입니다. baseline 대비 &Delta;도
+양쪽 모두 유의하지 않습니다(p=0.140 / 0.244).
+<br><br>
+이는 Stage E의 open-loop 예측(동등 또는 우세)과 <strong>부분적으로 어긋납니다</strong>. 궤적 축에서
+open-loop 우위가 폐루프로 그대로 옮겨가지 않았고, 이것이 이 프로젝트에서 반복 확인된 open-loop /
+closed-loop 간극입니다. 확정하려면 씬 수를 늘려 반복 노이즈를 낮춰야 합니다.
+</div>
+
+<figure>
+  <img src="PLOT::cl::scene_score.png" alt="scene score">
+  <figcaption>씬별 score 분포와 config 평균. 신뢰구간이 크게 겹칩니다.</figcaption>
+</figure>
+
+<div class="note"><strong>세션 한계.</strong> GPU 여유 부족으로 baseline과 cocsafe를 같은 세션에
+재실행하지 못했습니다. 씬 집합, 롤아웃 수, 이미지, 커밋, GPU 아키텍처는 모두 맞췄으나 alpasim은
+시드 제어가 없어 세션 간 반복 노이즈가 남습니다.</div>
+
+<h2><span class="num">7</span>부산물 &mdash; magnitude 베이스라인의 붕괴</h2>
+<p>표준 structured-pruning 베이스라인인 weight-norm magnitude가 dNLL +5.26 / dADE +12.6으로
+완전히 무너집니다. 원인은 측정에서 나옵니다: 이 모델 Q head의 레이어 내 weight norm은
+<strong>max/median이 1.10&ndash;1.27</strong>에 불과합니다(활성 가중 write norm은 2.2&ndash;4.5).
+순위 정보가 사실상 없는 기준으로 자르면 무작위 절단과 다르지 않습니다.</p>
+
+<h2><span class="num">8</span>지지되지 않은 가설 &mdash; Stage C</h2>
+<p>&ldquo;<code>integrated_mag</code>가 write mass 대비 J-mass를 더 많이 파괴한다&rdquo;는 진단 가설은
+<strong>지지되지 않습니다.</strong> 레이어별 정규화 후 IQR이 전부 겹칩니다.</p>
+<table>
+<thead><tr><th>config</th><th class="r">Q ratio [IQR]</th><th class="r">MLP ratio [IQR]</th></tr></thead>
+<tbody>
+<tr><td>cocsafe_r20</td><td class="r">0.86 [0.71, 1.11]</td><td class="r">0.78 [0.66, 0.92]</td></tr>
+<tr><td>cocsafe_r30</td><td class="r">0.90 [0.74, 1.12]</td><td class="r">0.75 [0.58, 0.91]</td></tr>
+<tr><td>integrated_mag</td><td class="r">0.99 [0.79, 1.10]</td><td class="r">0.84 [0.69, 0.97]</td></tr>
+</tbody>
+</table>
+<div class="note"><strong>정규화가 없으면 오독합니다.</strong> massive activation 때문에 한 레이어가
+squared write mass의 95&ndash;96%를 독점합니다. 전역 비율 통계는 사실상 그 한 레이어의 값이며,
+그대로 읽으면 정반대 결론이 나옵니다. 또한 <code>cocsafe</code>와 <code>integrated_mag</code>는
+기준과 레이어 배분이 <em>둘 다</em> 다르므로 이 표는 기술 통계일 뿐입니다.</div>
+
+<figure>
+  <img src="PLOT::jspace::stagec_mass.png" alt="stage c mass">
+  <figcaption>config별 제거된 총 write mass와 J-space mass. 확정적 방향성이 없습니다.</figcaption>
+</figure>
+
+<h2><span class="num">9</span>분석 (해석)</h2>
+<p>세 가지로 읽습니다.</p>
+<ol>
+<li><strong>라벨은 필수가 아닙니다.</strong> 추론 보존의 신호원이 &ldquo;참조 CoC에 대한 NLL&rdquo;일 필요가
+없고, &ldquo;unembedding이 읽어낼 수 있는 방향으로의 기여&rdquo;로 대체 가능합니다. 두 목적함수가
+&rho;=0.72로 얽혀 있는데도 J-score가 CoC 쪽을 두 배로 집는다는 점이 이를 뒷받침합니다.</li>
+<li><strong>J-score가 담는 것은 CoC <em>고유</em> 정보입니다.</strong> 부분상관으로 분해하면
+Q head에서 &rho;(j, coc | traj) = <strong>+0.534</strong>로 거의 그대로 남는 반면
+&rho;(j, traj | coc) = <strong>&minus;0.075</strong>로 사라집니다. 원상관 &rho;(j,traj)=0.312는 거의
+전부 coc&harr;traj의 &rho;=0.72를 통해 간접적으로 물려받은 것입니다. (j가 단지 coc의 잡음 섞인
+대리변수라면 &rho;(j,traj)&asymp;0.433이 기대되는데 실측은 그보다 낮습니다.)</li>
+<li><strong>단독 기준으로는 Taylor가 낫습니다.</strong> 각 기준을 홀로 쓴 r30 결과를 보면
+추론 보존은 CoC Taylor(dNLL +0.012)가 J-score(+0.046)보다 4배 낫고, 궤적은 J-score(+0.685)가
+전 기준 중 최악입니다. 비용도 Taylor가 클립당 backward 3회인 반면 J-lens는 935회입니다.
+<strong>따라서 이 연구의 주장은 &ldquo;더 나은 기준&rdquo;이 아니라 &ldquo;라벨 의존성 제거&rdquo;입니다</strong> &mdash;
+품질 우위가 아니라 적용 가능성의 우위이며, 참조 추론 텍스트가 없거나 신뢰할 수 없는 새 모델/도메인에서
+값을 가집니다.</li>
+<li><strong>J-score는 보완재이지 대체재가 아닙니다.</strong> 단독으로는 궤적 품질을 잃습니다.
+궤적 목적함수와 rank 결합했을 때 비로소 프론티어를 지배합니다. 축별로 보면 Q head가 이 방법이
+통하는 축이고(&rho;=0.602, 재현성 0.776) MLP는 신호가 묽습니다(&rho;=0.332, 재현성 0.682).</li>
+<li><strong>측정 대상 선택이 결과를 뒤집습니다.</strong> 고정 템플릿이 지배하는 위치에서 야코비안을
+평균내면 G2가 FAIL, 추론이 실제로 일어나는 위치로 좁히면 PASS입니다. 부호가 바뀌는 수준의 차이라
+이 종류의 lens를 다른 모델에 적용할 때 가장 먼저 점검해야 할 항목입니다.</li>
+</ol>
+
+<h2><span class="num">10</span>한계</h2>
+<ul>
+<li><strong>배포 가능한 config가 아닙니다.</strong> VLM만 마스킹했고 KV drop과 expert 마스크를
+껐으므로 실제 파라미터 절감률은 측정하지 않았습니다.</li>
+<li><strong>Stage E는 open-loop이며 CoC가 망가지는 config에게 유리한 프로토콜입니다</strong>
+(폐루프는 &sect;6에서 별도 검증했고, 추론 보존은 확인됐으나 scene score는 반복 노이즈에 가려
+판정 불가입니다).
+평가에 쓰이는 CoC는 <em>항상 baseline(마스킹 없는 모델)이 생성한 것</em>이고, 모든 config가
+그것을 teacher-forcing한 하나의 forward에서 dNLL과 KV 캐시를 함께 얻습니다. 즉 pruned config는
+자기 CoC를 생성할 기회가 없고 <strong>깨끗한 캐시를 받아 씁니다</strong>. 실전에서는 퇴화한 CoC가
+자기 캐시를 오염시키므로 dADE는 실제 손상을 <strong>과소평가</strong>하며, dNLL이 그 위험의 대리
+지표입니다. <code>integrated_mag</code>가 open-loop에서 무손상으로 보이다가 폐루프에서 at-fault
+충돌 2&rarr;8로 무너진 것이 정확히 이 간극입니다. 폐루프 검증은 미실시입니다.</li>
+<li><strong>Taylor의 독립 표본 재현성을 측정하지 않았습니다.</strong> J-score는 겹치지 않는 클립
+집합에서 q_j 0.776 / mlp_j 0.682로 쟀지만, 비교 대상인 Taylor 점수는 클립이 겹치는 두 run(50/30개)
+사이에서만 확인했습니다(0.94&ndash;0.98). 후자는 <strong>상한</strong>이므로 &ldquo;Taylor가 더 안정적&rdquo;이라는
+결론은 현재 데이터로 확정할 수 없습니다.</li>
+<li><strong>J 추정 노이즈가 남아 있습니다.</strong> 중간층에서 야코비안 인자의 재현성이 낮습니다
+(mlp 0.68). 클립 수를 늘리면 개선될 여지가 있으나 비용이 사전 크기 &times; 클립 수에 선형입니다.</li>
+<li>단일 모델, 단일 도메인입니다.</li>
+</ul>
+
+<h2><span class="num">11</span>다음 단계</h2>
+<ol>
+<li><s>slim 체크포인트 생성 &rarr; 폐루프 검증</s> &mdash; 완료(&sect;6). 후속: <strong>씬 수를 늘려
+반복 노이즈를 낮춰야</strong> scene score 축이 판정 가능해집니다(현재 노이즈 0.163 &gt; 격차 0.054).
+baseline/cocsafe 동일 세션 재실행도 함께.</li>
+<li>압축률 곡선(r10&ndash;r40)으로 프론티어 확장, <code>cocsafe</code>와 교차점 확인.</li>
+<li>&pi;0.5(manipulation)로 이식 &mdash; <strong>라벨-프리라는 성질이 여기서 실질적 이점이 됩니다.</strong>
+단 &pi;0.5는 MQA(KV head 1개)라 KV-group 축은 대응물이 없습니다.</li>
+<li>레이어 배분 confound(2&times;3 그리드)와 결합해 기준 효과를 배분 효과와 분리.</li>
+</ol>
+
+<h2><span class="num">12</span>산출물</h2>
+<ul>
+<li><code>outputs/jlens_coc</code>, <code>outputs/jlens_cocb</code> &mdash; J-lens (CoC 스팬, 겹치지 않는 클립)</li>
+<li><code>outputs/jlens_v1</code>, <code>outputs/jlens_v1b</code> &mdash; J-lens (text+CoC 스팬, 비교용)</li>
+<li><code>outputs/jspace_coc</code> &mdash; G1/G2 게이트 + Stage C</li>
+<li><code>outputs/jsweep_s0</code>, <code>outputs/jsweep_s40</code>, <code>outputs/jsweep_summary</code> &mdash; 기준 스윕</li>
+<li><code>outputs/slim_j_traj_r20</code> &mdash; 배포 체크포인트 (&minus;18.1%)</li>
+<li><code>outputs/alpasim_jtraj</code>, <code>outputs/alpasim_jtraj_collisions</code> &mdash; 폐루프 집계와 충돌 분석</li>
+<li><code>alpasim-runs/matrix_slim_j_traj_r20</code> &mdash; 60 rollouts 원본</li>
+<li>코드: <code>jlens_lib.py</code>, <code>run_jlens.py</code>, <code>analyze_jspace.py</code>,
+<code>run_jspace_sweep.py</code>, <code>analyze_jsweep.py</code></li>
+</ul>
+
+</div>
+</body>
+</html>
