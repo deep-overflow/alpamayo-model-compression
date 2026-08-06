@@ -13,7 +13,8 @@ and KV groups). Two distinct codebases live here:
   imports the `alpamayo1_5` package (installed into this repo's `.venv`) and runs
   `nvidia/Alpamayo-1.5-10B`.
 
-`main` tracks upstream; research work happens on task branches (current: `head-attention-analysis`).
+Research work was merged into `main` on 2026-08-06 (the `head-attention-analysis` task branch is
+deleted); new tasks branch off `main`.
 `experiments/`, `outputs/`, `reports/`, and `plans/` are untracked research artifacts.
 
 ## Environment & running experiments
