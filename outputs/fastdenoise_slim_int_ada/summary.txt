@@ -1,5 +1,0 @@
-expert denoise fast-path bench (slim outputs/slim_integrated_mag, 3 clips x K=4, pad=128)
-release   median   380.9 ms/denoise   max|dxy| vs release 0.0000 m
-fast      median   377.8 ms/denoise   max|dxy| vs release 0.0330 m
-compiled  median   160.6 ms/denoise   max|dxy| vs release 0.0330 m
-compile/capture first-call: ['383'] ms

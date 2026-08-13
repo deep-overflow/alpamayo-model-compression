@@ -1,8 +1,0 @@
-{
-  "purpose": "graphed static-KV decode: TF-replay equivalence + per-token latency",
-  "slim_ckpt": null,
-  "num_clips": 3,
-  "cap": 3456,
-  "seed": 42,
-  "gpu": "NVIDIA RTX 5880 Ada Generation"
-}

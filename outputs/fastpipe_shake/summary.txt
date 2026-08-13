@@ -1,5 +1,0 @@
-pipeline bench (baseline, n=3 live clips, cap=3456)
-vit+prefill   stock  606.6   fast  676.4 ms
-decode/tok    stock   36.8   fast   27.4 ms
-denoise       stock  434.4   fast  212.3 ms
-end-to-end (norm 16 tok)  stock  1630.5   fast  1327.1 ms ->  1.23x

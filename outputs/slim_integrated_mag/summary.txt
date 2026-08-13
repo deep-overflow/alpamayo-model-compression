@@ -1,3 +1,0 @@
-slim checkpoint integrated_mag
-params 11,078,526,194 -> 7,829,296,242 (-3,249,229,952, 29.3%)
-smoke clip 908d561e-32fc-49e1-bc55-17b5b5e001ba: NLL 9.9748 minADE@1 0.741

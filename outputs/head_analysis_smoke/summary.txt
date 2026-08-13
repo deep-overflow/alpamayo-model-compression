@@ -1,2 +1,0 @@
-head_analysis: 1/1 clips ok
-mean minADE=0.427  mean NLL=0.298

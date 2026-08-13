@@ -1,3 +1,0 @@
-slim checkpoint cocsafe_full_r30
-params 11,078,526,194 -> 8,410,490,098 (-2,668,036,096, 24.1%)
-smoke clip 908d561e-32fc-49e1-bc55-17b5b5e001ba: NLL 0.2161 minADE@1 2.024

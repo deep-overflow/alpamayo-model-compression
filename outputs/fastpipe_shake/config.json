@@ -1,9 +1,0 @@
-{
-  "purpose": "stock vs graph-optimized full pipeline, paired per clip",
-  "slim_ckpt": null,
-  "num_clips": 4,
-  "clip_offset": 0,
-  "cap": 3456,
-  "seed": 42,
-  "gpu": "NVIDIA RTX 5880 Ada Generation"
-}
