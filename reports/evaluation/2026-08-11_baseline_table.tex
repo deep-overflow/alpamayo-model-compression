@@ -1,0 +1,47 @@
+% Anchor table for the experimental section: evaluation protocol + unpruned baseline.
+% Every pruned configuration is reported as a paired delta against the last column.
+% Numbers: outputs/arms_summary/metrics.json (open-loop, arm "baseline")
+%          outputs/alpasim_baseline_2601/metrics.json (closed-loop)
+% Model: nvidia/Alpamayo-1.5-10B, revision 7aba8293c09993f2e125c6819df05d7fa3e873ea
+% Hardware: NVIDIA RTX 5880 Ada (all arms; determinism holds within one architecture only)
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{%
+  Evaluation protocol and unpruned baseline for Alpamayo-1.5-10B. Open-loop rolls out one
+  chain-of-causation per clip (temperature $0.6$, top-$p$ $0.98$) and samples $K{=}8$
+  trajectories under it; minADE is the best of the eight against the ground-truth path.
+  Per-clip seeds are derived as $\mathrm{sha256}(\texttt{seed}\!:\!\texttt{clip\_id})$, so
+  every configuration sees identical seeds and all comparisons are paired.
+  Closed-loop simulates a 20\,s rollout in which the model is queried at every control
+  step. The OOD split additionally carries a curated reference CoC, which lets the same
+  clips be scored under the model's own reasoning and under correct reasoning.
+  Medians are reported alongside means because minADE is heavy-tailed.
+}
+\label{tab:baseline}
+\begin{tabular}{llrlr}
+\toprule
+Mode & Evaluation set & Size & Metric & Alpamayo-1.5-10B \\
+\midrule
+\multirow{5}{*}{Open-loop}
+  & In-dist.\ val (official val)   & 500 clips   & minADE@8 (m) $\downarrow$ med / mean & 0.455 / 0.691 \\
+  & In-dist.\ test (official test) & 500 clips   & minADE@8 (m) $\downarrow$ med / mean & 0.471 / 0.780 \\
+  & OOD long-tail, own CoC         & 1{,}533 clips & minADE@8 (m) $\downarrow$ med / mean & 0.487 / 0.846 \\
+  & OOD long-tail, reference CoC   & 1{,}533 clips & minADE@8 (m) $\downarrow$ med / mean & 0.478 / 0.778 \\
+  & OOD long-tail                  & 1{,}533 clips & NLL of reference CoC $\downarrow$ & 3.005 \\
+\midrule
+\multirow{5}{*}{Closed-loop}
+  & \multirow{5}{*}{\shortstack[l]{alpasim \texttt{public\_2601}\\(150 scenes, 2 rollouts)}}
+                                   & \multirow{5}{*}{300 rollouts}
+                                                 & Scene score $\uparrow$          & 0.750 \tiny{[0.697, 0.801]} \\
+  & & & Pass rate $\uparrow$            & 0.890 \\
+  & & & At-fault collision $\downarrow$ & 0.040 \\
+  & & & Off-road $\downarrow$           & 0.070 \\
+  & & & Progress $\uparrow$             & 0.747 \\
+\midrule
+Both & --- & --- & CoC degeneracy $\downarrow$ (open / closed) & 0.006 / 0.006 \\
+\bottomrule
+\end{tabular}
+\end{table}

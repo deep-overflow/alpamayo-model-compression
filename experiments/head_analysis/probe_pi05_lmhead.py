@@ -30,6 +30,7 @@ from pathlib import Path
 
 import torch
 from huggingface_hub import snapshot_download
+from huggingface_hub.constants import HF_HUB_CACHE
 from safetensors.torch import safe_open
 
 PREFIX = "paligemma_with_expert.paligemma."
@@ -47,7 +48,9 @@ def load_lm(repo, dtype=torch.float32):
     the single [vocab, hidden] matrix is saved under `lm_head.weight` (LeRobot
     remaps it to embed_tokens on load). We use it for both roles.
     """
-    pattern = (f"{Path.home()}/.cache/huggingface/hub/"
+    # HF_HUB_CACHE follows HF_HUB_CACHE / HF_HOME, so this keeps working after the
+    # blob cache moved off the root filesystem (2026-08-06)
+    pattern = (f"{HF_HUB_CACHE}/"
                f"models--{repo.replace('/', '--')}/snapshots/*/model.safetensors")
     local = glob.glob(pattern)
     path = Path(local[0]) if local else Path(snapshot_download(repo)) / "model.safetensors"

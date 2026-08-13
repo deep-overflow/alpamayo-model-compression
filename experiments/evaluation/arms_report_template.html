@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기준 1요인 비교: CoC Taylor vs J-lens</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>참조 CoC 텍스트 없이 프루닝할 수 있는가: 기준 1요인 비교</h1>
+  <div class="meta">
+    2026-08-09 · <code>nvidia/Alpamayo-1.5-10B</code> 24.0% 압축 2종 + 무손상 baseline ·
+    공식 val 500 + 공식 test 500 + OOD 1,533 클립 · minADE@8 · RTX 5880 Ada
+  </div>
+</header>
+
+<p class="lede">
+같은 24.0% 압축을, 참조 CoC 텍스트가 필요한 기준과 필요 없는 기준으로 각각 수행해 7,599 클립에서 비교했다.
+결론은 &ldquo;대체 가능하다&rdquo;도 &ldquo;안 된다&rdquo;도 아니다. <strong>J-lens는 궤적 정확도 2.8 cm를 내주고
+추론 채널을 되사온다.</strong> 그리고 그 교환은 두 축 모두에서 통계적으로 확정된다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">게이트 C1</span><span class="v">FAIL</span>기준은 서로 다르다</div>
+  <div><span class="k">궤적 대가</span><span class="v">+0.028</span>minADE 중앙값 (m)</div>
+  <div><span class="k">추론 이득</span><span class="v">&minus;0.031</span>GT CoC의 NLL</div>
+  <div><span class="k">CoC 퇴화 (test)</span><span class="v">3.0→1.6%</span>dual → jtraj</div>
+  <div><span class="k">평가 규모</span><span class="v">7,599</span>클립 (3 arm × 2,533)</div>
+</div>
+
+<h2><span class="num">1</span>질문과, 왜 지금까지 답할 수 없었는가</h2>
+
+<p>
+이 연구의 폭 프루닝 기준은 두 목적함수의 랭크 최댓값이다.
+</p>
+
+<pre><code>keep(u)  ∝  max( rank I_traj(u),  rank X(u) )</code></pre>
+
+<p>
+<code>I_traj</code>는 궤적 flow-matching MSE에 대한 Taylor 중요도로, GT 궤적만 있으면 구해진다
+(egomotion에서 나오므로 사실상 공짜다). 문제는 <code>X</code>다. 지금까지 쓰인
+<code>I_CoC</code>는 <strong>참조 Chain-of-Causation 텍스트에 대한 NLL</strong>의 Taylor 중요도이므로,
+캘리브레이션 클립마다 사람이 쓴(또는 교사 모델이 쓴) 추론 텍스트가 있어야 한다. 이것이 이
+파이프라인에서 유일하게 값비싼 라벨이다.
+</p>
+
+<p>
+<strong>J-lens 점수</strong>는 그 라벨을 없앤다. 유닛이 residual stream에 쓰는 양 중
+unembedding 방향으로 읽히는 — 즉 언어로 검증 가능한 — 성분의 크기를 모델 자신의 야코비안에서
+직접 잰다. 참조 텍스트가 필요 없다.
+</p>
+
+<h3>기존 비교는 세 요인이 동시에 달랐다</h3>
+
+<p>
+shipped 체크포인트 <code>j_traj_full_r20</code>과 <code>dual_uniform</code>은 폐루프 점수가
+0.451 대 0.610으로 갈렸지만, 그 격차를 기준에 귀속시킬 수 없었다. 둘은 이렇게 다르다.
+</p>
+
+<table>
+<thead><tr><th>요인</th><th><code>dual_uniform</code></th><th><code>j_traj_full_r20</code></th></tr></thead>
+<tbody>
+<tr><td>기준의 X</td><td><code>I_CoC</code></td><td><code>J</code></td></tr>
+<tr><td>VLM 배분</td><td class="r">uniform 39.9%</td><td class="r">uniform 20% + KV 그룹 1개 드롭</td></tr>
+<tr><td>expert</td><td>미개입</td><td>early40 / late10, <strong>magnitude 기준</strong></td></tr>
+<tr><td>제거량</td><td class="r">24.0%</td><td class="r">18.1%</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p>
+게다가 <strong>캘리브레이션 출처까지 어긋나 있었다</strong>. <code>I_CoC</code>는
+<code>importance_v1</code>(구 50클립), <code>J</code>는 <code>jlens_coc</code>(8클립, 선택 churn 약 25%)에서
+나왔다. 그대로 비교하면 &ldquo;CoC Taylor 대 J-score&rdquo;가 아니라 &ldquo;50클립 대 8클립&rdquo;을
+절반쯤 재게 된다.
+</p>
+</div>
+
+<h2><span class="num">2</span>설계: 한 요인만 남기기</h2>
+
+<p>
+두 arm을 새로 만들되, <code>X</code>를 제외한 모든 것을 <code>dual_uniform</code> 쪽으로 고정했다.
+</p>
+
+<table>
+<thead><tr><th>항목</th><th>두 arm 공통</th></tr></thead>
+<tbody>
+<tr><td>기준 구조</td><td><code>max(rank_norm(I_traj), rank_norm(X))</code>, 레이어 내부 랭크 정규화</td></tr>
+<tr><td>배분</td><td>uniform, prune ratio <strong>0.3985632694</strong> — 36개 레이어 전부 동일</td></tr>
+<tr><td>Q head</td><td>13/32 제거 → <strong>19 유지</strong>, 전 레이어 동일</td></tr>
+<tr><td>MLP 채널</td><td>4,898/12,288 제거 → <strong>7,390 유지</strong>, 전 레이어 동일</td></tr>
+<tr><td>expert tower</td><td><strong>미개입</strong> (Q 16/16, MLP 8,256/8,256)</td></tr>
+<tr><td>KV 그룹</td><td><strong>드롭 없음</strong>, kv-only 레이어 없음</td></tr>
+<tr><td>중요도 / J</td><td><code>importance_v2</code> / <code>jlens_v2</code> — 둘 다 <strong>같은 100개 클립</strong>(<code>calib_100</code>)</td></tr>
+<tr><td>제거 파라미터</td><td>11,078,526,194 → 8,421,074,162 (<strong>−2,657,452,032, 24.0%</strong>)</td></tr>
+</tbody>
+</table>
+
+<p>
+비율 0.398563은 반올림한 0.40이 아니다. 이 값은 <code>run_grid.allocations()</code>가
+<code>slim_integrated_mag</code>의 실현 예산에서 역산한 matched budget이고, 0.40으로 반올림하면
+MLP가 레이어당 17채널 어긋난다. 그래서 하드코딩하지 않고 같은 코드 경로를 재사용했다.
+</p>
+
+<h3>J-score는 무엇을 재는가</h3>
+
+<p>
+야코비안 렌즈 <code>J_l = E[∂h_final/∂h_l]</code>을 <code>W_U</code> 행들을 코탄젠트로 두고 구한 뒤
+(사전 토큰 714개, 빈출 202 + 무작위), 유닛의 쓰기 방향·활성 통계와 곱한다.
+</p>
+
+<pre><code>mlp_j[c] = ‖ v @ down_proj[:, c] ‖₂ × sqrt(E[a_c²])          # 쓰기 방향 고정
+q_j[h]   = sqrt( Σ (v·O_h)ᵀ(v·O_h) ⊙ E[y_h y_hᵀ] )          # 쓰기 방향이 y에 따라 회전</code></pre>
+
+<p>
+라벨이 전혀 개입하지 않는다. 모델 자신의 함수 미분이기 때문이다.
+</p>
+
+<h3>선택은 실제로 얼마나 다른가</h3>
+
+<p>
+예산과 구조가 같으므로, 두 arm이 서로 다른 유닛을 고르지 않는다면 이 실험은 아무것도 재지 못한다.
+실측하면 다르다.
+</p>
+
+<table>
+<thead><tr><th>축</th><th class="r">유지 집합이 겹치는 비율</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">84.8%</td></tr>
+<tr><td>MLP 채널</td><td class="r">83.3%</td></tr>
+</tbody>
+</table>
+
+<p>
+약 16%가 서로 다른 유닛이다. 잴 대상이 존재한다.
+</p>
+
+<div class="callout good">
+<p>
+<strong>구현 검증.</strong> 새 config를 옛 중요도(<code>importance_v1</code>)로 부르면 shipped
+<code>slim_dual_uniform</code>의 유지 인덱스와 <strong>레이어 36개 전부에서 bit-identical</strong>하다.
+즉 <code>dual_u40_v2</code>는 검증된 config의 재캘리브레이션판이지 새로운 레시피가 아니다.
+</p>
+</div>
+
+<h2><span class="num">3</span>평가 프로토콜</h2>
+
+<p>
+baseline 평가와 동일한 세 셋 전부에서, 동일한 프로토콜로 잰다.
+</p>
+
+<table>
+<thead><tr><th>셋</th><th class="r">클립</th><th>조건</th></tr></thead>
+<tbody>
+<tr><td>in-dist val (공식 val)</td><td class="r">500</td><td>모델이 스스로 CoC를 생성한 뒤 그 문맥에서 궤적 8개</td></tr>
+<tr><td>in-dist test (공식 test)</td><td class="r">500</td><td>동일</td></tr>
+<tr><td>OOD (롱테일 이벤트)</td><td class="r">1,533</td><td>위 조건 + 큐레이션된 GT CoC를 teacher-forcing한 조건</td></tr>
+</tbody>
+</table>
+
+<p>
+시드는 클립 id에서 유도한다(<code>sha256(f"{seed}:{clip_id}")[:4]</code>). 루프 인덱스가 아니므로
+샤딩·순서·재시작이 결과를 바꾸지 못하고, 세 arm이 같은 클립에서 같은 시드를 쓰므로 모든 비교가
+클립 단위 페어드가 된다.
+</p>
+
+<div class="callout">
+<p>
+<strong>baseline을 다시 쟀다.</strong> 2026-08-07 baseline은 Blackwell에서 측정됐는데 이번 arm들은
+Ada에서 돌았다. 결정성은 한 아키텍처 안에서만 성립하므로(같은 클립이 Ada 0.286, Blackwell 0.291),
+기존 숫자와 페어링하면 모든 델타에 커널 차이가 섞인다. 그래서 무손상 모델을 같은 카드에서
+<code>baseline_ada</code>로 재평가해 vs-baseline 델타의 기준으로 삼았다.
+</p>
+</div>
+
+<h3>사전 등록 게이트</h3>
+
+<ul>
+<li><strong>C1 (주 판정)</strong> — in-dist val+test 1,000 클립 풀링, 페어드 minADE
+    <code>jtraj − dual</code>의 중앙값 절댓값이 0.05 m 미만이고 Wilcoxon p &gt; 0.05면
+    &ldquo;J-lens가 CoC 라벨을 대체한다&rdquo;. 0.05 m은 이 프로토콜의 분해능 하한이다.</li>
+<li><strong>C2</strong> — OOD의 <code>nll_gtcoc</code> 페어드 차이. 같은 큐레이션 CoC를 두 arm이
+    각각 예측하므로 추론 채널을 직접 비교할 수 있는 유일한 지표다. J-lens는 정의상 언어로
+    읽히는 write만 재므로, 라벨을 버린 대가가 어딘가 있다면 여기다.</li>
+<li><strong>C3</strong> — 두 arm 모두 CoC 퇴화율 0.05 미만. 넘으면 그 arm은 39.9%에서 붕괴한
+    것이고 C1은 무효다.</li>
+</ul>
+
+<h2><span class="num">4</span>결과</h2>
+
+<h3>4.1 한 장 요약</h3>
+
+<p>
+괄호는 baseline 대비 상대 차이이고 <strong>양수가 나쁨</strong>이다 (minADE / minFDE는 낮을수록 좋다).
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">val 500</th><th class="r">test 500</th><th class="r">OOD 1,533</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.691</td><td class="r">0.780</td><td class="r">0.846</td></tr>
+<tr><td>Taylor <span style="color:#6B6555">(<code>dual_u40_v2</code>)</span></td>
+    <td class="r">0.777 <strong>(+12.4%)</strong></td>
+    <td class="r">0.875 <strong>(+12.2%)</strong></td>
+    <td class="r">0.931 <strong>(+10.1%)</strong></td></tr>
+<tr><td>JSpace <span style="color:#6B6555">(<code>jtraj_u40_v2</code>)</span></td>
+    <td class="r">0.815 <strong>(+18.0%)</strong></td>
+    <td class="r">0.946 <strong>(+21.3%)</strong></td>
+    <td class="r">0.973 <strong>(+15.1%)</strong></td></tr>
+</tbody>
+</table>
+<p style="margin-top:-1.2rem; color:var(--text-muted); font-size:0.84rem;">
+<strong>minADE@8 평균</strong> (m), 자기 rollout CoC 조건.
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">val 500</th><th class="r">test 500</th><th class="r">OOD 1,533</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">1.840</td><td class="r">2.016</td><td class="r">2.076</td></tr>
+<tr><td>Taylor <span style="color:#6B6555">(<code>dual_u40_v2</code>)</span></td>
+    <td class="r">1.986 <strong>(+7.9%)</strong></td>
+    <td class="r">2.278 <strong>(+13.0%)</strong></td>
+    <td class="r">2.223 <strong>(+7.1%)</strong></td></tr>
+<tr><td>JSpace <span style="color:#6B6555">(<code>jtraj_u40_v2</code>)</span></td>
+    <td class="r">2.089 <strong>(+13.5%)</strong></td>
+    <td class="r">2.524 <strong>(+25.2%)</strong></td>
+    <td class="r">2.321 <strong>(+11.8%)</strong></td></tr>
+</tbody>
+</table>
+<p style="margin-top:-1.2rem; color:var(--text-muted); font-size:0.84rem;">
+<strong>minFDE@8 평균</strong> (m), 같은 조건. 끝점만 보는 지표라 격차가 minADE의 2&ndash;4배로
+벌어진다 &mdash; 압축의 손실이 궤적 후반에 몰려 있다.
+</p>
+
+<p>
+세 셋 모두에서 Taylor가 JSpace보다 baseline에 가깝고, 순서가 뒤집히는 셋은 없다.
+</p>
+
+<h3>4.2 셋별 상세</h3>
+
+<table>
+<thead><tr><th>셋</th><th>arm</th><th class="r">n</th><th class="r">minADE 중앙</th><th class="r">평균</th><th class="r">NLL(self)</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">val</td><td>baseline</td><td class="r">500</td><td class="r">0.4549</td><td class="r">0.6908</td><td class="r">0.1737</td><td class="r">0.0080</td></tr>
+<tr><td><code>dual</code></td><td class="r">500</td><td class="r">0.5664</td><td class="r">0.7766</td><td class="r">0.2223</td><td class="r">0.0140</td></tr>
+<tr><td><code>jtraj</code></td><td class="r">500</td><td class="r">0.5798</td><td class="r">0.8148</td><td class="r">0.1858</td><td class="r">0.0140</td></tr>
+<tr><td rowspan="3">test</td><td>baseline</td><td class="r">500</td><td class="r">0.4713</td><td class="r">0.7799</td><td class="r">0.1755</td><td class="r">0.0060</td></tr>
+<tr><td><code>dual</code></td><td class="r">500</td><td class="r">0.6019</td><td class="r">0.8754</td><td class="r">0.2507</td><td class="r">0.0300</td></tr>
+<tr><td><code>jtraj</code></td><td class="r">500</td><td class="r">0.6419</td><td class="r">0.9461</td><td class="r">0.1990</td><td class="r">0.0160</td></tr>
+<tr><td rowspan="3">OOD</td><td>baseline</td><td class="r">1533</td><td class="r">0.4871</td><td class="r">0.8457</td><td class="r">0.2156</td><td class="r">0.0059</td></tr>
+<tr><td><code>dual</code></td><td class="r">1533</td><td class="r">0.5607</td><td class="r">0.9313</td><td class="r">0.2535</td><td class="r">0.0254</td></tr>
+<tr><td><code>jtraj</code></td><td class="r">1533</td><td class="r">0.5996</td><td class="r">0.9731</td><td class="r">0.2203</td><td class="r">0.0137</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::arms::arms.png" alt="arm별 minADE와 페어드 대조">
+  <figcaption>
+    왼쪽: 셋별 minADE 중앙값. 가운데: 클립 단위 <code>jtraj − dual</code> 분포(±1 m로 클립), 음영은 게이트 C1의
+    ±0.05 m 밴드. 오른쪽: 모든 페어드 대조의 평균과 95% CI.
+  </figcaption>
+</figure>
+
+<h3>4.3 압축의 대가 (vs baseline)</h3>
+
+<p>
+24.0%를 잘라내면 두 arm 모두 baseline보다 나빠진다. 이건 예상된 것이고, 세 셋에서 일관된다.
+</p>
+
+<table>
+<thead><tr><th>대조</th><th>셋</th><th class="r">minADE 중앙</th><th class="r">평균 [95% CI]</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td rowspan="3"><code>dual</code> − baseline</td><td>val</td><td class="r">+0.0529</td><td class="r">+0.086 [+0.028, +0.147]</td><td class="r">1.0e&minus;07</td></tr>
+<tr><td>test</td><td class="r">+0.0517</td><td class="r">+0.096 [+0.046, +0.144]</td><td class="r">1.7e&minus;09</td></tr>
+<tr><td>OOD</td><td class="r">+0.0533</td><td class="r">+0.086 [+0.045, +0.127]</td><td class="r">5.5e&minus;18</td></tr>
+<tr><td rowspan="3"><code>jtraj</code> − baseline</td><td>val</td><td class="r">+0.0797</td><td class="r">+0.124 [+0.069, +0.180]</td><td class="r">1.1e&minus;12</td></tr>
+<tr><td>test</td><td class="r">+0.0960</td><td class="r">+0.166 [+0.115, +0.220]</td><td class="r">3.8e&minus;16</td></tr>
+<tr><td>OOD</td><td class="r">+0.0727</td><td class="r">+0.127 [+0.082, +0.176]</td><td class="r">3.6e&minus;28</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>dual</code>의 대가가 세 셋에서 +0.052&thinsp;/&thinsp;+0.052&thinsp;/&thinsp;+0.053 m로 사실상 상수라는 점이
+눈에 띈다. in-distribution과 롱테일에서 손실이 같다 &mdash; 이 config는 특정 상황에서 무너지는 방식이 아니라
+전 구간에서 균일하게 조금씩 나빠진다.
+</p>
+
+<h3>4.4 핵심 대조: <code>jtraj</code> − <code>dual</code></h3>
+
+<p>
+예산·배분·expert·KV가 모두 동일하므로 아래 차이는 전부 기준에서 나온다.
+</p>
+
+<table>
+<thead><tr><th>셋</th><th class="r">n</th><th class="r">minADE 중앙</th><th class="r">평균 [95% CI]</th><th class="r">p</th><th class="r">나빠진 클립</th></tr></thead>
+<tbody>
+<tr><td>val</td><td class="r">500</td><td class="r">+0.0288</td><td class="r">+0.038 [&minus;0.001, +0.075]</td><td class="r">1.3e&minus;04</td><td class="r">59%</td></tr>
+<tr><td>test</td><td class="r">500</td><td class="r">+0.0267</td><td class="r">+0.071 [+0.032, +0.116]</td><td class="r">2.0e&minus;04</td><td class="r">58%</td></tr>
+<tr><td>OOD</td><td class="r">1533</td><td class="r">+0.0234</td><td class="r">+0.042 [+0.014, +0.069]</td><td class="r">1.7e&minus;06</td><td class="r">56%</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p>
+세 셋에서 <strong>+0.0288 / +0.0267 / +0.0234 m</strong>. 서로 다른 split, 서로 다른 분포, 2.5배 차이 나는
+표본 크기에서 같은 값이 나온다. 효과 크기가 이 정도로 재현되면 표본 노이즈일 수 없다.
+</p>
+</div>
+
+<figure>
+  <img src="PLOT::arms::buckets_coc.png" alt="시나리오 버킷별 성능과 CoC 퇴화율">
+  <figcaption>
+    왼쪽: val의 시나리오 버킷별 minADE 중앙값. 오른쪽: CoC 퇴화율 &mdash; <code>dual</code>이 test에서 3.0%로
+    올라가는 반면 <code>jtraj</code>는 1.6%에 머문다.
+  </figcaption>
+</figure>
+
+<h3>4.5 OOD 분해: 대가는 어느 채널에 있는가</h3>
+
+<p>
+지금까지의 minADE는 <strong>각 arm이 자기 CoC를 생성한 뒤</strong> 잰 end-to-end 값이라, &ldquo;궤적 헤드가
+나빠졌다&rdquo;와 &ldquo;추론이 나빠져서 문맥이 나빠졌다&rdquo;가 섞여 있다. OOD는 세 arm이 <strong>동일한
+큐레이션 CoC</strong>를 받는 유일한 조건이므로 여기서만 분리된다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">minADE (자기 CoC)</th><th class="r">minADE (동일 GT CoC)</th><th class="r">GT CoC의 NLL 평균</th><th class="r">자기 추론의 대가</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.4871</td><td class="r">0.4777</td><td class="r">3.0052</td><td class="r">+0.068 [+0.026, +0.113]</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.5607</td><td class="r">0.5475</td><td class="r">3.0375</td><td class="r">+0.107 [+0.071, +0.147]</td></tr>
+<tr><td><code>jtraj</code></td><td class="r">0.5996</td><td class="r">0.5844</td><td class="r"><strong>3.0075</strong></td><td class="r">+0.099 [+0.057, +0.145]</td></tr>
+</tbody>
+</table>
+
+<p>페어드 대조로 다시 쓰면 두 가지가 분명해진다.</p>
+
+<table>
+<thead><tr><th>지표</th><th class="r">중앙값</th><th class="r">평균 [95% CI]</th><th class="r">p</th><th>읽는 법</th></tr></thead>
+<tbody>
+<tr><td><code>minADE_rollout</code> (end-to-end)</td><td class="r">+0.0234</td><td class="r">+0.042 [+0.014, +0.069]</td><td class="r">1.7e&minus;06</td><td>jtraj가 나쁨</td></tr>
+<tr><td><code>minADE_tf</code> (동일 GT CoC)</td><td class="r">+0.0291</td><td class="r">+0.050 [+0.031, +0.070]</td><td class="r">4.9e&minus;10</td><td>격차가 <strong>그대로 남음</strong></td></tr>
+<tr><td><code>nll_gtcoc</code> (게이트 C2)</td><td class="r">&minus;0.0308</td><td class="r">&minus;0.030 [&minus;0.042, &minus;0.018]</td><td class="r">4.1e&minus;07</td><td>jtraj가 <strong>좋음</strong></td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::arms::ood_decomposition.png" alt="OOD 채널 분해">
+  <figcaption>
+    왼쪽: 자기 CoC 조건과 동일 GT CoC 조건에서의 minADE &mdash; 두 arm의 격차가 조건을 바꿔도 유지된다.
+    가운데: 큐레이션 CoC에 대한 평균 NLL. <code>jtraj</code>는 baseline과 구분되지 않고 <code>dual</code>만
+    유의하게 나쁘다. 오른쪽: 각 arm이 자기 추론을 쓰는 대가.
+  </figcaption>
+</figure>
+
+<div class="callout good">
+<p>
+<strong>궤적 격차는 추론 탓이 아니다.</strong> 양쪽에 같은 정답 CoC를 넣어도 격차가
++0.0234 → +0.0291 m로 오히려 커진다. 즉 <code>jtraj</code>의 궤적 손실은 궤적 헤드 자체에서 오고,
+<code>jtraj</code>의 <em>더 나은</em> 추론이 end-to-end에서 그 손실을 일부 상쇄하고 있었다.
+</p>
+</div>
+
+<div class="callout good">
+<p>
+<strong>추론 이득은 확신도가 아니라 품질이다.</strong> <code>nll_gtcoc</code>는 세 arm이 동일한 참조 텍스트를
+예측하는 proper scoring rule이다. <code>jtraj</code>는 클립의 56%에서 <code>dual</code>보다 낫고, 절대값
+3.0075로 baseline 3.0052와 구분되지 않는다(+0.002, CI가 0을 포함). 반면 <code>dual</code>은 3.0375로
+baseline보다 유의하게 나쁘다(+0.032, p=0.031).
+</p>
+<p>
+CoC 퇴화율도 같은 방향이다: test에서 <code>dual</code> 3.0% 대 <code>jtraj</code> 1.6%.
+</p>
+</div>
+
+<p>
+참고로 <code>nll_self</code>(각 arm이 자기 샘플에 매긴 NLL)도 <code>jtraj</code>가 낮지만, 이건 품질이 아니라
+확신도다. 다만 아티팩트는 아님을 확인했다 &mdash; 생성 길이 중앙값이 동일하고(p=0.27/0.84),
+길이 변화가 2토큰 이하인 클립만 골라도 격차가 유지되며(p&lt;1e&minus;08), empty 출력은 세 arm 모두 0건이다.
+</p>
+
+<h2><span class="num">5</span>게이트 판정</h2>
+
+<table>
+<thead><tr><th>게이트</th><th>사전 등록 조건</th><th>실측</th><th>판정</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>C1</strong> (주)</td>
+  <td>val+test 1,000 클립 풀링, <code>jtraj − dual</code> minADE의 |중앙값| &lt; 0.05 m <strong>그리고</strong> p &gt; 0.05</td>
+  <td>중앙값 <strong>+0.0278 m</strong> (조건 충족)<br>p = <strong>9.7e&minus;08</strong> (조건 미충족)</td>
+  <td><strong>FAIL</strong></td>
+</tr>
+<tr>
+  <td><strong>C2</strong></td>
+  <td>OOD <code>nll_gtcoc</code> 페어드 차이</td>
+  <td>중앙값 <strong>&minus;0.0308</strong><br>평균 &minus;0.030 [&minus;0.042, &minus;0.018], p = 4.1e&minus;07</td>
+  <td><code>jtraj</code> 우위</td>
+</tr>
+<tr>
+  <td><strong>C3</strong></td>
+  <td>두 arm 모두 CoC 퇴화율 &lt; 0.05</td>
+  <td><code>dual</code> 0.030, <code>jtraj</code> 0.016</td>
+  <td><strong>PASS</strong></td>
+</tr>
+</tbody>
+</table>
+
+<p>
+C1은 <strong>크기 조건은 통과하고 유의성 조건에서 탈락</strong>했다. 게이트를 이 형태로 사전 등록한 것은
+&ldquo;대체 가능하다&rdquo;를 주장하려면 차이가 작아야 <em>하고</em> 검출되지 않아야 한다고 봤기 때문이다.
+실제로는 차이가 작으면서 확실히 검출된다.
+</p>
+
+<p>
+따라서 사전 등록한 문장 &mdash; <em>&ldquo;J-lens가 CoC 라벨을 대체한다&rdquo;</em> &mdash; 는 기각된다.
+두 기준은 같은 것을 고르지 않는다. 유지 집합이 Q head 84.8%, MLP 83.3%만 겹치던 것에서 이미 예상된 바다.
+</p>
+
+<div class="callout warn">
+<p>
+다만 &ldquo;기각&rdquo;이 &ldquo;J-lens가 열등하다&rdquo;를 뜻하지 않는다는 점이 이 실험의 실제 결과다.
+C1은 궤적 축 하나만 본다. 두 축을 함께 보면 기각된 것은 <strong>대체 가설</strong>이지 J-lens가 아니다.
+</p>
+</div>
+
+<h2><span class="num">6</span>해석과 한계</h2>
+
+<h3>결과가 말하는 것 (해석)</h3>
+
+<p>
+두 기준은 우열 관계가 아니라 <strong>교환 관계</strong>다. 같은 예산에서 J-lens는 궤적 정확도
+2.8 cm를 내주고 추론 채널을 되사온다. 그리고 그 방향은 J-score의 정의에서 예측되는 바로 그 방향이다.
+</p>
+
+<p>
+J-score는 유닛이 residual stream에 쓰는 양 중 <strong>unembedding으로 읽히는 성분</strong>만 잰다.
+그러니 언어 채널에 기여하는 유닛을 우선 보호하고, 궤적 전용 유닛의 운명은 <code>I_traj</code> 항 하나에
+맡긴다. 반면 <code>I_CoC</code>는 참조 텍스트 NLL의 기울기이므로, 그 텍스트를 만들어내는 계산 경로 전체를
+따라 흐른다 &mdash; 여기에는 궤적 계산과 공유되는 표현도 포함된다. <code>dual</code>이 궤적을 더 잘 지킨 것은
+CoC 목적함수가 궤적 유닛을 <em>부수적으로</em> 보호했기 때문으로 보인다.
+</p>
+
+<p>
+이 해석은 4.4의 두 사실과 정합적이다. 첫째, 동일한 정답 CoC를 주어도 궤적 격차가 사라지지 않는다
+(오히려 +0.0234 → +0.0291로 커진다) &mdash; 궤적 손실은 문맥이 아니라 헤드에 있다. 둘째,
+<code>jtraj</code>는 참조 CoC 예측력에서 baseline과 구분되지 않는데 <code>dual</code>은 유의하게 나쁘다
+&mdash; 라벨을 쓴 쪽이 오히려 추론을 덜 지켰다.
+</p>
+
+<h3>연구 서사에 대한 함의</h3>
+
+<p>
+당초 이 실험은 &ldquo;참조 CoC 텍스트 없이도 되는가&rdquo;라는 이진 질문으로 설계했다. 답은
+&ldquo;예/아니오&rdquo;가 아니라 <strong>&ldquo;무엇을 지키고 싶은가에 달렸다&rdquo;</strong> 이고, 이쪽이 더
+쓸모 있는 결과다:
+</p>
+
+<ul>
+<li><strong>궤적 정확도가 목표라면</strong> CoC 라벨이 값어치를 한다 &mdash; 2.8 cm, 즉 24% 압축 총비용
+    8.0 cm의 약 35%.</li>
+<li><strong>추론 건전성이 목표라면</strong> 라벨은 필요 없을 뿐 아니라 <strong>없는 편이 낫다</strong> &mdash;
+    퇴화율 절반, 참조 CoC 예측력은 baseline 수준.</li>
+</ul>
+
+<p>
+후자는 이 프로젝트에서 무게가 다르다. 개루프 minADE가 폐루프 실패를 가린 전례
+(<code>integrated_mag</code>: 개루프 정상, 폐루프 CoC 퇴화 86.3%)가 있기 때문이다. 개루프에서 2.8 cm를 잃고
+추론을 얻는 교환이 폐루프에서 어떻게 정산되는지는 minADE로 알 수 없다.
+</p>
+
+<h3>한계</h3>
+
+<ul>
+<li><strong>단일 압축률.</strong> 39.9%(모델의 24.0%) 한 점에서만 쟀다. 20%에서는 두 기준이 무승부였고
+    (<code>jsweep32</code>: dADE 중앙값 차 +0.006, p=0.45) 39.9%에서 갈렸다. 교환비가 압축률에 따라
+    어떻게 변하는지는 미측정이다.</li>
+<li><strong>expert와 KV는 손대지 않았다.</strong> 1요인 비교를 위해 고정한 것이지만, 그 결과 이 두 config는
+    모델의 60%(VLM q/o+MLP)만 건드린다. expert 축을 열면 결론이 달라질 수 있다.</li>
+<li><strong>C2는 NLL이다.</strong> proper scoring rule이므로 확신도가 아니라 품질이지만, 여전히 &ldquo;참조
+    텍스트를 얼마나 잘 예측하는가&rdquo;이지 &ldquo;생성한 추론이 옳은가&rdquo;가 아니다. 후자는 판정자 기반
+    평가(축 4)가 필요하고 아직 설계되지 않았다.</li>
+<li><strong>GPU 아키텍처.</strong> baseline을 Ada에서 재측정해 혼입을 제거했다. 사후 확인 결과 Ada−Blackwell
+    페어드 차이는 val +0.0000 / test +0.0001 (p=0.82)로 무시 가능했으나, 클립 단위로는 bit-identical이
+    0%이고 3&ndash;4%의 클립에서 생성 CoC 텍스트 자체가 달랐다.</li>
+</ul>
+
+<h3>다음</h3>
+
+<p>
+<strong>폐루프 평가가 진행 중이다.</strong> 같은 세 arm을 alpasim <code>public_2601</code> 150 씬 × 2 rollout에서
+돌린다. 기존 폐루프 매트릭스는 30 씬이라 페어드 델타 0.179 미만을 볼 수 없었고, 그래서 모든 config가
+non-significant로 끝났다 &mdash; 150 씬은 0.080까지 해상한다. 씬 선택은
+<code>sorted(scene_id)[:N]</code>이고 scene_id가 UUID라 편향 없는 무작위·중첩 표본이며,
+<code>calib_100</code>과의 겹침은 0건으로 확인했다.
+</p>
+
+<p>
+스위트를 <code>public_2604</code>에서 <code>public_2601</code>로 바꾼 것은 자원 문제다. 두 스위트는
+scene_id를 159개 공유하지만 아티팩트 uuid는 <strong>하나도 공유하지 않는다</strong> &mdash; 2604는
+26.04 release로 전부 재렌더링한 버전이라, 150 씬을 돌리려면 100 GB를 새로 받아야 했다. 2601은
+913 씬 전량이 이미 로컬에 있다. 대신 이 매트릭스의 숫자는 <code>public_2604</code>로 측정된 저장
+매트릭스(<code>slim_dual_uniform</code> 등)와 직접 비교할 수 없다 &mdash; 그래서 baseline도 같은
+스위트에서 새로 측정한다. 렌더러 역시 Blackwell이 타 실험에 장기 점유되어 드라이버와 같은 Ada
+카드로 접었다.
+</p>
+
+<p>
+그 결과가 이 보고서의 교환을 정산한다. 개루프에서 2.8 cm를 잃고 추론을 얻은 것이 주행 점수에서
+플러스인지 마이너스인지가 &mdash; 그리고 &ldquo;CoC 건전성은 안전의 대리지표가 아니다&rdquo;라는 기존 결론이
+이 축에서도 유지되는지가 &mdash; 거기서 결정된다.
+</p>
+
+<footer>
+  <p>
+    생성 스크립트: <code>experiments/head_analysis/make_slim.py --config {dual_u40_v2, j_traj_u40_v2}</code>,
+    <code>experiments/evaluation/launch_arms.sh</code>,
+    <code>experiments/evaluation/analyze_arms.py</code><br>
+    계획서: <code>plans/2026-08-09_criterion-oneshot.md</code> ·
+    출력: <code>outputs/arms_summary/</code>
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

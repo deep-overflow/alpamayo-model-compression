@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpamayo-1.5 baseline: 개루프와 폐루프 기준선 확정</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+  .papertable table { font-size: 0.85rem; }
+  .papertable td, .papertable th { padding: 0.4rem 0.7rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>무손상 baseline 기준선: 개루프 2,533 클립 + 폐루프 150 씬</h1>
+  <div class="meta">
+    2026-08-11 · <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba8293</code>) ·
+    RTX 5880 Ada ×4 · 이후 모든 압축 config가 이 숫자와의 페어드 델타로 보고된다
+  </div>
+</header>
+
+<p class="lede">
+압축 config를 평가하려면 먼저 무손상 모델이 어디에 서 있는지가 고정되어야 한다. 이 보고서는 두
+평가 모드 &mdash; 개루프 2,533 클립과 폐루프 150 씬 &mdash; 에서 baseline을 확정하고, 논문에
+그대로 넣을 수 있는 표 하나로 정리한다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">개루프 val</span><span class="v">0.455</span>minADE@8 중앙값 (m)</div>
+  <div><span class="k">개루프 OOD</span><span class="v">0.487</span>minADE@8 중앙값 (m)</div>
+  <div><span class="k">폐루프 점수</span><span class="v">0.750</span>150 씬 평균</div>
+  <div><span class="k">폐루프 통과율</span><span class="v">89.0%</span>300 rollouts</div>
+  <div><span class="k">CoC 퇴화</span><span class="v">0.6%</span>양쪽 모드 공통</div>
+</div>
+
+<h2><span class="num">1</span>왜 두 모드를 모두 재는가</h2>
+
+<p>
+개루프 minADE는 이 프로젝트에서 이미 한 번 실패를 가린 적이 있다. <code>integrated_mag</code>는
+개루프에서 baseline과 구분되지 않았지만 폐루프에서 CoC가 86.3% 퇴화하고 전방 충돌이 급증했다.
+반대로 <code>dual_uniform</code>은 개루프에서 baseline보다 나빴는데 폐루프 점수는 더 높았다.
+</p>
+
+<p>
+두 지표는 서로를 예측하지 못한다. 그래서 baseline도 두 모드에서 각각 고정해 둔다.
+</p>
+
+<h2><span class="num">2</span>개루프 &mdash; 2,533 클립</h2>
+
+<p>
+클립마다 모델이 스스로 CoC를 생성하고(temperature 0.6, top_p 0.98), 그 문맥에서 궤적 8개를
+샘플링해 <strong>best-of-8 minADE</strong>를 잰다. 시드는 <code>sha256(f"42:{clip_id}")</code>로
+클립에서 유도하므로 샤딩·순서·재시작이 결과를 바꾸지 못한다. 유일한 라벨은 egomotion에서 나온
+GT 궤적이다.
+</p>
+
+<table>
+<thead><tr><th>셋</th><th class="r">n</th><th class="r">minADE 중앙</th><th class="r">평균 [95% CI]</th><th class="r">p90</th><th class="r">minFDE 중앙</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>in-dist val (공식 val)</td><td class="r">500</td><td class="r">0.4549</td><td class="r">0.691 [0.625, 0.762]</td><td class="r">1.387</td><td class="r">0.922</td><td class="r">0.0080</td></tr>
+<tr><td>in-dist test (공식 test)</td><td class="r">500</td><td class="r">0.4713</td><td class="r">0.780 [0.706, 0.859]</td><td class="r">1.744</td><td class="r">0.930</td><td class="r">0.0060</td></tr>
+<tr><td>OOD (롱테일 이벤트)</td><td class="r">1,533</td><td class="r">0.4871</td><td class="r">0.846 [0.785, 0.914]</td><td class="r">1.798</td><td class="r">0.939</td><td class="r">0.0059</td></tr>
+</tbody>
+</table>
+
+<p>
+val과 test가 0.455 대 0.471로 거의 같다 &mdash; <strong>split 선택이 결론을 바꾸지 않는다.</strong>
+OOD는 0.487로 조금 높지만 격차가 작다. 즉 롱테일에서 baseline이 무너지는 것이 아니라,
+꼬리가 두꺼워질 뿐이다(평균 0.846 대 val 0.691, p90 1.80 대 1.39).
+</p>
+
+<h3>2.1 OOD 전용: 올바른 추론은 얼마짜리인가</h3>
+
+<p>
+OOD 1,533 클립에는 큐레이션된 참조 CoC가 붙어 있어, 같은 클립을 두 조건으로 잴 수 있다.
+</p>
+
+<table>
+<thead><tr><th>조건</th><th class="r">minADE 중앙</th><th class="r">평균 [95% CI]</th></tr></thead>
+<tbody>
+<tr><td>모델 자신의 rollout CoC</td><td class="r">0.4871</td><td class="r">0.846 [0.785, 0.914]</td></tr>
+<tr><td>큐레이션된 GT CoC를 teacher-forcing</td><td class="r">0.4777</td><td class="r">0.778 [0.730, 0.831]</td></tr>
+<tr><td><strong>차이 (rollout &minus; GT)</strong></td><td class="r">+0.0041</td><td class="r">+0.068 [+0.026, +0.113], p=1.2e&minus;03</td></tr>
+</tbody>
+</table>
+
+<p>
+올바른 추론을 넣어주면 궤적이 평균 <strong>6.8 cm</strong> 좋아진다. 작지만 유의하다. 그리고
+참조 CoC에 대한 NLL은 <strong>3.005 [2.950, 3.060]</strong>로, 이후 압축 config의 추론 채널을
+비교할 유일한 proper scoring rule 기준점이 된다.
+</p>
+
+<h3>2.2 시나리오 버킷</h3>
+
+<table>
+<thead><tr><th>버킷</th><th class="r">val (n)</th><th class="r">test (n)</th><th class="r">OOD (n)</th></tr></thead>
+<tbody>
+<tr><td>decel_stop</td><td class="r">0.365 (70)</td><td class="r">0.361 (65)</td><td class="r">0.374 (321)</td></tr>
+<tr><td>turn</td><td class="r">0.668 (77)</td><td class="r">0.664 (82)</td><td class="r">0.733 (120)</td></tr>
+<tr><td>accel</td><td class="r">0.478 (72)</td><td class="r">0.504 (75)</td><td class="r">0.522 (266)</td></tr>
+<tr><td>cruise</td><td class="r">0.422 (281)</td><td class="r">0.448 (278)</td><td class="r">0.476 (826)</td></tr>
+</tbody>
+</table>
+
+<p>
+버킷 순서가 세 셋에서 동일하다 (turn &gt; accel &gt; cruise &gt; decel_stop). 회전이 가장 어렵고
+감속·정지가 가장 쉽다 &mdash; 궤적 자유도를 생각하면 자연스럽다.
+</p>
+
+<h2><span class="num">3</span>폐루프 &mdash; alpasim 150 씬</h2>
+
+<p>
+20초 주행을 매 제어 스텝마다 모델을 돌려 시뮬레이션한다. 스텝마다 CoC 생성 + 10스텝 확산,
+4대 카메라 뉴럴 렌더링이 들어가므로 한 씬에 모델 forward가 수백 번 순차로 걸린다.
+</p>
+
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>스위트 / 씬</td><td><code>public_2601</code> 913 씬 중 첫 150 (scene_id 정렬 = UUID 해시 순서, 편향 없는 무작위)</td></tr>
+<tr><td>rollout</td><td>씬당 2 (총 300)</td></tr>
+<tr><td>캘리브레이션 오염</td><td><code>calib_100</code>과 겹침 <strong>0</strong>건</td></tr>
+<tr><td>드라이버 / 렌더러</td><td>모두 RTX 5880 Ada, 카드당 한 스택</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>지표</th><th class="r">값</th><th>의미</th></tr></thead>
+<tbody>
+<tr><td>scene score</td><td class="r"><strong>0.7496</strong> [0.697, 0.801]</td><td>150 씬 평균, 부트스트랩 CI</td></tr>
+<tr><td>pass rate</td><td class="r"><strong>0.890</strong></td><td>300 rollout 중 267 통과</td></tr>
+<tr><td>at-fault collision</td><td class="r">0.040</td><td>rollout당 비율</td></tr>
+<tr><td>any collision</td><td class="r">0.133</td><td></td></tr>
+<tr><td>off-road</td><td class="r">0.070</td><td></td></tr>
+<tr><td>wrong lane</td><td class="r">0.293</td><td></td></tr>
+<tr><td>progress (clipped rel)</td><td class="r">0.747</td><td></td></tr>
+<tr><td>dist to GT trajectory</td><td class="r">2.886 m</td><td></td></tr>
+<tr><td>CoC 퇴화율</td><td class="r">0.0055</td><td>empty 0.0007 + soup 0.0048</td></tr>
+<tr><td>rollout 반복 노이즈</td><td class="r">평균 0.145</td><td>같은 씬 두 rollout의 점수 차 절댓값</td></tr>
+</tbody>
+</table>
+
+<p>
+탈락 33건의 사유는 <strong>off-road 21건, at-fault collision 12건</strong>이다. 시뮬레이션 오류가
+아니라 주행 판정 결과이며, 300 rollout이 모두 정상 종료했다.
+</p>
+
+<figure>
+  <img src="PLOT::cl::scene_score.png" alt="씬별 점수 분포">
+  <figcaption>씬별 점수 분포. 다수가 1.0에 몰려 있고 실패한 소수가 0 근처에 쌓이는 이중 구조라,
+  씬 단위 페어드 차이의 절반가량이 정확히 0이 된다 &mdash; 이후 config 비교에서 Wilcoxon보다
+  부트스트랩 평균 CI를 1차 지표로 쓰는 이유다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::cl::incident_rates.png" alt="사고 유형별 비율">
+  <figcaption>사고 유형별 비율. at-fault collision 4.0%, off-road 7.0%.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::cl::coc_vs_score.png" alt="CoC 건전성과 점수">
+  <figcaption>CoC 퇴화와 주행 점수의 관계. baseline은 퇴화가 0.55%로 거의 없어 이 축에서
+  변별이 생기지 않는다 &mdash; 압축 config가 붙어야 의미를 갖는 그림이다.</figcaption>
+</figure>
+
+<div class="callout warn">
+<p>
+<strong>스위트 변경 주의.</strong> 2026-07 폐루프 매트릭스는 <code>public_2604</code> 30 씬이었고
+그때 baseline은 score 0.540 / pass 0.667이었다. 이번 0.750 / 0.890과 직접 비교하면 안 된다 &mdash;
+두 스위트는 scene_id를 159개 공유하지만 아티팩트 uuid는 <strong>하나도 공유하지 않는다</strong>
+(2604는 26.04 release로 전부 재렌더링). 2601로 옮긴 것은 자원 문제였다: 2604로 150 씬을 돌리려면
+100 GB를 새로 받아야 했고 2601은 913 씬 전량이 로컬에 있었다. 압축 config는 모두 2601에서
+새로 측정하므로 매트릭스 내부 비교는 온전하다.
+</p>
+</div>
+
+<h2><span class="num">4</span>논문용 표</h2>
+
+<p>
+아래 표 하나가 실험 절의 앵커가 된다. 평가 프로토콜(무엇을, 몇 개, 어떤 지표로)과 무손상 모델의
+값을 함께 담아, 이후 모든 압축 결과가 이 표의 마지막 열과의 델타로 읽히게 한다.
+</p>
+
+<div class="papertable">
+<table>
+<thead>
+<tr><th>Mode</th><th>Evaluation set</th><th class="r">Size</th><th>Metric</th><th class="r">Alpamayo-1.5-10B</th></tr>
+</thead>
+<tbody>
+<tr><td rowspan="5">Open-loop</td><td>In-dist. val (official val)</td><td class="r">500 clips</td><td>minADE@8 &darr; med / mean</td><td class="r">0.455 / 0.691</td></tr>
+<tr><td>In-dist. test (official test)</td><td class="r">500 clips</td><td>minADE@8 &darr; med / mean</td><td class="r">0.471 / 0.780</td></tr>
+<tr><td>OOD long-tail, own CoC</td><td class="r">1,533 clips</td><td>minADE@8 &darr; med / mean</td><td class="r">0.487 / 0.846</td></tr>
+<tr><td>OOD long-tail, ref. CoC</td><td class="r">1,533 clips</td><td>minADE@8 &darr; med / mean</td><td class="r">0.478 / 0.778</td></tr>
+<tr><td>OOD long-tail</td><td class="r">1,533 clips</td><td>NLL of reference CoC &darr;</td><td class="r">3.005</td></tr>
+<tr><td rowspan="5">Closed-loop</td><td rowspan="5">alpasim <code>public_2601</code></td><td rowspan="5">150 scenes<br>&times; 2 rollouts</td><td>Scene score &uarr;</td><td class="r">0.750 [0.697, 0.801]</td></tr>
+<tr><td>Pass rate &uarr;</td><td class="r">0.890</td></tr>
+<tr><td>At-fault collision &darr;</td><td class="r">0.040</td></tr>
+<tr><td>Off-road &darr;</td><td class="r">0.070</td></tr>
+<tr><td>Progress &uarr;</td><td class="r">0.747</td></tr>
+<tr><td>Both</td><td>&mdash;</td><td class="r">&mdash;</td><td>CoC degeneracy &darr;</td><td class="r">0.006 / 0.006</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>LaTeX 원본은 <code>reports/evaluation/2026-08-11_baseline_table.tex</code>에 있다.</p>
+
+<h2><span class="num">5</span>실행 메모</h2>
+
+<p>
+폐루프 150 씬은 4장에 샤딩해 <strong>8.13시간</strong>(씬당 12.51분, 146개 구간 중앙값)에 끝났다.
+처음에는 씬당 28.4분이 걸렸는데, 원인은 계산량이 아니라 <strong>PyTorch의 기본 스레드 수</strong>였다.
+</p>
+
+<p>
+<code>OMP_NUM_THREADS</code>가 없으면 torch가 코어 수(64)만큼 intra-op 스레드를 띄우고 OpenMP
+배리어가 busy-wait으로 CPU를 태운다. 드라이버 4개면 256 스레드가 64 코어에서 경합해, 별도
+마이크로벤치마크에서 동일한 CPU 작업이 8스레드 대비 <strong>34배</strong> 느렸다.
+<code>OMP_NUM_THREADS=8</code>을 주자 드라이버 CPU가 11.6 코어에서 1.1 코어로, 씬 시간이
+28.42분에서 12.51분으로 떨어졌다(<strong>2.27배</strong>).
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">OMP 미설정</th><th class="r">OMP=8</th></tr></thead>
+<tbody>
+<tr><td>씬당 시간</td><td class="r">28.42 min</td><td class="r"><strong>12.51 min</strong></td></tr>
+<tr><td>드라이버 CPU (개당)</td><td class="r">1,160%</td><td class="r">102&ndash;127%</td></tr>
+<tr><td>드라이버 스레드 (개당)</td><td class="r">342</td><td class="r">118</td></tr>
+<tr><td>시스템 load (64 코어)</td><td class="r">81</td><td class="r">15.8</td></tr>
+</tbody>
+</table>
+
+<p>
+스레드 수는 CPU 리덕션 순서를 바꾸므로 한 매트릭스 안에서 섞으면 안 된다. baseline과 두 압축
+config 모두 <code>OMP_NUM_THREADS=8</code>로 통일했다.
+</p>
+
+<h2><span class="num">6</span>이 기준선으로 무엇을 판정하는가</h2>
+
+<p>
+개루프 쪽은 이미 끝났다 &mdash; <code>dual_u40_v2</code>와 <code>jtraj_u40_v2</code>(각 24.0% 압축)가
+이 baseline 대비 중앙값 +0.053 m / +0.080 m이고, 두 config 사이의 차이는 +0.028 m이다
+(<a href="2026-08-09_criterion-oneshot.html">2026-08-09 보고서</a>).
+</p>
+
+<p>
+폐루프는 두 config가 같은 150 씬에서 실행 중이다. 이 표의 0.750 / 0.890이 그 비교의 기준점이
+되고, 씬 단위 페어드 델타로 보고된다. 씬 점수 분포가 이중 구조라 페어드 차이의 절반가량이 정확히
+0이 되므로, 부트스트랩 평균 CI를 1차 지표로 쓰고 Wilcoxon은 보조로 보고한다.
+</p>
+
+<footer>
+  <p>
+    실행: <code>experiments/evaluation/run_baseline.py</code> (개루프),
+    <code>experiments/head_analysis/launch_alpasim_shards.sh</code> +
+    <code>merge_alpasim_shards.py</code> (폐루프)<br>
+    분석: <code>experiments/evaluation/analyze_arms.py</code>,
+    <code>experiments/head_analysis/analyze_alpasim.py</code><br>
+    출력: <code>outputs/arms_summary/</code>, <code>outputs/alpasim_baseline_2601/</code> ·
+    실행 로그: <code>alpasim-runs/m2601_merged_baseline/</code>
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

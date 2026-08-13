@@ -5,6 +5,11 @@ Configs:
                       expert early40/late10 (magnitude). Expected -3.25B.
   cocsafe_full_r20 -- VLM dual max(rank_traj, rank_coc) 20% + KV1(dual),
                       expert early40/late10 (magnitude). Expected -2.01B.
+  *_u40_v2         -- the one-factor family, all at the grid's dual_uniform cell
+                      (uniform matched budget, expert untouched, no KV drop); only the
+                      within-layer score differs. Combined: dual = max(rank_traj,
+                      rank_coc), j_traj = max(rank_traj, rank_J). Single-criterion
+                      controls: traj, coc, j. Expected -2.66B each.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -22,33 +27,72 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
 
 import analysis_lib as lib  # noqa: E402
 import mask_lib as ml  # noqa: E402
+import sample_cache as sc  # noqa: E402
 import slim_lib as sl  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 from run_cocsafe import rank_norm  # noqa: E402
 from run_eval import eval_config  # noqa: E402
-from run_grid import grid_configs  # noqa: E402
+from run_grid import allocations, grid_configs  # noqa: E402
 from run_integrated import expert_masks, vlm_combined_masks  # noqa: E402
 
 from alpamayo1_5 import helper  # noqa: E402
-from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
+# pinned to the blobs every result in this track was produced with, matching run_baseline
+MODEL_REV = "7aba8293c09993f2e125c6819df05d7fa3e873ea"
 
 
-def build_masks(cfg_name, imp, model):
+def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
-    if cfg_name == "dual_uniform":
+    if cfg_name.endswith("_u40_v2"):
+        # The one-factor family. Everything is held at the grid's dual_uniform cell --
+        # uniform matched budget, expert untouched, no KV drop -- so the only thing that
+        # varies across these configs is the within-layer score. `dual`/`j_traj` are the
+        # combined criteria max(rank I_traj, rank X); `traj`/`coc`/`j` are the single-
+        # criterion controls that say what each half of that max() does on its own.
+        # Reusing `allocations` rather than hardcoding 0.40 matters: the matched target
+        # is 0.398563, and rounding it to 0.40 moves 17 MLP channels per layer.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq, rm = allocs["uniform"]
+
+        def half(name):
+            if name == "traj":
+                return imp["traj_vlm_q"], imp["traj_vlm_mlp"]
+            if name == "coc":
+                return imp["coc_vlm_q"], imp["coc_vlm_mlp"]
+            jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
+            return jl["q_j"], jl["mlp_j"]
+
+        stem = cfg_name[: -len("_u40_v2")]
+        parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j")}.get(stem, (stem,))
+        # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
+        # criterion -- it only matters when two scores have to share one scale
+        sq, sm = half(parts[0])
+        for p in parts[1:]:
+            oq, om = half(p)
+            sq = np.maximum(rank_norm(sq), rank_norm(oq))
+            sm = np.maximum(rank_norm(sm), rank_norm(om))
+        vq = ml.select_mask_ratios(sq, rq)
+        vm = ml.select_mask_ratios(sm, rm)
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif cfg_name == "dual_uniform":
         # the grid's practical winner: dual criterion, uniform layerwise budget, VLM only.
         # Masks come straight from grid_configs so the closed-loop checkpoint is bit-identical
         # to the cell that was evaluated open-loop; expert and KV are deliberately untouched
@@ -114,9 +158,13 @@ def expected_removed(model, vq, vm, eq, em, kvonly):
     return removed
 
 
-def smoke(model, processor, clip_id, seed=42):
-    """Short rollout + TF eval + cache-shape assert on the slim model."""
-    data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+def smoke(model, processor, clip_id, t0_us, seed=42):
+    """Short rollout + TF eval + cache-shape assert on the slim model.
+
+    Reads the per-clip cache rather than the camera chunk zip: the val chunks were
+    deleted in 2026-08, so `load_physical_aiavdataset` would re-download here.
+    """
+    data = sc.load_cached(sc.path_for("eval", clip_id, t0_us))
     inputs = lib.build_inputs(model, processor, data, "cuda")
     prompt_len = inputs["input_ids"].shape[1]
     gt_xy = data["ego_future_xyz"][0, 0, :, :2].cpu().numpy()
@@ -139,9 +187,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True,
                     choices=["integrated_mag", "cocsafe_full_r20", "cocsafe_full_r30", "dual_uniform",
-                             "j_traj_full_r20", "j_traj_full_r30"])
+                             "j_traj_full_r20", "j_traj_full_r30",
+                             "dual_u40_v2", "j_traj_u40_v2",
+                             "traj_u40_v2", "coc_u40_v2", "j_u40_v2"])
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
+    ap.add_argument("--jlens", type=str, default="jlens_v2",
+                    help="J-lens run supplying q_j/mlp_j for the j_traj configs")
+    ap.add_argument("--sets-id", type=str, default="eval_sets")
     ap.add_argument("--reserve-gb", type=float, default=30.0)
     ap.add_argument("--gpu", type=int, default=None)
     args = ap.parse_args()
@@ -150,7 +203,8 @@ def main():
     device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
     print(f"using {device}", flush=True)
 
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
+    model = Alpamayo1_5.from_pretrained(
+        "nvidia/Alpamayo-1.5-10B", revision=MODEL_REV, dtype=torch.bfloat16).to("cuda")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -159,7 +213,7 @@ def main():
     lib.set_expert_attn_impl(model, "sdpa")
 
     imp = dict(np.load(REPO / "outputs" / args.importance / "importance.npz"))
-    vq, vm, eq, em, kvonly = build_masks(args.config, imp, model)
+    vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens)
 
     full_total = sl.n_params(model)
     t0 = time.time()
@@ -179,13 +233,15 @@ def main():
     sl.save_slim(model, meta, out_dir)
     print(f"saved checkpoint in {time.time() - t0:.0f}s -> {out_dir}", flush=True)
 
-    split = json.loads((REPO / "outputs" / "split.json").read_text())
-    result = smoke(model, processor, split["val"][0])
+    man = pd.read_parquet(REPO / "outputs" / args.sets_id / "indist_500.parquet")
+    result = smoke(model, processor, man.clip_id.iloc[0], int(man.t0_us.iloc[0]))
     print(f"smoke: {result}", flush=True)
 
     (out_dir / "config.json").write_text(json.dumps({
-        "model": "nvidia/Alpamayo-1.5-10B", "config": args.config,
-        "importance_from": args.importance, "params": meta["params"],
+        "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
+        "config": args.config,
+        "importance_from": args.importance, "jlens_from": args.jlens,
+        "params": meta["params"],
         "kvonly_layers": list(kvonly),
         "kept_q_per_layer": {"vlm": [len(m["q"]) for m in meta["vlm"]],
                              "expert": [len(m["q"]) for m in meta["expert"]]},

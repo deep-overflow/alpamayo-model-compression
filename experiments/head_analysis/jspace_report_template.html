@@ -169,6 +169,64 @@ j-score는 언제나 <code>&radic;tr(발자국 Gram &times; 계수 2차 모멘�
 <p>둘 다 선형화 하에서 정확하며 활성값 2차 모멘트만 필요합니다. 사전은 이 모델이 실제 생성한
 CoC 코퍼스(900클립 14,131토큰, <strong>유니크 423개 전량</strong>)와 랜덤 어휘 512개로 구성했습니다.</p>
 
+<h3>2.1 사전 선택이 결과를 정하는가 (2026-08-09 측정)</h3>
+
+<p>
+j-score는 <code>mlp_j[c]&sup2; &prop; w<sub>c</sub>&#7488; <strong>M</strong> w<sub>c</sub></code>,
+<code><strong>M</strong> = &sum;<sub>&tau;</sub> v<sub>&tau;</sub>v<sub>&tau;</sub>&#7488;</code>
+이므로 <strong>사전은 곧 어느 2차 모멘트 행렬에 점수를 매길지의 선택</strong>입니다. 목적이
+&ldquo;모델이 실제로 생성하는 추론을 망가뜨리지 않는 것&rdquo;이라면 이론적으로 올바른 M은 모델 자신의
+출력 분포에 대한 기댓값 <code>&sum;<sub>&tau;</sub> p<sub>&tau;</sub> v<sub>&tau;</sub>v<sub>&tau;</sub>&#7488;</code>이고,
+빈출 상위를 잘라 <em>동일 가중</em>하는 현행 방식도, 어휘 균등 랜덤도 그 추정량이 아닙니다.
+차이가 실제로 문제가 되는지 재봤습니다 (100클립 재실행 <code>jlens_v2</code>, 사전 714 = 빈출 202 + 랜덤 512).
+</p>
+
+<table>
+<thead><tr><th>비교</th><th class="r">q_j</th><th class="r">mlp_j</th></tr></thead>
+<tbody>
+<tr><td>빈출 202 &nbsp;vs&nbsp; 랜덤 512</td><td class="r">+0.932</td><td class="r">+0.766</td></tr>
+<tr><td><em>노이즈 바닥</em> (랜덤 256 vs 랜덤 256)</td><td class="r"><em>+0.991</em></td><td class="r"><em>+0.961</em></td></tr>
+<tr><td>현행(빈출+랜덤) &nbsp;vs&nbsp; <strong>빈도가중 빈출</strong></td><td class="r"><strong>+0.984</strong></td><td class="r"><strong>+0.955</strong></td></tr>
+<tr><td>전체 vs 빈출만</td><td class="r">+0.993</td><td class="r">+0.981</td></tr>
+<tr><td>전체 vs 랜덤만</td><td class="r">+0.960</td><td class="r">+0.865</td></tr>
+</tbody>
+</table>
+
+<p>
+두 절반이 서로 다른 것을 재는 건 사실입니다 &mdash; 빈출 대 랜덤이 0.932/0.766으로 노이즈 바닥보다
+확실히 낮습니다. <strong>그런데 최종 점수는 이미 빈출 쪽입니다</strong>(전체 vs 빈출만 0.993/0.981,
+랜덤이 2.5배 많은데도). 빈출 토큰의 lens 벡터 크기가 커서 M을 지배하기 때문입니다. 결과적으로
+현행 점수와 이론적으로 올바른 빈도가중 점수의 차이는 <strong>mlp_j 0.955 대 노이즈 바닥 0.961로
+측정 노이즈 수준</strong>입니다.
+</p>
+
+<p>사전 크기도 병목이 아닙니다. 빈도 상위 k개만으로 202개 결과를 재현한 비율:</p>
+
+<table>
+<thead><tr><th class="r">상위 k</th><th class="r">q_j</th><th class="r">mlp_j</th></tr></thead>
+<tbody>
+<tr><td class="r">25</td><td class="r">+0.997</td><td class="r">+0.996</td></tr>
+<tr><td class="r">50</td><td class="r">+0.999</td><td class="r">+0.999</td></tr>
+<tr><td class="r">100</td><td class="r">+1.000</td><td class="r">+1.000</td></tr>
+</tbody>
+</table>
+
+<p>
+CoC 어휘가 극단적으로 치우쳐 있어서입니다 &mdash; 상위 10개 토큰이 코퍼스의 48.4%, 상위 50개가
+85.3%, 상위 100개가 93.9%를 차지합니다. <strong>상위 25개면 수렴</strong>하므로, 코퍼스가 900클립
+(유니크 423)이든 100클립(유니크 202)이든 같은 답이 나옵니다.
+</p>
+
+<div class="callout">
+<p>
+<strong>따라서 사전 선택은 이 결과를 좌우하지 않습니다.</strong> 랜덤 절반은 설계상 진단용
+(<code>freq_auc</code>가 빈출/랜덤 분리를 보고, <code>excess_kurtosis</code>는 랜덤 절반에서만 계산)
+이며 점수에 섞이는 것은 부작용에 가깝지만, 영향이 노이즈 수준이라 바꿀 실익이 없어 현행을 유지합니다.
+&ldquo;사전을 다르게 골랐으면 결론이 달라지지 않았겠는가&rdquo;라는 물음에 대한 답은 추정이 아니라
+위 측정값입니다.
+</p>
+</div>
+
 <h2><span class="num">3</span>결과 &mdash; G1: J-lens는 이 모델에서 작동하는가</h2>
 
 <p>초기~중간층 readout이 주행 개념을 정확히 지목합니다.</p>

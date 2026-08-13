@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기준 1요인 비교, 폐루프: CoC Taylor vs J-lens</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>폐루프에서의 기준 1요인 비교: 라벨을 버린 대가는 주행에서 정산되는가</h1>
+  <div class="meta">
+    2026-08-11 · alpasim <code>public_2601</code> 150 씬 × 2 rollout · 3 arm × 300 rollout ·
+    드라이버 RTX 5880 Ada
+  </div>
+</header>
+
+<p class="lede">
+답은 &ldquo;정산된다&rdquo;가 아니라 <strong>&ldquo;저울이 다르다&rdquo;</strong>였다. 24.0%를 잘라낸 두
+config 모두 무손상 baseline보다 <strong>주행을 더 잘한다</strong> &mdash; 개루프 minADE가 5&ndash;8 cm
+악화됐는데도. 그리고 두 config 사이의 순서는 개루프와 같게 유지된다: 주행 점수는 <code>dual</code>이,
+추론 건전성은 <code>jtraj</code>가 이긴다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">baseline</span><span class="v">0.750</span>씬 점수</div>
+  <div><span class="k">dual_u40_v2</span><span class="v">0.828</span>+0.079 (p=0.0001)</div>
+  <div><span class="k">jtraj_u40_v2</span><span class="v">0.791</span>+0.042 (p=0.037)</div>
+  <div><span class="k">jtraj − dual</span><span class="v">−0.037</span>p=0.032, 경계선</div>
+  <div><span class="k">CoC 퇴화</span><span class="v">3×</span>dual 2.7% / jtraj 0.8%</div>
+</div>
+
+<h2><span class="num">1</span>무엇을 정산하는가</h2>
+
+<p>
+개루프에서 두 config는 <strong>교환 관계</strong>로 드러났다
+(<a href="2026-08-09_criterion-oneshot.html">2026-08-09 보고서</a>). 같은 24.0% 압축, 같은 예산,
+같은 배분, expert·KV 미개입 &mdash; 오직 <code>max(rank I_traj, rank X)</code>의 <code>X</code>만
+다른데:
+</p>
+
+<table>
+<thead><tr><th>축</th><th class="r"><code>jtraj</code> − <code>dual</code></th><th>해석</th></tr></thead>
+<tbody>
+<tr><td>궤적 (minADE, val+test 1,000)</td><td class="r">+0.0278 m (p=9.7e&minus;08)</td><td>J-lens가 손해</td></tr>
+<tr><td>추론 (OOD의 GT CoC NLL)</td><td class="r">&minus;0.0308 (p=4.1e&minus;07)</td><td>J-lens가 이득</td></tr>
+<tr><td>CoC 퇴화 (test)</td><td class="r">3.0% → 1.6%</td><td>J-lens가 이득</td></tr>
+</tbody>
+</table>
+
+<p>
+개루프 minADE는 이 프로젝트에서 이미 두 번 방향을 틀리게 가리켰다. <code>integrated_mag</code>는
+개루프에서 멀쩡했지만 폐루프 CoC가 86.3% 퇴화했고, <code>dual_uniform</code>은 개루프에서
+baseline보다 나빴는데 폐루프 점수는 더 높았다. <strong>궤적 2.8 cm를 내주고 추론을 되사온 것이
+주행에서 플러스인지 마이너스인지는 minADE로 알 수 없다.</strong> 이 보고서가 그 답이다.
+</p>
+
+<h2><span class="num">2</span>설정</h2>
+
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>스위트 / 씬</td><td><code>public_2601</code> 913 씬 중 첫 150 (scene_id 정렬 = UUID 해시 순서)</td></tr>
+<tr><td>rollout</td><td>씬당 2 (arm당 300, 총 900)</td></tr>
+<tr><td>arm</td><td>baseline(무손상) · <code>dual_u40_v2</code> · <code>jtraj_u40_v2</code> (각 24.0% 압축)</td></tr>
+<tr><td>씬 집합</td><td>세 arm 동일 &mdash; 씬 단위 페어드</td></tr>
+<tr><td>캘리브레이션 오염</td><td><code>calib_100</code>과 겹침 0건</td></tr>
+<tr><td>드라이버 / 렌더러</td><td>모두 Ada, 카드당 한 스택, <code>OMP_NUM_THREADS=8</code></td></tr>
+</tbody>
+</table>
+
+<h3>2.1 이 표본이 무엇을 해상하는가</h3>
+
+<p>
+결과를 읽기 전에 검출 한계를 고정해 둔다. 씬 단위 페어드 델타의 σ는 저장된 매트릭스에서
+0.31&ndash;0.41이었고, 80% 검정력·α=0.05 기준 최소 검출 효과는 <code>2.80σ/√N</code>이다.
+</p>
+
+<table>
+<thead><tr><th class="r">N</th><th class="r">δ<sub>min</sub></th><th>비고</th></tr></thead>
+<tbody>
+<tr><td class="r">30</td><td class="r">0.179</td><td>2026-07 매트릭스 &mdash; 모든 config가 non-significant였던 이유</td></tr>
+<tr><td class="r"><strong>150</strong></td><td class="r"><strong>0.080</strong></td><td>이번 실험</td></tr>
+<tr><td class="r">250</td><td class="r">0.062</td><td>중첩 확장 시</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p>
+<strong>δ<sub>min</sub>은 낙관적인 추정이다.</strong> baseline 기준 150 씬 중 <strong>49.3%가 정확히
+1.0점</strong>이고, 이 씬들은 압축이 망가뜨리지 않는 한 페어드 차이가 0이 되어 정보를 주지 않는다.
+게다가 <strong>37%의 씬은 같은 조건의 두 rollout끼리도 갈린다</strong>(반복 노이즈 평균 0.145).
+실제 유효 표본은 150보다 작다. 따라서 non-significant 결과는 &ldquo;차이 없음&rdquo;이 아니라
+<strong>&ldquo;이 표본으로는 구분 불가&rdquo;</strong>로 읽어야 한다.
+</p>
+</div>
+
+<p>
+씬 점수 분포가 1.0에 몰린 이중 구조라 페어드 차이의 절반가량이 정확히 0이 된다. Wilcoxon 부호순위는
+0을 버리므로 유효 표본이 반으로 준다 &mdash; 그래서 이 보고서는 <strong>부트스트랩 평균 CI를 1차
+지표</strong>로 쓰고 Wilcoxon을 보조로 병기한다. 개루프 보고서와 우선순위가 반대인 이유다.
+</p>
+
+<h2><span class="num">3</span>결과</h2>
+
+<h3>3.1 절대값</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">score</th><th class="r">pass%</th><th class="r">at-fault 충돌</th><th class="r">전체 충돌</th><th class="r">off-road</th><th class="r">progress</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.750</td><td class="r">89.0</td><td class="r">0.040</td><td class="r">0.133</td><td class="r">0.070</td><td class="r">0.747</td><td class="r">0.006</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r"><strong>0.828</strong></td><td class="r"><strong>91.0</strong></td><td class="r"><strong>0.023</strong></td><td class="r"><strong>0.067</strong></td><td class="r">0.067</td><td class="r">0.828</td><td class="r">0.027</td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r">0.791</td><td class="r">88.7</td><td class="r">0.043</td><td class="r">0.097</td><td class="r">0.070</td><td class="r">0.804</td><td class="r"><strong>0.008</strong></td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cl::scene_score.png" alt="config별 씬 점수">
+  <figcaption>씬 점수. 두 압축 config가 baseline 위에 있다.</figcaption>
+</figure>
+
+<h3>3.2 페어드 대조 (n=150 씬)</h3>
+
+<table>
+<thead><tr><th>대조</th><th class="r">평균 [95% CI]</th><th class="r">p</th><th class="r">W/L/T</th><th class="r">σ</th><th class="r">δ<sub>min</sub></th></tr></thead>
+<tbody>
+<tr><td><code>dual</code> − baseline</td><td class="r"><strong>+0.0787</strong> [+0.0355, +0.1234]</td><td class="r"><strong>0.0001</strong></td><td class="r">56/20/74</td><td class="r">0.281</td><td class="r">0.064</td></tr>
+<tr><td><code>jtraj</code> − baseline</td><td class="r"><strong>+0.0418</strong> [&minus;0.0047, +0.0876]</td><td class="r"><strong>0.0371</strong></td><td class="r">51/30/69</td><td class="r">0.290</td><td class="r">0.066</td></tr>
+<tr><td><strong><code>jtraj</code> − <code>dual</code></strong></td><td class="r"><strong>&minus;0.0369</strong> [&minus;0.0719, &minus;0.0017]</td><td class="r"><strong>0.0323</strong></td><td class="r">24/34/92</td><td class="r">0.220</td><td class="r">0.050</td></tr>
+</tbody>
+</table>
+
+<p>
+세 대조 모두 유의하다. 주 대조인 <code>jtraj − dual</code>은 관측 효과 0.037이 δ<sub>min</sub> 0.050보다
+작은데도 검출됐는데, 이 대조의 σ가 0.220으로 vs-baseline(0.28&ndash;0.29)보다 작기 때문이다 &mdash;
+두 압축 config가 <em>같은 씬에서 비슷하게</em> 실패해 델타의 분산이 줄었다. 다만 CI 상한이
+&minus;0.0017로 0에 매우 가까워 <strong>경계선</strong>이다.
+</p>
+
+<figure>
+  <img src="PLOT::cl::paired_deltas.png" alt="baseline 대비 페어드 델타">
+  <figcaption>baseline 대비 씬 단위 페어드 델타. T(무승부)가 절반 가까이인 것은 baseline이 이미
+  만점인 씬이 49.3%이기 때문이다.</figcaption>
+</figure>
+
+<h3>3.3 개선은 어디서 나왔는가</h3>
+
+<p>
+baseline 점수를 기준으로 씬을 둘로 나누면 구조가 드러난다.
+</p>
+
+<table>
+<thead><tr><th>씬 구분</th><th class="r">n</th><th class="r">baseline</th><th class="r"><code>dual</code></th><th class="r"><code>jtraj</code></th></tr></thead>
+<tbody>
+<tr><td>baseline이 만점(1.0)</td><td class="r">74</td><td class="r">1.000</td><td class="r">0.941 <span style="color:#6B6555">(7씬 하락)</span></td><td class="r">0.932 <span style="color:#6B6555">(12씬 하락)</span></td></tr>
+<tr><td>baseline이 만점 미달</td><td class="r">76</td><td class="r">0.506</td><td class="r"><strong>0.718</strong></td><td class="r"><strong>0.655</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+<strong>압축은 baseline이 이미 잘하던 씬을 조금 망가뜨리고, 못하던 씬을 크게 개선한다.</strong>
+만점 씬에서는 7&ndash;12개가 떨어지지만, 미달 씬 76개에서 0.506 → 0.718(<code>dual</code>)로 올린다.
+순합이 플러스인 이유다.
+</p>
+
+<h3>3.4 실패 사유</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">at-fault 충돌</th><th class="r">off-road</th><th class="r">합계 (300 rollout 중)</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">12</td><td class="r">21</td><td class="r">33</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r"><strong>7</strong></td><td class="r">20</td><td class="r">27</td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r">13</td><td class="r">21</td><td class="r">34</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>dual</code>의 우위는 <strong>at-fault 충돌이 12 → 7로 거의 반</strong>이라는 한 가지에서 나온다.
+off-road는 세 config가 20&ndash;21로 동일하고, <code>jtraj</code>는 두 사유 모두 baseline과 구분되지
+않는다.
+</p>
+
+<figure>
+  <img src="PLOT::cl::incident_rates.png" alt="사고 유형별 비율">
+  <figcaption>사고 유형별 비율. <code>dual</code>의 충돌 감소가 유일한 실질적 차이다.</figcaption>
+</figure>
+
+<h3>3.5 추론 채널</h3>
+
+<table>
+<thead><tr><th>config</th><th class="r">CoC 퇴화</th><th class="r">empty</th><th class="r">soup</th><th class="r">길이 중앙</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.0055</td><td class="r">0.0007</td><td class="r">0.0048</td><td class="r">74</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0.0272</td><td class="r">0.0131</td><td class="r">0.0141</td><td class="r">74</td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r"><strong>0.0081</strong></td><td class="r">0.0010</td><td class="r">0.0070</td><td class="r">73</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>jtraj</code>의 퇴화율이 <code>dual</code>의 <strong>1/3</strong>이고 baseline(0.0055)에 거의
+붙어 있다. 개루프 test 셋에서 본 3.0% 대 1.6%와 같은 패턴이 폐루프에서 2.7% 대 0.8%로 재현됐다.
+</p>
+
+<figure>
+  <img src="PLOT::cl::coc_vs_score.png" alt="CoC 건전성과 주행 점수">
+  <figcaption>CoC 퇴화와 주행 점수. 퇴화가 3배 낮은 <code>jtraj</code>가 주행 점수는 더 낮다 &mdash;
+  &ldquo;CoC 건전성은 안전의 대리지표가 아니다&rdquo;라는 기존 결론이 이 축에서도 유지된다.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>판정</h2>
+
+<p>
+&ldquo;구분 불가&rdquo;로 끝날 가능성을 §2.1에서 미리 열어뒀지만, <strong>그렇게 되지 않았다.</strong>
+세 대조가 모두 유의하다.
+</p>
+
+<h3>4.1 압축이 주행을 개선했다</h3>
+
+<p>
+이것이 이번 실험의 가장 큰 발견이다. 파라미터의 24.0%를 제거한 두 config 모두 무손상 모델보다
+주행 점수가 높다. <code>dual</code>은 +0.079 (p=0.0001), <code>jtraj</code>는 +0.042 (p=0.037).
+</p>
+
+<p>
+같은 두 config가 <strong>개루프에서는 baseline보다 나빴다</strong> &mdash; minADE 중앙값
++0.053 m와 +0.080 m로, 둘 다 p&lt;1e&minus;07. 부호가 완전히 뒤집혔다.
+</p>
+
+<table>
+<thead><tr><th>대조</th><th class="r">개루프 minADE</th><th class="r">폐루프 score</th><th>부호</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code> vs baseline</td><td class="r">+0.053 m (나쁨)</td><td class="r">+0.079 (좋음)</td><td>뒤집힘</td></tr>
+<tr><td><code>jtraj</code> vs baseline</td><td class="r">+0.080 m (나쁨)</td><td class="r">+0.042 (좋음)</td><td>뒤집힘</td></tr>
+<tr><td><strong><code>jtraj</code> vs <code>dual</code></strong></td><td class="r">+0.028 m (나쁨)</td><td class="r">&minus;0.037 (나쁨)</td><td><strong>일치</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+개루프 절대값을 한 장으로 놓으면 그 대비가 분명해진다. 괄호는 baseline 대비 상대 차이이고,
+<strong>양수가 나쁨</strong>이다 (minADE / minFDE는 낮을수록 좋다).
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">val 500</th><th class="r">test 500</th><th class="r">OOD 1,533</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.691</td><td class="r">0.780</td><td class="r">0.846</td></tr>
+<tr><td>Taylor <span style="color:#6B6555">(<code>dual_u40_v2</code>)</span></td>
+    <td class="r">0.777 <strong>(+12.4%)</strong></td>
+    <td class="r">0.875 <strong>(+12.2%)</strong></td>
+    <td class="r">0.931 <strong>(+10.1%)</strong></td></tr>
+<tr><td>JSpace <span style="color:#6B6555">(<code>jtraj_u40_v2</code>)</span></td>
+    <td class="r">0.815 <strong>(+18.0%)</strong></td>
+    <td class="r">0.946 <strong>(+21.3%)</strong></td>
+    <td class="r">0.973 <strong>(+15.1%)</strong></td></tr>
+</tbody>
+</table>
+<p style="margin-top:-1.2rem; color:var(--text-muted); font-size:0.84rem;">
+개루프 <strong>minADE@8 평균</strong> (m), 자기 rollout CoC 조건. 괄호는 baseline 대비 상대 차이.
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">val 500</th><th class="r">test 500</th><th class="r">OOD 1,533</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">1.840</td><td class="r">2.016</td><td class="r">2.076</td></tr>
+<tr><td>Taylor <span style="color:#6B6555">(<code>dual_u40_v2</code>)</span></td>
+    <td class="r">1.986 <strong>(+7.9%)</strong></td>
+    <td class="r">2.278 <strong>(+13.0%)</strong></td>
+    <td class="r">2.223 <strong>(+7.1%)</strong></td></tr>
+<tr><td>JSpace <span style="color:#6B6555">(<code>jtraj_u40_v2</code>)</span></td>
+    <td class="r">2.089 <strong>(+13.5%)</strong></td>
+    <td class="r">2.524 <strong>(+25.2%)</strong></td>
+    <td class="r">2.321 <strong>(+11.8%)</strong></td></tr>
+</tbody>
+</table>
+<p style="margin-top:-1.2rem; color:var(--text-muted); font-size:0.84rem;">
+개루프 <strong>minFDE@8 평균</strong> (m), 같은 조건. 끝점만 보는 지표라 격차가 minADE의 2&ndash;4배로
+벌어진다 &mdash; 압축의 손실이 궤적 후반에 몰려 있다.
+</p>
+
+<p>
+세 셋 모두에서 Taylor가 JSpace보다 baseline에 가깝고, 순서가 뒤집히는 셋은 없다. 그리고 이
+&ldquo;개루프에서 10&ndash;25% 나쁨&rdquo;이 폐루프에서는 <strong>주행 점수 +4&ndash;8% 좋음</strong>으로
+나타난다.
+</p>
+
+<h3>4.2 기준 간 순서는 두 모드에서 일치한다</h3>
+
+<p>
+vs-baseline 부호는 뒤집히지만 <strong>arm 간 대조는 두 모드에서 같은 방향</strong>이다. 개루프에서
+<code>jtraj</code>가 뒤졌고, 폐루프에서도 뒤진다. 즉 &ldquo;CoC 라벨을 버린 대가&rdquo;는 두 평가
+모드가 일치해서 가리키는 유일한 항목이다.
+</p>
+
+<p>
+그리고 그 대가의 반대급부도 두 모드에서 같다: 추론 채널에서 <code>jtraj</code>가 이긴다.
+개루프에서는 참조 CoC의 NLL이 &minus;0.031 (p=4.1e&minus;07)이고 test 퇴화율이 3.0% 대 1.6%였으며,
+폐루프에서는 퇴화율이 2.7% 대 0.8%다.
+</p>
+
+<div class="callout good">
+<p>
+<strong>사전 등록한 판정에 대한 답.</strong> C1(개루프)에서 기각된 것은 &ldquo;J-lens가 CoC 라벨을
+대체한다&rdquo;는 <em>대체 가설</em>이었고, 폐루프가 그 기각을 확인한다. 두 기준은 서로 다른 것을
+지키며, 어느 쪽이 나은지는 무엇을 목표로 하느냐에 달렸다 &mdash; 주행 점수라면 <code>dual</code>,
+추론 건전성이라면 <code>jtraj</code>.
+</p>
+</div>
+
+<h3>4.3 경계선이라는 점은 명시해 둔다</h3>
+
+<p>
+주 대조의 CI 상한이 &minus;0.0017로 0에 매우 가깝다. 관측 효과 0.037은 이 표본의
+δ<sub>min</sub> 0.050보다 작고, 검출된 것은 이 대조의 σ가 유독 작았기 때문이다(0.220 대 0.28&ndash;0.29).
+<strong>재현을 요구할 만한 강도는 아니다.</strong> 씬 선택이 중첩이므로 같은 실행에 씬을 이어붙여
+250으로 늘리면 δ<sub>min</sub>이 0.039로 내려가고, 4장 기준 config당 5시간이 추가된다.
+</p>
+
+<h2><span class="num">5</span>해석과 한계</h2>
+
+<h3>왜 압축이 주행을 개선하는가 (해석)</h3>
+
+<p>
+§3.3의 분해가 단서를 준다. 압축은 baseline이 <em>이미 만점이던</em> 74씬에서는 조금 잃고
+(0.941 / 0.932), <em>못하던</em> 76씬에서 크게 얻는다 (0.506 → 0.718 / 0.655). 개선이 고르게
+퍼진 게 아니라 어려운 씬에 몰려 있다.
+</p>
+
+<p>
+반복 노이즈가 같은 방향을 가리킨다. 같은 씬 두 rollout의 점수 차 절댓값이
+baseline <strong>0.145</strong>인데 <code>dual</code> 0.067, <code>jtraj</code> 0.084로
+<strong>절반</strong>이다. 압축 모델이 더 결정론적으로 행동한다.
+</p>
+
+<p>
+이를 종합하면 그럴듯한 설명은 <strong>&ldquo;압축이 분포를 좁혔다&rdquo;</strong>는 것이다. 무손상
+모델은 어려운 상황에서 더 다양한 &mdash; 때로는 과감한 &mdash; 행동을 내놓고, 폐루프에서는 그 꼬리가
+사고로 이어진다. 폭을 24% 줄이면 출력이 보수적·반복적으로 좁혀지고, 개루프 minADE(GT 궤적과의
+거리)는 나빠지지만 폐루프 점수(충돌·이탈 회피)는 좋아진다. <code>dual</code>의 at-fault 충돌이
+12 → 7로 준 것이 이 그림에 맞는다.
+</p>
+
+<div class="callout warn">
+<p>
+<strong>이건 가설이지 측정이 아니다.</strong> &ldquo;압축이 규제자로 작동한다&rdquo;는 매력적인
+서사지만, 이 실험은 그것을 설계로 검증하지 않았다. 반증 가능한 형태로 만들려면 행동 분포의 폭을
+직접 재야 한다 &mdash; 예를 들어 같은 씬에서 K개 rollout의 궤적 분산, 조향·가속 명령의 엔트로피,
+또는 <code>analyze_longitudinal.py</code>가 이미 재는 제동 반응·차간거리 분포. 보수화가 사고를
+줄이는 대신 progress를 깎았는지도 봐야 하는데, progress는 오히려 0.747 → 0.828로 올라 단순한
+&ldquo;느리게 가서 안전해졌다&rdquo;는 아니다.
+</p>
+</div>
+
+<h3>한계</h3>
+
+<ul>
+<li><strong>주 대조가 경계선이다.</strong> CI 상한 &minus;0.0017, 관측 효과 0.037 &lt; δ<sub>min</sub>
+    0.050. 250씬으로 확장하면 δ<sub>min</sub>이 0.039가 된다.</li>
+<li><strong>천장 효과.</strong> baseline 기준 49.3%의 씬이 만점이라 페어드 차이의 절반가량(T 69&ndash;92)이
+    정확히 0이다. 유효 표본은 150보다 작고, δ<sub>min</sub> 계산은 그만큼 낙관적이다.</li>
+<li><strong>씬 커버리지를 통제하지 못했다.</strong> 선택은 UUID 해시 순서라 편향은 없지만,
+    <code>sim_suites.csv</code>에 시나리오 속성이 없어 층화가 불가능하다. 씬 id의 22%만
+    PhysicalAI-AV 클립 인덱스와 조인되고, 그 부분집합에서 검사한 분포는 무작위 추출과 구분되지
+    않았다(관측 L1 0.491, 귀무 중앙값 0.607, 백분위 27%).</li>
+<li><strong>단일 압축률.</strong> 39.9% 폭(모델의 24.0%) 한 점이다. 개루프에서 20%일 때 두 기준은
+    무승부였고 39.9%에서 갈렸다 &mdash; 압축률에 따른 교환비는 미측정이다.</li>
+<li><strong>expert·KV 미개입.</strong> 1요인 비교를 위한 고정이지만, 결과적으로 모델의 60%(VLM
+    q/o+MLP)만 건드린다. &ldquo;압축이 주행을 개선한다&rdquo;가 expert까지 자른 config에서도
+    성립하는지는 별개 문제다.</li>
+<li><strong>스위트 비교 불가.</strong> 2026-07 매트릭스는 <code>public_2604</code> 30씬이었고 두
+    스위트는 아티팩트 uuid를 하나도 공유하지 않는다. 이 매트릭스 내부 비교만 유효하다.</li>
+</ul>
+
+<h3>다음</h3>
+
+<ol>
+<li><strong>보수화 가설의 검증.</strong> 같은 rollout 로그로 궤적 분산과 종방향 지표를 재면 추가
+    실행 없이 검증 가능하다 (<code>analyze_longitudinal.py</code>가 이미 있다).</li>
+<li><strong>expert 축.</strong> 지금까지의 모든 config가 expert를 magnitude 기준으로 자르거나
+    아예 건드리지 않았다. <code>expert_masks</code>에 <code>criterion="traj"</code> 분기가 이미
+    있고 <code>traj_exp_q</code>/<code>traj_exp_mlp</code>도 산출돼 있으므로, 거의 공짜로 열 수 있는
+    축이다 &mdash; 그리고 모델의 19.2%다.</li>
+<li><strong>압축률 스윕.</strong> 주행 점수가 압축률에 대해 단조인지, 어디서 꺾이는지.
+    &ldquo;24%가 개선&rdquo;이라면 40%는? 이것이 논문의 헤드라인이 될 수 있다.</li>
+</ol>
+
+<footer>
+  <p>
+    실행: <code>experiments/head_analysis/launch_alpasim_shards.sh</code> +
+    <code>merge_alpasim_shards.py</code> ·
+    분석: <code>experiments/head_analysis/analyze_alpasim.py --prefix m2601_merged_</code><br>
+    출력: <code>outputs/alpasim_arms_2601/</code> ·
+    로그: <code>alpasim-runs/m2601_merged_*</code> ·
+    기준선: <a href="2026-08-11_baseline-anchor.html">2026-08-11 baseline anchor</a>
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

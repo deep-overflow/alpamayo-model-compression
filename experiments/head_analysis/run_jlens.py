@@ -30,14 +30,15 @@ import torch
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
 
 import analysis_lib as lib  # noqa: E402
 import jlens_lib as jl  # noqa: E402
 import mask_lib as ml  # noqa: E402
+import sample_cache as sc  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 
 from alpamayo1_5 import helper  # noqa: E402
-from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
 # resolved from this file so the script runs the same on the host and in the container
@@ -74,7 +75,9 @@ def load_coc_refs(exp_id):
     sampling noise from the Jacobian and makes the run reproducible.
     """
     refs = {}
-    for shard in sorted((REPO / "outputs" / exp_id).glob("train_*.json")):
+    # shards are named for what they were drawn from: "train_*" for the old split-based
+    # runs, "calib_*" since the calibration set moved to its own manifest
+    for shard in sorted((REPO / "outputs" / exp_id).glob("*.json")):
         refs.update(json.loads(shard.read_text()))
     return refs
 
@@ -185,6 +188,12 @@ def main():
                     help="dump the (2,L,S,d) J-lens tensor (~600 MB at S=1024)")
     ap.add_argument("--smoke", action="store_true",
                     help="1 clip, S=16 -- measures one backward before committing")
+    ap.add_argument("--shard", type=int, default=None,
+                    help="write raw accumulators for this shard instead of final scores; "
+                         "merge_jlens.py combines them")
+    ap.add_argument("--n-shards", type=int, default=1)
+    ap.add_argument("--calib-manifest", default="calib_100",
+                    help="eval_sets manifest stem; empty string falls back to split.json")
     args = ap.parse_args()
     if args.smoke:
         args.num_clips, args.n_freq, args.n_random = 1, 8, 8
@@ -193,13 +202,18 @@ def main():
 
     out_dir = REPO / "outputs" / args.exp_id
     (out_dir / "plots").mkdir(parents=True, exist_ok=True)
-    split = json.loads((REPO / "outputs" / "split.json").read_text())
-    clips = split["calib"][args.clip_offset : args.clip_offset + args.num_clips]
+    clips = sc.calib_clips(REPO, args.calib_manifest)[
+        args.clip_offset : args.clip_offset + args.num_clips]
+    if args.shard is not None:
+        # strided so any shard count covers the same clip set
+        clips = clips[args.shard::args.n_shards]
 
     device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
     print(f"using {device}", flush=True)
 
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
+    model = Alpamayo1_5.from_pretrained(
+        "nvidia/Alpamayo-1.5-10B", revision="7aba8293c09993f2e125c6819df05d7fa3e873ea",
+        dtype=torch.bfloat16).to("cuda")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -228,7 +242,7 @@ def main():
     datas = []
     for clip_id in clips:
         t0 = time.time()
-        datas.append(load_physical_aiavdataset(clip_id, t0_us=5_100_000))
+        datas.append(sc.load_cached(sc.path_for("calib", clip_id, sc.CALIB_T0)))
         print(f"[data {len(datas)}/{len(clips)}] {clip_id} ({time.time() - t0:.0f}s)", flush=True)
 
     # ---- pass 2: Jacobian ---------------------------------------------------
@@ -241,6 +255,16 @@ def main():
     # single run reports its own Jacobian noise floor without a paired run
     v_odd = torch.zeros_like(v_acc)
     n_odd = 0
+    # a missing reference silently falls back to a fresh rollout, which reintroduces the
+    # sampling noise this run exists to avoid -- and the fallback path does not survive the
+    # J-lens grad requirements. Fail loudly instead.
+    missing = [c for c in clips if c not in refs]
+    if missing:
+        raise SystemExit(
+            f"{len(missing)}/{len(clips)} clips have no CoC reference in "
+            f"outputs/{args.coc_refs} (first: {missing[0]}). Run make_teacher_refs.py "
+            f"--calib-manifest {args.calib_manifest} first.")
+
     probe_acc, records = [], []
     for ci, data in enumerate(datas):
         torch.cuda.reset_peak_memory_stats()
@@ -259,8 +283,21 @@ def main():
               f"peak={rec['peak_gb']:.1f}GB held {rec['held_gb_before']:.1f}->"
               f"{rec['held_gb_after']:.1f}GB ({time.time() - t0:.0f}s)", flush=True)
     n_even = len(clips) - n_odd
-    v_acc /= len(clips)
     taps.remove()
+    if args.shard is not None:
+        # sums, not means: merge_jlens.py divides once over the pooled clips/positions
+        torch.save({"v_sum": v_acc.cpu(), "n_clips": len(clips),
+                    "mlp_sq_sum": wstats.mlp_sq.cpu(), "head_cov_sum": wstats.head_cov.cpu(),
+                    "wstats_count": wstats.count, "token_ids": token_ids,
+                    "n_freq": n_freq, "clip_ids": clips, "records": records,
+                    "probes": torch.stack([p[:, :min(x.shape[1] for x in probe_acc)]
+                                           for p in probe_acc]).sum(0)},
+                   out_dir / f"shard_{args.shard}of{args.n_shards}.pt")
+        wstats.remove()
+        print(f"shard {args.shard}/{args.n_shards}: {len(clips)} clips -> "
+              f"{out_dir}/shard_{args.shard}of{args.n_shards}.pt", flush=True)
+        return
+    v_acc /= len(clips)
     mlp_sq, head_cov = wstats.finalize()
     wstats.remove()
 

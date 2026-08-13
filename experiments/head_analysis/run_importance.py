@@ -22,9 +22,11 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
 
 import analysis_lib as lib  # noqa: E402
 import prune_lib as pl  # noqa: E402
+import sample_cache as sc  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 
 from alpamayo1_5 import helper  # noqa: E402
@@ -123,6 +125,8 @@ def main():
     ap.add_argument("--num-clips", type=int, default=50)
     ap.add_argument("--exp-id", type=str, default="importance_v1")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--calib-manifest", default="calib_100",
+                    help="eval_sets manifest stem; empty string falls back to split.json")
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--fm-steps", type=int, default=10)
     ap.add_argument("--reserve-gb", type=float, default=40.0)
@@ -134,14 +138,15 @@ def main():
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    split = json.loads((REPO / "outputs" / "split.json").read_text())
-    calib = split["calib"][: args.num_clips]
+    calib = sc.calib_clips(REPO, args.calib_manifest)[: args.num_clips]
 
     devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
     device = reserve_gpu(args.reserve_gb, devices=devices)
     print(f"using {device}", flush=True)
 
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
+    model = Alpamayo1_5.from_pretrained(
+        "nvidia/Alpamayo-1.5-10B", revision="7aba8293c09993f2e125c6819df05d7fa3e873ea",
+        dtype=torch.bfloat16).to("cuda")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -182,6 +187,9 @@ def main():
         "purpose": "dual-objective Taylor importance for Q head / MLP channel / KV group",
         "objectives": {"coc": "CoC NLL", "traj": "flow-matching MSE vs GT trajectory"},
         "num_clips": len(calib), "clip_ids": calib, "seed": args.seed,
+        "calib_manifest": args.calib_manifest,
+        "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+        "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
         "fm_steps": args.fm_steps, "gradient_checkpointing": args.checkpoint,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
@@ -189,10 +197,12 @@ def main():
     records = []
     for ci, clip_id in enumerate(calib):
         t0 = time.time()
-        data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+        data = sc.load_cached(sc.path_for("calib", clip_id, sc.CALIB_T0))
         torch.cuda.reset_peak_memory_stats()
         clip_acc = {obj: {k: np.zeros(s) for k, s in shapes.items()} for obj in ("coc", "traj")}
-        rec = process_clip(model, processor, data, args, args.seed + ci, clip_acc)
+        # seed from the clip id, not the loop index: sharding must not change a result
+        rec = process_clip(model, processor, data, args,
+                           sc.clip_seed(args.seed, clip_id), clip_acc)
         for obj, d in clip_acc.items():
             for k, v in d.items():
                 acc[obj][k] += v

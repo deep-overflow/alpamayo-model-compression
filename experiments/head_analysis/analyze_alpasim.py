@@ -49,7 +49,16 @@ DEFAULT_CONFIGS = ["baseline", "slim_cocsafe_r20", "slim_cocsafe_r30", "slim_int
 # module-level so the plotting/summary helpers can stay parameterless; main() rebinds both
 # when --configs is given (e.g. re-running one new config against the stored baseline)
 CONFIGS = list(DEFAULT_CONFIGS)
-COLORS = {c: col for c, col in zip(CONFIGS, [C1, C2, C3, C4])}
+# a 6-arm comparison outruns the four named accents, so cycle rather than zip-truncate
+# (zip would silently drop the 5th config's colour and KeyError at plot time)
+PALETTE = [MUTED, C1, C2, C3, C4, "#7b5bd6", "#b0552f"]
+
+
+def colour_map(configs):
+    return {c: PALETTE[i % len(PALETTE)] for i, c in enumerate(configs)}
+
+
+COLORS = colour_map(CONFIGS)
 HEADLINE = ["score", "passed", "collision_at_fault", "collision_any", "offroad",
             "wrong_lane", "progress_clipped_rel", "progress_rel", "dist_to_gt_trajectory"]
 
@@ -166,7 +175,7 @@ def main():
     args = ap.parse_args()
     global CONFIGS, COLORS
     CONFIGS = list(args.configs)
-    COLORS = {c: col for c, col in zip(CONFIGS, [C1, C2, C3, C4])}
+    COLORS = colour_map(CONFIGS)
     configs = CONFIGS
 
     out = args.out

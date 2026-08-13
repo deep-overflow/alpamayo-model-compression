@@ -26,19 +26,23 @@ from pathlib import Path
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
 
-import analysis_lib as lib  # noqa: E402
-from expert_per_clip import reserve_gpu  # noqa: E402  gated-repo hub patch
+import analysis_lib as lib
+import sample_cache as sc
+from alpamayo1_5 import helper
+from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
+from expert_per_clip import reserve_gpu
 
-from alpamayo1_5 import helper  # noqa: E402
-from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
-from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
-
-REPO = Path("/workspace/alpamayo-model-compression")
+REPO = Path(__file__).resolve().parents[2]
 
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--calib-manifest", default=None,
+                    help="eval_sets manifest stem; overrides --split")
+    ap.add_argument("--cache", default="calib",
+                    help="pre_processed cache the clips are read from")
     ap.add_argument("--split", type=str, default="train", choices=["train", "val"])
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--num", type=int, default=10_000)
@@ -52,12 +56,15 @@ def main():
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     split = json.loads((REPO / "outputs" / "split.json").read_text())
-    clips = split[args.split][args.offset : args.offset + args.num]
+    clips = (sc.calib_clips(REPO, args.calib_manifest) if args.calib_manifest
+             else split[args.split])[args.offset : args.offset + args.num]
 
     device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
     print(f"using {device}  {args.split}[{args.offset}:{args.offset + len(clips)}]", flush=True)
 
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
+    model = Alpamayo1_5.from_pretrained(
+        "nvidia/Alpamayo-1.5-10B", revision="7aba8293c09993f2e125c6819df05d7fa3e873ea",
+        dtype=torch.bfloat16).to("cuda")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -65,17 +72,20 @@ def main():
     lib.set_vlm_attn_impl(model, "sdpa")
     lib.set_expert_attn_impl(model, "sdpa")
 
-    shard_path = out_dir / f"{args.split}_{args.offset:04d}.json"
+    tag = args.calib_manifest or args.split
+    shard_path = out_dir / f"{tag}_{args.offset:04d}.json"
     refs = json.loads(shard_path.read_text()) if shard_path.exists() else {}
     for ci, clip_id in enumerate(clips):
         if clip_id in refs:
             continue
         t0 = time.time()
-        data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+        data = sc.load_cached(sc.path_for(args.cache, clip_id, sc.CALIB_T0))
         inputs = lib.build_inputs(model, processor, data, "cuda")
         prompt_len = inputs["input_ids"].shape[1]
-        torch.manual_seed(args.seed + ci)
-        torch.cuda.manual_seed_all(args.seed + ci)
+        # seed from the clip id, not the loop index, so shards agree with a whole run
+        _s = sc.clip_seed(args.seed, clip_id)
+        torch.manual_seed(_s)
+        torch.cuda.manual_seed_all(_s)
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             roll = lib.run_rollout(model, inputs, max_generation_length=args.max_gen)
         coc_ids = roll["sequences"][0, prompt_len : roll["eos_pos"] + 1].tolist()

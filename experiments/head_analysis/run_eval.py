@@ -126,8 +126,14 @@ def combined_configs(imp, n_layers, n_heads, intermediate, seed):
 
 
 @torch.no_grad()
-def eval_config(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
-    """Teacher-forced forward + K denoisings. Returns (minADE, minFDE, CoC NLL)."""
+def eval_config_samples(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
+    """Teacher-forced forward + K denoisings. Returns (ade_k, fde_k, CoC NLL).
+
+    Per-sample arrays rather than their minimum, so minADE@K' for any K' <= len(seeds)
+    can be derived later without re-running: seeds are `base + k`, so the first K'
+    samples of a K-sample run are exactly what a K'-sample run would have drawn.
+    `eval_config` is the reducing wrapper every older runner still calls.
+    """
     attention_mask = torch.ones_like(seq_tf)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         out = model.vlm.model(
@@ -150,9 +156,16 @@ def eval_config(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
                 inputs["ego_history_rot"][:, -1].float(),
             )
             preds.append(pred_xyz[0, :, :2].cpu().numpy())
-    ade, fde = el.min_metrics(np.stack(preds), gt_xy)
+    ade, fde = el.ade_fde(np.stack(preds), gt_xy)
     del out, cache
     return ade, fde, nll
+
+
+def eval_config(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
+    """minADE / minFDE over `seeds`, plus the CoC NLL."""
+    ade, fde, nll = eval_config_samples(model, inputs, seq_tf, coc_start, coc_end,
+                                        gt_xy, seeds)
+    return float(ade.min()), float(fde.min()), nll
 
 
 def main():

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang='ko'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>평가 결과 표 모음 — Alpamayo 1.5 압축</title>
+<style>
+:root { --bg:#FAF9F5; --card:#FFF; --code:#F0EEE6; --ink:#29261B; --muted:#6B6555;
+  --accent:#D97757; --border:#E8E6DC; --stripe:#F5F4EF; --good:#008300; --bad:#b0402a; }
+* { box-sizing:border-box; }
+body { background:var(--bg); color:var(--ink); margin:0; padding:3rem 1.5rem 5rem;
+  font-family:"Söhne","Pretendard","Inter",-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+  font-size:16px; line-height:1.65; }
+.container { max-width:1080px; margin:0 auto; }
+header { border-bottom:2px solid var(--accent); padding-bottom:1.25rem; margin-bottom:2.5rem; }
+.eyebrow { color:var(--accent); font-size:.78rem; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; margin-bottom:.5rem; }
+h1 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.9rem; font-weight:500; margin:0 0 .6rem; }
+h2 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.3rem; font-weight:500;
+  margin:2.5rem 0 .5rem; }
+h2 .num { color:var(--accent); margin-right:.4rem; }
+h3 { font-size:1rem; font-weight:600; margin:1.6rem 0 .4rem; }
+.meta,.note { color:var(--muted); font-size:.88rem; }
+.note { margin:.4rem 0 1rem; }
+code { font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.85em;
+  background:var(--code); padding:.12em .35em; border-radius:4px; }
+.scroll { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; margin:.75rem 0 1.5rem; font-size:.87rem;
+  background:var(--card); border:1px solid var(--border); border-radius:8px; }
+th { background:var(--code); text-align:left; font-weight:600; padding:.5rem .7rem;
+  border-bottom:2px solid var(--border); white-space:nowrap; }
+td { padding:.45rem .7rem; border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr:nth-child(even) { background:var(--stripe); }
+tbody tr:last-child td { border-bottom:none; }
+.r { text-align:right; font-variant-numeric:tabular-nums; }
+.base td { font-weight:600; }
+.up { color:var(--bad); } .down { color:var(--good); }
+footer { margin-top:3.5rem; padding-top:1.2rem; border-top:1px solid var(--border);
+  color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class='container'>
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>평가 결과 표 모음</h1>
+  <div class="meta">2026-08-12 · <code>nvidia/Alpamayo-1.5-10B</code> ·
+  개루프 공식 val 500 / test 500 / OOD 1,533 · minADE@8 · RTX 5880 Ada ·
+  폐루프 alpasim <code>public_2601</code> 150씬 × 2 롤아웃</div>
+</header>
+<p class="note">서술 없이 숫자만 모은 참조 페이지. 모든 값은 클립 단위 원본 행에서 다시 계산했다.
+<strong>*</strong> 는 페어드 95% 부트스트랩 CI가 0을 포함하지 않는 경우.
+압축률은 모든 pruned arm이 동일하다 — 11.079B → 8.421B (−2.657B, 24.0%).</p>
+
+<h2><span class="num">1</span>arm 정의</h2><div class='scroll'><table><thead><tr><th>arm</th><th class='r'>기준</th><th class='r'>체크포인트</th></tr></thead><tbody><tr><td><code>baseline</code></td><td>무손상 기준선</td><td class='r'><code>baseline</code></td></tr>
+<tr><td><code>traj</code></td><td>궤적 Taylor 단독</td><td class='r'><code>slim_traj_u40_v2</code></td></tr>
+<tr><td><code>coc</code></td><td>CoC NLL Taylor 단독 (라벨 필요)</td><td class='r'><code>slim_coc_u40_v2</code></td></tr>
+<tr><td><code>j</code></td><td>J-lens 단독 (라벨 없음)</td><td class='r'><code>slim_j_u40_v2</code></td></tr>
+<tr><td><code>dual</code></td><td>max(rank I_traj, rank I_CoC) — 라벨 필요</td><td class='r'><code>slim_dual_u40_v2</code></td></tr>
+<tr><td><code>jtraj</code></td><td>max(rank I_traj, rank J) — 라벨 없음</td><td class='r'><code>slim_jtraj_u40_v2</code></td></tr></tbody></table></div>
+
+<h2><span class="num">2</span>개루프 요약</h2>
+<p class="note">괄호는 baseline 대비 상대 변화. 빨강이 악화, 초록이 개선.</p>
+<h3>minADE@8 평균</h3><div class='scroll'><table><thead><tr><th>minADE@8 — 평균 (baseline 대비)</th><th class='r'>val 500</th><th class='r'>test 500</th><th class='r'>OOD 1,533</th></tr></thead><tbody><tr class='base'><td><code>baseline</code></td><td class='r'>0.6908</td><td class='r'>0.7799</td><td class='r'>0.8457</td></tr>
+<tr><td><code>traj</code></td><td class='r'>0.8411 <span class="up">(+21.8%)</span></td><td class='r'>0.9333 <span class="up">(+19.7%)</span></td><td class='r'>1.0632 <span class="up">(+25.7%)</span></td></tr>
+<tr><td><code>coc</code></td><td class='r'>1.4442 <span class="up">(+109.1%)</span></td><td class='r'>1.4733 <span class="up">(+88.9%)</span></td><td class='r'>1.3826 <span class="up">(+63.5%)</span></td></tr>
+<tr><td><code>j</code></td><td class='r'>1.7827 <span class="up">(+158.1%)</span></td><td class='r'>2.0004 <span class="up">(+156.5%)</span></td><td class='r'>2.4234 <span class="up">(+186.6%)</span></td></tr>
+<tr><td><code>dual</code></td><td class='r'>0.7766 <span class="up">(+12.4%)</span></td><td class='r'>0.8754 <span class="up">(+12.2%)</span></td><td class='r'>0.9313 <span class="up">(+10.1%)</span></td></tr>
+<tr><td><code>jtraj</code></td><td class='r'>0.8148 <span class="up">(+18.0%)</span></td><td class='r'>0.9461 <span class="up">(+21.3%)</span></td><td class='r'>0.9731 <span class="up">(+15.1%)</span></td></tr></tbody></table></div>
+<h3>minFDE@8 평균</h3><div class='scroll'><table><thead><tr><th>minFDE@8 — 평균 (baseline 대비)</th><th class='r'>val 500</th><th class='r'>test 500</th><th class='r'>OOD 1,533</th></tr></thead><tbody><tr class='base'><td><code>baseline</code></td><td class='r'>1.8404</td><td class='r'>2.0156</td><td class='r'>2.0760</td></tr>
+<tr><td><code>traj</code></td><td class='r'>2.1693 <span class="up">(+17.9%)</span></td><td class='r'>2.4365 <span class="up">(+20.9%)</span></td><td class='r'>2.5406 <span class="up">(+22.4%)</span></td></tr>
+<tr><td><code>coc</code></td><td class='r'>3.9575 <span class="up">(+115.0%)</span></td><td class='r'>4.1489 <span class="up">(+105.8%)</span></td><td class='r'>3.3809 <span class="up">(+62.9%)</span></td></tr>
+<tr><td><code>j</code></td><td class='r'>4.9779 <span class="up">(+170.5%)</span></td><td class='r'>5.4861 <span class="up">(+172.2%)</span></td><td class='r'>6.2458 <span class="up">(+200.9%)</span></td></tr>
+<tr><td><code>dual</code></td><td class='r'>1.9860 <span class="up">(+7.9%)</span></td><td class='r'>2.2779 <span class="up">(+13.0%)</span></td><td class='r'>2.2235 <span class="up">(+7.1%)</span></td></tr>
+<tr><td><code>jtraj</code></td><td class='r'>2.0891 <span class="up">(+13.5%)</span></td><td class='r'>2.5237 <span class="up">(+25.2%)</span></td><td class='r'>2.3215 <span class="up">(+11.8%)</span></td></tr></tbody></table></div>
+<h3>NLL(self) 평균</h3><div class='scroll'><table><thead><tr><th>NLL(self) — 평균 (baseline 대비)</th><th class='r'>val 500</th><th class='r'>test 500</th><th class='r'>OOD 1,533</th></tr></thead><tbody><tr class='base'><td><code>baseline</code></td><td class='r'>0.1737</td><td class='r'>0.1755</td><td class='r'>0.2156</td></tr>
+<tr><td><code>traj</code></td><td class='r'>0.5900 <span class="up">(+239.6%)</span></td><td class='r'>0.6531 <span class="up">(+272.2%)</span></td><td class='r'>0.8587 <span class="up">(+298.3%)</span></td></tr>
+<tr><td><code>coc</code></td><td class='r'>1.1485 <span class="up">(+561.1%)</span></td><td class='r'>1.2102 <span class="up">(+589.7%)</span></td><td class='r'>0.8547 <span class="up">(+296.4%)</span></td></tr>
+<tr><td><code>j</code></td><td class='r'>0.2126 <span class="up">(+22.4%)</span></td><td class='r'>0.2276 <span class="up">(+29.7%)</span></td><td class='r'>0.2645 <span class="up">(+22.7%)</span></td></tr>
+<tr><td><code>dual</code></td><td class='r'>0.2223 <span class="up">(+28.0%)</span></td><td class='r'>0.2507 <span class="up">(+42.9%)</span></td><td class='r'>0.2535 <span class="up">(+17.6%)</span></td></tr>
+<tr><td><code>jtraj</code></td><td class='r'>0.1858 <span class="up">(+7.0%)</span></td><td class='r'>0.1990 <span class="up">(+13.4%)</span></td><td class='r'>0.2203 <span class="up">(+2.2%)</span></td></tr></tbody></table></div>
+
+<h2><span class="num">3</span>개루프 상세</h2><div class='scroll'><table><thead><tr><th class='r' colspan='1'>set</th><th class='r' colspan='1'>arm</th><th class='r' colspan='1'>n</th><th class='r' colspan='1'>minADE@8</th><th class='r' colspan='1'></th><th class='r' colspan='1'></th><th class='r' colspan='1'>minFDE@8</th><th class='r' colspan='1'></th><th class='r' colspan='1'></th><th class='r' colspan='1'>NLL(self)</th><th class='r' colspan='1'></th><th class='r' colspan='1'></th><th class='r' colspan='1'>CoC 퇴화</th><th class='r' colspan='1'>CoC 길이</th></tr><tr><th class='r'></th><th class='r'></th><th class='r'></th><th class='r'>중앙값</th><th class='r'>평균</th><th class='r'>95% CI</th><th class='r'>중앙값</th><th class='r'>평균</th><th class='r'>95% CI</th><th class='r'>중앙값</th><th class='r'>평균</th><th class='r'>95% CI</th><th class='r'></th><th class='r'></th></tr></thead><tbody><tr class='base'><td>val 500</td><td><code>baseline</code></td><td class='r'>500</td><td class='r'>0.4549</td><td class='r'>0.6908</td><td class='r'>[0.6252, 0.7624]</td><td class='r'>0.9224</td><td class='r'>1.8404</td><td class='r'>[1.6130, 2.1011]</td><td class='r'>0.1306</td><td class='r'>0.1737</td><td class='r'>[0.1605, 0.1876]</td><td class='r'>0.8%</td><td class='r'>69</td></tr>
+<tr><td>val 500</td><td><code>traj</code></td><td class='r'>500</td><td class='r'>0.5937</td><td class='r'>0.8411</td><td class='r'>[0.7715, 0.9145]</td><td class='r'>1.2237</td><td class='r'>2.1693</td><td class='r'>[1.9291, 2.4304]</td><td class='r'>0.3915</td><td class='r'>0.5900</td><td class='r'>[0.5265, 0.6616]</td><td class='r'>1.4%</td><td class='r'>69</td></tr>
+<tr><td>val 500</td><td><code>coc</code></td><td class='r'>500</td><td class='r'>0.9242</td><td class='r'>1.4442</td><td class='r'>[1.3122, 1.5840]</td><td class='r'>2.2815</td><td class='r'>3.9575</td><td class='r'>[3.5548, 4.3848]</td><td class='r'>0.1989</td><td class='r'>1.1485</td><td class='r'>[0.9480, 1.3582]</td><td class='r'>14.2%</td><td class='r'>72</td></tr>
+<tr><td>val 500</td><td><code>j</code></td><td class='r'>500</td><td class='r'>1.3114</td><td class='r'>1.7827</td><td class='r'>[1.6341, 1.9422]</td><td class='r'>3.2404</td><td class='r'>4.9779</td><td class='r'>[4.5155, 5.4713]</td><td class='r'>0.1598</td><td class='r'>0.2126</td><td class='r'>[0.1950, 0.2309]</td><td class='r'>0.2%</td><td class='r'>69</td></tr>
+<tr><td>val 500</td><td><code>dual</code></td><td class='r'>500</td><td class='r'>0.5664</td><td class='r'>0.7766</td><td class='r'>[0.7093, 0.8502]</td><td class='r'>1.2082</td><td class='r'>1.9860</td><td class='r'>[1.7559, 2.2393]</td><td class='r'>0.1587</td><td class='r'>0.2223</td><td class='r'>[0.1985, 0.2493]</td><td class='r'>1.4%</td><td class='r'>70</td></tr>
+<tr><td>val 500</td><td><code>jtraj</code></td><td class='r'>500</td><td class='r'>0.5798</td><td class='r'>0.8148</td><td class='r'>[0.7471, 0.8881]</td><td class='r'>1.2272</td><td class='r'>2.0891</td><td class='r'>[1.8690, 2.3334]</td><td class='r'>0.1360</td><td class='r'>0.1858</td><td class='r'>[0.1670, 0.2069]</td><td class='r'>1.4%</td><td class='r'>71</td></tr>
+<tr class='base'><td>test 500</td><td><code>baseline</code></td><td class='r'>500</td><td class='r'>0.4713</td><td class='r'>0.7799</td><td class='r'>[0.7056, 0.8593]</td><td class='r'>0.9302</td><td class='r'>2.0156</td><td class='r'>[1.7709, 2.2752]</td><td class='r'>0.1231</td><td class='r'>0.1755</td><td class='r'>[0.1609, 0.1900]</td><td class='r'>0.6%</td><td class='r'>67</td></tr>
+<tr><td>test 500</td><td><code>traj</code></td><td class='r'>500</td><td class='r'>0.6193</td><td class='r'>0.9333</td><td class='r'>[0.8448, 1.0258]</td><td class='r'>1.4105</td><td class='r'>2.4365</td><td class='r'>[2.1544, 2.7308]</td><td class='r'>0.4219</td><td class='r'>0.6531</td><td class='r'>[0.5701, 0.7455]</td><td class='r'>2.6%</td><td class='r'>66</td></tr>
+<tr><td>test 500</td><td><code>coc</code></td><td class='r'>500</td><td class='r'>0.9537</td><td class='r'>1.4733</td><td class='r'>[1.3299, 1.6286]</td><td class='r'>2.2091</td><td class='r'>4.1489</td><td class='r'>[3.7021, 4.6368]</td><td class='r'>0.2060</td><td class='r'>1.2102</td><td class='r'>[1.0087, 1.4237]</td><td class='r'>15.0%</td><td class='r'>72</td></tr>
+<tr><td>test 500</td><td><code>j</code></td><td class='r'>500</td><td class='r'>1.1460</td><td class='r'>2.0004</td><td class='r'>[1.8043, 2.2113]</td><td class='r'>3.0200</td><td class='r'>5.4861</td><td class='r'>[4.8737, 6.1538]</td><td class='r'>0.1613</td><td class='r'>0.2276</td><td class='r'>[0.2084, 0.2476]</td><td class='r'>0.8%</td><td class='r'>68</td></tr>
+<tr><td>test 500</td><td><code>dual</code></td><td class='r'>500</td><td class='r'>0.6019</td><td class='r'>0.8754</td><td class='r'>[0.7972, 0.9572]</td><td class='r'>1.2845</td><td class='r'>2.2779</td><td class='r'>[2.0242, 2.5420]</td><td class='r'>0.1608</td><td class='r'>0.2507</td><td class='r'>[0.2119, 0.2969]</td><td class='r'>3.0%</td><td class='r'>69</td></tr>
+<tr><td>test 500</td><td><code>jtraj</code></td><td class='r'>500</td><td class='r'>0.6419</td><td class='r'>0.9461</td><td class='r'>[0.8592, 1.0387]</td><td class='r'>1.4117</td><td class='r'>2.5237</td><td class='r'>[2.2512, 2.8086]</td><td class='r'>0.1333</td><td class='r'>0.1990</td><td class='r'>[0.1771, 0.2237]</td><td class='r'>1.6%</td><td class='r'>71</td></tr>
+<tr class='base'><td>OOD 1,533</td><td><code>baseline</code></td><td class='r'>1533</td><td class='r'>0.4871</td><td class='r'>0.8457</td><td class='r'>[0.7847, 0.9143]</td><td class='r'>0.9385</td><td class='r'>2.0760</td><td class='r'>[1.8985, 2.2736]</td><td class='r'>0.1706</td><td class='r'>0.2156</td><td class='r'>[0.2075, 0.2241]</td><td class='r'>0.6%</td><td class='r'>72</td></tr>
+<tr><td>OOD 1,533</td><td><code>traj</code></td><td class='r'>1533</td><td class='r'>0.6391</td><td class='r'>1.0632</td><td class='r'>[0.9948, 1.1389]</td><td class='r'>1.2526</td><td class='r'>2.5406</td><td class='r'>[2.3533, 2.7439]</td><td class='r'>0.5854</td><td class='r'>0.8587</td><td class='r'>[0.8064, 0.9146]</td><td class='r'>3.1%</td><td class='r'>72</td></tr>
+<tr><td>OOD 1,533</td><td><code>coc</code></td><td class='r'>1533</td><td class='r'>0.8132</td><td class='r'>1.3826</td><td class='r'>[1.2966, 1.4752]</td><td class='r'>1.7472</td><td class='r'>3.3809</td><td class='r'>[3.1442, 3.6335]</td><td class='r'>0.2391</td><td class='r'>0.8547</td><td class='r'>[0.7628, 0.9514]</td><td class='r'>10.5%</td><td class='r'>72</td></tr>
+<tr><td>OOD 1,533</td><td><code>j</code></td><td class='r'>1533</td><td class='r'>1.3106</td><td class='r'>2.4234</td><td class='r'>[2.2776, 2.5725]</td><td class='r'>3.3804</td><td class='r'>6.2458</td><td class='r'>[5.8457, 6.6641]</td><td class='r'>0.2126</td><td class='r'>0.2645</td><td class='r'>[0.2527, 0.2768]</td><td class='r'>1.2%</td><td class='r'>72</td></tr>
+<tr><td>OOD 1,533</td><td><code>dual</code></td><td class='r'>1533</td><td class='r'>0.5607</td><td class='r'>0.9313</td><td class='r'>[0.8685, 1.0003]</td><td class='r'>1.0918</td><td class='r'>2.2235</td><td class='r'>[2.0450, 2.4149]</td><td class='r'>0.1880</td><td class='r'>0.2535</td><td class='r'>[0.2400, 0.2679]</td><td class='r'>2.5%</td><td class='r'>72</td></tr>
+<tr><td>OOD 1,533</td><td><code>jtraj</code></td><td class='r'>1533</td><td class='r'>0.5996</td><td class='r'>0.9731</td><td class='r'>[0.9078, 1.0447]</td><td class='r'>1.1280</td><td class='r'>2.3215</td><td class='r'>[2.1380, 2.5171]</td><td class='r'>0.1790</td><td class='r'>0.2203</td><td class='r'>[0.2117, 0.2293]</td><td class='r'>1.4%</td><td class='r'>72</td></tr></tbody></table></div>
+
+<h2><span class="num">4</span>페어드 대조 (minADE@8)</h2>
+<p class="note">양수 = 뒤쪽 arm이 더 나쁨. 같은 클립·같은 시드로 짝지은 차이.</p>
+<div class='scroll'><table><thead><tr><th class='r'>페어드 대조</th><th class='r'>val 500</th><th class='r'></th><th class='r'>test 500</th><th class='r'></th><th class='r'>OOD 1,533</th><th class='r'></th></tr><tr><th class='r'></th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th></tr></thead><tbody><tr><td><code>traj</code> − <code>baseline</code></td><td class='r'>+0.1053</td><td class='r'>+0.1504 [+0.0870, +0.2110] <strong>*</strong></td><td class='r'>+0.0862</td><td class='r'>+0.1534 [+0.0869, +0.2261] <strong>*</strong></td><td class='r'>+0.1075</td><td class='r'>+0.2175 [+0.1686, +0.2681] <strong>*</strong></td></tr>
+<tr><td><code>coc</code> − <code>baseline</code></td><td class='r'>+0.3229</td><td class='r'>+0.7534 [+0.6259, +0.8902] <strong>*</strong></td><td class='r'>+0.2943</td><td class='r'>+0.6934 [+0.5616, +0.8354] <strong>*</strong></td><td class='r'>+0.2412</td><td class='r'>+0.5369 [+0.4657, +0.6164] <strong>*</strong></td></tr>
+<tr><td><code>j</code> − <code>baseline</code></td><td class='r'>+0.6967</td><td class='r'>+1.0919 [+0.9503, +1.2448] <strong>*</strong></td><td class='r'>+0.6091</td><td class='r'>+1.2204 [+1.0451, +1.4089] <strong>*</strong></td><td class='r'>+0.7423</td><td class='r'>+1.5777 [+1.4479, +1.7103] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>baseline</code></td><td class='r'>+0.0529</td><td class='r'>+0.0859 [+0.0275, +0.1471] <strong>*</strong></td><td class='r'>+0.0517</td><td class='r'>+0.0955 [+0.0460, +0.1443] <strong>*</strong></td><td class='r'>+0.0533</td><td class='r'>+0.0856 [+0.0453, +0.1267] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>baseline</code></td><td class='r'>+0.0797</td><td class='r'>+0.1241 [+0.0693, +0.1796] <strong>*</strong></td><td class='r'>+0.0960</td><td class='r'>+0.1661 [+0.1148, +0.2202] <strong>*</strong></td><td class='r'>+0.0727</td><td class='r'>+0.1274 [+0.0824, +0.1762] <strong>*</strong></td></tr>
+<tr><td><code>coc</code> − <code>traj</code></td><td class='r'>+0.1812</td><td class='r'>+0.6030 [+0.4847, +0.7289] <strong>*</strong></td><td class='r'>+0.1926</td><td class='r'>+0.5400 [+0.4181, +0.6710] <strong>*</strong></td><td class='r'>+0.1317</td><td class='r'>+0.3194 [+0.2523, +0.3896] <strong>*</strong></td></tr>
+<tr><td><code>j</code> − <code>traj</code></td><td class='r'>+0.5595</td><td class='r'>+0.9416 [+0.8121, +1.0816] <strong>*</strong></td><td class='r'>+0.4881</td><td class='r'>+1.0671 [+0.8984, +1.2460] <strong>*</strong></td><td class='r'>+0.6137</td><td class='r'>+1.3602 [+1.2409, +1.4828] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>traj</code></td><td class='r'>-0.0142</td><td class='r'>-0.0645 [-0.1136, -0.0128] <strong>*</strong></td><td class='r'>-0.0172</td><td class='r'>-0.0579 [-0.1167, -0.0044] <strong>*</strong></td><td class='r'>-0.0505</td><td class='r'>-0.1320 [-0.1755, -0.0892] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>traj</code></td><td class='r'>+0.0056</td><td class='r'>-0.0263 [-0.0735, +0.0209]</td><td class='r'>+0.0224</td><td class='r'>+0.0128 [-0.0559, +0.0763]</td><td class='r'>-0.0146</td><td class='r'>-0.0901 [-0.1346, -0.0447] <strong>*</strong></td></tr>
+<tr><td><code>j</code> − <code>coc</code></td><td class='r'>+0.2518</td><td class='r'>+0.3386 [+0.1929, +0.4845] <strong>*</strong></td><td class='r'>+0.2374</td><td class='r'>+0.5271 [+0.3400, +0.7171] <strong>*</strong></td><td class='r'>+0.4561</td><td class='r'>+1.0408 [+0.9260, +1.1594] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>coc</code></td><td class='r'>-0.2010</td><td class='r'>-0.6675 [-0.8034, -0.5421] <strong>*</strong></td><td class='r'>-0.2068</td><td class='r'>-0.5979 [-0.7276, -0.4774] <strong>*</strong></td><td class='r'>-0.1826</td><td class='r'>-0.4514 [-0.5166, -0.3889] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>coc</code></td><td class='r'>-0.2018</td><td class='r'>-0.6293 [-0.7562, -0.5108] <strong>*</strong></td><td class='r'>-0.1858</td><td class='r'>-0.5272 [-0.6594, -0.4036] <strong>*</strong></td><td class='r'>-0.1533</td><td class='r'>-0.4095 [-0.4740, -0.3479] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>j</code></td><td class='r'>-0.6301</td><td class='r'>-1.0061 [-1.1591, -0.8632] <strong>*</strong></td><td class='r'>-0.5194</td><td class='r'>-1.1250 [-1.3026, -0.9579] <strong>*</strong></td><td class='r'>-0.6786</td><td class='r'>-1.4921 [-1.6186, -1.3684] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>j</code></td><td class='r'>-0.5971</td><td class='r'>-0.9679 [-1.1134, -0.8333] <strong>*</strong></td><td class='r'>-0.4960</td><td class='r'>-1.0543 [-1.2271, -0.8949] <strong>*</strong></td><td class='r'>-0.6683</td><td class='r'>-1.4503 [-1.5749, -1.3291] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>dual</code></td><td class='r'>+0.0288</td><td class='r'>+0.0382 [-0.0006, +0.0745]</td><td class='r'>+0.0267</td><td class='r'>+0.0707 [+0.0322, +0.1156] <strong>*</strong></td><td class='r'>+0.0234</td><td class='r'>+0.0418 [+0.0139, +0.0691] <strong>*</strong></td></tr></tbody></table></div>
+
+<h2><span class="num">5</span>페어드 대조 (NLL, 자체 CoC)</h2>
+<div class='scroll'><table><thead><tr><th class='r'>페어드 대조</th><th class='r'>val 500</th><th class='r'></th><th class='r'>test 500</th><th class='r'></th><th class='r'>OOD 1,533</th><th class='r'></th></tr><tr><th class='r'></th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th><th class='r'>중앙값</th><th class='r'>평균 [95% CI]</th></tr></thead><tbody><tr><td><code>traj</code> − <code>baseline</code></td><td class='r'>+0.2345</td><td class='r'>+0.4163 [+0.3566, +0.4851] <strong>*</strong></td><td class='r'>+0.2363</td><td class='r'>+0.4776 [+0.3982, +0.5688] <strong>*</strong></td><td class='r'>+0.3652</td><td class='r'>+0.6431 [+0.5932, +0.6967] <strong>*</strong></td></tr>
+<tr><td><code>coc</code> − <code>baseline</code></td><td class='r'>+0.0290</td><td class='r'>+0.9748 [+0.7740, +1.1918] <strong>*</strong></td><td class='r'>+0.0413</td><td class='r'>+1.0347 [+0.8303, +1.2445] <strong>*</strong></td><td class='r'>+0.0409</td><td class='r'>+0.6391 [+0.5478, +0.7333] <strong>*</strong></td></tr>
+<tr><td><code>j</code> − <code>baseline</code></td><td class='r'>+0.0155</td><td class='r'>+0.0389 [+0.0231, +0.0551] <strong>*</strong></td><td class='r'>+0.0224</td><td class='r'>+0.0521 [+0.0348, +0.0698] <strong>*</strong></td><td class='r'>+0.0184</td><td class='r'>+0.0489 [+0.0371, +0.0612] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>baseline</code></td><td class='r'>+0.0120</td><td class='r'>+0.0486 [+0.0270, +0.0748] <strong>*</strong></td><td class='r'>+0.0104</td><td class='r'>+0.0752 [+0.0396, +0.1201] <strong>*</strong></td><td class='r'>+0.0125</td><td class='r'>+0.0379 [+0.0263, +0.0502] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>baseline</code></td><td class='r'>+0.0017</td><td class='r'>+0.0121 [-0.0042, +0.0325]</td><td class='r'>+0.0032</td><td class='r'>+0.0235 [+0.0042, +0.0472] <strong>*</strong></td><td class='r'>+0.0017</td><td class='r'>+0.0047 [-0.0028, +0.0122]</td></tr>
+<tr><td><code>coc</code> − <code>traj</code></td><td class='r'>-0.1400</td><td class='r'>+0.5585 [+0.3545, +0.7771] <strong>*</strong></td><td class='r'>-0.1392</td><td class='r'>+0.5571 [+0.3451, +0.7714] <strong>*</strong></td><td class='r'>-0.2667</td><td class='r'>-0.0040 [-0.1091, +0.1037]</td></tr>
+<tr><td><code>j</code> − <code>traj</code></td><td class='r'>-0.1991</td><td class='r'>-0.3774 [-0.4467, -0.3178] <strong>*</strong></td><td class='r'>-0.1876</td><td class='r'>-0.4255 [-0.5178, -0.3443] <strong>*</strong></td><td class='r'>-0.3095</td><td class='r'>-0.5942 [-0.6495, -0.5432] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>traj</code></td><td class='r'>-0.2075</td><td class='r'>-0.3677 [-0.4376, -0.3052] <strong>*</strong></td><td class='r'>-0.1995</td><td class='r'>-0.4024 [-0.4934, -0.3225] <strong>*</strong></td><td class='r'>-0.3286</td><td class='r'>-0.6052 [-0.6589, -0.5551] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>traj</code></td><td class='r'>-0.2291</td><td class='r'>-0.4042 [-0.4743, -0.3426] <strong>*</strong></td><td class='r'>-0.2243</td><td class='r'>-0.4541 [-0.5483, -0.3723] <strong>*</strong></td><td class='r'>-0.3560</td><td class='r'>-0.6384 [-0.6925, -0.5879] <strong>*</strong></td></tr>
+<tr><td><code>j</code> − <code>coc</code></td><td class='r'>-0.0098</td><td class='r'>-0.9359 [-1.1547, -0.7355] <strong>*</strong></td><td class='r'>-0.0191</td><td class='r'>-0.9827 [-1.1915, -0.7787] <strong>*</strong></td><td class='r'>-0.0169</td><td class='r'>-0.5902 [-0.6850, -0.4979] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>coc</code></td><td class='r'>-0.0126</td><td class='r'>-0.9262 [-1.1443, -0.7273] <strong>*</strong></td><td class='r'>-0.0165</td><td class='r'>-0.9595 [-1.1672, -0.7587] <strong>*</strong></td><td class='r'>-0.0215</td><td class='r'>-0.6012 [-0.6955, -0.5100] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>coc</code></td><td class='r'>-0.0291</td><td class='r'>-0.9627 [-1.1789, -0.7621] <strong>*</strong></td><td class='r'>-0.0250</td><td class='r'>-1.0112 [-1.2202, -0.8082] <strong>*</strong></td><td class='r'>-0.0396</td><td class='r'>-0.6343 [-0.7291, -0.5431] <strong>*</strong></td></tr>
+<tr><td><code>dual</code> − <code>j</code></td><td class='r'>-0.0024</td><td class='r'>+0.0097 [-0.0162, +0.0387]</td><td class='r'>-0.0028</td><td class='r'>+0.0232 [-0.0144, +0.0669]</td><td class='r'>-0.0076</td><td class='r'>-0.0110 [-0.0263, +0.0044]</td></tr>
+<tr><td><code>jtraj</code> − <code>j</code></td><td class='r'>-0.0160</td><td class='r'>-0.0268 [-0.0481, -0.0033] <strong>*</strong></td><td class='r'>-0.0114</td><td class='r'>-0.0286 [-0.0508, -0.0045] <strong>*</strong></td><td class='r'>-0.0163</td><td class='r'>-0.0442 [-0.0562, -0.0326] <strong>*</strong></td></tr>
+<tr><td><code>jtraj</code> − <code>dual</code></td><td class='r'>-0.0081</td><td class='r'>-0.0365 [-0.0628, -0.0102] <strong>*</strong></td><td class='r'>-0.0072</td><td class='r'>-0.0517 [-0.0871, -0.0217] <strong>*</strong></td><td class='r'>-0.0099</td><td class='r'>-0.0331 [-0.0447, -0.0225] <strong>*</strong></td></tr></tbody></table></div>
+
+<h2><span class="num">6</span>OOD 채널 분해</h2>
+<p class="note">OOD만 전 arm이 동일한 curated CoC를 받는다 — 궤적 헤드 손상과 추론 채널
+손상을 분리할 수 있는 유일한 셋.</p>
+<div class='scroll'><table><thead><tr><th>arm</th><th class='r'>minADE@8 (자체 CoC)</th><th class='r'>minADE@8 (GT CoC)</th><th class='r'>NLL(GT CoC)</th><th class='r'>자체 − GT</th></tr></thead><tbody><tr class='base'><td><code>baseline</code></td><td class='r'>0.8457</td><td class='r'>0.7781</td><td class='r'>3.0052</td><td class='r'>+0.0676</td></tr>
+<tr><td><code>traj</code></td><td class='r'>1.0632 <span class="up">(+25.7%)</span></td><td class='r'>0.9321 <span class="up">(+19.8%)</span></td><td class='r'>3.1483 <span class="up">(+4.8%)</span></td><td class='r'>+0.1311</td></tr>
+<tr><td><code>coc</code></td><td class='r'>1.3826 <span class="up">(+63.5%)</span></td><td class='r'>1.0838 <span class="up">(+39.3%)</span></td><td class='r'>3.1967 <span class="up">(+6.4%)</span></td><td class='r'>+0.2989</td></tr>
+<tr><td><code>j</code></td><td class='r'>2.4234 <span class="up">(+186.6%)</span></td><td class='r'>1.9956 <span class="up">(+156.5%)</span></td><td class='r'>2.9861 <span class="down">(-0.6%)</span></td><td class='r'>+0.4278</td></tr>
+<tr><td><code>dual</code></td><td class='r'>0.9313 <span class="up">(+10.1%)</span></td><td class='r'>0.8240 <span class="up">(+5.9%)</span></td><td class='r'>3.0375 <span class="up">(+1.1%)</span></td><td class='r'>+0.1072</td></tr>
+<tr><td><code>jtraj</code></td><td class='r'>0.9731 <span class="up">(+15.1%)</span></td><td class='r'>0.8745 <span class="up">(+12.4%)</span></td><td class='r'>3.0075 <span class="up">(+0.1%)</span></td><td class='r'>+0.0986</td></tr></tbody></table></div>
+
+<h2><span class="num">7</span>시나리오 버킷별 minADE@8 중앙값</h2>
+<p class="note">버킷은 GT 경로 기하에서 유도 (우선순위 decel_stop &gt; turn &gt; accel &gt; cruise).</p>
+<div class='scroll'><table><thead><tr><th>set</th><th class='r'>arm</th><th class='r'>decel_stop</th><th class='r'>turn</th><th class='r'>accel</th><th class='r'>cruise</th></tr></thead><tbody><tr class='base'><td>val 500</td><td><code>baseline</code></td><td class='r'>0.3649 <span class='meta'>(n=70)</span></td><td class='r'>0.6677 <span class='meta'>(n=77)</span></td><td class='r'>0.4785 <span class='meta'>(n=72)</span></td><td class='r'>0.4225 <span class='meta'>(n=281)</span></td></tr>
+<tr><td>val 500</td><td><code>traj</code></td><td class='r'>0.4576 <span class='meta'>(n=70)</span></td><td class='r'>0.8848 <span class='meta'>(n=77)</span></td><td class='r'>0.6646 <span class='meta'>(n=72)</span></td><td class='r'>0.5495 <span class='meta'>(n=281)</span></td></tr>
+<tr><td>val 500</td><td><code>coc</code></td><td class='r'>0.5283 <span class='meta'>(n=70)</span></td><td class='r'>1.4103 <span class='meta'>(n=77)</span></td><td class='r'>0.7104 <span class='meta'>(n=72)</span></td><td class='r'>1.0191 <span class='meta'>(n=281)</span></td></tr>
+<tr><td>val 500</td><td><code>j</code></td><td class='r'>0.9599 <span class='meta'>(n=70)</span></td><td class='r'>2.3873 <span class='meta'>(n=77)</span></td><td class='r'>0.9282 <span class='meta'>(n=72)</span></td><td class='r'>1.3157 <span class='meta'>(n=281)</span></td></tr>
+<tr><td>val 500</td><td><code>dual</code></td><td class='r'>0.4393 <span class='meta'>(n=70)</span></td><td class='r'>0.7898 <span class='meta'>(n=77)</span></td><td class='r'>0.5781 <span class='meta'>(n=72)</span></td><td class='r'>0.4948 <span class='meta'>(n=281)</span></td></tr>
+<tr><td>val 500</td><td><code>jtraj</code></td><td class='r'>0.4708 <span class='meta'>(n=70)</span></td><td class='r'>0.9194 <span class='meta'>(n=77)</span></td><td class='r'>0.6272 <span class='meta'>(n=72)</span></td><td class='r'>0.5253 <span class='meta'>(n=281)</span></td></tr>
+<tr class='base'><td>test 500</td><td><code>baseline</code></td><td class='r'>0.3609 <span class='meta'>(n=65)</span></td><td class='r'>0.6636 <span class='meta'>(n=82)</span></td><td class='r'>0.5040 <span class='meta'>(n=75)</span></td><td class='r'>0.4480 <span class='meta'>(n=278)</span></td></tr>
+<tr><td>test 500</td><td><code>traj</code></td><td class='r'>0.3825 <span class='meta'>(n=65)</span></td><td class='r'>0.8786 <span class='meta'>(n=82)</span></td><td class='r'>0.6246 <span class='meta'>(n=75)</span></td><td class='r'>0.5657 <span class='meta'>(n=278)</span></td></tr>
+<tr><td>test 500</td><td><code>coc</code></td><td class='r'>0.4547 <span class='meta'>(n=65)</span></td><td class='r'>1.0995 <span class='meta'>(n=82)</span></td><td class='r'>0.6489 <span class='meta'>(n=75)</span></td><td class='r'>1.1004 <span class='meta'>(n=278)</span></td></tr>
+<tr><td>test 500</td><td><code>j</code></td><td class='r'>0.8706 <span class='meta'>(n=65)</span></td><td class='r'>2.2556 <span class='meta'>(n=82)</span></td><td class='r'>0.8433 <span class='meta'>(n=75)</span></td><td class='r'>1.1311 <span class='meta'>(n=278)</span></td></tr>
+<tr><td>test 500</td><td><code>dual</code></td><td class='r'>0.3813 <span class='meta'>(n=65)</span></td><td class='r'>0.8484 <span class='meta'>(n=82)</span></td><td class='r'>0.6468 <span class='meta'>(n=75)</span></td><td class='r'>0.5401 <span class='meta'>(n=278)</span></td></tr>
+<tr><td>test 500</td><td><code>jtraj</code></td><td class='r'>0.5050 <span class='meta'>(n=65)</span></td><td class='r'>0.9888 <span class='meta'>(n=82)</span></td><td class='r'>0.6804 <span class='meta'>(n=75)</span></td><td class='r'>0.5920 <span class='meta'>(n=278)</span></td></tr>
+<tr class='base'><td>OOD 1,533</td><td><code>baseline</code></td><td class='r'>0.3735 <span class='meta'>(n=321)</span></td><td class='r'>0.7328 <span class='meta'>(n=120)</span></td><td class='r'>0.5217 <span class='meta'>(n=266)</span></td><td class='r'>0.4765 <span class='meta'>(n=826)</span></td></tr>
+<tr><td>OOD 1,533</td><td><code>traj</code></td><td class='r'>0.6276 <span class='meta'>(n=321)</span></td><td class='r'>1.0839 <span class='meta'>(n=120)</span></td><td class='r'>0.6492 <span class='meta'>(n=266)</span></td><td class='r'>0.5916 <span class='meta'>(n=826)</span></td></tr>
+<tr><td>OOD 1,533</td><td><code>coc</code></td><td class='r'>0.6998 <span class='meta'>(n=321)</span></td><td class='r'>1.3451 <span class='meta'>(n=120)</span></td><td class='r'>0.7853 <span class='meta'>(n=266)</span></td><td class='r'>0.8056 <span class='meta'>(n=826)</span></td></tr>
+<tr><td>OOD 1,533</td><td><code>j</code></td><td class='r'>1.3964 <span class='meta'>(n=321)</span></td><td class='r'>2.5113 <span class='meta'>(n=120)</span></td><td class='r'>1.1302 <span class='meta'>(n=266)</span></td><td class='r'>1.2432 <span class='meta'>(n=826)</span></td></tr>
+<tr><td>OOD 1,533</td><td><code>dual</code></td><td class='r'>0.4282 <span class='meta'>(n=321)</span></td><td class='r'>0.9943 <span class='meta'>(n=120)</span></td><td class='r'>0.6408 <span class='meta'>(n=266)</span></td><td class='r'>0.5464 <span class='meta'>(n=826)</span></td></tr>
+<tr><td>OOD 1,533</td><td><code>jtraj</code></td><td class='r'>0.4851 <span class='meta'>(n=321)</span></td><td class='r'>1.0707 <span class='meta'>(n=120)</span></td><td class='r'>0.6756 <span class='meta'>(n=266)</span></td><td class='r'>0.5676 <span class='meta'>(n=826)</span></td></tr></tbody></table></div>
+
+<h2><span class="num">8</span>폐루프 (alpasim)</h2>
+<p class='note'>150씬 × 2 롤아웃, 롤아웃 → 씬 평균 → baseline과 페어드 차이.</p><div class='scroll'><table><thead><tr><th>arm</th><th class='r'>scene score [95% CI]</th><th class='r'>pass%</th><th class='r'>at-fault 충돌</th><th class='r'>offroad</th><th class='r'>progress</th><th class='r'>d2gt</th><th class='r'>CoC 퇴화</th><th class='r'>Δ score vs baseline</th></tr></thead><tbody><tr class=base><td><code>baseline</code></td><td class='r'>0.7496 <span class='meta'>[0.6968, 0.8011]</span></td><td class='r'>89.0%</td><td class='r'>0.040</td><td class='r'>0.070</td><td class='r'>0.747</td><td class='r'>2.89</td><td class='r'>0.6%</td><td class='r'>&mdash;</td></tr>
+<tr><td><code>dual</code></td><td class='r'>0.8283 <span class='meta'>[0.7787, 0.8742]</span></td><td class='r'>91.0%</td><td class='r'>0.023</td><td class='r'>0.067</td><td class='r'>0.828</td><td class='r'>3.32</td><td class='r'>2.7%</td><td class='r'>+0.0787 [+0.0355, +0.1234] <strong>*</strong> <span class='meta'>p=1.1e-04, W/L/T 56/20/74</span></td></tr>
+<tr><td><code>jtraj</code></td><td class='r'>0.7914 <span class='meta'>[0.7384, 0.8433]</span></td><td class='r'>88.7%</td><td class='r'>0.043</td><td class='r'>0.070</td><td class='r'>0.804</td><td class='r'>3.33</td><td class='r'>0.8%</td><td class='r'>+0.0418 [-0.0047, +0.0876] <span class='meta'>p=3.7e-02, W/L/T 51/30/69</span></td></tr></tbody></table></div>
+
+<footer>생성: <code>experiments/evaluation/make_results_tables.py</code> ·
+원본 행: <code>outputs/&lt;arm&gt;_&lt;set&gt;/</code></footer>
+</div>
+</body>
+</html>

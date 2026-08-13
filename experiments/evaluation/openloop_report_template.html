@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpamayo-1.5 baseline open-loop 평가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>Baseline open-loop 평가: in-distribution과 OOD를 분리 측정</h1>
+  <div class="meta">
+    2026-08-07 · <code>nvidia/Alpamayo-1.5-10B</code> (무손상) ·
+    공식 val 500 + 공식 test 500 + OOD 1,533 클립 · minADE@8 · RTX PRO 5000 Blackwell ×4
+  </div>
+</header>
+
+<p class="lede">
+이후 모든 압축 config가 비교될 기준선을 확정한다. 압축이 in-distribution 성능은 유지하면서
+롱테일에서만 무너지는지가 이 연구의 핵심 질문이므로, 평가셋을 처음부터 분리해 측정했다.
+공식 val과 test 양쪽에서 재어 split 선택이 결론을 바꾸지 않음도 함께 확인했다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">val minADE</span><span class="v">0.461</span>중앙값 (m)</div>
+  <div><span class="k">test minADE</span><span class="v">0.470</span>중앙값 (m)</div>
+  <div><span class="k">OOD minADE</span><span class="v">0.487</span>중앙값 (m)</div>
+  <div><span class="k">CoC 퇴화율</span><span class="v">0.6%</span>OOD 기준</div>
+  <div><span class="k">분포 일치</span><span class="v">0.0056</span>가중 L1</div>
+</div>
+
+<h2><span class="num">1</span>목적과 설계</h2>
+
+<p>
+측정 대상은 <strong>무손상 Alpamayo-1.5-10B 하나</strong>다. 비교가 아니라 기준선 확정이 목적이고,
+이후 pruning config는 전부 이 숫자와의 클립 단위 페어드 델타로 보고된다.
+</p>
+
+<p>
+두 셋을 나눈 이유는 단순하다. 섞어서 평균을 내면 &ldquo;in-distribution은 멀쩡한데 롱테일에서 무너진다&rdquo;는
+구분 자체가 사라진다. 기존 연구에서 <code>integrated_mag</code>가 open-loop에서는 멀쩡해 보였으나
+폐루프 CoC 퇴화 86.3%, 전방 충돌 100%로 드러난 전례가 있다.
+</p>
+
+<h3>평가셋 A — in-distribution (공식 val 500 + 공식 test 500)</h3>
+
+<p>
+<strong>공식 <code>val</code>과 <code>test</code> 양쪽에서 각각 500 클립을 뽑았다.</strong> 두 셋을
+모두 보고하는 이유는 &ldquo;split 선택이 결론을 바꾸는가&rdquo;를 직접 확인하기 위해서다. 압축 config
+비교에서 val 결과와 test 결과가 갈리면 그 자체가 보고할 발견이 된다.
+</p>
+
+<div class="callout">
+<p>
+초기에는 test를 쓸 수 없다고 판단했으나 <strong>사실이 아니었다</strong>. 로컬에 test 카메라 청크가
+0개인 것은 맞지만 HuggingFace 리포에는 3,146개 청크(id 0&ndash;3145)가 모두 있고 test 범위
+(298&ndash;3145)도 포함된다. test 클립 하나를 스트리밍으로 로드해 GT 궤적까지 정상적으로 들어 있음을
+확인했다. &ldquo;로컬에 없다&rdquo;와 &ldquo;쓸 수 없다&rdquo;를 혼동한 것이다.
+</p>
+</div>
+
+<p>풀 구성과 제외 규칙:</p>
+
+<pre><code>val                                  test
+18,868  캐시된 val 클립               61,599  전체 test 클립
+   -76  OOD 클립                          -0  OOD 클립 (test 에는 OOD 가 없다)
+    -8  캘리브레이션 클립                 -12  캘리브레이션 클립
+------                               ------
+18,784  풀 → greedy 500              61,587  풀 → greedy 500</code></pre>
+
+<p>
+OOD는 val 소속 290개가 아니라 <strong>1,740개 전량</strong>을 제외했다. 그래야 평가셋들이 구성상
+배타적이다. 캘리브레이션 50개 중 <strong>12개가 공식 test 소속</strong>이라, test로 평가하는 이상
+캘리브레이션 재추출은 선택이 아니라 필수가 된다.
+</p>
+
+<p>
+추출은 빈 집합에서 시작해, 매 스텝 해당 split의 전체 분포와의 가중 L1을 가장 많이 줄이는 클립을
+하나씩 더하는 greedy다. 속성과 가중치는 청크 단계와 동일하다
+(country 4.0 / platform_class 2.0 / time_of_day 2.0 / season 1.5 / month 1.0 / radar_config 1.0).
+동점은 시드 고정 RNG로 깨서 재현 가능하다.
+</p>
+
+<table>
+<thead><tr><th>split</th><th>N</th><th class="r">가중 L1</th><th class="r">country L1</th><th class="r">무작위 추출</th><th class="r">국가 수</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">val</td><td>200</td><td class="r">0.0165</td><td class="r">0.0377</td><td class="r">0.1234</td><td class="r">25</td></tr>
+<tr><td><strong>500</strong></td><td class="r"><strong>0.0056</strong></td><td class="r">0.0122</td><td class="r">0.0850</td><td class="r">25</td></tr>
+<tr><td>1000</td><td class="r">0.0030</td><td class="r">0.0057</td><td class="r">0.0585</td><td class="r">25</td></tr>
+<tr><td rowspan="3">test</td><td>200</td><td class="r">0.0161</td><td class="r">—</td><td class="r">0.1324</td><td class="r">25</td></tr>
+<tr><td><strong>500</strong></td><td class="r"><strong>0.0055</strong></td><td class="r">—</td><td class="r">0.0842</td><td class="r">25</td></tr>
+<tr><td>1000</td><td class="r">0.0034</td><td class="r">—</td><td class="r">0.0600</td><td class="r">25</td></tr>
+</tbody>
+</table>
+
+<p>
+두 split에서 <strong>거의 동일한 일치도</strong>(0.0056 / 0.0055)를 얻었고, 단순 무작위 추출 대비
+15배 가깝다. 청크 단계 자체가 0.0144이므로 N=500에서는 클립 단계가 더 이상 병목이 아니다.
+</p>
+
+<p>
+test 클립 500개는 청크가 로컬에 없으므로 <strong>클립 단위 스트리밍</strong>으로 캐시를 만들었다 —
+16 워커로 24분, 2.61 GB, 실패 0건.
+</p>
+
+<h3>평가셋 B — OOD (1,533 클립)</h3>
+
+<p>
+<code>ood_reasoning.parquet</code>의 큐레이션된 추론 텍스트와 <code>event_start_timestamp</code>를
+쓴다. OOD 클립은 <strong>이벤트가 발생하는 시점</strong>에서 로드해야 하므로 in-distribution 캐시
+(t0=5.1초 고정)를 재사용할 수 없어 별도 캐시를 구축했다.
+</p>
+
+<pre><code>1,740   ood_reasoning.parquet 전체
+   -9   events 컬럼이 NaN → 이벤트 시점을 알 수 없음
+------
+1,731   사용 가능
+ -195   이벤트가 클립 초반 → ego history 16스텝 확보 불가
+   -3   이벤트가 클립의 보간 범위 밖
+------
+1,533   구축 완료 (8.5 GB, 스키마 이상 0건)</code></pre>
+
+<p>
+1,740개 클립은 1,085개 청크에 클립당 1.6개꼴로 흩어져 있어, 미보유 840청크를 통째로 받으면
+<strong>4.28 TB</strong>가 필요했다. 대신 클립 단위 스트리밍을 썼다 —
+<code>open_file(maybe_stream=True)</code>가 <code>zipfile</code>에 seekable한
+<code>HfFileSystem</code> 객체를 넘겨 해당 클립의 멤버만 range로 읽는다. 16 워커로 1.08시간,
+최종 저장 8.5 GB.
+</p>
+
+<p>
+공식 split 기준 <strong>val 262개가 primary</strong>, train 1,271개가 secondary다. 우리는 학습을
+하지 않으므로 train 소속도 zero-shot 평가로 유효하지만, 독자가 val만 보고 싶을 수 있어 분리해
+보고한다.
+</p>
+
+<h2><span class="num">2</span>재현성</h2>
+
+<div class="callout warn">
+<p>
+<strong>기존 러너에 결함이 있었다.</strong> <code>run_eval.py</code>는 시드를 루프 인덱스로 만든다
+(<code>torch.manual_seed(args.seed + ci)</code>). <code>--clip-offset</code>으로 샤딩하면 같은
+클립이 다른 시드를 받으므로, 분할 실행과 전체 실행의 결과가 일치하지 않는다.
+</p>
+</div>
+
+<p>새 러너는 시드를 클립 정체성에서 유도한다 — 순서·샤딩·재시작과 무관하다:</p>
+
+<pre><code>base = sha256(f"{seed}:{clip_id}")[:4]
+traj_seeds = [base + k for k in range(8)]</code></pre>
+
+<p>
+모델 리비전도 못 박았다. 이번 실행 도중 실제로 Alpamayo 리포가 갱신되어 로컬
+<code>refs/main</code>이 <code>dc468990</code>에서 <code>7aba8293</code>으로 바뀌었다. 두 스냅샷이
+동일한 blob을 참조함을 확인해 결과는 무사했지만, 리비전을 지정하지 않으면 실행 중에 가중치가 조용히
+바뀔 수 있다는 뜻이다. 이후 실행은 <code>revision=7aba8293…</code>으로 고정한다.
+</p>
+
+<p>
+여기에 결정성 플래그를 CUDA 컨텍스트 생성 전에 건다:
+<code>CUBLAS_WORKSPACE_CONFIG=:4096:8</code>,
+<code>torch.use_deterministic_algorithms(True)</code>, cudnn deterministic, TF32 off.
+</p>
+
+<div class="callout good">
+<p>
+<strong>실측 결과.</strong> 같은 OOD 20클립을 독립 프로세스로 두 번 실행해 대조했다.
+minADE·minFDE·NLL 6개 지표가 <strong>비트 단위로 일치</strong>했고,
+<strong>생성된 CoC 텍스트까지 완전히 같았다</strong>. CoC 디코딩이 확률적 샘플링
+(temp 0.6, top_p 0.98)이므로 텍스트 일치는 샘플링 RNG까지 완전히 고정됐다는 더 강한 증거다.
+비결정적 커널 경고도 발생하지 않았다.
+</p>
+</div>
+
+<div class="callout">
+<p>
+<strong>단, 아키텍처 내에서만 성립한다.</strong> 같은 클립·같은 시드인데 카드가 다르면 값이 달라진다
+— Ada에서 0.286, Blackwell에서 0.291. 따라서 <strong>이후 모든 config를 Blackwell에서
+돌려야</strong> 페어드 비교가 성립한다. 이 사실을 실측으로 확인한 뒤 Ada에서 진행하던 부분 결과를
+폐기하고 재시작했다.
+</p>
+</div>
+
+<h2><span class="num">3</span>측정 프로토콜</h2>
+
+<pre><code>클립 1개
+ └─ run_rollout()  → CoC 1개        (샘플링: temp 0.6, top_p 0.98)
+     └─ denoise × 8 → 궤적 8개       (시드만 다름, 추론 맥락은 동일)
+         └─ minADE@8 = 8개 중 최소</code></pre>
+
+<p>두 셋의 측정 항목이 다르다. 참조 추론 텍스트가 OOD에만 존재하기 때문이다.</p>
+
+<table>
+<thead><tr><th>항목</th><th>in-dist</th><th>OOD</th></tr></thead>
+<tbody>
+<tr><td>minADE / minFDE @8 (자체 롤아웃 조건)</td><td>✓</td><td>✓</td></tr>
+<tr><td>minADE / minFDE @8 (<strong>GT CoC</strong> teacher-forcing 조건)</td><td>—</td><td>✓</td></tr>
+<tr><td>참조 CoC의 NLL</td><td>—</td><td>✓</td></tr>
+<tr><td>자체 생성 CoC의 NLL (참고값)</td><td>✓</td><td>✓</td></tr>
+<tr><td>시나리오 버킷 · 퇴화 지표 · 생성 텍스트 저장</td><td>✓</td><td>✓</td></tr>
+</tbody>
+</table>
+
+<p>
+즉 <strong>추론 품질은 OOD에서만 직접 측정된다.</strong> in-distribution에는 비교할 참조 추론이
+없다. 이것이 별도의 Driving-QA 축이 필요한 구조적 이유이고, OOD의
+<code>(gt_coc, gen_coc)</code> 쌍이 그 입력이 된다.
+</p>
+
+<h2><span class="num">4</span>결과</h2>
+
+<table>
+<thead><tr><th>지표</th><th class="r">val (500)</th><th class="r">test (500)</th><th class="r">OOD (1,533)</th></tr></thead>
+<tbody>
+<tr><td>minADE 중앙값</td><td class="r">0.461</td><td class="r">0.470</td><td class="r"><strong>0.487</strong></td></tr>
+<tr><td>minADE 평균 [95% CI]</td><td class="r">0.690 [0.62, 0.76]</td><td class="r">0.777 [0.70, 0.86]</td><td class="r"><strong>0.842</strong> [0.78, 0.91]</td></tr>
+<tr><td>minADE p90</td><td class="r">1.379</td><td class="r">1.732</td><td class="r"><strong>1.789</strong></td></tr>
+<tr><td>minFDE 중앙값</td><td class="r">0.924</td><td class="r">0.913</td><td class="r">0.924</td></tr>
+<tr><td>minFDE 평균</td><td class="r">1.841</td><td class="r">2.014</td><td class="r">2.060</td></tr>
+<tr><td>자체 CoC NLL</td><td class="r">0.174</td><td class="r">0.175</td><td class="r">0.215</td></tr>
+<tr><td>CoC 퇴화율</td><td class="r">0.0080</td><td class="r">0.0060</td><td class="r">0.0059</td></tr>
+<tr><td>CoC 길이 중앙값 (문자)</td><td class="r">69</td><td class="r">67</td><td class="r">72</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p>
+<strong>val과 test가 일치한다.</strong> minADE 중앙값이 0.461 대 0.470으로 2% 차이이고, 자체 CoC NLL은
+0.174 대 0.175로 사실상 같으며, 시나리오 버킷의 난이도 순서도 두 split에서 동일하다.
+<strong>split 선택은 결론을 바꾸지 않는다</strong> — 이후 압축 config 비교에서 val 결과를 test로
+일반화해도 된다는 근거다.
+</p>
+</div>
+
+<p>
+다만 평균과 p90은 test가 val보다 높다(0.777 대 0.690, 1.732 대 1.379). 중앙값은 같은데 꼬리가 더
+두껍다는 뜻으로, 이 점에서 test는 OOD 쪽에 가깝다.
+</p>
+
+<figure>
+  <img src="PLOT::base::baseline.png" alt="baseline 분포">
+  <figcaption>
+    좌: minADE 분포(로그축). 중앙: 시나리오 버킷별 중앙값. 우: OOD에서 GT CoC 조건 대비 자체 롤아웃 조건.
+  </figcaption>
+</figure>
+
+<h3>4.1 OOD의 어려움은 꼬리에 몰려 있다</h3>
+
+<table>
+<thead><tr><th>통계량</th><th class="r">val</th><th class="r">test</th><th class="r">OOD</th><th class="r">OOD − val</th></tr></thead>
+<tbody>
+<tr><td>중앙값</td><td class="r">0.461</td><td class="r">0.470</td><td class="r">0.487</td><td class="r">+5.6%</td></tr>
+<tr><td>평균</td><td class="r">0.690</td><td class="r">0.777</td><td class="r">0.842</td><td class="r">+22%</td></tr>
+<tr><td>p90</td><td class="r">1.379</td><td class="r">1.732</td><td class="r">1.789</td><td class="r">+30%</td></tr>
+<tr><td>최대</td><td class="r">8.07</td><td class="r">—</td><td class="r">24.59</td><td class="r">+205%</td></tr>
+</tbody>
+</table>
+
+<p>
+중앙값 격차는 5.6%에 불과한데 평균은 22%, p90은 30%, 최대값은 3배다.
+<strong>OOD의 난이도는 전형적인 클립이 아니라 소수의 파국적 클립에 집중돼 있다.</strong>
+두 셋은 서로 다른 클립이므로 이 비교는 페어드가 아니며, 절대 격차보다 분포 형태의 차이로 읽어야 한다.
+</p>
+
+<h3>4.2 시나리오 버킷</h3>
+
+<table>
+<thead><tr><th>버킷</th><th class="r">val n</th><th class="r">val</th><th class="r">test n</th><th class="r">test</th><th class="r">OOD n</th><th class="r">OOD</th></tr></thead>
+<tbody>
+<tr><td>decel_stop</td><td class="r">70</td><td class="r">0.367</td><td class="r">65</td><td class="r">0.368</td><td class="r">321</td><td class="r">0.377</td></tr>
+<tr><td><strong>turn</strong></td><td class="r">77</td><td class="r"><strong>0.675</strong></td><td class="r">82</td><td class="r"><strong>0.648</strong></td><td class="r">120</td><td class="r"><strong>0.732</strong></td></tr>
+<tr><td>accel</td><td class="r">72</td><td class="r">0.485</td><td class="r">75</td><td class="r">0.492</td><td class="r">266</td><td class="r">0.526</td></tr>
+<tr><td>cruise</td><td class="r">281</td><td class="r">0.414</td><td class="r">278</td><td class="r">0.445</td><td class="r">826</td><td class="r">0.474</td></tr>
+</tbody>
+</table>
+
+<p>
+<strong>세 셋 모두 turn이 가장 어렵고 decel_stop이 가장 쉽다.</strong> 난이도 순서가 완전히 일치한다는 점은
+버킷 정의(GT 궤적 기하에서 유도)가 split과 무관하게 안정적으로 작동한다는 뜻이다.
+</p>
+
+<h3>4.3 올바른 추론은 얼마의 가치인가</h3>
+
+<p>
+OOD에서는 같은 클립을 두 조건으로 잰다. 페어드이므로 클립 난이도가 상쇄된다.
+</p>
+
+<pre><code>rollout − GT CoC   평균 +0.063 m  [+0.023, +0.107]
+                   중앙값 +0.004 m
+                   Wilcoxon p = 8.6e-04
+                   GT 조건이 나은 클립: 53%</code></pre>
+
+<div class="callout">
+<p>
+<strong>통계적으로는 유의하지만 전형적인 클립에서는 차이가 없다.</strong> 중앙값이 +0.004 m로 사실상
+0이고 GT가 나은 클립도 53%에 그치는데, 평균은 +0.063 m로 유의하다(p&lt;0.001). 즉
+<strong>평균 차이는 소수의 큰 개선에서 나온다</strong> — 대부분의 상황에서 모델 자신의 추론은
+큐레이션된 참조와 대등하고, 일부 어려운 클립에서만 올바른 추론이 크게 기여한다.
+</p>
+</div>
+
+<h3>4.4 어느 상황에서 추론이 중요한가</h3>
+
+<figure>
+  <img src="PLOT::base::ood_clusters.png" alt="OOD cluster별 분해">
+  <figcaption>
+    좌: event cluster별 두 조건의 중앙값 minADE. 우: 참조 CoC의 평균 NLL.
+  </figcaption>
+</figure>
+
+<table>
+<thead><tr><th>event cluster</th><th class="r">n</th><th class="r">자체 롤아웃</th><th class="r">GT CoC</th><th class="r">개선</th><th class="r">참조 NLL</th></tr></thead>
+<tbody>
+<tr><td>ROAD_DEBRIS_OR_SAFETY_TRACES</td><td class="r">21</td><td class="r">0.859</td><td class="r">0.589</td><td class="r"><strong>−31%</strong></td><td class="r">3.239</td></tr>
+<tr><td>OTHER_LONGTAIL</td><td class="r">36</td><td class="r">0.632</td><td class="r">0.489</td><td class="r"><strong>−23%</strong></td><td class="r">3.026</td></tr>
+<tr><td>CYCLISTS_AND_MICROMOBILITY_COMPLEX</td><td class="r">68</td><td class="r">0.548</td><td class="r">0.477</td><td class="r">−13%</td><td class="r">2.611</td></tr>
+<tr><td>COMPLEX_INTERSECTION_INTERACTION</td><td class="r">47</td><td class="r">0.757</td><td class="r">0.683</td><td class="r">−10%</td><td class="r">2.759</td></tr>
+<tr><td>PEDESTRIAN_DENSITY_OR_CLOSE_PROXIMITY</td><td class="r">352</td><td class="r">0.450</td><td class="r">0.412</td><td class="r">−8%</td><td class="r">2.244</td></tr>
+<tr><td>WORK_ZONES_TEMP_TRAFFIC_CONTROL</td><td class="r">739</td><td class="r">0.473</td><td class="r">0.469</td><td class="r">−1%</td><td class="r">3.472</td></tr>
+<tr><td>ANIMALS_BIRDS_ROADKILL</td><td class="r">22</td><td class="r">0.466</td><td class="r">0.492</td><td class="r">+6%</td><td class="r">2.916</td></tr>
+<tr><td>EMERGENCY_INCIDENT_SCENE</td><td class="r">27</td><td class="r">0.580</td><td class="r">0.593</td><td class="r">+2%</td><td class="r">3.031</td></tr>
+<tr><td>SPECIAL_OR_UNCOMMON_VEHICLE_BEHAVIOR</td><td class="r">221</td><td class="r">0.494</td><td class="r">0.509</td><td class="r">+3%</td><td class="r">2.808</td></tr>
+</tbody>
+</table>
+
+<p>
+<strong>드물고 물리적인 장애물일수록 올바른 추론의 가치가 크다.</strong> 도로 파편(−31%),
+롱테일(−23%), 자전거(−13%)에서 GT 추론이 크게 도움이 되는 반면, 표본이 가장 큰 공사구간에서는
+차이가 −1%로 사라진다. 공사구간은 참조 NLL이 3.47로 가장 높은데도 궤적 개선이 없다 — 추론을
+예측하기 어려운 것과 추론이 궤적에 기여하는 것은 별개라는 뜻이다.
+</p>
+
+<h3>4.5 split별</h3>
+
+<table>
+<thead><tr><th>split</th><th class="r">n</th><th class="r">minADE 중앙값</th><th class="r">참조 NLL</th></tr></thead>
+<tbody>
+<tr><td><strong>val</strong> (primary)</td><td class="r">262</td><td class="r">0.527</td><td class="r">3.139</td></tr>
+<tr><td>train (secondary)</td><td class="r">1,271</td><td class="r">0.475</td><td class="r">2.977</td></tr>
+</tbody>
+</table>
+
+<p>
+val이 약간 어렵고 참조 추론도 예측하기 더 어렵다. 차이가 작아 두 그룹을 함께 보고해도 결론이
+바뀌지는 않지만, 분리 보고 방침은 유지한다.
+</p>
+
+<h2><span class="num">5</span>해석</h2>
+
+<p>
+<strong>기준선은 건강하다.</strong> CoC 퇴화율이 0.6~0.8%로, 압축 실패 사례(<code>integrated_mag</code>의
+폐루프 86.3%)와 두 자릿수 이상 차이 난다. 이후 config에서 이 수치가 올라가면 그 자체가 명확한 신호다.
+</p>
+
+<p>
+<strong>split 선택은 결론을 바꾸지 않는다.</strong> val과 test에서 중앙값이 2% 차이, 자체 CoC NLL이
+0.001 차이, 버킷 난이도 순서가 동일하다. 두 셋이 각각 독립적으로 전체 split 분포에 매칭됐고
+(가중 L1 0.0056 / 0.0055) 서로 겹치지 않는 클립으로 구성됐음을 감안하면, 이 일치는 우연이 아니라
+추출 절차가 제대로 작동한다는 증거다. 이후 config 비교에서 두 셋의 결과가 갈린다면 그것은
+split 효과가 아니라 압축의 실제 영향으로 읽어야 한다.
+</p>
+
+<p>
+<strong>압축 손상은 꼬리에서 먼저 보일 것이다.</strong> OOD의 난이도가 중앙값이 아니라 p90·최대값에
+몰려 있으므로(§4.1), 평균만 보는 판독은 손상을 늦게 감지한다. 이후 config 비교에서 중앙값·평균과
+함께 <strong>p90을 주 판독에 포함</strong>해야 한다.
+</p>
+
+<p>
+<strong>추론 손상의 영향은 상황 의존적이다.</strong> §4.4가 보여주듯 올바른 추론의 가치는 cluster마다
+−31%에서 +6%까지 갈린다. 이는 &ldquo;추론을 망가뜨리는 압축&rdquo;의 피해가 전체 평균에 희석되어
+드러나지 않을 수 있음을 뜻한다. 롱테일 cluster를 별도로 보는 판독이 필요하다.
+</p>
+
+<p>
+동시에 <strong>추론과 궤적의 연결이 생각보다 느슨하다</strong>는 점도 기록해 둔다. 전체적으로 GT 추론을
+주입해도 중앙값은 0.004 m밖에 개선되지 않았다. 이는 &ldquo;추론이 무너지면 궤적도 무너진다&rdquo;는
+단순한 인과가 open-loop에서는 약하게만 성립함을 시사하며, 폐루프에서 드러났던 강한 연결
+(CoC 퇴화 → 선행차 거리 판단 상실 → 전방 충돌)과 대비된다. open-loop 단독 판독의 한계를 다시 보여주는
+결과다.
+</p>
+
+<h2><span class="num">6</span>한계</h2>
+
+<ul>
+<li><strong>test 클립은 스트리밍으로 가져왔다.</strong> 청크를 통째로 받지 않고 클립 단위로 range 읽기를
+  했다. 결과는 동일하지만, 재현하려면 HuggingFace 접근 권한과 네트워크가 필요하다 (500 클립 24분).</li>
+<li><strong>in-distribution에는 참조 추론이 없다.</strong> 추론 품질은 OOD에서만 직접 측정된다.</li>
+<li><strong>아키텍처가 고정된다.</strong> 결과는 Blackwell 기준이며, 이후 모든 config를 같은 카드에서
+  돌려야 페어드 비교가 성립한다.</li>
+<li><strong>프레임이 JPEG 재인코딩을 거친다.</strong> 청크 zip 대신 per-clip 캐시에서 로드한다.
+  궤적 데이터는 비트 단위로 동일하고 프레임은 평균 1.04/255 차이다. 또한 val 캐시는 quality 85,
+  test·OOD 캐시는 quality 95로 인코딩이 다르다. 같은 val 클립 20개를 두 품질로 평가해 영향을 실측한
+  결과 <strong>minADE 평균 차이 0.0028 m(baseline의 0.4%), 생성 CoC 텍스트는 20개 중 19개 동일</strong>로,
+  검출 가능 최소 효과(0.05 m)의 1/18 수준이다. 개별 클립에서는 최대 0.115 m까지 벌어지므로 비트 단위
+  재현은 캐시별로만 성립한다.</li>
+<li><strong>OOD 198개가 빠졌다.</strong> 이벤트가 클립 경계 밖이라 로드할 수 없는 경우로, 데이터 속성이지
+  파이프라인 문제가 아니다.</li>
+<li><strong>캘리브레이션 셋이 아직 정리되지 않았다.</strong> 현재 50개 중 공식 val 16 · test 12가 섞여
+  있다. 이번 평가에는 영향이 없으나(양쪽 평가 풀에서 제외됨), <strong>test로 평가하는 이상 다음
+  importance 계산 전에 공식 train에서 재추출하는 것이 필수다</strong>.</li>
+</ul>
+
+<h2><span class="num">7</span>다음</h2>
+
+<ol>
+<li><strong>압축 config 평가</strong> — 같은 두 셋에 <code>--compare</code>로 붙이면 클립 단위 페어드
+  델타·부트스트랩 CI·Wilcoxon이 자동으로 산출된다.</li>
+<li><strong>캘리브레이션 재추출</strong> — 공식 train에서 100 클립, 클립별 importance 텐서를 저장해
+  수렴 곡선을 보고 가능하게 한다. 현재 근거는 30 vs 50 비교에서 유지 집합이 5~8% 바뀐다는 것뿐이다.</li>
+<li><strong>폐루프 확장</strong> — <code>public_2604</code> 30 → 150~300 씬. 디스크 1.3 TB를 확보해
+  제약이 풀렸다.</li>
+<li><strong>추론 품질 평가</strong> — OOD의 <code>(gt_coc, gen_coc)</code> 1,533 쌍이 이미 저장돼 있다.
+  §4.4가 보여주듯 cluster별로 추론의 가치가 다르므로, 판정도 cluster별로 분해해야 한다.</li>
+</ol>
+
+<footer>
+  <p>
+  데이터·코드 · 평가셋 <code>outputs/eval_sets/</code> · 결과 <code>outputs/baseline_{indist,ood}/</code> ·
+  집계 <code>outputs/baseline_summary/</code> · 러너 <code>experiments/evaluation/</code> ·
+  샘플링 상세 <code>experiments/evaluation/SAMPLING.md</code>
+  </p>
+  <p>
+  재현: <code>make_eval_sets.py --split {val,test}</code> → <code>build_cache.py</code> (test) →
+  <code>run_baseline.py --set {indist,test,ood} --shard i --n-shards 4 --gpu g</code> →
+  <code>analyze_baseline.py</code>. 시드 42, k=8, Blackwell 4장.
+  </p>
+  <p>
+  못 박은 리비전 · 데이터셋 <code>nvidia/PhysicalAI-Autonomous-Vehicles</code>
+  <code>b719eea7f0a63619ef51ec7f54178af0937ef050</code> ·
+  모델 <code>nvidia/Alpamayo-1.5-10B</code> <code>7aba8293c09993f2e125c6819df05d7fa3e873ea</code> ·
+  전처리 4카메라 × 4프레임, t0 = 5,100,000 µs (OOD는 클립별 event_start_timestamp)
+  </p>
+</footer>
+
+</div>
+</body>
+</html>
