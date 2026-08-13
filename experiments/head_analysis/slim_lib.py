@@ -36,6 +36,10 @@ from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     eager_attention_forward,
 )
 
+# The base snapshot every checkpoint in this track was cut from. Several revisions of the
+# gated repo are cached on this box, so an unpinned from_pretrained is not reproducible.
+MODEL_REV = "7aba8293c09993f2e125c6819df05d7fa3e873ea"
+
 
 def slim_attn_forward(self, hidden_states, position_embeddings, attention_mask,
                       past_key_values=None, cache_position=None, **kwargs):
@@ -196,8 +200,18 @@ def save_slim(model, meta, out_dir):
     return out_dir / "slim_state.pt"
 
 
-def load_slim(ckpt_dir, device="cuda"):
+def load_slim(ckpt_dir, device="cuda", revision=MODEL_REV):
     """Full skeleton -> structural surgery from meta -> strict state_dict load.
+
+    `slim_state.pt` is optional. apply_surgery slices the base weights in place, so the
+    surgically-modified skeleton already *is* the slim checkpoint -- the state_dict load
+    is an identity restated for safety when the file is there, and skipped when it is
+    not. That makes slim_meta.json (3.4 MB) a complete recipe: it reconstructs the same
+    model the 16.8 GB state file holds, bit for bit (verified tensor-by-tensor).
+
+    `revision` is pinned because the base repo has several snapshots and an unpinned
+    from_pretrained picks whichever the cache resolves; a different revision either
+    fails the strict load or, worse, matches shapes and silently loads another model.
 
     Caller must have imported expert_per_clip first (gated-hub patch), like every runner.
     """
@@ -205,7 +219,8 @@ def load_slim(ckpt_dir, device="cuda"):
 
     ckpt_dir = Path(ckpt_dir)
     meta = json.loads((ckpt_dir / "slim_meta.json").read_text())
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16)
+    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", revision=revision,
+                                        dtype=torch.bfloat16)
     tc = model.vlm.config.text_config
     ec = model.expert.config
     vq = np.zeros((tc.num_hidden_layers, tc.num_attention_heads))
@@ -219,8 +234,10 @@ def load_slim(ckpt_dir, device="cuda"):
         eq[li, m["q"]] = 1.0
         em[li, m["mlp"]] = 1.0
     apply_surgery(model, vq, vm, eq, em, kvonly_layers=tuple(meta["kvonly_layers"]))
-    sd = torch.load(ckpt_dir / "slim_state.pt", map_location="cpu", weights_only=True)
-    model.load_state_dict(sd, strict=True)
+    state = ckpt_dir / "slim_state.pt"
+    if state.exists():
+        sd = torch.load(state, map_location="cpu", weights_only=True)
+        model.load_state_dict(sd, strict=True)
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)

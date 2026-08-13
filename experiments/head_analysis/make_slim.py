@@ -48,7 +48,7 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 # pinned to the blobs every result in this track was produced with, matching run_baseline
-MODEL_REV = "7aba8293c09993f2e125c6819df05d7fa3e873ea"
+MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
 
 
 def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
