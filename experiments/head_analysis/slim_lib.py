@@ -192,11 +192,18 @@ def check_slim(model):
         assert p.is_contiguous(), name
 
 
-def save_slim(model, meta, out_dir):
+def save_slim(model, meta, out_dir, write_state=True):
+    """Write the recipe, and the 16.8 GB state_dict unless told not to.
+
+    load_slim() rebuilds the identical weights from the meta alone, so the state file is
+    only needed to move a checkpoint to a machine that cannot reach the base weights.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out_dir / "slim_state.pt")
     (out_dir / "slim_meta.json").write_text(json.dumps(meta))
+    if not write_state:
+        return None
+    torch.save(model.state_dict(), out_dir / "slim_state.pt")
     return out_dir / "slim_state.pt"
 
 

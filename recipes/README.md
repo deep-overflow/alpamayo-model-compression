@@ -50,6 +50,22 @@ A venv with `alpamayo1_5 @ f42e594`, `transformers==4.57.1`, `torch 2.8.0+cu128`
 
 Inference needs **≥24 GB of VRAM**. `run_baseline.py --reserve-gb 26` reserves it up front.
 
+### `outputs/` in a fresh clone
+
+A new checkout has no `outputs/`, and `run_baseline.py` reads its manifests from
+`outputs/eval_sets/` and writes results to `outputs/<exp-id>/`. Give yourself your own
+results directory and link only the shared inputs into it, so runs never land in someone
+else's tree:
+
+```bash
+mkdir -p /mnt/nvme1n1/ad_vla/outputs/<you> && ln -s /mnt/nvme1n1/ad_vla/outputs/<you> outputs
+ln -s /mnt/nvme1n1/ad_vla/outputs/chan/eval_sets outputs/eval_sets   # manifests, read-only
+```
+
+`/mnt/nvme1n1` is shared and was 87% full (933 GB free) on 2026-08-13 — check `df` before
+a run that writes much, and note that `du` over that tree double-counts heavily because a
+lot of it is hardlinked.
+
 ## Loading a recipe
 
 ```python

@@ -76,27 +76,21 @@
   </div>
 </header>
 
-<div class="draft">
-  <strong>초안 — 개루프만.</strong> 폐루프(alpasim <code>public_2601</code> 150씬)는
-  세 단독 기준 arm에 대해 실행 중이며 8/13 저녁 완료 예정이다. 개루프 결론이 폐루프에서
-  뒤집힌 전례가 있으므로(<code>dual_uniform</code>: 개루프 −12%, 폐루프 +10%),
-  이 문서의 §6 함의는 폐루프 도착 전까지 잠정이다.
-</div>
-
 <p class="lede">
 지금까지의 프루닝 기준은 모두 <code>max(rank I<sub>traj</sub>, rank X)</code> 형태의 <strong>결합</strong>
 기준이었고, <code>X</code>를 CoC-NLL Taylor에서 J-lens로 바꾼 1요인 비교만 측정되어 있었다.
 정작 <em>각 항이 단독으로 무엇을 하는지</em>는 측정된 적이 없다. 같은 예산·같은 할당으로
-세 단독 기준을 추가 구축해 45,594 클립에서 평가한 결과, 세 항은 절충 관계가 아니라
-<strong>직교</strong>한다. 그리고 결합 기준은 두 구성 요소 <em>모두보다</em> 좋다.
+세 단독 기준을 추가 구축해 45,594 클립과 폐루프 900 롤아웃에서 평가한 결과, 세 항은 절충
+관계가 아니라 <strong>직교</strong>한다. 결합 기준은 두 구성 요소 <em>모두보다</em> 좋고,
+단독 기준 둘은 주행에서 무손상 모델보다 <strong>유의하게 나쁘다</strong>.
 </p>
 
 <div class="kpi">
   <div><span class="k">평가 규모</span><span class="v">45,594</span>클립 (6 arm × 7,599)</div>
   <div><span class="k">압축률</span><span class="v">24.0%</span>5개 arm 전부 동일</div>
-  <div><span class="k">최선 (dual)</span><span class="v">+10.1%</span>OOD minADE vs baseline</div>
-  <div><span class="k">최악 (j 단독)</span><span class="v">+186.6%</span>OOD minADE vs baseline</div>
-  <div><span class="k">게이트</span><span class="v">G1 PASS</span>추론 항이 궤적까지 개선</div>
+  <div><span class="k">최선 (dual)</span><span class="v">+0.079</span>폐루프 씬 점수 vs baseline</div>
+  <div><span class="k">최악 (j 단독)</span><span class="v">&minus;0.214</span>폐루프 씬 점수 vs baseline</div>
+  <div><span class="k">기준이 가르는 폭</span><span class="v">0.293</span>같은 예산, 같은 할당</div>
 </div>
 
 <h2><span class="num">1</span>왜 단독 기준을 재야 했는가</h2>
@@ -374,7 +368,74 @@ OOD는 전 arm이 동일한 curated CoC를 받는 유일한 셋이다. <code>nll
   오른쪽: 자체 추론이 각 arm에 물리는 비용.</figcaption>
 </figure>
 
-<h2><span class="num">5</span>게이트 판정</h2>
+<h2><span class="num">5</span>폐루프: 같은 순서가 주행에서도 나온다</h2>
+
+<p>
+개루프 minADE는 20 s 주행을 재지 않는다. 앞선 실험에서 <code>dual_uniform</code>은 개루프에서
+baseline보다 12% 나빴는데 폐루프 씬 점수에서는 10% <em>좋았다</em> — 부호가 뒤집혔다. 그래서
+여섯 arm 전부를 alpasim <code>public_2601</code> 150씬 &times; 2 롤아웃으로 다시 돌렸다
+(arm당 900 롤아웃, Ada 드라이버, <code>OMP_NUM_THREADS=8</code>).
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">씬 점수</th><th class="r">pass%</th><th class="r">at-fault 충돌</th><th class="r">offroad</th><th class="r">&Delta; vs baseline (95% CI)</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td class="r">0.828</td><td class="r">91.0</td><td class="r">0.023</td><td class="r">0.067</td><td class="r"><strong>+0.0787 [+0.0355, +0.1234]</strong></td></tr>
+<tr><td><code>jtraj</code></td><td class="r">0.791</td><td class="r">88.7</td><td class="r">0.043</td><td class="r">0.070</td><td class="r">+0.0418 [&minus;0.0047, +0.0876]</td></tr>
+<tr><td><code>traj</code></td><td class="r">0.783</td><td class="r">88.0</td><td class="r">0.033</td><td class="r">0.087</td><td class="r">+0.0334 [&minus;0.0123, +0.0792]</td></tr>
+<tr><td>baseline</td><td class="r">0.750</td><td class="r">89.0</td><td class="r">0.040</td><td class="r">0.070</td><td class="r">&mdash;</td></tr>
+<tr><td><code>coc</code></td><td class="r">0.660</td><td class="r">83.7</td><td class="r">0.073</td><td class="r">0.090</td><td class="r"><strong>&minus;0.0892 [&minus;0.1510, &minus;0.0290]</strong></td></tr>
+<tr><td><code>j</code></td><td class="r">0.536</td><td class="r">70.7</td><td class="r">0.173</td><td class="r">0.120</td><td class="r"><strong>&minus;0.2138 [&minus;0.2807, &minus;0.1453]</strong></td></tr>
+</tbody>
+</table>
+
+<h3>5.1 개루프 순위가 예외 없이 재현된다</h3>
+
+<pre><code>개루프 minADE (OOD)   dual 0.931 &lt; jtraj 0.973 &lt; traj 1.063 &lt; coc 1.383 &lt; j 2.423
+폐루프 씬 점수        dual 0.828 &gt; jtraj 0.791 &gt; traj 0.783 &gt; coc 0.660 &gt; j 0.536</code></pre>
+
+<p>
+여섯 arm 전부에서 완전한 역순이다. 이번에는 부호 반전이 없었다 — 다만 이것이 개루프가
+주행의 신뢰할 만한 대리 지표라는 뜻은 아니다. <code>dual_uniform</code>의 반전 사례가 있고,
+여기서도 baseline은 압축 arm 셋보다 <em>개루프에서는</em> 최고인데 <em>폐루프에서는</em>
+넷 중 넷째다.
+</p>
+
+<h3>5.2 단독 기준 둘은 무손상 모델보다 유의하게 나쁘다</h3>
+
+<div class="callout warn">
+<p><code>coc</code>는 &minus;0.089 (W/L/T 40/68/42), <code>j</code>는 <strong>&minus;0.214</strong>
+(35/80/35). 둘 다 CI가 0 아래다. <code>j</code>의 at-fault 충돌률 0.173은 baseline 0.040의
+<strong>4.3배</strong>이고 pass율은 70.7%까지 떨어진다.</p>
+<p>이는 &ldquo;24% 압축이 정규화로 작동한다&rdquo;는 서사에 대한 첫 반례다. 지금까지 폐루프에서
+측정한 모든 압축 arm이 baseline보다 좋았다. 결정하는 것은 <strong>압축 자체가 아니라
+기준</strong>이다 — 같은 예산, 같은 할당에서 기준만 바꿔 &minus;0.214에서 +0.079까지
+<strong>폭 0.293</strong>이 나온다.</p>
+</div>
+
+<h3>5.3 추론을 가장 잘 지킨 arm이 가장 많이 충돌한다</h3>
+
+<p>
+<code>j</code> 단독은 개루프에서 추론 채널을 baseline <em>이상</em>으로 보존했다 —
+OOD <code>nll_gtcoc</code>가 &minus;0.019 [&minus;0.0373, &minus;0.0007]로 CI가 0 아래였고,
+폐루프 CoC 퇴화율도 1.4%로 <code>dual</code>의 2.7%보다 낮다. 그런데 주행은 여섯 중 최악이다.
+</p>
+
+<div class="callout">
+<p><strong>CoC 건전성은 주행 안전의 대리 지표가 아니다.</strong> 추론 텍스트가 가장 온전한 arm이
+충돌을 가장 많이 낸다. 반대 방향도 성립한다 — <code>traj</code>는 폐루프 CoC 퇴화율이 5.0%로
+여섯 중 가장 높고 CoC 길이도 93 토큰으로 유일하게 길지만(다른 arm 70&ndash;77), 주행 점수는
+baseline보다 높다.</p>
+</div>
+
+<p>
+이 두 사실을 합치면 <code>max(rank I<sub>traj</sub>, rank X)</code> 구조의 정당화가 완성된다.
+세 단독 기준 중 둘은 주행에서 유의하게 나쁘고 하나는 유의하지 않게 좋은데, 결합하면
+<code>dual</code>이 +0.0787로 유의하게 좋아진다. 두 항은 서로 다른 실패 모드를 막고 있고,
+어느 쪽도 혼자서는 충분하지 않다.
+</p>
+
+<h2><span class="num">6</span>게이트 판정</h2>
 
 <table>
 <thead><tr><th>게이트</th><th>질문</th><th class="r">측정</th><th>판정</th></tr></thead>
@@ -404,7 +465,7 @@ OOD는 전 arm이 동일한 curated CoC를 받는 유일한 셋이다. <code>nll
 기록하되, 결론은 &ldquo;대체 불가&rdquo;가 아니라 &ldquo;서로 다른 것을 잰다&rdquo;이다.</p>
 </div>
 
-<h2><span class="num">6</span>해석과 한계</h2>
+<h2><span class="num">7</span>해석과 한계</h2>
 
 <h3>결과가 말하는 것 (해석)</h3>
 
@@ -434,11 +495,13 @@ CoC-NLL Taylor는 &ldquo;이 유닛을 지우면 내가 실제로 뱉는 텍스�
 <h3>한계</h3>
 
 <ul>
-  <li><strong>폐루프 미완.</strong> 이 문서는 개루프만이다. <code>dual_uniform</code>은 개루프에서
-  baseline보다 12% 나빴지만 폐루프 씬 점수에서는 10% <em>좋았다</em>. 개루프 순위가 그대로
-  주행 성능 순위가 된다는 보장이 없다. 세 단독 arm의 폐루프는 실행 중이다.</li>
+  <li><strong>폐루프 씬 수.</strong> 150씬의 페어드 델타는 σ ≈ 0.32라 0.080까지만 분해된다.
+  <code>jtraj</code>(+0.042)와 <code>traj</code>(+0.034)는 그 아래이므로 <strong>서로 구분되지
+  않는다</strong> — 둘의 순서를 주장해서는 안 된다. 유의한 것은 <code>dual</code>,
+  <code>coc</code>, <code>j</code> 셋뿐이다.</li>
   <li><strong>단일 압축률.</strong> 24.0% 한 점에서만 측정했다. 결합의 시너지가 압축률에 따라
-  어떻게 변하는지는 모른다 — 더 공격적인 압축에서 뒤집힐 수 있다.</li>
+  어떻게 변하는지는 모른다 — 더 공격적인 압축에서 뒤집힐 수 있다. 33%/45% 스윕이 진행 중이고,
+  빌드 직후 smoke에서 이미 CoC가 종료되지 않는 신호가 나왔다.</li>
   <li><strong>단일 할당.</strong> uniform 할당 한 가지만 썼다. 2026-07 grid는 할당 요인이
   기준 요인보다 큰 효과를 낸 적이 있으므로, 다른 할당에서 같은 순서가 나온다는 보장은 없다.</li>
   <li><strong>expert·KV 미개입.</strong> 1요인을 지키려고 expert(모델의 19.2%)와 KV를 건드리지
@@ -450,8 +513,9 @@ CoC-NLL Taylor는 &ldquo;이 유닛을 지우면 내가 실제로 뱉는 텍스�
 <h3>다음</h3>
 
 <ol>
-  <li>폐루프 3 arm (실행 중, 8/13 저녁) — 개루프 순위가 주행에서 유지되는지.</li>
-  <li>압축률 스윕 — 결합의 시너지가 어느 압축률까지 유지되는지.</li>
+  <li>압축률 스윕 (진행 중) — VLM uniform 0.55 / 0.75, 전체 압축 33.1% / 45.0%.
+  무릎이 24%와 33% 사이일 가능성이 smoke에서 시사됐다.</li>
+  <li>expert 타워(모델의 19.2%)를 여는 것 — 지금까지 모든 arm이 미개입으로 두었다.</li>
   <li><code>max</code> 대신 가중합 <code>α·rank I_traj + (1−α)·rank J</code>를 스윕 —
   <code>max</code>가 최선의 결합 형태인지는 검증된 적이 없다.</li>
 </ol>

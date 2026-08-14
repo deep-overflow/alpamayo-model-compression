@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -57,19 +58,29 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
-    if cfg_name.endswith("_u40_v2"):
+    uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
+    if uni:
         # The one-factor family. Everything is held at the grid's dual_uniform cell --
-        # uniform matched budget, expert untouched, no KV drop -- so the only thing that
-        # varies across these configs is the within-layer score. `dual`/`j_traj` are the
-        # combined criteria max(rank I_traj, rank X); `traj`/`coc`/`j` are the single-
-        # criterion controls that say what each half of that max() does on its own.
-        # Reusing `allocations` rather than hardcoding 0.40 matters: the matched target
-        # is 0.398563, and rounding it to 0.40 moves 17 MLP channels per layer.
-        ref_meta = json.loads(
-            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
-        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
-                                tc.num_attention_heads, tc.intermediate_size, 0.5)
-        rq, rm = allocs["uniform"]
+        # uniform allocation, expert untouched, no KV drop -- so the only things that
+        # vary are the within-layer score and, across the ratio sweep, the budget.
+        # `dual`/`j_traj` are the combined criteria max(rank I_traj, rank X);
+        # `traj`/`coc`/`j` are the single-criterion controls that say what each half of
+        # that max() does on its own.
+        stem, pct = uni.group(1), int(uni.group(2))
+        if pct == 40:
+            # u40 is NOT 0.40: it is the matched target 0.3985632694 that
+            # run_grid.allocations() derives from slim_integrated_mag's realized budget.
+            # Rounding it to 0.40 moves 17 MLP channels per layer, so the shipped
+            # checkpoints would no longer regenerate bit-identically.
+            ref_meta = json.loads(
+                (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+            allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                    tc.num_attention_heads, tc.intermediate_size, 0.5)
+            rq, rm = allocs["uniform"]
+        else:
+            # the sweep points mean exactly what their name says
+            rq = np.full(tc.num_hidden_layers, pct / 100)
+            rm = np.full(tc.num_hidden_layers, pct / 100)
 
         def half(name):
             if name == "traj":
@@ -79,7 +90,6 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
-        stem = cfg_name[: -len("_u40_v2")]
         parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j")}.get(stem, (stem,))
         # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
         # criterion -- it only matters when two scores have to share one scale
@@ -186,15 +196,20 @@ def smoke(model, processor, clip_id, t0_us, seed=42):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True,
-                    choices=["integrated_mag", "cocsafe_full_r20", "cocsafe_full_r30", "dual_uniform",
-                             "j_traj_full_r20", "j_traj_full_r30",
-                             "dual_u40_v2", "j_traj_u40_v2",
-                             "traj_u40_v2", "coc_u40_v2", "j_u40_v2"])
+                    help="a named config, or <criterion>_u<pct>_v2 for the uniform family "
+                         "(criterion in traj|coc|j|dual|j_traj; pct 40 means the matched "
+                         "0.3985632694, any other pct means exactly pct/100)")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
                     help="J-lens run supplying q_j/mlp_j for the j_traj configs")
     ap.add_argument("--sets-id", type=str, default="eval_sets")
+    ap.add_argument("--no-state", action="store_true",
+                    help="write only slim_meta.json, skipping the 16.8 GB slim_state.pt. "
+                         "load_slim() reconstructs the identical model from the meta "
+                         "(base weights are sliced in place, verified tensor-by-tensor), "
+                         "so this is enough for evaluation; the state file is only needed "
+                         "to hand the checkpoint to a machine without the base weights.")
     ap.add_argument("--reserve-gb", type=float, default=30.0)
     ap.add_argument("--gpu", type=int, default=None)
     args = ap.parse_args()
@@ -230,8 +245,9 @@ def main():
     meta["params"] = {"full": full_total, "slim": slim_total, "removed": removed}
 
     t0 = time.time()
-    sl.save_slim(model, meta, out_dir)
-    print(f"saved checkpoint in {time.time() - t0:.0f}s -> {out_dir}", flush=True)
+    sl.save_slim(model, meta, out_dir, write_state=not args.no_state)
+    kind = "recipe" if args.no_state else "checkpoint"
+    print(f"saved {kind} in {time.time() - t0:.0f}s -> {out_dir}", flush=True)
 
     man = pd.read_parquet(REPO / "outputs" / args.sets_id / "indist_500.parquet")
     result = smoke(model, processor, man.clip_id.iloc[0], int(man.t0_us.iloc[0]))

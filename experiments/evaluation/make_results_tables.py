@@ -288,7 +288,14 @@ def closed_loop_table(metrics_paths, arms):
             f"<td class='r'>{degcell}</td>"
             f"<td class='r'>{dcell}</td></tr>")
     n = " / ".join(str(x) for x in sorted(n_scenes) if x)
-    return (f"<p class='note'>{n}씬 × 2 롤아웃, 롤아웃 → 씬 평균 → baseline과 페어드 차이.</p>"
+    # name the arms that have open-loop rows but no closed-loop run yet: a table that
+    # silently lists 4 of 6 arms reads as "these are all of them"
+    pending = [a for a in arms if CLOSED.get(a) not in merged]
+    note = f"{n}씬 × 2 롤아웃, 롤아웃 → 씬 평균 → baseline과 페어드 차이."
+    if pending:
+        note += (" 아직 폐루프 미완료: "
+                 + ", ".join(f"<code>{a}</code>" for a in pending) + ".")
+    return (f"<p class='note'>{note}</p>"
             + table(["arm", "scene score [95% CI]", "pass%", "at-fault 충돌", "offroad",
                      "progress", "d2gt", "CoC 퇴화", "Δ score vs baseline"], body))
 
