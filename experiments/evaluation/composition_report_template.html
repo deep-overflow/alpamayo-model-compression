@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>양자화 × 프루닝: 두 압축은 겹칠 수 있는가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b0402a;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .up { color: var(--bad); } .down { color: var(--good); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>양자화 × 프루닝: 두 압축은 겹칠 수 있는가</h1>
+  <div class="meta">
+    2026-08-15 · <code>nvidia/Alpamayo-1.5-10B</code> · 공식 test 500 클립 · minADE@8 ·
+    RTX 5880 Ada · 페어드 부트스트랩 95% CI
+  </div>
+</header>
+
+<p class="lede">
+저장 용량은 곱해진다 &mdash; 그건 산술이다. 물어야 할 것은 <strong>품질 손상이 더해지는가</strong>다.
+같은 500 클립·같은 시드로 네 조건을 재서 클립 단위 상호작용을 만든 결과, 프루닝과 양자화의
+손상은 <strong>독립</strong>이었다. 그리고 그 과정에서 예상과 다른 것이 나왔다 &mdash;
+<strong>expert 타워를 양자화하는 것이 24% 구조적 프루닝보다 저장 용량을 더 많이,
+더 싸게 줄인다.</strong>
+</p>
+
+<div class="kpi">
+  <div><span class="k">최대 압축</span><span class="v">4.04&times;</span>22.16 &rarr; 5.48 GB</div>
+  <div><span class="k">그 대가</span><span class="v">+0.177</span>minADE@8 (+22.7%)</div>
+  <div><span class="k">상호작용 (w4)</span><span class="v">+0.028</span>CI가 0 포함 &rarr; 독립</div>
+  <div><span class="k">expert 8bit 대가</span><span class="v">+0.001</span>측정 한계 아래</div>
+</div>
+
+<h2><span class="num">1</span>왜 이 실험을 했는가</h2>
+
+<p>
+두 압축 축이 이 저장소에서 따로 자라 있었다. <strong>구조적 프루닝</strong>은 Q head와 MLP
+채널을 실제로 제거해 형상을 바꾸고, <strong>양자화</strong>는 가중치 행의 정밀도를 낮춘다.
+프루닝 쪽은 24.0% 압축에서 개루프 minADE +12.2%, 폐루프 씬 점수는 오히려 baseline보다
+높았다. 양자화 쪽은 4비트에서도 손실이 작다고 보고됐다.
+</p>
+
+<p>
+그렇다면 둘을 겹치면 저장 용량이 곱해진다. 문제는 품질이다. 프루닝이 남긴 유닛은 정보가
+더 조밀해져 있을 수 있고, 그렇다면 양자화 오차에 더 취약할 것이다 &mdash; 손상이
+초가법적일 수 있다는 뜻이다.
+</p>
+
+<h3>먼저 걸린 것: 양자화 풀에 expert가 없었다</h3>
+
+<p>
+기존 양자화 풀은 VLM text + <code>lm_head</code> + ViT = <strong>8.158 B</strong>였다.
+expert 2.279 B와 <code>embed_tokens</code> 0.642 B는 bf16으로 남는다. 이건 양자화 불가라서가
+아니라 <strong>기준의 부산물</strong>이다 &mdash; CoC NLL 그래프가 <code>vlm.lm_head</code>에서
+끝나므로 CoC-only 민감도는 expert 행을 전부 0점으로 매기고, 유도 배분이라면 타워 전체를
+0비트로 강등시킨다. 그래서 배제했다.
+</p>
+
+<div class="callout">
+<p><strong>균일 예산에는 기준이 없으므로 이 제약이 적용되지 않는다.</strong> 그리고 이게
+결정적이다: 4비트로 내려도 남는 2.921 B가 5.84 GB를 차지해 <strong>압축 모델의 57%</strong>가
+된다. 프루닝을 얹어 얻는 1.65 GB보다, expert를 4비트로 내려 얻는 3.42 GB가 두 배 크다.</p>
+</div>
+
+<h2><span class="num">2</span>설계</h2>
+
+<p>
+2&times;2 요인 설계다. 네 조건 모두 <strong>같은 500 클립, 같은 클립 유도 시드</strong>
+(<code>sha256(f"{seed}:{clip_id}")[:4]</code>)를 쓰므로 클립 단위로 짝지을 수 있다.
+</p>
+
+<table>
+<thead><tr><th></th><th>양자화 없음</th><th>+ 균일 양자화 (expert 포함)</th></tr></thead>
+<tbody>
+<tr><td><strong>프루닝 없음</strong></td><td>baseline (22.16 GB)</td>
+    <td><code>w8_all</code> 12.21 GB · <code>w4_all</code> 6.91 GB</td></tr>
+<tr><td><strong>+ <code>dual_u40</code> (24.0%)</strong></td><td>16.84 GB</td>
+    <td><code>+w8</code> 9.44 GB · <code>+w4</code> 5.48 GB</td></tr>
+</tbody>
+</table>
+
+<p>
+파이프라인은 <strong>프루닝 &rarr; 양자화</strong>다. slim 체크포인트를 로드한 뒤
+<em>그 형상에서 생성한</em> spec을 적용한다. spec은 행별 비트 벡터라 프루닝이 바꾼
+<code>out_features</code>와 맞아야 하는데, <code>apply_quant</code>는 이름만 검사하고 길이는
+검사하지 않았다 &mdash; 원본용 spec을 프루닝된 모델에 넘기면 조용히 어긋난다. 이번에
+<strong>shape 검증</strong>을 추가해 즉시 에러가 나도록 했다.
+</p>
+
+<h3>사전 등록한 판정</h3>
+
+<pre><code>interaction_i = d(both)_i - d(prune)_i - d(quant)_i
+d(x)_i = minADE(x, clip i) - minADE(baseline, clip i)</code></pre>
+
+<p>
+이 벡터를 클립에 대해 부트스트랩해 95% CI를 낸다. CI가 0을 포함하면 두 압축은 독립,
+양수면 프루닝된 모델이 양자화에 더 취약하다는 뜻이다. <strong>가법성은 물리 법칙이 아니라
+기술적 귀무가설</strong>이다 &mdash; minADE 델타가 선형으로 합성될 이유는 없고, 다만
+상호작용을 정의하려면 기준선이 필요해서 쓴다.
+</p>
+
+<h2><span class="num">3</span>결과</h2>
+
+<h3>3.1 expert 양자화는 사실상 공짜다</h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">minADE@8</th><th class="r">vs baseline</th><th class="r">CoC 퇴화</th><th class="r">크기</th><th class="r">배율</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.7799</td><td class="r">&mdash;</td><td class="r">0.6%</td><td class="r">22.16 GB</td><td class="r">1.00&times;</td></tr>
+<tr><td><code>uniform_w8</code> (VLM만)</td><td class="r">0.7811</td><td class="r">+0.0012</td><td class="r">0.6%</td><td class="r">14.39 GB</td><td class="r">1.54&times;</td></tr>
+<tr><td><strong><code>uniform_w8</code> (+expert)</strong></td><td class="r">0.7810</td><td class="r">+0.0011</td><td class="r">0.6%</td><td class="r"><strong>12.21 GB</strong></td><td class="r"><strong>1.81&times;</strong></td></tr>
+<tr><td><code>uniform_w4</code> (VLM만)</td><td class="r">0.8239</td><td class="r">+0.0440 <strong>*</strong></td><td class="r">0.4%</td><td class="r">10.24 GB</td><td class="r">2.16&times;</td></tr>
+<tr><td><strong><code>uniform_w4</code> (+expert)</strong></td><td class="r">0.8332</td><td class="r">+0.0533 <strong>*</strong></td><td class="r">0.4%</td><td class="r"><strong>6.91 GB</strong></td><td class="r"><strong>3.20&times;</strong></td></tr>
+</tbody>
+</table>
+
+<pre><code>8비트   VLM만 +0.0012  ->  +expert +0.0011    추가 대가 -0.0001   (14.39 -> 12.21 GB)
+4비트   VLM만 +0.0440  ->  +expert +0.0533    추가 대가 +0.0093   (10.24 ->  6.91 GB)</code></pre>
+
+<p>
+8비트에서는 <strong>차이가 측정 한계 아래</strong>다. 4비트에서도 추가 대가는 VLM 4비트
+자체의 대가(+0.0440)의 5분의 1이면서 <strong>3.33 GB(32%)를 더 줄인다</strong>.
+</p>
+
+<div class="callout warn">
+<p>양자화 계획서에는 &ldquo;expert가 RTN에서 VLM보다 2.5&ndash;5배 어렵다&rdquo;고 측정돼
+있었다. <strong>그 가중치 재구성 오차는 최종 성능으로 나타나지 않았다.</strong> 오차가
+크더라도 궤적 출력이 그만큼 민감하지 않다는 뜻이다 &mdash; 재구성 오차를 대리 지표로 삼는
+것의 한계를 보여준다.</p>
+</div>
+
+<h3>3.2 손상은 더해진다</h3>
+
+<table>
+<thead><tr><th>셀</th><th class="r">프루닝만</th><th class="r">양자화만</th><th class="r">합성 (측정)</th><th class="r">가법 예측</th><th class="r">상호작용</th></tr></thead>
+<tbody>
+<tr><td><strong>w8</strong> (9.44 GB, 2.35&times;)</td>
+    <td class="r">+0.0955 <strong>*</strong></td><td class="r">+0.0011</td>
+    <td class="r">+0.1088 <strong>*</strong></td><td class="r">+0.0966</td>
+    <td class="r"><strong>+0.0122</strong> [&minus;0.0096, +0.0398]</td></tr>
+<tr><td><strong>w4</strong> (5.48 GB, 4.04&times;)</td>
+    <td class="r">+0.0955 <strong>*</strong></td><td class="r">+0.0533 <strong>*</strong></td>
+    <td class="r">+0.1771 <strong>*</strong></td><td class="r">+0.1488</td>
+    <td class="r"><strong>+0.0283</strong> [&minus;0.0222, +0.0850]</td></tr>
+</tbody>
+</table>
+
+<p>
+두 셀 모두 상호작용 CI가 0을 포함한다 (p=0.59, p=0.23). CoC 퇴화율도 3.4% / 2.0%로
+사전 등록 임계 5% 아래다.
+</p>
+
+<div class="callout good">
+<p><strong>독립은 실용적으로 좋은 소식이다.</strong> 프루닝된 모델이 양자화에 더 취약하지
+않으므로, 두 단계를 따로 튜닝하고 그대로 이어붙일 수 있다. 상호작용 항을 모델링할 필요가
+없다.</p>
+<p>다만 상호작용의 부호는 두 셀 모두 <em>양수</em>이고 (+0.012, +0.028), 압축이 강할수록
+커진다. 초가법성이 없다고 확정된 것이 아니라 <strong>이 표본 크기에서 검출되지 않은
+것</strong>이다. 더 공격적인 조합에서는 다시 봐야 한다.</p>
+</div>
+
+<h3>3.3 프루닝은 이 지형에서 지배당한다</h3>
+
+<figure>
+  <img src="PLOT::comp::tradeoff.png" alt="저장 용량 대 품질 트레이드오프">
+  <figcaption>가로축은 투영 체크포인트 크기(왼쪽이 큼), 세로축은 baseline 대비 페어드
+  minADE 차이. 오차막대는 95% CI. <code>prune 24%</code>가 <code>w8 (+expert)</code>보다
+  <strong>크면서 동시에 나쁘다</strong> &mdash; 지배당하는 점이다.</figcaption>
+</figure>
+
+<pre><code>arm                   대가        절감        절감/대가
+w8 (+expert)       +0.0011     9.95 GB     사실상 무한
+w4 (+expert)       +0.0533    15.25 GB       286 GB/m
+prune 24%          +0.0955     5.32 GB        56 GB/m</code></pre>
+
+<p>
+같은 minADE 손실당 얻는 크기 감소로 보면 프루닝이 가장 나쁘다. 대가는 가장 크면서
+(+0.0955) 절감은 가장 적고(5.32 GB), CoC 퇴화율도 3.0%로 유일하게 baseline의 5배다.
+<strong>저장 용량이 목적이라면 양자화가 명백히 우월하다.</strong>
+</p>
+
+<div class="callout warn">
+<p><strong>단, 이건 저장 용량 축에서만 그렇다.</strong> 여기서 쓴 양자화는
+<em>fake quant</em>(quantize&rarr;dequantize를 bf16으로 되돌림)라 형상·dtype이 그대로다.
+연산량도 지연시간도 메모리도 <strong>전혀 줄지 않고</strong>, 절감은 비트 배분에서
+계산한 <strong>투영치</strong>다. 프루닝만이 실제로 파라미터를 제거해 FLOP과 지연시간을
+줄인다. 두 축은 다른 것을 산다.</p>
+</div>
+
+<h2><span class="num">4</span>한계</h2>
+
+<ul>
+  <li><strong>fake quant.</strong> 위 경고 그대로 &mdash; 저장 용량은 투영치이고 속도 이득은
+  0이다. 실제 커널로 검증되지 않았다.</li>
+  <li><strong>개루프 한 셋.</strong> <code>test_500</code>만 측정했다. 그리고 이 프로젝트에는
+  개루프 순위가 주행에서 뒤집힌 전례가 있다 &mdash; <code>dual_u40</code>은 개루프 +0.0955에도
+  폐루프 씬 점수에서 baseline보다 <strong>좋았다</strong>(+0.0787). 합성 arm의 +0.1771을
+  주행 결론으로 읽어서는 안 된다.</li>
+  <li><strong>순서 한 방향.</strong> 프루닝&rarr;양자화만 측정했다. 반대 순서는 수치적으로
+  다르다 &mdash; 양자화 그룹이 입력 차원 64개 단위인데 <code>o_proj</code>/<code>down_proj</code>의
+  열 제거가 그룹 경계를 바꾼다.</li>
+  <li><strong>균일 양자화만.</strong> CoC 유도 배분은 expert를 점수화할 수 없어(그래프에
+  없음) 이번 풀에 쓰지 못했다. VLM만 놓고 보면 유도 배분이 균일보다 4비트에서 &minus;0.0326
+  유의하게 나았으므로, expert까지 덮는 배분 기준을 찾으면 여지가 남아 있다.</li>
+  <li><strong>프루닝 한 점.</strong> 24.0%만 조합했다. 별도 스윕에서 33.1%는 CoC가 종료되지
+  않는 수준으로 붕괴했으므로(퇴화율 71%), 더 공격적인 프루닝과의 조합은 의미가 없다.</li>
+</ul>
+
+<h2><span class="num">5</span>다음</h2>
+
+<ol>
+  <li><strong>expert까지 덮는 유도 배분.</strong> 가장 값어치 있는 다음 수. CoC 기준으로는
+  expert를 점수화할 수 없으므로 궤적 손실이나 다른 신호가 필요하고, 이는 양자화 트랙의
+  &ldquo;CoC-only&rdquo; 설계 원칙과 충돌한다 &mdash; 프레이밍 결정이 선행돼야 한다.</li>
+  <li><strong>폐루프 검증.</strong> <code>w4_all</code>과 <code>dual_u40+w4</code>를 150씬에서.
+  config당 ~10시간.</li>
+  <li><strong>실제 커널.</strong> 투영 절감을 실측으로 바꾸려면 packed 4비트 추론 경로가
+  필요하다. 그래야 &ldquo;저장 대 속도&rdquo; 축이 하나로 합쳐진다.</li>
+</ol>
+
+<footer>
+숫자 원본: <code>outputs/composition_test/</code> ·
+계획서: <code>plans/2026-08-15_prune-quant-composition.md</code> ·
+분석: <code>experiments/evaluation/analyze_composition.py</code>,
+<code>compare_quant_arms.py</code> ·
+spec: <code>outputs/quant_specs/{w4,w8}_all{,_dual_u40}.npz</code>
+</footer>
+
+</div>
+</body>
+</html>

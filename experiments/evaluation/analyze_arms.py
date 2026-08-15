@@ -71,10 +71,20 @@ ARMS = {
     "j": ("j_u40_v2_", "slim_j_u40_v2"),
     "dual": ("dual_u40_v2_", "slim_dual_u40_v2"),
     "jtraj": ("jtraj_u40_v2_", "slim_jtraj_u40_v2"),
+    # ratio sweep: same criteria, uniform budget raised from 0.3986 to 0.55 / 0.75
+    # (24.0% -> 33.1% / 45.0% of the model). exp-ids are <arm>_u<pct>_<set>.
+    "dual_u55": ("dual_u55_", "slim_dual_u55_v2"),
+    "jtraj_u55": ("jtraj_u55_", "slim_jtraj_u55_v2"),
+    "dual_u75": ("dual_u75_", "slim_dual_u75_v2"),
+    "jtraj_u75": ("jtraj_u75_", "slim_jtraj_u75_v2"),
 }
-ARM_ORDER = ["baseline", "traj", "coc", "j", "dual", "jtraj"]
+ARM_ORDER = ["baseline", "traj", "coc", "j", "dual", "jtraj",
+             "dual_u55", "jtraj_u55", "dual_u75", "jtraj_u75"]
 COLORS = {"baseline": MUTED, "traj": C4, "coc": C3, "j": "#7b5bd6",
-          "dual": C1, "jtraj": C2}
+          "dual": C1, "jtraj": C2,
+          # the sweep keeps each criterion's hue and darkens it as the budget rises
+          "dual_u55": "#1f5aa0", "dual_u75": "#123a69",
+          "jtraj_u55": "#006200", "jtraj_u75": "#004100"}
 # every pruned arm against the unpruned reference, then the contrasts the gates read.
 # an explicit list rather than all 15 pairs: each one costs a 10k-resample bootstrap
 # per metric per set, and the other pairs answer no pre-registered question.

@@ -166,7 +166,7 @@ def detail_table(rows_by_set, arms):
     for _, mlbl, _ in METRICS:
         head += [mlbl, "", ""]
         sub += ["중앙값", "평균", "95% CI"]
-    head += ["CoC 퇴화", "CoC 길이"]
+    head += ["CoC 퇴화", "CoC 길이(자)"]   # coc_degenerate() measures the decoded string
     sub += ["", ""]
     h = "".join(f"<th class='r' colspan='1'>{c}</th>" for c in head)
     s = "".join(f"<th class='r'>{c}</th>" for c in sub)
