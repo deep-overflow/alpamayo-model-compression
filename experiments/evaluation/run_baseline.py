@@ -121,11 +121,23 @@ def main():
     ap.add_argument("--gpu", type=int, default=None)
     ap.add_argument("--manifest", default=None, help="override the manifest stem")
     ap.add_argument("--cache", default=None, help="override the pre_processed cache name")
+    ap.add_argument("--quant", default=None,
+                    help="path to a per-row bit spec .npz (alloc_lib); VLM pool only")
+    ap.add_argument("--quant-group", type=int, default=64)
+    ap.add_argument("--quant-parts", nargs="+",
+                    default=["vlm_text", "lm_head", "vit"],
+                    help="pool parts the spec is allowed to cover. The default excludes "
+                         "the expert because a CoC-guided allocation cannot score it; a "
+                         "uniform budget can, so pass '... expert' for those specs.")
     ap.add_argument("--strict-deterministic", action="store_true",
                     help="error instead of warn when an op has no deterministic kernel")
     args = ap.parse_args()
 
     tag = "baseline" if args.model == "baseline" else Path(args.model).name
+    if args.quant:
+        # the rows file has to name the intervention, not just the checkpoint it sits on
+        qs = Path(args.quant).stem
+        tag = qs if tag == "baseline" else f"{tag}_{qs}"
     exp_id = args.exp_id or f"baseline_{args.which}"
     out_dir = REPO / "outputs" / exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -152,6 +164,48 @@ def main():
     else:
         import slim_lib as sl
         model = sl.load_slim(REPO / args.model, device="cuda")
+
+    quant_meta = None
+    if args.quant:
+        import quant_lib as ql
+        z = np.load(args.quant, allow_pickle=True)
+        names = [str(n) for n in z["_names"]]
+        spec = {n: torch.from_numpy(z[n]) for n in names}
+        parts = tuple(args.quant_parts)
+        pool = ql.pool_shapes(model, parts=parts)
+        unknown = [n for n in names if n not in pool]
+        if unknown:
+            raise KeyError(f"spec has {len(unknown)} names outside pool {parts}: {unknown[:3]}")
+        # a spec is a per-row bit vector, so it only fits the shapes it was written for;
+        # pruning changes out_features and apply_quant checks names but not lengths
+        bad = [(n, len(spec[n]), pool[n][0]) for n in names if len(spec[n]) != pool[n][0]]
+        if bad:
+            raise ValueError(
+                f"spec row counts do not match this model ({len(bad)} tensors, e.g. {bad[:2]}). "
+                "Regenerate it against the model it will be applied to "
+                "(make_uniform_spec.py --model <ckpt>).")
+        eff, tot_bits, tot_par = ql.effective_bits({n: pool[n] for n in names}, spec,
+                                                   args.quant_group)
+        report = ql.apply_quant(model, spec, group=args.quant_group, parts=parts)
+        hist = {b: sum(int((spec[n] == b).sum()) for n in names) for b in ql.BITS}
+        # embed_tokens is never quantizable, and the expert only when asked for: a
+        # CoC-guided spec that silently reached it would invalidate that comparison
+        touched = set(report)
+        assert not any("embed_tokens" in n for n in touched)
+        if "expert" not in parts:
+            assert not any(n.startswith("expert") for n in touched)
+        quant_meta = {
+            "spec": str(args.quant), "group": args.quant_group, "parts": list(parts),
+            "pool_tensors": len(names), "pool_params": tot_par,
+            "effective_bits": eff, "projected_pool_gb": tot_bits / 8 / 1e9,
+            "pool_bf16_gb": tot_par * 2 / 1e9, "row_bit_hist": hist,
+            "worst_rel_mse": max(r["rel_mse"] for r in report.values()),
+            "mean_rel_mse": float(np.mean([r["rel_mse"] for r in report.values()])),
+        }
+        print(f"quant {Path(args.quant).stem}: {len(names)} tensors, "
+              f"{eff:.3f} eff bits, pool {tot_par * 2 / 1e9:.2f} -> "
+              f"{tot_bits / 8 / 1e9:.2f} GB (projected), rows {hist}", flush=True)
+
     processor = helper.get_processor(model.tokenizer)
     tok = model.tokenizer
     lib.set_vlm_attn_impl(model, "sdpa")
@@ -164,7 +218,7 @@ def main():
         "seed": args.seed, "seed_rule": "sha256(f'{seed}:{clip_id}')[:4], +k per sample",
         "max_gen": args.max_gen, "shard": [args.shard, args.n_shards],
         "sets_id": args.sets_id, "gpu": gpu_name, "model_revision": MODEL_REV,
-        "manifest": args.manifest, "cache": args.cache,
+        "manifest": args.manifest, "cache": args.cache, "quant": quant_meta,
         "deterministic": {"use_deterministic_algorithms": True,
                           "warn_only": not args.strict_deterministic,
                           "cudnn_deterministic": True, "tf32": False,

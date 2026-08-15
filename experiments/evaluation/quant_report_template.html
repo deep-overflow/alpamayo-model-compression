@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>추론 손실만으로 유도한 VLM 양자화: 8비트와 4비트 (중간 보고)</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  .pend { color: var(--text-muted); font-style: italic; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구 · 중간 보고</div>
+  <h1>추론 손실만으로 비트를 배분할 수 있는가: 8비트와 4비트 예산</h1>
+  <div class="meta">
+    2026-08-13 · <code>plans/2026-08-13_qvla-coc-vlm-only.md</code> ·
+    캘리브레이션 <code>calib_100</code> · 모델 <code>nvidia/Alpamayo-1.5-10B</code>
+    @ <code>7aba8293</code> · 평가 <code>baseline_ada</code> 페어드
+  </div>
+</header>
+
+<p class="lede">
+QVLA(ICLR 2026)의 채널 단위 비트 배분 기계장치를 Alpamayo 1.5에 이식하되, 민감도 기준을
+<strong>CoC(Chain-of-Causation) 추론 손실 하나로만</strong> 바꿨다. 궤적 손실은 어느 단계에서도
+쓰지 않는다. 양자화 대상은 VLM 타워뿐이고 expert는 bf16으로 남긴다.
+</p>
+
+<div class="callout warn">
+  <p><strong>중간 보고다.</strong> 네 개의 양자화 arm이 in-dist val 500을 마쳤고,
+  <code>qvla_coc_b8</code>만 official test 500까지 끝났다. 나머지 arm의 test와 OOD 1,533은 아직
+  큐에 있다. 사전 등록한 Gate G1은 val+test 1,000클립 풀링으로 정의돼 있으므로, 아래 판정은
+  <strong>val 500 기준의 잠정 판정</strong>이다.</p>
+</div>
+
+<h2><span class="num">1</span>질문</h2>
+
+<p>
+프루닝 트랙의 결론은 "추론(CoC)이 먼저 무너지고 주행은 버틴다"였다. 양자화가 반대 방향인지를
+묻기 전에, 더 기본적인 질문이 있다 — <strong>추론 손실만으로 잰 중요도가 주행에 쓸 만한 비트 배분을
+만들어내는가?</strong>
+</p>
+
+<p>
+이 질문이 Alpamayo에서 자연스러운 이유는 구조에 있다. CoC 손실의 계산 그래프는
+<code>model.vlm.lm_head</code>에서 끝난다 — <code>prune_lib.coc_nll</code>을 보면 expert가 아예
+등장하지 않는다. 즉 <strong>expert 타워의 모든 행은 CoC 기준으로 정확히 0점</strong>이고, 어떤
+배분기에 넣어도 가장 싼 비트폭으로 강등된다. expert를 건드리지 않는 것은 취향이 아니라 이 기준의
+논리적 귀결이다.
+</p>
+
+<p>
+그리고 <code>coc_nll</code>은 모델 <strong>자기 rollout</strong>을 teacher-force한 NLL이므로 GT 궤적이
+필요 없다 — 이 기준은 <strong>라벨 없는 주행 로그만으로</strong> 캘리브레이션된다.
+</p>
+
+<h3>선행 연구와의 위치</h3>
+
+<p>
+2026-08-13 기준 VLA 양자화는 이미 붐빈다. 아래가 <em>이미 되어 있는 것</em>이다.
+</p>
+
+<table>
+<thead><tr><th>논문</th><th>핵심</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>QVLA (ICLR 2026)</td><td>action-space 민감도 → 채널 단위 비트 배분 <code>{0,2,4,8,16}</code>, greedy demotion, 0-bit로 프루닝 통합</td><td>OpenVLA-OFT W4A4급 96.0 vs FP 97.1</td></tr>
+<tr><td>Mix-QVLA</td><td>layer 단위 혼합 정밀도 + model-size/BitOps 예산 제약 최적화</td><td>OpenVLA-OFT 15.4→4.1 GB</td></tr>
+<tr><td>QuantVLA</td><td>최초 VLA PTQ, DiT action head 포함</td><td>FP baseline 초과</td></tr>
+<tr><td>HoloQ-VLA</td><td>SVD·Hadamard 회전 + per-step DiT activation scaling, 균일 W4A4</td><td>π0.5 98.0 vs FP16 97.1</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <p>네 편을 전수 검색한 결과 <strong>언어/추론 출력 품질을 평가한 논문이 하나도 없다</strong>
+  (perplexity/BLEU/reasoning accuracy 류 지표가 QVLA related work의 한 줄 언급 외 전무). 전부 LIBERO
+  task success rate와 action MSE뿐이다. Alpamayo의 CoC는 중간 산물이 아니라 그 자체가 산출물이므로,
+  기준을 CoC로 바꾸고 <em>추론과 궤적을 각각</em> 재는 것이 여기서 남은 자리다.</p>
+</div>
+
+<h2><span class="num">2</span>설계</h2>
+
+<h3>양자화 범위</h3>
+
+<table>
+<thead><tr><th>구성</th><th class="r">텐서</th><th class="r">파라미터</th><th class="r">bf16</th><th>처리</th></tr></thead>
+<tbody>
+<tr><td>VLM text Linear</td><td class="r">252</td><td class="r">6.946 B</td><td class="r">13.89 GB</td><td>양자화</td></tr>
+<tr><td>lm_head</td><td class="r">1</td><td class="r">0.638 B</td><td class="r">1.28 GB</td><td>양자화</td></tr>
+<tr><td>ViT Linear</td><td class="r">116</td><td class="r">0.571 B</td><td class="r">1.14 GB</td><td>양자화</td></tr>
+<tr><td><strong>풀 합계</strong></td><td class="r"><strong>369</strong></td><td class="r"><strong>8.155 B</strong></td><td class="r"><strong>16.31 GB</strong></td><td></td></tr>
+<tr><td>expert Linear</td><td class="r">252</td><td class="r">2.279 B</td><td class="r">4.56 GB</td><td>bf16 유지</td></tr>
+<tr><td>embed_tokens</td><td class="r">1</td><td class="r">0.638 B</td><td class="r">1.28 GB</td><td>bf16 유지 (룩업)</td></tr>
+</tbody>
+</table>
+
+<p>
+<strong>압축 상한을 정직하게 적어둔다.</strong> expert와 embed가 bf16으로 남으므로 총 22.16 GB 중
+5.84 GB는 어떤 경우에도 줄지 않는다. 8비트 예산이면 22.16 → 14.4 GB(−35%), 4비트 예산이면
+22.16 → 10.25 GB(−54%)다. 그리고 이 실험은 fake-quant(bf16에 되담기)이므로
+<strong>실제 GPU 메모리는 줄지 않는다</strong> — 모든 절약 수치는 packed 저장 기준의 <em>projected</em>
+값이다. 대신 런타임·결정성이 baseline과 동일해 정확도 비교에 인프라 리스크가 0이다.
+</p>
+
+<h3>기준</h3>
+
+<pre><code>S^(b)_{l,c} = | &lt; dL_CoC/dW_{l,c} , eps^(b)_{l,c} &gt; | ,   eps^(b) = Q_b(W) - W</code></pre>
+
+<p>
+결정론적 RTN 오차를 태스크 기울기와 내적한다. 확률적 라운딩 노이즈를 가정하지 않으므로
+<code>E[delta²]=step²/12</code> 같은 가정이 들어가지 않는다. alpha=0이 모든 b의 공통 작동점이라
+<strong>한 번의 backward로 모든 비트폭 점수가 동시에</strong> 나온다. 목적함수가 하나뿐이라 backward도
+클립당 1회다.
+</p>
+
+<p>
+다만 이것은 유한 양자화 효과의 <strong>1차 근사</strong>다. QVLA도 같은 자리에 1차 Jacobian 프록시를
+두고 상위 채널만 실측으로 보정한다. 우리 형태가 노름 곱보다 직접적이지만 근사인 것은 같고, 이를
+검증하는 Gate G0(Spearman)은 아직 돌리지 않았다.
+</p>
+
+<h3>배분: 왜 QVLA의 greedy를 그대로 쓸 수 없는가</h3>
+
+<div class="callout warn">
+  <p>QVLA의 staged greedy demotion(16→8→4→2→0, 예산 도달 시 정지)에 <strong>평균 8비트</strong>를 넣으면
+  16→8 단계가 끝나는 순간 예산이 충족되어 전 채널이 8비트가 된다 — <strong>균일 W8과
+  bit-identical</strong>이고 혼합 정밀도가 사라진다. 기준이 표현할 것이 남지 않는다.</p>
+</div>
+
+<p>
+그래서 고정 단계를 걷는 대신 예산에 직접 배분한다. 행마다 작은 메뉴에서 비트폭 하나를 고르는
+multiple-choice knapsack이고, 그 LP 완화는 라그랑주 스윕으로 정확히 풀린다: 저장 가격
+<code>lam</code>에 대해 각 행이 독립적으로 <code>argmin_b (damage[b] + lam·cost[b])</code>를 고르고,
+총 비용이 <code>lam</code>에 단조 감소하므로 이분탐색이 예산에 착지한다. 예산은
+<strong>균일 W<em>b</em>의 실제 저장 비용</strong>으로 잡았다 — 같은 바이트, 다른 분포.
+</p>
+
+<p>
+메뉴에서 <strong>0비트(프루닝)를 뺐다</strong>. CoC NLL 기울기는 캘리브레이션 클립이 실제로 사용한
+토큰을 통해서만 lm_head 행에 닿으므로, 나머지 약 15.5만 vocab 행은 노이즈 바닥(측정 중앙값
+<strong>1.9e-8</strong>)에 앉는다. 0비트를 허용하면 그 대부분이 잘리는데, 이는 "중요하지 않다"가 아니라
+"100클립이 한 번도 쓰지 않았다"는 뜻이고, 캘리브레이션 지지집합 밖 토큰을 못 만드는 모델은 압축
+결과가 아니라 캘리브레이션 인공물이다.
+</p>
+
+<h3>scale 레이아웃: QVLA에서 벗어난 유일한 지점</h3>
+
+<p>
+QVLA는 행당 scale+zero-point 하나를 쓴다. 이 체크포인트에서 실측한 상대 재구성 MSE:
+</p>
+
+<table>
+<thead><tr><th>텐서</th><th class="r">per-row 2b</th><th class="r">per-row 4b</th><th class="r">per-row 8b</th><th class="r">g64 4b</th></tr></thead>
+<tbody>
+<tr><td>VLM L17 gate_proj</td><td class="r">4.97e-1</td><td class="r">2.26e-2</td><td class="r">7.9e-5</td><td class="r">8.6e-3</td></tr>
+<tr><td>VLM L35 down_proj</td><td class="r">6.86e-1</td><td class="r">4.61e-2</td><td class="r">1.6e-4</td><td class="r">9.5e-3</td></tr>
+<tr><td><strong>lm_head</strong></td><td class="r">6.09e-1</td><td class="r"><strong>4.62e-1</strong></td><td class="r">2.8e-3</td><td class="r"><strong>1.6e-2</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+per-row 4비트는 g64 대비 2.6배 나쁘고, <strong>lm_head는 29배</strong>다 — 155697×4096의 outlier를 행당
+scale 하나로 감당하지 못한다. scale 입도와 비트 배분 입도는 직교하므로(한 행의 비트폭은 그 행의
+모든 그룹에 균일), 결정 변수는 QVLA대로 <strong>행당 비트폭</strong>으로 두고 scale만
+<strong>(행, g64) 비대칭</strong>으로 바꿨다. 실효 비트에는 그룹당 scale(16b)+zero-point(<em>b</em>)
+오버헤드를 포함한다.
+</p>
+
+<h2><span class="num">3</span>배분 결과</h2>
+
+<div class="kpi">
+  <div><span class="v">13.14b</span><span class="k">ViT (W8 예산)</span></div>
+  <div><span class="v">8.54b</span><span class="k">VLM text (W8)</span></div>
+  <div><span class="v">2.37b</span><span class="k">lm_head (W8)</span></div>
+  <div><span class="v">100.00%</span><span class="k">예산 사용률</span></div>
+</div>
+
+<table>
+<thead><tr><th>부분</th><th class="r">8비트 예산</th><th class="r">4비트 예산</th></tr></thead>
+<tbody>
+<tr><td>ViT</td><td class="r">13.14b</td><td class="r">7.07b</td></tr>
+<tr><td>VLM text</td><td class="r">8.54b</td><td class="r">4.27b</td></tr>
+<tr><td>lm_head</td><td class="r">2.37b</td><td class="r">2.29b</td></tr>
+<tr><td>행 분포</td><td class="r">2b 12.7 / 4b 3.5 / 8b 66.1 / 16b 17.7 %</td><td class="r">2b 25.6 / 54.3 / 20.0 / 0.1 %</td></tr>
+<tr><td>풀 저장 (projected)</td><td class="r">16.31 → 8.54 GB</td><td class="r">16.31 → 4.40 GB</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::quant::allocation.png" alt="비트 배분 프로파일">
+  <figcaption>왼쪽: 행 비트폭 분포. 가운데: 부분별 평균 비트 — 두 예산 모두 <strong>ViT를 보호하고
+  lm_head를 2.3비트 부근으로 압축</strong>한다. 오른쪽: VLM text의 깊이 프로파일.</figcaption>
+</figure>
+
+<p>
+CoC 기준의 선택은 일관된다. <strong>비전 인코더를 예산의 상단으로 끌어올리고, 출력 헤드를 하단으로
+내린다.</strong> 4비트 예산에서 ViT 보호 여력이 13.1 → 7.1비트로 줄지만 순서는 유지된다.
+lm_head가 두 예산에서 거의 같은 2.3비트인 것은, 이 기준이 출력 헤드를 예산과 무관하게 "덜 중요"로
+판정한다는 뜻이다.
+</p>
+
+<p>
+두 예산의 차이는 <strong>여유</strong>다. 8비트에서는 행의 17.7%를 16비트(무손실)로 남길 수 있어
+기준이 보호하고 싶은 것을 거의 전부 보호한다. 4비트에서는 16비트 행이 0.1%로 사라지고 25.6%가
+2비트로 내려간다 — 기준이 <em>무엇을 포기할지</em> 실제로 골라야 하는 구간이다. 아래 결과에서
+두 예산이 갈리는 이유가 여기에 있다.
+</p>
+
+<h2><span class="num">4</span>결과 — val 500, 두 예산</h2>
+
+<p>
+페어드 비교다. <code>baseline_ada</code>는 동일 클립·동일 시드·동일 아키텍처(Ada)에서 측정된
+무양자화 기준선이고, 클립별 차이의 <strong>중앙값과 그 부트스트랩 CI</strong>가 주 판독이다
+(minADE는 heavy-tail이라 한 클립이 25 m에 앉는다).
+</p>
+
+<table>
+<thead><tr>
+  <th>arm</th><th class="r">실효 비트</th>
+  <th class="r">minADE@8 중앙값</th><th class="r">평균</th>
+  <th class="r">minFDE@8 중앙값</th><th class="r">평균</th>
+  <th class="r">NLL(own)</th><th class="r">CoC degen</th>
+</tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">16.00</td><td class="r">0.4549</td><td class="r">0.6908</td><td class="r">0.9224</td><td class="r">1.8404</td><td class="r">0.1306</td><td class="r">0.0080</td></tr>
+<tr><td><code>uniform_w8</code></td><td class="r">8.38</td><td class="r">0.4524</td><td class="r">0.6841</td><td class="r">0.9116</td><td class="r">1.8230</td><td class="r">0.1300</td><td class="r">0.0040</td></tr>
+<tr><td><code>qvla_coc_b8</code></td><td class="r">8.38</td><td class="r">0.4576</td><td class="r">0.6938</td><td class="r">0.9259</td><td class="r">1.8515</td><td class="r">0.1345</td><td class="r">0.0040</td></tr>
+<tr><td><code>uniform_w4</code></td><td class="r">4.31</td><td class="r"><strong>0.5053</strong></td><td class="r"><strong>0.7330</strong></td><td class="r"><strong>1.0856</strong></td><td class="r"><strong>1.9572</strong></td><td class="r">0.1349</td><td class="r">0.0080</td></tr>
+<tr><td><code>qvla_coc_b4</code></td><td class="r">4.31</td><td class="r">0.4634</td><td class="r">0.6910</td><td class="r">0.9368</td><td class="r">1.8363</td><td class="r">0.1321</td><td class="r">0.0060</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::quant::minade_by_arm.png" alt="arm별 minADE와 minFDE">
+  <figcaption>8비트 세 막대는 구분되지 않는다. 4비트에서만 <code>uniform_w4</code>가 홀로 솟는다.</figcaption>
+</figure>
+
+<h3>8비트: 아무 일도 일어나지 않는다</h3>
+
+<table>
+<thead><tr><th>대조</th><th>지표</th><th class="r">중앙값 [95% CI]</th><th class="r">평균 [95% CI]</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>uniform_w8 − baseline</td><td>minADE</td><td class="r">−0.0012 [−0.0020, −0.0001]</td><td class="r">−0.0067 [−0.0155, −0.0002]</td><td class="r">0.033</td></tr>
+<tr><td>qvla_coc_b8 − baseline</td><td>minADE</td><td class="r">−0.0001 [−0.0007, +0.0003]</td><td class="r">+0.0030 [−0.0019, +0.0089]</td><td class="r">0.518</td></tr>
+<tr><td><strong>qvla_coc_b8 − uniform_w8</strong></td><td>minADE</td><td class="r">+0.0006 [−0.0005, +0.0013]</td><td class="r">+0.0097 [+0.0012, +0.0207]</td><td class="r">0.145</td></tr>
+<tr><td><strong>qvla_coc_b8 − uniform_w8</strong></td><td>minFDE</td><td class="r">+0.0018 [−0.0014, +0.0058]</td><td class="r">+0.0285 [−0.0032, +0.0707]</td><td class="r">0.359</td></tr>
+</tbody>
+</table>
+
+<p>
+세 arm이 0.684~0.694 사이에 몰려 있다. 폭 0.010 m는 프로토콜 분해능(0.05 m)의 1/5이다.
+<code>uniform_w8</code>이 baseline보다 <em>낮게</em> 나온 것(p=0.033)은 양자화가 성능을 올렸다는
+뜻이 아니라 이 구간 전체가 노이즈라는 신호로 읽는 것이 맞다. <strong>8비트에서는 배분 기준이
+표현할 것이 없다.</strong>
+</p>
+
+<h3>4비트: 여기서 갈린다</h3>
+
+<table>
+<thead><tr><th>대조</th><th>지표</th><th class="r">중앙값 [95% CI]</th><th class="r">평균 [95% CI]</th><th class="r">p</th><th class="r">나빠진 비율</th></tr></thead>
+<tbody>
+<tr><td>uniform_w4 − baseline</td><td>minADE</td><td class="r">+0.0079 [−0.0018, +0.0259]</td><td class="r">+0.0422 [+0.0130, +0.0752]</td><td class="r"><strong>0.0036</strong></td><td class="r">54%</td></tr>
+<tr><td>uniform_w4 − baseline</td><td>minFDE</td><td class="r">+0.0513 [+0.0082, +0.1223]</td><td class="r">+0.1168 [+0.0129, +0.2295]</td><td class="r"><strong>0.0012</strong></td><td class="r">56%</td></tr>
+<tr><td>qvla_coc_b4 − baseline</td><td>minADE</td><td class="r">+0.0010 [−0.0011, +0.0058]</td><td class="r">+0.0003 [−0.0115, +0.0112]</td><td class="r">0.244</td><td class="r">52%</td></tr>
+<tr><td>qvla_coc_b4 − baseline</td><td>minFDE</td><td class="r">+0.0003 [−0.0112, +0.0148]</td><td class="r">−0.0041 [−0.0480, +0.0355]</td><td class="r">0.780</td><td class="r">50%</td></tr>
+<tr><td><strong>qvla_coc_b4 − uniform_w4</strong></td><td>minADE</td><td class="r"><strong>−0.0091 [−0.0237, −0.0034]</strong></td><td class="r">−0.0419 [−0.0714, −0.0158]</td><td class="r"><strong>0.0021</strong></td><td class="r">43%</td></tr>
+<tr><td><strong>qvla_coc_b4 − uniform_w4</strong></td><td>minFDE</td><td class="r"><strong>−0.0757 [−0.1102, −0.0184]</strong></td><td class="r">−0.1209 [−0.2180, −0.0307]</td><td class="r"><strong>0.0006</strong></td><td class="r">43%</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::quant::paired_delta.png" alt="페어드 델타">
+  <figcaption>페어드 중앙값 차이와 95% CI. 점선은 프로토콜 분해능 ±0.05 m. 8비트 대조는 전부 0에
+  붙어 있고, 4비트에서만 <code>uniform_w4</code>가 위로, <code>coc − uniform</code>이 아래로 벌어진다.</figcaption>
+</figure>
+
+<div class="callout good">
+  <p><strong>4비트에서 균일 배분은 측정 가능하게 상하고, CoC 배분은 baseline 수준을 회복한다.</strong>
+  <code>uniform_w4</code>는 baseline 대비 minADE 평균 +0.042 m (p=0.0036), minFDE 중앙값
+  +0.051 m (p=0.0012)로 유의하게 나빠진다. 같은 바이트를 CoC 중요도로 재분배한
+  <code>qvla_coc_b4</code>는 baseline과 구분되지 않는다 (minADE p=0.24, minFDE p=0.78).
+  두 arm의 직접 대조는 minADE 중앙값 <strong>−0.0091 m</strong> [−0.0237, −0.0034], p=0.0021,
+  minFDE 중앙값 <strong>−0.0757 m</strong> [−0.1102, −0.0184], p=0.0006 — <strong>부호가 일관되고
+  CI가 0을 포함하지 않는다.</strong></p>
+</div>
+
+<h3>시나리오 버킷: 열화가 어디에 모이는가</h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">decel_stop</th><th class="r">turn</th><th class="r">accel</th><th class="r">cruise</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.365</td><td class="r">0.668</td><td class="r">0.478</td><td class="r">0.422</td></tr>
+<tr><td><code>uniform_w8</code></td><td class="r">0.357</td><td class="r">0.667</td><td class="r">0.496</td><td class="r">0.421</td></tr>
+<tr><td><code>qvla_coc_b8</code></td><td class="r">0.360</td><td class="r">0.667</td><td class="r">0.481</td><td class="r">0.419</td></tr>
+<tr><td><code>uniform_w4</code></td><td class="r">0.398</td><td class="r"><strong>0.765</strong></td><td class="r"><strong>0.629</strong></td><td class="r">0.461</td></tr>
+<tr><td><code>qvla_coc_b4</code></td><td class="r">0.374</td><td class="r">0.683</td><td class="r">0.523</td><td class="r">0.438</td></tr>
+</tbody>
+</table>
+
+<p>
+val 500의 시나리오 버킷별 minADE 중앙값이다. <code>uniform_w4</code>의 열화는
+<strong>accel(+0.151)과 turn(+0.097)</strong>, 즉 <strong>동적 기동</strong>에 집중된다. cruise는
++0.039로 절반 이하다. CoC 배분은 그 열화의 대부분을 되돌린다(accel +0.045, turn +0.015).
+정적 주행이 아니라 조향·가속이 걸린 구간에서 정밀도가 필요하다는 뜻이고, 균일 배분은 그 구간에
+쓸 비트를 다른 곳에 흘린다.
+</p>
+
+<h3>추론 채널</h3>
+
+<figure>
+  <img src="PLOT::quant::reasoning_channel.png" alt="추론 채널">
+  <figcaption>CoC 퇴화율과 자기 CoC NLL.</figcaption>
+</figure>
+
+<p>
+CoC degeneracy는 다섯 arm 전부 0.004~0.008로 baseline 범위 안에 있다. <strong>lm_head를 2.3비트로
+내렸는데 어느 예산에서도 텍스트 생성이 무너지지 않았다</strong> — 착수 전 가장 큰 위험으로 지목했던
+지점이다. 15.5만 vocab 행 중 실제 CoC 생성 경로에 관여하는 것이 극소수라, 저비트로 내려간 행들이
+출력에 거의 닿지 않는 것으로 보인다.
+</p>
+
+<p>
+자기 CoC NLL의 페어드 차이는 결이 다르다. 8비트에서 <code>qvla_coc_b8 − uniform_w8</code>은
+중앙값 <strong>+0.0007</strong>, 69%의 클립이 악화, <strong>p=3.9e−17</strong>이다 —
+<strong>CoC 손실로 유도한 배분이 정작 CoC 지표에서 균일보다 근소하게 나쁘다.</strong> 4비트에서는
+그 차이가 사라진다(중앙값 −0.0002, p=0.30). 8비트 구간에서는 기준이 실질적 정보 없이 노이즈를
+재배치할 뿐이라는 읽기와 맞아떨어진다.
+</p>
+
+<div class="callout warn">
+  <p><code>nll_self</code>는 모델이 <em>자기가 생성한</em> CoC에 매기는 NLL이라 텍스트와 채점자가 함께
+  바뀌는 자기참조 수치다(<code>run_baseline.py</code> docstring의 표현으로 "품질 측정이 아니라 참조
+  수치"). 라벨이 있는 판독은 OOD 세트의 <code>nll_gtcoc</code>이며 아직 실행 중이다.</p>
+</div>
+
+<h3>Gate G1 판정 (잠정, val 500)</h3>
+
+<table>
+<thead><tr><th>게이트</th><th class="r">minADE 중앙값 [CI]</th><th class="r">임계</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><code>G1_w8</code></td><td class="r">+0.0006 [−0.0005, +0.0013]</td><td class="r">≤ −0.05 m</td><td><strong>FAIL</strong> (부호도 반대)</td></tr>
+<tr><td><code>G1_w4</code></td><td class="r">−0.0091 [−0.0237, −0.0034]</td><td class="r">≤ −0.05 m</td><td><strong>FAIL</strong> (효과 크기 미달)</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+  <p><strong>4비트의 실패는 8비트의 실패와 성격이 전혀 다르다.</strong> 게이트는
+  <em>median(d) ≤ −0.05 m</em> <strong>그리고</strong> <em>CI 상한 &lt; 0</em>을 함께 요구한다.
+  4비트는 두 번째 조건을 만족하고(−0.0034 &lt; 0) 부호도 옳지만, 효과 크기가 −0.0091 m로 등록된
+  임계의 <strong>1/5.5</strong>다.</p>
+  <p>여기서 임계를 옮기거나 minFDE로 바꿔 통과를 주장하지 않는다 — minFDE 중앙값은 −0.0757 m로
+  크기 기준을 넘지만, 게이트는 <strong>minADE로 사전 등록</strong>됐다. 정직한 서술은 이것이다:
+  <em>효과는 실재하고 통계적으로 명확하지만, 사전 등록한 지표에서의 크기는 등록 임계에 못 미친다.</em></p>
+</div>
+
+<h2><span class="num">5</span>구현 과정에서 잡은 것</h2>
+
+<h3>ViT 기울기가 0이었다</h3>
+
+<div class="callout warn">
+  <p>첫 배분이 ViT를 통째로 0비트로 잘랐다. 확인해보니 ViT <strong>306,544행의 점수가 정확히 0</strong>
+  이었다 — <code>pixel_values</code>는 grad를 요구하지 않고 ViT 가중치는 frozen이라 autograd가 비전
+  서브그래프를 아예 순회하지 않았다. <code>enable_input_require_grads()</code>는 텍스트 임베딩만
+  연결한다. <strong>"비전 인코더는 추론에 안 중요하다"로 읽힐 뻔했지만, 실제로는 측정 자체가 안 된
+  것이었다.</strong></p>
+</div>
+
+<p>
+풀 가중치에 <code>requires_grad_(True)</code>를 주어 고쳤다(우리 autograd.Function은 W 자리에 None을
+반환하므로 <code>.grad</code> 메모리는 할당되지 않는다). 그러자 ViT 그래프가 들어와 OOM(46.9/47.4
+GiB)이 났고, gradient checkpointing으로 해결하되 <strong>rollout 구간만 꺼야</strong> 했다 — train
+모드가 <code>use_cache=False</code>를 강제해 증분 디코딩이 <code>get_rope_index</code>에서 깨진다.
+결과 peak 41.2 → <strong>24.2 GB</strong>, 클립당 7 → 9초. 이제 첫 클립 후 모든 풀 텐서가 점수를
+받았는지 검사하는 assertion이 들어가, 같은 종류의 실수가 조용히 결과로 흘러가지 않는다.
+</p>
+
+<h3>단위 테스트</h3>
+<p>
+<code>test_quant_lib.py</code> 22개 항목 전부 통과 — 비트폭에 따른 오차 단조성, 0/16비트 특수 경로,
+행별 혼합 스펙이 균일 적용과 일치하는지, 패딩 경로(ViT <code>linear_fc2</code>, in=4304), 저장량
+회계, 그리고 <strong>expert·embed_tokens·action projection이 풀에서 제외되는지</strong>.
+</p>
+
+<h2><span class="num">6</span>현재 상태와 남은 것</h2>
+
+<table>
+<thead><tr><th>arm</th><th>예산</th><th class="r">val 500</th><th class="r">test 500</th><th class="r">OOD 1533</th></tr></thead>
+<tbody>
+<tr><td>baseline (Ada)</td><td>—</td><td class="r">완료</td><td class="r">완료</td><td class="r">완료</td></tr>
+<tr><td><code>qvla_coc_b8</code></td><td>uniform W8</td><td class="r">완료</td><td class="r">완료</td><td class="r">767/1533</td></tr>
+<tr><td><code>uniform_w8</code></td><td>uniform W8</td><td class="r">완료</td><td class="r pend">진행 중</td><td class="r pend">대기</td></tr>
+<tr><td><code>qvla_coc_b4</code></td><td>uniform W4</td><td class="r">완료</td><td class="r pend">대기</td><td class="r pend">대기</td></tr>
+<tr><td><code>uniform_w4</code></td><td>uniform W4</td><td class="r">완료</td><td class="r pend">대기</td><td class="r pend">대기</td></tr>
+</tbody>
+</table>
+
+<p>
+큐는 val을 네 arm 모두 먼저 끝내도록 재정렬했다 — 두 예산의 Gate G1 비교가 가장 먼저 나온다.
+공유 GPU 박스에서 카드 한 장으로 도는 중이라 전체 완료까지는 시간이 더 걸린다.
+</p>
+
+<h3>사전 등록 게이트 상태</h3>
+
+<table>
+<thead><tr><th>게이트</th><th>내용</th><th>상태</th></tr></thead>
+<tbody>
+<tr><td>G0</td><td>1차 근사 타당성: <code>S</code>와 실제 단일 행 ΔL의 Spearman ρ ≥ 0.7</td><td class="pend">미실행</td></tr>
+<tr><td>G1</td><td>기준의 이득: 동일 예산에서 <code>qvla_coc</code> vs <code>uniform</code>, 페어드 중앙값</td><td>val 500 잠정 — W8 FAIL(부호 반대), W4 FAIL(크기 미달, 방향은 유의). test 포함 정식 판정 대기</td></tr>
+<tr><td>G2</td><td>능력 비대칭: 궤적과 CoC 중 어느 쪽이 먼저 임계를 넘는가</td><td>부분 — 4비트 균일에서 <strong>궤적이 먼저</strong> 넘고 CoC degeneracy는 안 넘음</td></tr>
+<tr><td>G3</td><td>경로 분해: 텍스트 변화 vs 캐시 수치 변화</td><td class="pend"><code>ade_tf_base</code> 조건 미구현</td></tr>
+<tr><td>G4</td><td>프루닝 트랙과의 연결(0비트 끝단)</td><td class="pend">미실행</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">7</span>해석과 한계</h2>
+
+<h3>지금 말할 수 있는 것</h3>
+<ul>
+<li><strong>배분 기준은 압축이 실제로 아프기 시작하는 지점에서만 값을 한다.</strong> 8비트에서는 균일과
+CoC 배분이 구분되지 않고(중앙값 +0.0006 m, p=0.15), 4비트에서는 CoC 배분이 균일보다 유의하게 낫다
+(minADE 중앙값 −0.0091 m, p=0.0021 / minFDE −0.0757 m, p=0.0006). 여유가 있을 때는 어디에 쓰든
+상관없고, 여유가 없을 때 <em>무엇을 포기할지</em>가 결과를 가른다.</li>
+<li><strong>추론 손실만으로 잰 중요도가 주행에 쓸 만한 배분을 만든다.</strong> 4비트에서 균일 배분은
+baseline 대비 유의하게 나빠지는데(minADE 평균 +0.042 m, p=0.0036), 궤적 라벨을 한 번도 보지 않은
+기준으로 재분배한 arm은 baseline과 구분되지 않는다(p=0.24). CoC NLL은 모델 자기 rollout에서
+나오므로 이 배분은 <strong>라벨 없는 주행 로그만으로</strong> 얻어진다.</li>
+<li>그 배분은 <strong>비전 인코더를 보호하고 출력 헤드를 2.3비트로 압축</strong>하는 비자명한 구조이며,
+어느 예산에서도 CoC 생성이 무너지지 않는다(degeneracy 0.004~0.008).</li>
+<li>4비트 균일의 열화는 <strong>accel·turn 등 동적 기동에 집중</strong>되고 cruise는 절반 이하다.</li>
+</ul>
+
+<h3>말할 수 없는 것</h3>
+<ul>
+<li><strong>Gate G1은 통과하지 않았다.</strong> 4비트의 효과는 실재하지만 사전 등록 지표(minADE)에서의
+크기가 −0.0091 m로 등록 임계(−0.05 m)의 1/5.5다. minFDE가 크기 기준을 넘는다고 해서 지표를 바꿔
+통과를 주장하지 않는다.</li>
+<li><strong>val 500만의 잠정 판정이다.</strong> 등록된 G1은 val+test 1,000클립 풀링이고, 세 arm의
+test와 네 arm의 OOD가 아직 없다.</li>
+<li><strong>궤적 기준(QVLA 원본)과의 1요인 대결이 없다.</strong> 이번 실험은 궤적 손실 미사용이 제약이라
+<code>qvla_act</code> arm을 만들지 않았다. "CoC 기준이 균일보다 낫다"는 말할 수 있어도
+"CoC 기준이 action-space 기준만큼 좋다"는 말할 수 없다.</li>
+<li><strong>회전(Hadamard)이나 GPTQ/AWQ 대조가 없다.</strong> HoloQ-VLA가 보인 대로 회전이 heavy-tail을
+해결하므로, 4비트에서 관측된 균일 배분의 열화 상당 부분이 회전으로 사라질 수 있다. 그 경우 배분의
+이득도 함께 줄어든다 — <strong>이것이 이 결과의 가장 큰 미검증 위협이다.</strong></li>
+<li><strong>속도·메모리 이득은 측정되지 않았다.</strong> fake-quant이므로 저장량은 전부 projected다.</li>
+<li><strong>폐루프가 없다.</strong> 이 트랙의 기존 경험상 개루프 minADE는 폐루프 실패를 가린 전례가 있다.</li>
+</ul>
+
+<h3>다음</h3>
+<ol>
+<li>세 arm의 test 500 → 등록된 대로 val+test 1,000클립 풀링으로 <strong>Gate G1 정식 판정</strong></li>
+<li>OOD 1,533 → 라벨 있는 추론 판독(<code>nll_gtcoc</code>)과 롱테일 cluster 분해</li>
+<li>Gate G0(점수 타당성) — 실패하면 "1차 프록시가 유한 RTN을 예측 못 함"과 "배분이 무용"을 반드시 분리해 보고</li>
+<li>Gate G3(경로 분해) — <code>ade_tf_base</code> 조건 추가 후 별도 패스. VLM만 양자화하면 궤적은
+<em>텍스트 변화</em>와 <em>KV 캐시 수치 변화</em> 두 경로로만 상하므로 분리 측정이 가능하다.
+OpenVLA 계열은 중간 텍스트가 없어 이 분해 자체가 성립하지 않는다.</li>
+</ol>
+
+<footer>
+  생성: <code>experiments/evaluation/analyze_quant.py</code> ·
+  민감도 <code>run_qsens_coc.py</code> → <code>outputs/qsens_coc_v1</code> ·
+  배분 <code>alloc_lib.py</code> → <code>outputs/quant_specs</code> ·
+  평가 <code>run_baseline.py --quant</code> (k=8, seed 42, clip_id 유래 시드, Ada) ·
+  계획 <code>plans/2026-08-13_qvla-coc-vlm-only.md</code>
+</footer>
+
+</div>
+</body>
+</html>

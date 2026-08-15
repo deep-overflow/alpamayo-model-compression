@@ -39,20 +39,29 @@ init | append)
 
 worker)
   gpu=$2
-  n=$(wc -l <"$Q")
   while :; do
+    # re-read the length every claim: `append` can grow the queue while workers run,
+    # and a length captured once at start would make them quit at the old end
+    n=$(wc -l <"$Q")
     # claim one line; the lock covers read-modify-write of the cursor
     idx=$(flock "$CUR" bash -c 'i=$(cat '"$CUR"'); echo $((i + 1)) > '"$CUR"'; echo $i')
     [ "$idx" -ge "$n" ] && break
     read -r tag ckpt set_name shard nsh < <(sed -n "$((idx + 1))p" "$Q")
     echo "$(date '+%H:%M:%S') gpu$gpu -> $tag $set_name shard $shard/$nsh"
+    # a spec of the form `quant:<path.npz>` is a bit allocation applied to the unpruned
+    # model rather than a checkpoint directory; everything else is a slim checkpoint
+    if [[ "$ckpt" == quant:* ]]; then
+      model_args=(--model baseline --quant "${ckpt#quant:}")
+    else
+      model_args=(--model "$ckpt")
+    fi
     # this box is shared with other members' runs; retry for hours rather than give
     # up, or a busy stretch drains the whole queue without evaluating anything.
     # 26 GiB fits the slim model (16.8 GiB of weights) with the same headroom the
     # 30 GiB default leaves the 22.2 GiB baseline.
     bash experiments/head_analysis/run_retry_host.sh "${RETRIES-480}" \
       experiments/evaluation/run_baseline.py \
-      --set "$set_name" --model "$ckpt" --exp-id "${tag}_${set_name}" \
+      --set "$set_name" "${model_args[@]}" --exp-id "${tag}_${set_name}" \
       --shard "$shard" --n-shards "$nsh" --gpu "$gpu" --reserve-gb "${RESERVE-26}" \
       >>"logs/eval_${tag}_${set_name}_s${shard}.log" 2>&1
   done
