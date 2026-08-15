@@ -205,8 +205,17 @@ d(x)_i = minADE(x, clip i) - minADE(baseline, clip i)</code></pre>
 
 <p>
 두 셀 모두 상호작용 CI가 0을 포함한다 (p=0.59, p=0.23). CoC 퇴화율도 3.4% / 2.0%로
-사전 등록 임계 5% 아래다.
+사전 등록 임계 5% 아래다. 중앙값 기준 상호작용은 &minus;0.0011 / +0.0102로 0에 더 붙는다
+&mdash; minADE 델타가 heavy-tail이므로 평균 CI가 판정 기준이되, 중앙값이 같은 방향을
+가리키는지 함께 확인했다.
 </p>
+
+<figure>
+  <img src="PLOT::comp::interaction.png" alt="가법 예측 대 실측, 클립 단위 상호작용 분포">
+  <figcaption>왼쪽: 단독 대가 두 개와 그 합(점선 윤곽), 그리고 합성의 실측 &mdash; 두 셀 모두
+  실측이 가법 예측의 CI 안에 있다. 오른쪽: 클립 단위 상호작용 분포(&plusmn;0.3 m로 클립).
+  w8은 0 주위에 좁게 몰리고, w4는 꼬리가 두껍지만 중앙값이 +0.0102로 0에 붙어 있다.</figcaption>
+</figure>
 
 <div class="callout good">
 <p><strong>독립은 실용적으로 좋은 소식이다.</strong> 프루닝된 모델이 양자화에 더 취약하지

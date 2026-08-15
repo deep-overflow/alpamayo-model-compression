@@ -86,6 +86,45 @@ PLOT_ARMS = [
 ]
 
 
+def interaction_plot(cells, path):
+    """Left: the additive prediction against the measured composite. Right: per-clip
+    interaction distributions with the bootstrap mean CI."""
+    fig, (ax, axh) = plt.subplots(1, 2, figsize=(9.6, 4.0), width_ratios=[1.15, 1])
+    width, xs = 0.16, np.arange(len(cells))
+    for i, (off, key, colour, label) in enumerate(
+            (((-1.5, "dp", C4, "prune 24%")), (-0.5, "dq", C1, "quant"),
+             (0.5, "add", MUTED, "additive predict"), (1.5, "db", C2, "both measured"))):
+        for x, (name, c) in enumerate(cells.items()):
+            if key == "add":
+                ax.bar(x + off * width, c["add"], width, facecolor="none",
+                       edgecolor=MUTED, ls="--", lw=1.2,
+                       label=label if x == 0 else None)
+            else:
+                m, lo, hi = c[key]
+                ax.bar(x + off * width, m, width, color=colour,
+                       label=label if x == 0 else None)
+                ax.errorbar([x + off * width], [m], yerr=[[m - lo], [hi - m]],
+                            fmt="none", ecolor=INK, capsize=2, lw=1)
+    ax.axhline(0, color=MUTED, lw=0.8)
+    ax.set_xticks(xs, [f"prune + {n}" for n in cells])
+    ax.set_ylabel("paired ΔminADE@8 vs baseline (m)")
+    ax.set_title("measured composite vs additive prediction")
+    ax.legend(fontsize=8, frameon=False)
+    for x, (name, c) in enumerate(cells.items()):
+        v = np.clip(c["inter_clips"], -0.3, 0.3)
+        axh.hist(v, bins=40, range=(-0.3, 0.3), alpha=0.55,
+                 color=C2 if name == "w4" else C1, label=f"{name}")
+        m, lo, hi = c["inter"]
+        axh.axvline(m, color=C2 if name == "w4" else C1, lw=1.4)
+    axh.axvline(0, color=MUTED, lw=0.8, ls="--")
+    axh.set_xlabel("per-clip interaction (m, clipped to ±0.3)")
+    axh.set_title("per-clip interaction distribution")
+    axh.legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def tradeoff_plot(which, out, path):
     """Projected checkpoint size against the quality it costs, one point per arm."""
     base, _ = series(*BASE, which)
@@ -122,7 +161,20 @@ def main():
     if not base or not prune:
         raise SystemExit("baseline or prune-only rows missing")
 
-    out = {"set": w, "n_baseline": len(base), "cells": {}}
+    out = {"set": w, "n_baseline": len(base), "cells": {}, "arms": {}}
+    plot_cells = {}
+    for label, exp, tag, spec, slim, _c, _m in PLOT_ARMS:
+        try:
+            cur, cur_rows = series(exp, tag, w)
+        except (FileNotFoundError, SystemExit):
+            continue
+        if not cur_rows:
+            continue
+        v = np.array(list(cur.values()))
+        out["arms"][label] = {
+            "n": len(v), "mean": float(v.mean()), "median": float(np.median(v)),
+            "coc_degenerate": float(np.mean([r["coc_degenerate"] for r in cur_rows])),
+            "gb": size_gb(spec, slim)}
     print(f"set={w}  baseline n={len(base)}  mean minADE "
           f"{np.mean(list(base.values())):.4f}\n")
     for name, q, both, spec in CELLS:
@@ -151,12 +203,17 @@ def main():
         out["cells"][name] = {
             "n": len(ids), "gb": gb, "ratio": FULL_GB / gb,
             "prune": mp[:3], "quant": mq[:3], "both": mb[:3],
+            "prune_med": float(np.median(dp)), "quant_med": float(np.median(dq)),
+            "both_med": float(np.median(db)), "inter_med": float(np.median(inter)),
             "additive_prediction": mp[0] + mq[0],
             "interaction": {"mean": mi[0], "ci": [mi[1], mi[2]],
                             "p": float(wilcoxon(inter).pvalue),
                             "independent": not mi[3]},
             "coc_degenerate": deg,
         }
+        plot_cells[name] = {"dp": mp[:3], "dq": mq[:3], "db": mb[:3],
+                            "add": mp[0] + mq[0], "inter": mi[:3],
+                            "inter_clips": inter.tolist()}
     d = REPO / "outputs" / f"composition_{w}"
     (d / "plots").mkdir(parents=True, exist_ok=True)
     (d / "metrics.json").write_text(json.dumps(out, indent=2))
@@ -173,6 +230,8 @@ def main():
             f"  CoC degeneracy {c['coc_degenerate'] * 100:.1f}%", ""]
     (d / "summary.txt").write_text("\n".join(lines) + "\n")
     tradeoff_plot(w, out, d / "plots" / "tradeoff.png")
+    if plot_cells:
+        interaction_plot(plot_cells, d / "plots" / "interaction.png")
     print("saved ->", d)
 
 
