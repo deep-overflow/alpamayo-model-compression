@@ -110,15 +110,18 @@ def load_manifest(data=DATA):
     return questions, segments
 
 
-def load_segment(segment_id, data=DATA, device=None):
+def load_segment(segment_id, data=DATA, device=None, split="val"):
     """Frames for one segment in the loader's return format.
 
     Returns image_frames (1, 4, 3, H, W) uint8 for the single front camera plus the
     synthetic ego history, i.e. the four keys `analysis_lib.build_inputs` reads.
     The last 4 of LingoQA's 5 frames are used -- the ones nearest the present, matching
     how the cached clips end at t0.
+
+    `split` selects the image tree: "val" is the held-out benchmark, "train" the
+    calibration source for importance runs. The two live under different `data` roots.
     """
-    d = data / "images" / "val" / segment_id
+    d = data / "images" / split / segment_id
     frames = []
     for i in range(5 - N_FRAMES, 5):
         img = np.asarray(Image.open(d / f"{i}.jpg").convert("RGB"))   # (H, W, 3)
