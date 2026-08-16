@@ -115,6 +115,23 @@ def pooled_spearman(units, real_f, pred_f, layers):
     return rho, (lo, hi), len(rp), per_layer
 
 
+def split_half(units, clips_f, layers):
+    """Reliability of the realized target itself: odd- vs even-clip means, within-layer
+    ranks pooled. Any predictor's observable correlation is bounded by roughly the
+    square root of this, so a near-zero value means the gate cannot convict the score --
+    the single-unit damage is not a stable quantity at this clip count."""
+    ra, rb = [], []
+    for li in layers:
+        sub = [u for u in units if u["layer"] == li]
+        if len(sub) < 3:
+            continue
+        a = np.array([np.mean(u[clips_f][0::2]) for u in sub])
+        b = np.array([np.mean(u[clips_f][1::2]) for u in sub])
+        ra.append(rankdata(a) / len(sub))
+        rb.append(rankdata(b) / len(sub))
+    return float(pearsonr(np.concatenate(ra), np.concatenate(rb)).statistic)
+
+
 def loglog_pearson(units, real_f, pred_f):
     real = np.array([u[real_f] for u in units])
     pred = np.array([u[pred_f] for u in units])
@@ -175,6 +192,8 @@ def main():
             res["sign_stats"][cell] = {
                 "frac_units_mean_neg": float(np.mean(real < 0)),
                 "frac_units_sign_mixed": float(np.mean((negf >= 0.2) & (negf <= 0.8)))}
+            res.setdefault("target_reliability", {})[cell] = split_half(
+                units, f"{real_f}_clips", ls)
 
     # ---- groups: additivity (G-CAL-C) and operating-point prediction ----
     unit_by_key = {(a["layer"], a["axis"], a["name"]): a for a in units_all}
@@ -309,6 +328,24 @@ def main():
     fig.savefig(plots / "additivity.png", dpi=150)
     plt.close(fig)
 
+    fig, axm = plt.subplots(figsize=(9.6, 3.8))
+    crits = ("traj", "coc", "dual", "jtraj")
+    ccol = dict(zip(crits, (C4, C3, C1, C2)))
+    width = 0.19
+    mcut = {(r["layer"], r["crit"]): r["dnll"] for r in res["mcut_table"]}
+    for i, crit in enumerate(crits):
+        xs = np.arange(len(layers)) + (i - 1.5) * width
+        axm.bar(xs, [mcut[(li, crit)] for li in layers], width,
+                color=ccol[crit], label=crit)
+    axm.axhline(0, color=MUTED, lw=0.8)
+    axm.set_xticks(range(len(layers)), [f"L{li}" for li in layers])
+    axm.set_ylabel("realized dNLL of the actual MLP cut")
+    axm.set_title("per-layer damage of each criterion's real bottom-40% MLP cut (CoC NLL)")
+    axm.legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    fig.savefig(plots / "mcut_damage.png", dpi=150)
+    plt.close(fig)
+
     (out_dir / "calib_metrics.json").write_text(json.dumps(res, indent=2))
 
     lines = [f"importance calibration — {args.exp_id}",
@@ -331,6 +368,11 @@ def main():
                      f"sign-violated={g['n_sign_violated']} -> "
                      f"{'BROKEN (>1)' if g['pass_broken'] else 'within 2x'}"
                      if g["median_abs_log2R"] is not None else f"G-CAL-C {obj}: no data")
+    rel = res.get("target_reliability", {})
+    lines.append("target split-half reliability (realized dL, within-layer ranks): "
+                 + ", ".join(f"{k}={v:+.3f}" for k, v in rel.items()))
+    lines.append("  -> near zero means A/B cannot convict the score: single-unit damage "
+                 "is not a stable quantity at this clip count")
     lines.append(f"additivity by size: {json.dumps(res['additivity_by_size'])}")
     lines.append(f"operating-point pred ratio: {json.dumps(res['opoint_pred_ratio'])}")
     if "j_secondary" in res:

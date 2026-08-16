@@ -1,6 +1,8 @@
 # 1차 Taylor 중요도의 크기 캘리브레이션 진단 — rank는 병목인가 보호막인가
 
-날짜: 2026-08-15 (KST) · 상태: 승인 대기
+날짜: 2026-08-15 (KST) · 상태: 완료 — 결과는
+`reports/evaluation/2026-08-16_importance-calibration.html`, 후속은
+`plans/2026-08-16_iterative-recalibration.md`
 
 ## 질문과 가설
 

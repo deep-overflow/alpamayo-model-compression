@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>중요도 캘리브레이션: 유닛 하나의 제거 손상은 안정된 양이 아니다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b0402a;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>중요도 캘리브레이션: 유닛 하나의 제거 손상은 안정된 양이 아니다</h1>
+  <div class="meta">
+    2026-08-16 · <code>plans/2026-08-15_importance-calibration.md</code> ·
+    calib 25클립 × 556 마스크 평가 · <code>nvidia/Alpamayo-1.5-10B</code> @ <code>7aba8293</code> ·
+    RTX 5880 Ada ×2 · <code>outputs/imp_calib_v1</code>
+  </div>
+</header>
+
+<p class="lede">
+프루닝 기준 <code>max(rank I_traj, rank X)</code>는 결합 직전에 rank_norm으로 크기 정보를
+버린다. 그 크기 — Taylor 스코어 |dL/dg|가 예측하는 손실 단위의 제거 손상 — 가 실측과 맞는지를
+유닛 480개·그룹 78개에서 직접 쟀다. 사전 등록한 게이트는 전부 FAIL인데, 그 이유가 예상과
+달랐다: <strong>스코어가 나빠서가 아니라, 비교 대상인 "단독 유닛의 실측 제거 손상" 자체가
+안정된 양이 아니었다.</strong>
+</p>
+
+<div class="kpi">
+  <div><span class="v">0 / 4</span><span class="k">G-CAL-A 순서 (ρ ≥ 0.7)</span></div>
+  <div><span class="v">0 / 4</span><span class="k">G-CAL-B 크기 (r ≥ 0.7)</span></div>
+  <div><span class="v">~0</span><span class="k">실측 타깃 split-half 신뢰도</span></div>
+  <div><span class="v">1/7.5</span><span class="k">그룹 손상 / 단독합 (sub-additive)</span></div>
+  <div><span class="v">25/25</span><span class="k">클립 비트 단위 결정론</span></div>
+</div>
+
+<h2><span class="num">1</span>질문과 사전 등록 분기</h2>
+
+<p>
+Taylor 스코어는 게이트값 1에서의 |dL/dg|이므로(Δg=−1) "이 유닛을 지우면 L이 이만큼 오른다"는
+<strong>크기 예측 그 자체</strong>다. rank_norm이 그 크기를 버리는 것이 정당한지는 스코어
+품질에 달려 있어, 실행 전에 세 갈래를 등록했다:
+</p>
+
+<ul>
+  <li><strong>G-CAL-A</strong> (순서) — 레이어 내 랭크 풀링 Spearman(예측, 실측) ≥ 0.7이면 순서 신뢰.</li>
+  <li><strong>G-CAL-B</strong> (크기) — 실측 ΔL &gt; 0 유닛의 log-log Pearson ≥ 0.7이면 크기에
+    신호 있음 → loss 단위 knapsack 결합 arm 승격. <strong>미달이면 rank_norm 유지, 정규화
+    실험은 하지 않는다.</strong></li>
+  <li><strong>G-CAL-C</strong> (가법성) — 실제 u40 컷(Q bottom-13)에서 그룹 실측 / 단독합의
+    |log2| 중앙값 &gt; 1이면 1차 가법성이 작동점에서 붕괴 → 반복 재캘리브레이션이 최우선 후속.</li>
+</ul>
+
+<h2><span class="num">2</span>설계</h2>
+
+<p>
+자기완결 러너가 클립마다 ① 무손상 rollout으로 CoC 텍스트를 고정하고 ② backward 1회로 그
+클립의 예측 스코어(부호/절대값)를 뽑은 뒤 ③ 표본 유닛·그룹을 <code>mask_lib</code>로 하나씩
+꺼서 같은 텍스트·같은 FM 노이즈로 실측 ΔL_CoC / ΔL_traj를 페어드 측정한다. 레퍼런스를 스윕
+전후 두 번 재서 비트 단위 일치를 클립마다 검증했고 — <strong>25클립 전부 통과</strong> — graph
+패스와 no_grad 측정 경로의 NLL도 비트 단위로 일치했다. 즉 페어드 ΔL에 실행 노이즈는 0이다.
+</p>
+
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>레이어</td><td>1, 8, 15, 22, 29, 35 (깊이 스팬)</td></tr>
+<tr><td>Q head 단독</td><td>레이어당 전수 32 → 192 유닛</td></tr>
+<tr><td>MLP 채널 단독</td><td>레이어당 47–48 (traj 랭크 균등 24 + coc 균등 12 + dual 컷 ±5% 집중 12) → 286 유닛</td></tr>
+<tr><td>그룹</td><td>실제 u40 컷: Q bottom-13 × {traj, coc, dual, jtraj} + MLP bottom-4898 × 4 ·
+  표본 부분집합 k=8/32 (bottom / random / 컷 근방)</td></tr>
+<tr><td>클립 / 카드</td><td>calib_100의 앞 25개 · Ada 2장 샤딩, 클립당 ~11.8분</td></tr>
+<tr><td>L35 구조적 0</td><td>폭 유닛이 lm_head로만 흐름(expert는 캐시만 읽음) → 실측 max|ΔFM| = 0.0
+  으로 확인, traj 축 풀링에서 제외</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">3</span>게이트 판정 (사실)</h2>
+
+<table>
+<thead><tr><th>게이트</th><th>셀</th><th class="r">실측</th><th class="r">95% CI</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td rowspan="4">G-CAL-A (순서)</td><td>q / coc</td><td class="r">ρ = +0.024</td><td class="r">[−0.123, +0.176]</td><td>FAIL</td></tr>
+<tr><td>q / traj</td><td class="r">ρ = +0.148</td><td class="r">[−0.017, +0.312]</td><td>FAIL</td></tr>
+<tr><td>mlp / coc</td><td class="r">ρ = +0.076</td><td class="r">[−0.053, +0.201]</td><td>FAIL</td></tr>
+<tr><td>mlp / traj</td><td class="r">ρ = +0.111</td><td class="r">[−0.017, +0.234]</td><td>FAIL</td></tr>
+<tr><td rowspan="4">G-CAL-B (크기)</td><td>q / coc</td><td class="r">r = +0.236, slope 0.25</td><td class="r">[+0.068, +0.415]</td><td>FAIL</td></tr>
+<tr><td>q / traj</td><td class="r">r = +0.592, slope 0.80</td><td class="r">[+0.404, +0.779]</td><td>FAIL</td></tr>
+<tr><td>mlp / coc</td><td class="r">r = −0.034</td><td class="r">[−0.160, +0.095]</td><td>FAIL</td></tr>
+<tr><td>mlp / traj</td><td class="r">r = −0.069</td><td class="r">[−0.276, +0.126]</td><td>FAIL</td></tr>
+<tr><td rowspan="2">G-CAL-C (가법성)</td><td>CoC NLL</td><td class="r">중앙값 log2 R = <strong>−2.90</strong></td><td class="r">n=21, 부호위반 3</td><td><strong>BROKEN</strong></td></tr>
+<tr><td>FM MSE</td><td class="r">중앙값 |log2 R| = 0.87</td><td class="r">n=14, 부호위반 6</td><td>2배 이내 (표본 약함)</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::calib::pred_vs_real.png" alt="predicted vs realized single-unit ablation loss">
+  <figcaption>예측 |ΔL|(Taylor) 대 실측 ΔL, log-log, 실측 양수 유닛만. 유일하게 구조가 보이는
+  칸은 q/traj(r=0.59, slope 0.80)인데, 이는 레이어 간 스케일 구조가 상당 부분 만든 상관이다.
+  mlp 두 칸은 완전한 무상관 — L1(보라)의 예측 최하위 유닛들이 실측으로는 최상위권이다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::calib::additivity.png" alt="group vs sum-of-singles additivity">
+  <figcaption>log2(그룹 실측 / 단독 실측 합). CoC NLL(왼쪽)은 거의 전부 −1 아래 —
+  <strong>그룹 손상이 단독합보다 일관되게 작다(sub-additive)</strong>. k8 중앙값 −2.30,
+  실제 컷 k13 −2.90, k32 −5.79로 그룹이 클수록 이탈이 커진다.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>판정을 뒤집는 사실: 타깃 자체가 노이즈였다</h2>
+
+<p>
+게이트 A/B를 "Taylor 스코어가 형편없다"로 읽기 전에, 실측 타깃의 재현성을 봐야 한다.
+같은 25클립을 홀짝으로 갈라 실측 ΔL의 클립 평균을 두 번 만들면, 그 둘 사이의
+레이어 내 랭크 상관이 — 즉 <strong>타깃 자신의 split-half 신뢰도</strong>가 — 4셀 모두 0 근처다:
+</p>
+
+<table>
+<thead><tr><th></th><th class="r">q / coc</th><th class="r">q / traj</th><th class="r">mlp / coc</th><th class="r">mlp / traj</th></tr></thead>
+<tbody>
+<tr><td>실측 타깃 split-half 신뢰도</td><td class="r">+0.017</td><td class="r">−0.112</td><td class="r">−0.049</td><td class="r">+0.067</td></tr>
+<tr><td>클립 간 부호 혼합 유닛 비율</td><td class="r">100%</td><td class="r">99%</td><td class="r">100%</td><td class="r">100%</td></tr>
+<tr><td>평균조차 음수(제거가 이득)인 유닛</td><td class="r">15%</td><td class="r">39%</td><td class="r">7%</td><td class="r">42%</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>어떤 예측기의 관측 가능한 상관도 타깃 신뢰도의 제곱근에 묶인다.</strong> 신뢰도가
+0이면 게이트 A/B는 스코어를 유죄로 만들 수 없다 — 이 게이트가 실제로 판정한 것은 스코어가
+아니라 타깃이다: 25클립 규모에서 <strong>단독 유닛의 제거 손상은 측정 가능한 안정된 양이
+아니다</strong>. 유닛의 99–100%가 클립에 따라 제거가 이득이 되기도 손해가 되기도 하고, traj
+축에서는 40%가 평균적으로도 제거가 이득이다. 중복성이 단일 유닛 제거를 그때그때 흡수한다.</p>
+</div>
+
+<p>
+같은 그림이 레이어 규모에서도 나온다. <strong>한 레이어의 40% MLP 컷조차 거의 공짜다</strong>
+(전 기준·전 레이어에서 ΔNLL ≤ 0.002, ΔFM ≤ 0.001) — 단 하나의 예외를 빼고:
+</p>
+
+<figure>
+  <img src="PLOT::calib::mcut_damage.png" alt="per-layer damage of each criterion's actual MLP cut">
+  <figcaption>기준별 실제 bottom-40% MLP 컷의 레이어별 실측 ΔNLL. L35에서 traj 기준만
+  +0.043으로 다른 기준의 ~20배 — 그리고 이 셀이 mcut 손상의 split-half 신뢰도 0.99를 거의
+  혼자 만든다. L35는 traj 신호가 구조적으로 0인 레이어라 traj 기준의 선택이 CoC 관점에서
+  무작위가 되고, coc / dual / jtraj는 같은 자리에서 CoC를 보호한다.</figcaption>
+</figure>
+
+<p>
+이 L35 셀은 <strong>"왜 결합 기준이 필요한가"의 최소 재현</strong>이다. traj 단독 arm이
+end-to-end에서 추론을 망가뜨리고(NLL +240%, LingoQA −36pp), <code>max(rank, rank)</code>가
+그것을 막는 메커니즘 — 한 목적이 눈먼 자리에서 다른 목적이 거부권을 행사한다 — 이 단일
+레이어·단일 실측에서 그대로 보인다.
+</p>
+
+<h2><span class="num">5</span>해석</h2>
+
+<p>
+<strong>1. rank_norm은 무죄다. 병목은 "유닛별 점수 → 독립 합산"이라는 프레임 자체다.</strong>
+크기 정보를 살릴 대상(안정된 유닛별 손상)이 존재하지 않으므로, loss 단위 knapsack 결합은
+등록한 분기대로 기각한다. 원래 질문 — "rank로 잃는 것이 있는가" — 의 답은 "잃을 것이
+애초에 실재하지 않는다"이다.
+</p>
+
+<p>
+<strong>2. 손상은 구성(composition) 수준에서만 정의된다.</strong> 단독 제거는 sub-additive하게
+흡수되고(그룹/합 = 1/5~1/55), 실제 arm들의 큰 손상(개루프 +12~187%)은 36개 레이어에 걸친
+동시 제거에서만 나타난다. 1차 Taylor가 전제하는 "각 유닛의 기여를 독립적으로 합산"은 이
+작동점에서 성립하지 않는다 — G-CAL-C가 그것을 직접 보였고, 이는 <strong>반복
+재캘리브레이션</strong>(자를수록 변하는 네트워크에서 스코어를 다시 재기)의 직접 근거다.
+</p>
+
+<p>
+<strong>3. J-lens도 유닛 수준에서는 실측과 무상관이지만(q +0.07, mlp −0.07), 같은 신뢰도
+한계로 판단 불가다.</strong> J의 가치 역시 그룹 수준에서만 정의된다 — 이는 j 단독 arm이
+유닛별로는 무의미해 보이는 선택으로 추론 채널을 baseline 이상으로 보존한 기존 결과와
+정합적이다.
+</p>
+
+<h2><span class="num">6</span>한계</h2>
+
+<ul>
+  <li><strong>25클립.</strong> 클립을 크게 늘리면 유닛 수준 신뢰도가 올라올 수 있다. 다만 전형적
+    단독 ΔL(1e-4~1e-3)이 클립 간 분산에 묻히는 정도를 보면 수십 배가 필요해 보이고, 그 경우에도
+    가법성 붕괴는 별개로 남는다.</li>
+  <li><strong>레이어 6개 표본.</strong> 결론이 레이어 선택에 의존할 수 있어 per-layer 수치를
+    metrics에 개별 보존했다.</li>
+  <li><strong>게이트 설계의 약점.</strong> A/B는 타깃이 측정 가능하다는 것을 전제로 등록됐다.
+    타깃 신뢰도를 게이트에 함께 등록했어야 했다 — 이번에 분석 코드에 반영해 두었다.</li>
+  <li><strong>FM 축의 그룹 판독이 약하다.</strong> 부호 위반 6건, n=14, 타깃 신뢰도 0.14.</li>
+</ul>
+
+<h2><span class="num">7</span>다음</h2>
+
+<p>
+<strong>반복 재캘리브레이션</strong> — 한 번에 39.86%를 자르는 대신 스테이지로 나눠, 스테이지마다
+마스킹된 모델에서 중요도를 다시 재고 다음 컷을 고른다. G-CAL-C의 sub-additivity가 정확히
+"부분 컷 후의 네트워크는 스코어를 잰 네트워크가 아니다"를 뜻하므로, 재측정이 그 간극을
+직접 메운다. 계획서: <code>plans/2026-08-16_iterative-recalibration.md</code>.
+</p>
+
+<footer>
+  실행: <code>experiments/head_analysis/run_imp_calib.py</code> (2샤드, GPU 6·7) ·
+  분석: <code>experiments/head_analysis/analyze_imp_calib.py</code> ·
+  출력: <code>outputs/imp_calib_v1/</code> (records, calib_metrics.json, summary.txt) ·
+  계획: <code>plans/2026-08-15_importance-calibration.md</code>
+</footer>
+
+</div>
+</body>
+</html>
