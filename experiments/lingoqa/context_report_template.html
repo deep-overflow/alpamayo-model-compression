@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>가지치기 기준의 병목: 목적함수가 아니라 보정 데이터였다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #C0392B;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+  .good-t { color: var(--good); font-weight: 600; }
+  .bad-t { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구 · 평가 트랙</div>
+  <h1>가지치기 기준의 병목: 목적함수가 아니라 보정 데이터였다</h1>
+  <p class="meta">2026-08-16 · 동일 예산 −24.0% arm 9개 · LingoQA 500 질문 / 100 세그먼트<br>
+  코드 <code>experiments/lingoqa/</code> · 선행 <code>reports/evaluation/2026-08-14_lingoqa-zeroshot-benchmark.html</code></p>
+</header>
+
+<p class="lede">앞선 연구에서 단일 기준 arm이 30%대로 무너졌고, 그 원인을 <strong>관측 문맥이 좁아서</strong>라고
+가설했다. VQA 문맥 중요도를 추가해 검증한 결과 <strong>가설은 기각됐다</strong>.
+지배 요인은 목적함수(문맥)가 아니라 <strong>중요도를 어떤 데이터에서 쟀는가</strong>였다 —
+같은 CoC 목적함수도 보정 이미지를 평가 도메인으로 바꾸면 30.2% → 65.4%로 <strong>35.2pp</strong> 오른다.
+목적함수를 CoC에서 VQA로 바꾸는 효과는 그중 1.0pp에 불과했다.</p>
+
+<div class="callout bad">
+<p><strong>이 리포트는 선행 연구의 결론 하나와 이 연구의 중간 결론 하나를 정정한다.</strong>
+(1) "단일 기준이라서 무너진다"는 부분적으로 틀렸다 — 보정 도메인이 맞으면 단일 기준도 65%대다.
+(2) 중요도 겹침(Jaccard)으로 성능 영향을 예측하려 한 §3의 추론이 틀렸다 — 방향이 반대로 나왔다.</p>
+</div>
+
+<h2><span class="num">1</span>출발점</h2>
+
+<p>선행 연구(2026-08-14)에서 동일 예산 −24.0%로 다음이 측정됐다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>기준</th><th class="r">LingoQA</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>—</td><td class="r">73.2%</td></tr>
+<tr><td><code>dual</code></td><td>max(traj, CoC)</td><td class="r">68.8%</td></tr>
+<tr><td><code>j_traj</code></td><td>max(traj, J)</td><td class="r">67.8%</td></tr>
+<tr><td><code>traj</code></td><td>궤적 단독</td><td class="r">37.0%</td></tr>
+<tr><td><code>j</code></td><td>J 단독</td><td class="r">32.2%</td></tr>
+<tr><td><code>coc</code></td><td>CoC 단독</td><td class="r">30.2%</td></tr>
+</tbody>
+</table>
+
+<p>CoC 기준으로 잘랐는데 언어가 가장 심하게 무너지는 것이 이상했다. 후보 설명이 넷이었고,
+셋은 계산으로 배제됐다.</p>
+
+<table>
+<thead><tr><th>후보</th><th>검증</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>J-lens 사전이 CoC 빈출어에 편향</td>
+<td><code>jlens_v2</code> 사전 714 토큰 = CoC 빈출 202(28%) + 무작위 512(72%).
+<code>select_tokens</code>가 <q>the random half keeps the score from being defined only on
+terms we already expect to matter</q>라고 명시</td><td class="bad-t">배제</td></tr>
+<tr><td>보정 표본이 부족</td>
+<td><code>importance_v1</code>(50클립)과 <code>v2</code>(100클립)는 <strong>공유 클립 0개</strong>인데
+Jaccard 0.803(Q) / 0.707(MLP)</td><td class="bad-t">배제</td></tr>
+<tr><td>목적함수가 CoC 텍스트 위치에만 정의됨 (<strong>문맥</strong>)</td>
+<td>이 연구에서 검정</td><td class="warn">→ §3–4</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">2</span>설계</h2>
+
+<p><code>prune_lib.coc_nll</code>과 구조가 같고 <strong>관측 위치만 다른</strong> 목적함수를 추가했다.</p>
+
+<pre><code>coc_nll : create_message      → &lt;|cot_start|&gt;    ... CoC 토큰 위치의 CE
+vqa_nll : create_vqa_message  → &lt;|answer_start|&gt; ... 레퍼런스 답변 위치의 CE</code></pre>
+
+<p>보정 데이터는 <strong>LingoQA scenery train</strong>(3,508 세그먼트 중 해시 고정으로 100개,
+세그먼트당 질문 4개). 평가셋 <code>val.parquet</code>은 손대지 않았다. 궤적 목적함수는 LingoQA에
+GT 궤적이 없어 쓸 수 없으므로, 결합 arm의 궤적 절반은 기존 <code>importance_v2</code>(PhysicalAI-AV)에서 온다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>기준</th><th>언어 절반을 잰 이미지</th><th>역할</th></tr></thead>
+<tbody>
+<tr><td><code>trajvqa_u40_v2</code></td><td>max(traj, VQA)</td><td>LingoQA</td><td>주 arm (G1)</td></tr>
+<tr><td><code>vqa_u40_v2</code></td><td>VQA 단독</td><td>LingoQA</td><td>단일 기준 (G3)</td></tr>
+<tr><td><code>coclingo_u40_v2</code></td><td><strong>CoC 단독</strong></td><td>LingoQA</td><td><strong>도메인 통제 (G2)</strong></td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p><strong><code>coclingo</code>가 이 연구의 핵심 장치다.</strong> 목적함수는 기존 <code>coc</code>와
+완전히 동일하고 이미지만 LingoQA로 바뀐다. 이게 없으면 <code>vqa</code>(66.4%)와
+<code>coc</code>(30.2%)만 비교하게 되어 <strong>"VQA 문맥이 +36pp를 만든다"고 잘못 결론</strong>내게 된다.</p>
+</div>
+
+<h2><span class="num">3</span>중간 단계: 중요도 겹침 (이 추론은 빗나갔다)</h2>
+
+<p>체크포인트를 만들기 전에, 중요도끼리의 유지집합 겹침으로 가설을 싸게 미리 보려 했다.
+같은 예산(0.3985632694)에서 층별 상위 유닛을 뽑아 Jaccard를 쟀다.</p>
+
+<table>
+<thead><tr><th>비교</th><th>무엇이 다른가</th><th class="r">Q head</th><th class="r">MLP</th></tr></thead>
+<tbody>
+<tr><td>VQA(lingo) vs CoC(lingo)</td><td><strong>문맥만</strong></td><td class="r">0.611</td><td class="r">0.636</td></tr>
+<tr><td>CoC(lingo) vs CoC(AV)</td><td><strong>도메인만</strong></td><td class="r">0.753</td><td class="r">0.686</td></tr>
+<tr><td>CoC(AV) vs traj(AV)</td><td><em>기준선</em> — 언어 vs 궤적</td><td class="r">0.616</td><td class="r">0.645</td></tr>
+<tr><td>CoC v1 vs v2</td><td><em>기준선</em> — 같은 목적, 분리 표본</td><td class="r">0.803</td><td class="r">0.707</td></tr>
+</tbody>
+</table>
+
+<p>당시 판단은 이랬다 — 문맥을 바꾸면 겹침이 0.611까지 떨어져 <em>언어 vs 궤적</em> 수준(0.616)이 되는데,
+도메인만 바꾸면 0.753으로 재현성 상한(0.803)에 가깝다. 따라서 <q>문맥이 병목이고 도메인은 부차적</q>이라고
+결론했고, 3단계 진행을 권고했다.</p>
+
+<div class="callout bad">
+<p><strong>이 추론은 틀렸다.</strong> 겹침은 "얼마나 다른 유닛을 고르는가"만 말해줄 뿐
+"그 차이가 성능에 얼마나 작용하는가"는 말해주지 않는다. §4에서 보듯 <strong>더 비슷한 선택(도메인,
+0.753)이 훨씬 큰 성능 변화(+35.2pp)를 만들었고, 더 다른 선택(문맥, 0.611)은 +1.0pp에 그쳤다.</strong>
+당시 "다른 유닛을 고르는 것 ≠ 좋은 유닛을 고르는 것"이라는 단서를 달긴 했으나, 결론 문장이 그 단서를
+반영하지 못했다.</p>
+</div>
+
+<figure>
+  <img src="PLOT::ctx::context_inversion.png" alt="겹침과 실제 효과의 역전">
+  <figcaption>왼쪽이 선택의 유사도, 오른쪽이 실제 성능 변화. 방향이 반대다.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>결과 (사실)</h2>
+
+<figure>
+  <img src="PLOT::ctx::context_arms.png" alt="동일 예산 arm 9개">
+  <figcaption>전부 −24.0%. 파랑은 PhysicalAI-AV로, 초록은 LingoQA train으로 언어 절반을 보정한 arm.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>arm</th><th>기준</th><th>보정</th><th class="r">LingoQA</th><th class="r"><code>dual</code> 대비</th><th class="r">95% CI</th><th class="r">b/c</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>—</td><td>—</td><td class="r">73.2%</td><td class="r">+4.40pp</td><td class="r">[−0.40, +9.40]</td><td class="r">87/65</td></tr>
+<tr><td><code>trajvqa</code></td><td>max(traj, VQA)</td><td>LingoQA</td><td class="r good-t"><strong>71.2%</strong></td><td class="r">+2.40pp</td><td class="r">[−2.40, +7.20]</td><td class="r">85/73</td></tr>
+<tr><td><code>dual</code></td><td>max(traj, CoC)</td><td>AV</td><td class="r">68.8%</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><code>vqa</code></td><td>VQA 단독</td><td>LingoQA</td><td class="r">66.4%</td><td class="r">−2.40pp</td><td class="r">[−7.80, +3.20]</td><td class="r">79/91</td></tr>
+<tr><td><code>coclingo</code></td><td>CoC 단독</td><td>LingoQA</td><td class="r">65.4%</td><td class="r">−3.40pp</td><td class="r">[−8.00, +1.40]</td><td class="r">64/81</td></tr>
+<tr><td><code>coc</code></td><td>CoC 단독</td><td>AV</td><td class="r bad-t">30.2%</td><td class="r bad-t">−38.60pp</td><td class="r">[−44.00, −33.00]</td><td class="r">28/221</td></tr>
+</tbody>
+</table>
+
+<h3>4.1 두 축의 분해</h3>
+
+<pre><code>coc      (CoC 목적, AV 이미지)        30.2%
+coclingo (CoC 목적, LingoQA 이미지)   65.4%    ← 이미지만 바꿈:  +35.2pp
+vqa      (VQA 목적, LingoQA 이미지)   66.4%    ← 목적함수까지:   +1.0pp</code></pre>
+
+<p><strong>이득의 97%가 보정 이미지에서 왔다.</strong> 목적함수를 CoC에서 VQA로 바꾸는 것은
+1.0pp를 더할 뿐이고, 그 차이는 CI가 0을 크게 포함한다.</p>
+
+<h3>4.2 사전 등록 게이트 판정</h3>
+
+<table>
+<thead><tr><th>게이트</th><th>조건</th><th>결과</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><strong>G1</strong></td><td><code>trajvqa</code> − <code>dual</code> CI가 0 초과</td>
+<td>+2.40pp, CI [−2.40, +7.20], p=0.38</td><td class="warn">미달 (방향은 일치)</td></tr>
+<tr><td><strong>G2</strong></td><td><code>vqa</code> − <code>coclingo</code> CI가 0 초과</td>
+<td>+1.00pp</td><td class="bad-t">미달 — 문맥 효과 미검출</td></tr>
+<tr><td><strong>G3</strong></td><td><code>vqa</code> 단독이 30%대면 재해석</td>
+<td>66.4% — <strong>30%대 아님</strong></td><td class="bad-t">발동</td></tr>
+<tr><td><strong>G4</strong></td><td><code>trajvqa</code> in-dist minADE ≤ 0.854</td>
+<td><strong>0.8504</strong> (mean, 500클립)</td><td class="warn">통과 — 여유 0.4%</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">5</span>분석 (해석)</h2>
+
+<div class="callout bad">
+<p><strong>문맥 가설은 기각한다.</strong> VQA 응답 위치에서 중요도를 재는 것이 CoC 위치에서 재는 것보다
+나은 유닛을 고른다는 증거가 없다(+1.0pp, CI가 0을 포함). 사전 등록한 G3의 재해석 조항이 그대로 적용된다.</p>
+</div>
+
+<div class="callout good">
+<p><strong>대신 더 단순하고 강한 요인이 드러났다 — 보정 데이터가 평가 도메인과 맞는가.</strong>
+목적함수·예산·할당·결합 방식을 전부 고정하고 이미지만 바꿔도 35.2pp가 움직인다.
+이 크기는 이 연구에서 관측한 어떤 설계 선택보다 크며, 기준 결합(단일 → max(rank, rank))의
+효과와 맞먹는다.</p>
+</div>
+
+<h3>선행 결론의 정정</h3>
+
+<p>2026-08-14 리포트는 <q>단일 기준은 30%대로 붕괴하고 결합은 68%대를 지킨다</q>고 적었고,
+결합 자체가 성능의 대부분을 만든다고 해석했다. 이제 그 관측이 <strong>두 요인의 혼재</strong>였음이 드러난다 —
+당시 단일 기준 arm 셋은 모두 PhysicalAI-AV로 보정됐고, 결합 arm도 마찬가지였지만
+궤적 절반이 선택을 안정화시켰다. 보정을 평가 도메인에 맞추면 단일 기준도 65%대다.</p>
+
+<table>
+<thead><tr><th></th><th class="r">AV 보정</th><th class="r">LingoQA 보정</th><th class="r">차이</th></tr></thead>
+<tbody>
+<tr><td>단일 기준 (CoC)</td><td class="r">30.2%</td><td class="r">65.4%</td><td class="r">+35.2pp</td></tr>
+<tr><td>결합 기준 (traj + 언어)</td><td class="r">68.8%</td><td class="r">71.2%</td><td class="r">+2.4pp</td></tr>
+</tbody>
+</table>
+
+<p>결합 기준에서는 보정 도메인의 효과가 2.4pp로 줄어든다. <strong>궤적 절반이 도메인 불일치를
+흡수한다</strong>는 뜻이고, 이는 arm 수준 유지집합 겹침에서도 보였다 —
+<code>dual</code> vs <code>trajcoclingo</code>가 0.826/0.804로 재현성 상한 근처였다.
+즉 결합의 진짜 효용은 "두 관점의 합의"보다 <strong>보정 데이터 선택에 대한 강건성</strong>일 수 있다.</p>
+
+<h3>가장 중요한 단서</h3>
+
+<div class="callout warn">
+<p><strong>LingoQA로 보정한 arm의 LingoQA 점수는 제로샷이 아니다.</strong>
+train/eval 분리는 지켰으나, 평가 도메인의 데이터로 유닛을 골랐으므로 in-domain 보정의 이점을 포함한다.
+<code>dual</code>(AV 보정)과 나란히 놓고 우열을 말할 때 이 비대칭을 반드시 명시해야 한다.
+논문에서는 별도 블록으로 분리해야 한다.</p>
+<p>그리고 이 이점이 <strong>일반적 언어 능력 보존인지 LingoQA 과적합인지</strong>는 아직 모른다.
+그것이 G4가 답할 질문이며, 현재 측정 중이다.</p>
+</div>
+
+<h2><span class="num">6</span>미결과 다음 단계</h2>
+
+<h3>6.1 G4 in-dist — 형식상 통과, 실질은 손실</h3>
+
+<table>
+<thead><tr><th>arm</th><th>기준</th><th class="r">in-dist minADE (mean)</th><th class="r">중앙값</th><th class="r">CoC degen</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td>max(traj, CoC) · AV 보정</td><td class="r">0.7766</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><code>traj</code></td><td>궤적 단독 · AV 보정</td><td class="r">0.8411</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><code>trajvqa</code></td><td>max(traj, VQA) · LingoQA 보정</td><td class="r warn">0.8504</td><td class="r">0.6044</td><td class="r">0.004</td></tr>
+<tr><td colspan="2"><em>G4 통과선 (dual +10%)</em></td><td class="r">0.8540</td><td class="r">—</td><td class="r">—</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>0.8504 대 통과선 0.8540 — 여유가 0.4%다.</strong> 사전 등록한 +10% 기준을 형식상 통과하지만,
+<q>주행을 잃지 않았다</q>고 말할 수는 없다. <code>dual</code> 대비 minADE가 <strong>9.5% 악화</strong>됐고,
+이는 궤적 단독으로 자른 <code>traj</code>(0.8411)보다도 나쁘다.
+임계값을 +5%로 잡았다면 탈락이었다.</p>
+<p>정리하면 <code>trajvqa</code>는 <strong>LingoQA +2.4pp를 얻는 대가로 in-dist minADE 9.5%를 지불했다.</strong>
+CI가 없어 단정할 수는 없으나, in-domain 보정이 언어 능력을 일반적으로 보호했다기보다
+평가 도메인 쪽으로 모델을 기울였다는 해석에 무게가 실린다.</p>
+</div>
+
+<h3>측정 중</h3>
+<ul>
+<li><strong>G4 OOD.</strong> 1,533클립의 <code>nll_gtcoc</code>와 minADE.
+<code>dual</code> 기준값은 3.0375 / 0.9313. 이것이 남은 핵심 질문에 답한다 —
+LingoQA로 보정해 얻은 것이 <strong>일반적 언어 능력 보존</strong>인지
+<strong>LingoQA 과적합</strong>인지. <code>nll_gtcoc</code>가 <code>dual</code> 수준을 유지하면 전자,
+악화되면 후자다.</li>
+</ul>
+
+<h3>이 연구가 답하지 못한 것</h3>
+<ul>
+<li><strong>일반화 여부.</strong> LingoQA로 보정해 LingoQA가 오르는 것은 부분적으로 자명하다.
+다른 언어 과제(예: OOD 세트의 <code>gt_coc</code> 대비 판정)에서도 오르는지 확인해야
+"언어 능력 보존"이라 부를 수 있다.</li>
+<li><strong>왜 보정 도메인이 그렇게 큰가.</strong> 영국/미국 주행의 시각적 차이인지, LingoQA 질문
+분포의 다양성(세그먼트당 42개 질문) 때문인지, 아니면 단순히 in-domain 기울기가 더 유효한 것인지
+분해되지 않았다.</li>
+<li><strong>G1의 검정력.</strong> +2.40pp는 100 클러스터의 해상도(5–8pp) 아래라, 참이어도 검출되지 않는다.
+확정하려면 표본을 늘리거나 CoC를 다중 샘플링해야 한다.</li>
+</ul>
+
+<h3>실용적 교훈</h3>
+<p>중요도 기준을 설계할 때 <strong>유지집합 겹침으로 성능 영향을 예측하지 말 것.</strong>
+이 연구에서 겹침과 실제 효과는 방향이 반대였다. 겹침은 "선택이 달라졌는가"의 진단이지
+"더 나아졌는가"의 예측이 아니다. 값싼 사전 검증으로는 쓸 수 있으나, 그 결과로 가설을 확정해서는 안 된다.</p>
+
+<footer>
+생성 <code>experiments/lingoqa/{run_vqa_importance,plot_context,run_lingo_vqa,score_lingo_vqa,analyze_lingo}.py</code> ·
+<code>experiments/head_analysis/make_slim.py</code>(vqa/coclingo/trajvqa 분기 추가) ·
+결과 <code>outputs/importance_vqa</code>, <code>outputs/slim_{trajvqa,vqa,coclingo}_u40_v2</code>,
+<code>outputs/lingo_context_arms</code>, <code>outputs/lingo_vqa_scores_context</code> ·
+메트릭은 LingoQA 원본 <code>benchmark/judge.py::LingoJudge</code>를 그대로 임포트해 사용.
+</footer>
+
+</div>
+</body>
+</html>

@@ -52,7 +52,7 @@ REPO = Path(__file__).resolve().parents[2]
 MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
 
 
-def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
+def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -87,10 +87,19 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2"):
                 return imp["traj_vlm_q"], imp["traj_vlm_mlp"]
             if name == "coc":
                 return imp["coc_vlm_q"], imp["coc_vlm_mlp"]
+            if name in ("vqa", "coclingo"):
+                # VQA-context importance and its same-images CoC control come from their
+                # own run: they are measured on LingoQA train, which ships no ego
+                # trajectory, so that npz holds only the two VLM arrays per objective and
+                # cannot supply traj / KV / expert scores. Those still come from `imp`.
+                z = dict(np.load(REPO / "outputs" / vqa_imp / "importance.npz"))
+                pre = "vqa" if name == "vqa" else "coc"
+                return z[f"{pre}_vlm_q"], z[f"{pre}_vlm_mlp"]
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
-        parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j")}.get(stem, (stem,))
+        parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j"),
+                 "trajvqa": ("traj", "vqa")}.get(stem, (stem,))
         # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
         # criterion -- it only matters when two scores have to share one scale
         sq, sm = half(parts[0])
@@ -203,6 +212,9 @@ def main():
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
                     help="J-lens run supplying q_j/mlp_j for the j_traj configs")
+    ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
+                    help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
+                         "trajvqa configs (measured on LingoQA train)")
     ap.add_argument("--sets-id", type=str, default="eval_sets")
     ap.add_argument("--no-state", action="store_true",
                     help="write only slim_meta.json, skipping the 16.8 GB slim_state.pt. "
@@ -228,7 +240,8 @@ def main():
     lib.set_expert_attn_impl(model, "sdpa")
 
     imp = dict(np.load(REPO / "outputs" / args.importance / "importance.npz"))
-    vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens)
+    vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens,
+                                         args.vqa_importance)
 
     full_total = sl.n_params(model)
     t0 = time.time()

@@ -157,7 +157,10 @@ def main():
     ap.add_argument("--exp-id", default="importance_vqa")
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--seed", type=int, default=20260815)
-    ap.add_argument("--reserve-gb", type=float, default=30.0)
+    # run_importance.py measures a ~40.5 GB peak with 4 cameras x 4 frames. LingoQA
+    # gives one camera, so the sequence is roughly a quarter of the vision tokens and
+    # the peak is well under that; 32 leaves headroom without waiting for a whole card.
+    ap.add_argument("--reserve-gb", type=float, default=32.0)
     ap.add_argument("--gpu", default="4,5,6,7")
     args = ap.parse_args()
 
@@ -177,8 +180,11 @@ def main():
     # no graph at all (see prune_lib.retain_cache_grads)
     model.vlm.enable_input_require_grads()
     processor = helper.get_processor(model.tokenizer)
-    lib.set_vlm_attn_impl(model, "eager")
-    lib.set_expert_attn_impl(model, "eager")
+    # sdpa, as run_importance.py uses: the gates hook o_proj / down_proj inputs, so
+    # nothing here needs eager's materialised attention matrix, and eager costs a lot
+    # of activation memory in a pass that already has to hold a backward graph.
+    lib.set_vlm_attn_impl(model, "sdpa")
+    lib.set_expert_attn_impl(model, "sdpa")
 
     cfg = model.vlm.config.text_config
     gates = pl.UnitGates(model.vlm.model.language_model.layers, cfg.num_attention_heads,
