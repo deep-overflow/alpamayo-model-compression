@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>압축 개요: 모든 arm을 한 축에</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b0402a;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.88rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.7rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .base td { font-weight: 600; }
+  .up { color: var(--bad); } .down { color: var(--good); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>압축 개요: 열 개 arm을 한 축에</h1>
+  <div class="meta">
+    2026-08-16 · <code>nvidia/Alpamayo-1.5-10B</code> @ <code>7aba8293</code> ·
+    개루프 공식 test 500 · 폐루프 alpasim <code>public_2601</code> 150씬 × 2 롤아웃 ·
+    RTX 5880 Ada · 페어드 부트스트랩 95% CI
+  </div>
+</header>
+
+<p class="lede">
+세 갈래로 자란 압축 실험을 하나의 표로 모았다. 프루닝 기준 6종, 균일 양자화 2종, 둘의
+합성 2종이다. 두 측정이 함께 있는 arm에서 드러나는 것은 <strong>압축률이 아니라 무엇을
+자르느냐가 주행을 지배한다</strong>는 것, 그리고 <strong>개루프 열화의 크기를 주행 열화의
+크기로 환산할 수 없다</strong>는 것이다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">측정한 arm</span><span class="v">10</span>개루프 10 / 폐루프 8</div>
+  <div><span class="k">주행이 baseline보다 나은 arm</span><span class="v">1</span><code>dual</code> +0.0787</div>
+  <div><span class="k">최대 압축</span><span class="v">4.04&times;</span>22.16 &rarr; 5.48 GB</div>
+  <div><span class="k">같은 압축률, 주행 폭</span><span class="v">0.292</span>1.32&times;에서 &minus;0.214 ~ +0.079</div>
+</div>
+
+<h2><span class="num">1</span>전체 표</h2>
+
+<p>
+<strong>*</strong>는 페어드 95% CI가 0을 배제한다는 표시다. 크기는 프루닝 arm에서는 실제
+파일 크기, 양자화가 들어간 arm에서는 비트 배분에서 계산한 <strong>투영치</strong>다 &mdash;
+두 열은 같은 종류의 숫자가 아니다(§4).
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>arm</th><th>구성</th><th class="r">크기</th><th class="r">배율</th>
+<th class="r">개루프 minADE</th><th class="r">Δ vs baseline</th>
+<th class="r">폐루프 점수</th><th class="r">Δ vs baseline</th></tr></thead>
+<tbody>
+<tr class="base"><td>baseline</td><td>무손상</td><td class="r">22.16 GB</td><td class="r">1.00&times;</td>
+  <td class="r">0.7799</td><td class="r">&mdash;</td><td class="r">0.750</td><td class="r">&mdash;</td></tr>
+<tr><td><code>w8_all</code></td><td>균일 8bit (expert 포함)</td><td class="r">12.21 GB</td><td class="r">1.81&times;</td>
+  <td class="r">0.7810</td><td class="r">+0.0011</td><td class="r">&mdash;</td><td class="r">미측정</td></tr>
+<tr><td><code>w4_all</code></td><td>균일 4bit (expert 포함)</td><td class="r">6.91 GB</td><td class="r">3.20&times;</td>
+  <td class="r">0.8332</td><td class="r">+0.0533 <strong>*</strong></td><td class="r">&mdash;</td><td class="r">미측정</td></tr>
+<tr><td><code>traj</code></td><td>프루닝 24%, <code>I_traj</code></td><td class="r">16.84 GB</td><td class="r">1.32&times;</td>
+  <td class="r">0.9333</td><td class="r">+0.1534 <strong>*</strong></td><td class="r">0.783</td><td class="r">+0.0334</td></tr>
+<tr><td><code>coc</code></td><td>프루닝 24%, <code>I_CoC</code></td><td class="r">16.84 GB</td><td class="r">1.32&times;</td>
+  <td class="r">1.4733</td><td class="r">+0.6934 <strong>*</strong></td><td class="r">0.660</td><td class="r"><span class="up">&minus;0.0892 <strong>*</strong></span></td></tr>
+<tr><td><code>j</code></td><td>프루닝 24%, <code>J</code></td><td class="r">16.84 GB</td><td class="r">1.32&times;</td>
+  <td class="r">2.0004</td><td class="r">+1.2204 <strong>*</strong></td><td class="r">0.536</td><td class="r"><span class="up">&minus;0.2138 <strong>*</strong></span></td></tr>
+<tr><td><strong><code>dual</code></strong></td><td>프루닝 24%, <code>max(traj, CoC)</code></td><td class="r">16.84 GB</td><td class="r">1.32&times;</td>
+  <td class="r">0.8754</td><td class="r">+0.0955 <strong>*</strong></td><td class="r"><strong>0.828</strong></td><td class="r"><span class="down"><strong>+0.0787 *</strong></span></td></tr>
+<tr><td><code>jtraj</code></td><td>프루닝 24%, <code>max(traj, J)</code></td><td class="r">16.84 GB</td><td class="r">1.32&times;</td>
+  <td class="r">0.9461</td><td class="r">+0.1661 <strong>*</strong></td><td class="r">0.791</td><td class="r">+0.0418</td></tr>
+<tr><td><code>dual+w8</code></td><td>프루닝 + 8bit</td><td class="r">9.44 GB</td><td class="r">2.35&times;</td>
+  <td class="r">0.8888</td><td class="r">+0.1088 <strong>*</strong></td><td class="r">&mdash;</td><td class="r">실행 중</td></tr>
+<tr><td><strong><code>dual+w4</code></strong></td><td>프루닝 + 4bit</td><td class="r"><strong>5.48 GB</strong></td><td class="r"><strong>4.04&times;</strong></td>
+  <td class="r">0.9570</td><td class="r">+0.1771 <strong>*</strong></td><td class="r">0.768</td><td class="r">+0.0180</td></tr>
+</tbody>
+</table>
+</div>
+
+<figure>
+  <img src="PLOT::ov::frontier.png" alt="압축률 대 개루프·폐루프 성능">
+  <figcaption>왼쪽은 개루프(세로축 symlog &mdash; 범위가 1,000배라 선형으로는 아래쪽이
+  뭉갠다), 오른쪽은 폐루프. 오차막대는 페어드 95% CI. 오른쪽 음영은 이 설계가 80% 검정력으로
+  검출하도록 설계된 효과 크기(&plusmn;0.080)다.</figcaption>
+</figure>
+
+<h2><span class="num">2</span>표에서 읽히는 것</h2>
+
+<h3>2.1 같은 압축률에서 주행이 0.292만큼 갈린다</h3>
+
+<p>
+<code>traj</code>·<code>coc</code>·<code>j</code>·<code>dual</code>·<code>jtraj</code>는
+<strong>전부 1.32&times;</strong>다 &mdash; 같은 36개 레이어에서 같은 수의 Q head와 MLP 채널을
+제거했고 파라미터 수가 정확히 같다. 유일한 차이는 <em>어느</em> 유닛을 남겼느냐다.
+</p>
+
+<pre><code>같은 1.32x 압축, 폐루프 씬 점수
+  dual   0.828   +0.0787 *      &lt;- baseline보다 유의하게 나음
+  jtraj  0.791   +0.0418
+  traj   0.783   +0.0334
+  (baseline 0.750)
+  coc    0.660   -0.0892 *
+  j      0.536   -0.2138 *      &lt;- at-fault 충돌 4.3배</code></pre>
+
+<div class="callout">
+<p><strong>압축률은 주행 성능을 예측하지 못한다.</strong> 폭 0.292는 baseline과 최악 arm의
+차이(0.214)보다 크다. 압축을 &ldquo;얼마나&rdquo;의 문제로 보는 프레이밍은 이 데이터에서
+성립하지 않는다.</p>
+</div>
+
+<h3>2.2 개루프 크기는 주행 크기로 환산되지 않는다</h3>
+
+<p>
+개루프 Δ는 +0.0011에서 +1.2204까지 <strong>1,000배</strong> 범위인데, 폐루프 Δ는
+&minus;0.214에서 +0.079까지 좁다. 순서는 8개 arm 전부에서 일치하지만 스케일은 전혀 다르다.
+</p>
+
+<pre><code>            개루프 Δ      폐루프 Δ      비
+  dual       +0.0955       +0.0787      부호 반전 (개루프 악화, 주행 개선)
+  jtraj      +0.1661       +0.0418      부호 반전
+  traj       +0.1534       +0.0334      부호 반전
+  coc        +0.6934       -0.0892      같은 방향
+  j          +1.2204       -0.2138      같은 방향</code></pre>
+
+<p>
+상위 세 arm은 <strong>개루프에서 나빠졌는데 주행에서는 좋아졌다</strong>. 개루프 minADE를
+주행 품질의 대리 지표로 쓸 수 없다는 뜻이고, 이 프로젝트가 폐루프를 계속 도는 이유다.
+</p>
+
+<h3>2.3 양자화는 싸고 프루닝은 비싸다 &mdash; 저장 축에서만</h3>
+
+<pre><code>arm        대가(개루프)   절감        절감/대가
+w8_all       +0.0011      9.95 GB     사실상 무한
+w4_all       +0.0533     15.25 GB       286 GB/m
+dual(prune)  +0.0955      5.32 GB        56 GB/m</code></pre>
+
+<p>
+같은 minADE 손실당 얻는 크기 감소로 보면 프루닝이 가장 나쁘다. 그런데 <strong>주행에서는
+프루닝만이 baseline을 넘는 유일한 수단</strong>이다. 두 축의 결론이 정반대이므로, 목적을
+먼저 정해야 한다 &mdash; 저장이면 양자화, 주행 품질이면 프루닝(그것도 올바른 기준으로).
+</p>
+
+<h3>2.4 합성: 저장은 곱해지고 손상은 더해진다</h3>
+
+<p>
+개루프에서 프루닝과 양자화의 손상은 <strong>독립</strong>이었다(상호작용 CI가 0 포함,
+p=0.59 / p=0.23). 폐루프에서는 <code>dual</code>의 +0.0787이 <code>dual+w4</code>에서
++0.0180으로 내려가 유의성을 잃는다.
+</p>
+
+<div class="callout warn">
+<p><strong>다만 &ldquo;4비트가 이득을 지웠다&rdquo;고 단정할 수 없다.</strong> 두 값의 차이
+0.061은 이 설계가 80% 검정력으로 검출하도록 설계된 0.080보다 작다. 말할 수 있는 것은
+&ldquo;<code>dual</code>은 baseline보다 유의하게 낫고 <code>dual+w4</code>는 그렇지
+않다&rdquo;까지다. <code>dual+w8</code>(2.35&times;)이 실행 중이며, 8비트가 개루프에서
+4비트의 1/6만 손상시켰으므로 이 arm이 판정을 좁힐 것이다.</p>
+</div>
+
+<h2><span class="num">3</span>검정력</h2>
+
+<p>
+150씬의 페어드 델타는 &sigma; &asymp; 0.32이므로
+&delta;<sub>min</sub>(80%, &alpha;=0.05) = 2.80&sigma;/&radic;N = <strong>0.080</strong>이다.
+이것은 <em>검출 하한</em>이 아니라 <em>설계가 보장하는 검출력</em>이다 &mdash; 그보다 작은
+효과도 CI가 0을 배제할 수 있고(<code>dual</code>이 그렇다), 다만 설계가 그것을 찾아내리라
+보장하지 않았을 뿐이다.
+</p>
+
+<p>실무적으로 지켜야 할 선은 이것이다:</p>
+
+<ul>
+  <li><strong>주장 가능</strong>: <code>dual</code>(+), <code>coc</code>(&minus;),
+  <code>j</code>(&minus;)는 baseline과 유의하게 다르다.</li>
+  <li><strong>주장 불가</strong>: <code>traj</code>(+0.033), <code>jtraj</code>(+0.042),
+  <code>dual+w4</code>(+0.018)는 baseline과도, <strong>서로와도</strong> 구분되지 않는다.
+  이 셋의 순서를 매겨서는 안 된다.</li>
+</ul>
+
+<h2><span class="num">4</span>한계</h2>
+
+<ul>
+  <li><strong>양자화 크기는 투영치다.</strong> fake quant(quantize&rarr;dequantize를 bf16으로
+  되돌림)라 형상·dtype이 그대로고, 디스크의 파일은 <strong>여전히 full size</strong>다.
+  연산량·지연시간·메모리는 전혀 줄지 않는다. 실제로 FLOP을 줄이는 것은 프루닝뿐이다.</li>
+  <li><strong>양자화 단독 폐루프가 없다.</strong> <code>w8_all</code>/<code>w4_all</code>을
+  폐루프에서 재지 않아, <code>dual+w4</code>의 하락을 폐루프 안에서 분해할 수 없다 &mdash;
+  개루프에서 한 상호작용 분석을 폐루프에서는 못 한다. config당 ~15시간.</li>
+  <li><strong>개루프는 한 셋.</strong> 이 표는 <code>test 500</code>만이다. 프루닝 arm은
+  val 500과 OOD 1,533에서도 측정했고 순서가 동일하지만, 양자화·합성 arm은 그렇지 않다.</li>
+  <li><strong>압축률 한 점.</strong> 프루닝은 24.0%만 조합했다. 별도 스윕에서 33.1%는
+  CoC 퇴화율 71%로 붕괴했으므로 더 공격적인 프루닝과의 조합은 의미가 없다.</li>
+  <li><strong>순서 한 방향.</strong> 프루닝&rarr;양자화만 측정했다. 반대 순서는 수치적으로
+  다르다(양자화 그룹이 입력 차원 64개 단위인데 열 제거가 그룹 경계를 바꾼다).</li>
+</ul>
+
+<h2><span class="num">5</span>실용적 권고</h2>
+
+<ol>
+  <li><strong>주행 품질이 목적이면</strong> <code>dual</code> (프루닝 24%, 1.32&times;).
+  폐루프에서 무손상보다 유의하게 나은 유일한 구성이고, 실제로 FLOP도 24% 줄어든다.</li>
+  <li><strong>저장이 목적이면</strong> <code>w8_all</code> (1.81&times;). 개루프 대가
+  +0.0011로 측정 한계 아래다. 폐루프 미측정이 유일한 미확인 요소다.</li>
+  <li><strong>둘 다면</strong> <code>dual+w8</code> (2.35&times;) &mdash; 판정은 실행 중이다.
+  <code>dual+w4</code>(4.04&times;)는 저장이 절대적으로 우선일 때만.</li>
+  <li><strong>어떤 경우에도</strong> 단일 기준(<code>coc</code>, <code>j</code>) 프루닝은
+  쓰지 않는다. 같은 압축률에서 주행이 baseline보다 유의하게 나쁘다.</li>
+</ol>
+
+<footer>
+숫자 원본: <code>outputs/overview_test/</code> · 생성:
+<code>experiments/evaluation/make_overview.py</code> ·
+개별 트랙 보고서: <code>2026-08-12_criterion-decomposition.html</code>,
+<code>2026-08-12_results-tables.html</code>,
+<code>2026-08-15_prune-quant-composition.html</code>
+</footer>
+
+</div>
+</body>
+</html>
