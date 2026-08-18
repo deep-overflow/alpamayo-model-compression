@@ -109,7 +109,51 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     arms_plot(out)
     inversion_plot(out)
-    print(f"2 plots -> {out}")
+    tradeoff_plot(out)
+    print(f"3 plots -> {out}")
+
+# G4. All five arms share the -24.0% budget; driving numbers are the open-loop runs
+# (in-dist 500 clips, OOD 1,533). nll_gtcoc is the OOD reference-CoC NLL.
+G4 = [("dual", 68.8, 0.7766, 0.9313, 3.0375),
+      ("j_traj", 67.8, 0.8148, 0.9731, 3.0075),
+      ("trajvqa", 71.2, 0.8504, 1.0039, 3.0268),
+      ("traj", 37.0, 0.8411, 1.0632, 3.1483),
+      ("coc", 30.2, 1.4442, 1.3826, 3.1967)]
+
+
+def tradeoff_plot(out):
+    fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.7))
+
+    # left: what trajvqa bought and what it paid, all relative to dual
+    ax = axes[0]
+    labels = ["LingoQA\n(accuracy)", "in-dist\nminADE", "OOD\nminADE", "minADE_tf",
+              "nll_gtcoc\n(OOD)"]
+    # sign convention: positive = better than dual
+    vals = [+3.5, -9.5, -7.8, -5.5, +0.4]
+    cols = [C2 if v > 0 else C3 for v in vals]
+    ax.bar(range(len(vals)), vals, color=cols, width=0.6)
+    ax.axhline(0, color=MUTED, lw=1)
+    for i, v in enumerate(vals):
+        ax.text(i, v + (0.6 if v > 0 else -1.4), f"{v:+.1f}%", ha="center", fontsize=8.5)
+    ax.set_xticks(range(len(vals)))
+    ax.set_xticklabels(labels, fontsize=7.8)
+    ax.set_ylabel("relative to dual (%, + is better)")
+    ax.set_ylim(-13, 7)
+    ax.set_title("trajvqa: one gain, three losses", fontsize=10)
+
+    # right: the language metric cannot separate arms that differ by 38.6pp on LingoQA
+    ax = axes[1]
+    for (n, lq, _, _, nll), c in zip(G4, [C1, C4, C2, MUTED, "#8e5ea8"]):
+        ax.scatter(nll, lq, s=70, color=c, zorder=3)
+        ax.annotate(n, (nll, lq), fontsize=8, xytext=(5, 3),
+                    textcoords="offset points", color=MUTED)
+    ax.set_xlabel("nll_gtcoc (OOD, 1533 clips)")
+    ax.set_ylabel("LingoQA accuracy (%)")
+    ax.set_title("nll_gtcoc spans 7.1% while LingoQA spans 38.6pp", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out / "context_tradeoff.png", dpi=160)
+    plt.close(fig)
+    print("1 tradeoff plot ->", out)
 
 
 if __name__ == "__main__":

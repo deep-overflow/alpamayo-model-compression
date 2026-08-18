@@ -218,7 +218,7 @@ vqa      (VQA 목적, LingoQA 이미지)   66.4%    ← 목적함수까지:   +1
 <tr><td><strong>G3</strong></td><td><code>vqa</code> 단독이 30%대면 재해석</td>
 <td>66.4% — <strong>30%대 아님</strong></td><td class="bad-t">발동</td></tr>
 <tr><td><strong>G4</strong></td><td><code>trajvqa</code> in-dist minADE ≤ 0.854</td>
-<td><strong>0.8504</strong> (mean, 500클립)</td><td class="warn">통과 — 여유 0.4%</td></tr>
+<td>in-dist <strong>0.8504</strong> (통과선 0.8540)</td><td class="warn">형식상 통과, 실질 손실</td></tr>
 </tbody>
 </table>
 
@@ -263,8 +263,10 @@ vqa      (VQA 목적, LingoQA 이미지)   66.4%    ← 목적함수까지:   +1
 train/eval 분리는 지켰으나, 평가 도메인의 데이터로 유닛을 골랐으므로 in-domain 보정의 이점을 포함한다.
 <code>dual</code>(AV 보정)과 나란히 놓고 우열을 말할 때 이 비대칭을 반드시 명시해야 한다.
 논문에서는 별도 블록으로 분리해야 한다.</p>
-<p>그리고 이 이점이 <strong>일반적 언어 능력 보존인지 LingoQA 과적합인지</strong>는 아직 모른다.
-그것이 G4가 답할 질문이며, 현재 측정 중이다.</p>
+<p>그리고 이 이점이 <strong>일반적 언어 능력 보존인지 LingoQA 과적합인지</strong>는
+G4를 마친 지금도 <strong>판별되지 않았다</strong>(§6.2). 유일하게 쓸 수 있었던 도메인 밖 언어 지표
+<code>nll_gtcoc</code>가 arm을 가를 민감도를 갖지 못하기 때문이다. 확실한 것은
+<strong>주행을 5–10% 잃었다</strong>는 사실뿐이다.</p>
 </div>
 
 <h2><span class="num">6</span>미결과 다음 단계</h2>
@@ -287,18 +289,43 @@ train/eval 분리는 지켰으나, 평가 도메인의 데이터로 유닛을 �
 이는 궤적 단독으로 자른 <code>traj</code>(0.8411)보다도 나쁘다.
 임계값을 +5%로 잡았다면 탈락이었다.</p>
 <p>정리하면 <code>trajvqa</code>는 <strong>LingoQA +2.4pp를 얻는 대가로 in-dist minADE 9.5%를 지불했다.</strong>
-CI가 없어 단정할 수는 없으나, in-domain 보정이 언어 능력을 일반적으로 보호했다기보다
-평가 도메인 쪽으로 모델을 기울였다는 해석에 무게가 실린다.</p>
+§6.2의 OOD 결과가 이 그림을 확정한다 — 주행 손실은 세 지표 모두에서 재현된다.</p>
 </div>
 
-<h3>측정 중</h3>
-<ul>
-<li><strong>G4 OOD.</strong> 1,533클립의 <code>nll_gtcoc</code>와 minADE.
-<code>dual</code> 기준값은 3.0375 / 0.9313. 이것이 남은 핵심 질문에 답한다 —
-LingoQA로 보정해 얻은 것이 <strong>일반적 언어 능력 보존</strong>인지
-<strong>LingoQA 과적합</strong>인지. <code>nll_gtcoc</code>가 <code>dual</code> 수준을 유지하면 전자,
-악화되면 후자다.</li>
-</ul>
+<h3>6.2 G4 OOD — 언어 지표는 유지, 주행은 전면 악화</h3>
+
+<figure>
+  <img src="PLOT::ctx::context_tradeoff.png" alt="trajvqa의 트레이드오프">
+  <figcaption>왼쪽: <code>dual</code> 대비 상대 변화. 오른쪽: <code>nll_gtcoc</code>는 38.6pp를 가르는 arm들을 7.1% 안에 뭉쳐 놓는다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>arm</th><th class="r">LingoQA</th><th class="r">nll_gtcoc</th><th class="r">OOD minADE</th><th class="r">minADE_tf</th><th class="r">in-dist minADE</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td class="r">68.8%</td><td class="r">3.0375</td><td class="r">0.9313</td><td class="r">0.8240</td><td class="r">0.7766</td></tr>
+<tr><td><code>j_traj</code></td><td class="r">67.8%</td><td class="r">3.0075</td><td class="r">0.9731</td><td class="r">0.8745</td><td class="r">0.8148</td></tr>
+<tr><td><code>trajvqa</code></td><td class="r good-t">71.2%</td><td class="r">3.0268</td><td class="r bad-t">1.0039</td><td class="r bad-t">0.8694</td><td class="r bad-t">0.8504</td></tr>
+<tr><td><code>traj</code></td><td class="r">37.0%</td><td class="r">3.1483</td><td class="r">1.0632</td><td class="r">0.9321</td><td class="r">0.8411</td></tr>
+<tr><td><code>coc</code></td><td class="r">30.2%</td><td class="r">3.1967</td><td class="r">1.3826</td><td class="r">1.0838</td><td class="r">1.4442</td></tr>
+<tr><td colspan="2"><strong><code>trajvqa</code> vs <code>dual</code></strong></td>
+<td class="r">−0.4%</td><td class="r bad-t">+7.8%</td><td class="r bad-t">+5.5%</td><td class="r bad-t">+9.5%</td></tr>
+</tbody>
+</table>
+
+<div class="callout bad">
+<p><strong>주행은 세 지표 모두에서 일관되게 나빠졌다</strong> — in-dist +9.5%, OOD 롤아웃 +7.8%,
+teacher-forced +5.5%. 반면 얻은 것은 LingoQA +2.4pp이고 그마저 CI가 0을 포함한다.
+<strong><code>trajvqa</code>는 순이득이 아니다.</strong></p>
+</div>
+
+<div class="callout warn">
+<p><strong><code>nll_gtcoc</code>가 유지된 것(−0.4%)을 "언어 능력이 일반적으로 보존됐다"는 근거로
+써서는 안 된다.</strong> §6.3에서 이미 확인했듯 이 지표는 arm 간 범위가 7.1%에 불과하고
+LingoQA와 Spearman −0.300(p=0.62)으로 무관하다. LingoQA를 38.6pp 가르는 차이를 감지하지 못하는
+지표가 변하지 않았다는 사실은 <strong>거의 아무것도 말해주지 않는다</strong>.</p>
+<p>따라서 <q>LingoQA 밖에서도 언어 능력이 보존됐는가</q>는 <strong>여전히 미해결</strong>이다.
+그 질문에 답하려면 LingoQA와 무관하면서 <em>민감한</em> 언어 지표가 필요한데, 현재 트랙에 그런 지표가 없다.</p>
+</div>
 
 <h3>이 연구가 답하지 못한 것</h3>
 <ul>
