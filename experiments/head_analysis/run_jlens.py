@@ -182,7 +182,13 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--reserve-gb", type=float, default=42.0)
-    ap.add_argument("--gpu", type=int, default=None)
+    ap.add_argument("--gpu", type=str, default=None,
+                    help="comma-separated card ids to restrict the scan, e.g. '0' or '0,1'")
+    ap.add_argument("--mask", type=str, default=None,
+                    help="npz with q_mask/mlp_mask 0-1 keep masks: build the lens and "
+                         "score units with these VLM units removed. Installed before the "
+                         "taps and WriteStats hooks, so a masked unit's activation "
+                         "statistics -- and therefore its J score -- are exactly zero")
     ap.add_argument("--log-every", type=int, default=64)
     ap.add_argument("--save-vectors", action="store_true",
                     help="dump the (2,L,S,d) J-lens tensor (~600 MB at S=1024)")
@@ -208,7 +214,8 @@ def main():
         # strided so any shard count covers the same clip set
         clips = clips[args.shard::args.n_shards]
 
-    device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
+    device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None
+                         else [int(x) for x in args.gpu.split(",")])
     print(f"using {device}", flush=True)
 
     model = Alpamayo1_5.from_pretrained(
@@ -226,6 +233,13 @@ def main():
 
     layers = model.vlm.model.language_model.layers
     tc = model.vlm.config.text_config
+    if args.mask:
+        z = np.load(args.mask)
+        vmasks = ml.PruneMasks(layers, tc.num_attention_heads, tc.head_dim,
+                               tc.intermediate_size, "cuda")
+        vmasks.set(q=z["q_mask"], mlp=z["mlp_mask"])
+        print(f"mask {args.mask}: q keep {float(z['q_mask'].mean()):.4f}, "
+              f"mlp keep {float(z['mlp_mask'].mean()):.4f}", flush=True)
 
     # ---- dictionary from the stored CoC corpus ------------------------------
     # ~900 train clips of this model's own reasoning output, so the frequent half
@@ -347,7 +361,7 @@ def main():
         "purpose": "J-lens over the VLM tower + J-space unit scores (Stage A/B)",
         "reference": "transformer-circuits.pub/2026/workspace (2026-07-06)",
         "num_clips": len(clips), "clip_ids": clips, "seed": args.seed,
-        "coc_refs": args.coc_refs, "teacher_forced": True,
+        "coc_refs": args.coc_refs, "teacher_forced": True, "mask": args.mask,
         "dict_tokens": s_dict, "n_freq": n_freq, "n_random": s_dict - n_freq,
         "source_span": args.span,
         "taps": {"mid": "post_attention_layernorm input (Q heads)",

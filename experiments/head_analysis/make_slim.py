@@ -58,8 +58,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
+    it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
-    if uni:
+    if it:
+        # Staged re-calibration masks from run_iter_prune.py: same budget, allocation
+        # and axes as the *_u40_v2 family (verified by its R0 gate), only the score
+        # measurement schedule differs. The masks are precomputed, so this branch just
+        # loads them; plans/2026-08-16_iterative-recalibration.md.
+        z = np.load(REPO / "outputs" / f"iter_{it.group(1)}_u40" / "final_masks.npz")
+        vq, vm = z["vq"], z["vm"]
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif uni:
         # The one-factor family. Everything is held at the grid's dual_uniform cell --
         # uniform allocation, expert untouched, no KV drop -- so the only things that
         # vary are the within-layer score and, across the ratio sweep, the budget.

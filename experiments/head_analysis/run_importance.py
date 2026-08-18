@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
 
 import analysis_lib as lib  # noqa: E402
+import mask_lib as ml  # noqa: E402
 import prune_lib as pl  # noqa: E402
 import sample_cache as sc  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
@@ -134,6 +135,11 @@ def main():
                     help="comma-separated card ids to restrict the scan, e.g. '0' or '0,1'")
     ap.add_argument("--checkpoint", action="store_true",
                     help="see note below; incompatible with use_cache, off by default")
+    ap.add_argument("--mask", type=str, default=None,
+                    help="npz with q_mask/mlp_mask (L,H)/(L,I) 0-1 keep masks: score the "
+                         "VLM with these units removed. The mask hooks are installed "
+                         "before the per-clip gates, so a masked unit's gate gradient is "
+                         "exactly zero and it cannot re-enter a ranking")
     args = ap.parse_args()
 
     out_dir = REPO / "outputs" / args.exp_id
@@ -169,6 +175,14 @@ def main():
 
     tc = model.vlm.config.text_config
     ec = model.expert.config
+    if args.mask:
+        z = np.load(args.mask)
+        vmasks = ml.PruneMasks(model.vlm.model.language_model.layers,
+                               tc.num_attention_heads, tc.head_dim,
+                               tc.intermediate_size, "cuda")
+        vmasks.set(q=z["q_mask"], mlp=z["mlp_mask"])
+        print(f"mask {args.mask}: q keep {float(z['q_mask'].mean()):.4f}, "
+              f"mlp keep {float(z['mlp_mask'].mean()):.4f}", flush=True)
     shapes = {
         "vlm_q": (tc.num_hidden_layers, tc.num_attention_heads),
         "vlm_mlp": (tc.num_hidden_layers, tc.intermediate_size),
@@ -190,6 +204,7 @@ def main():
         "calib_manifest": args.calib_manifest,
         "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
+        "mask": args.mask,
         "fm_steps": args.fm_steps, "gradient_checkpointing": args.checkpoint,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
