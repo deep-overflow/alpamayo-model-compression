@@ -106,9 +106,11 @@ def run_scoring(kind, crit, stage, mask_path, args):
     else:
         done = (out / "jlens.npz").exists()
         script, result = "run_jlens.py", out / "jlens.npz"
-        # jlens_v2's exact dictionary request (the corpus caps the freq half at 202)
+        # jlens_v2's exact dictionary request (the corpus caps the freq half at 202).
+        # teacher_refs_v2 is the calib_100 reference store; the default teacher_refs
+        # holds the old split.json clips and covers none of calib_100.
         extra = ["--num-clips", "100", "--n-freq", "512", "--n-random", "512",
-                 "--reserve-gb", "44"]
+                 "--coc-refs", args.coc_refs, "--reserve-gb", "44"]
     if done:
         print(f"[{crit}] stage {stage} {kind}: already measured, reusing {exp_id}",
               flush=True)
@@ -148,6 +150,9 @@ def main():
     ap.add_argument("--retries", type=int, default=2000)
     ap.add_argument("--importance", default="importance_v2")
     ap.add_argument("--jlens", default="jlens_v2")
+    ap.add_argument("--coc-refs", default="teacher_refs_v2",
+                    help="make_teacher_refs store for the jlens passes; must cover "
+                         "calib_100 (teacher_refs_v2 does, the old teacher_refs does not)")
     ap.add_argument("--verify", action="store_true",
                     help="R0 only: CPU check that --stages 1 reproduces the shipped "
                          "kept sets bit-for-bit, then exit")
