@@ -1,38 +1,77 @@
-% Paper-ready result tables for the compression study. The protocol/baseline anchor
-% lives in 2026-08-11_baseline_table.tex (\label{tab:baseline}); every configuration
-% here reads as a paired delta against that table's last column.
-% Significance: * marks a paired clip/scene-level bootstrap 95% CI excluding zero.
+% Paper-ready result tables for the compression study, under the frozen open-loop
+% protocol (user-fixed 2026-08-19): rollout condition only (never teacher-forced),
+% sets = in-dist val 500 / official test 500 / OOD-val 262 (official-val members of
+% the long-tail reasoning set), metric = minADE@6 and minFDE@6 with the MEAN as the
+% headline. Runs sample K=8 and store per-sample arrays; the first six samples are
+% exactly what a 6-sample run would draw (seeds are base+k).
+% Every open-loop number is reproduced by experiments/evaluation/paper_numbers.py.
+% Significance: * marks a paired clip/scene-level bootstrap 95% CI excluding zero
+% (open-loop deltas are per-clip medians; minADE is heavy-tailed).
 % Model: nvidia/Alpamayo-1.5-10B @ 7aba8293; all open-loop arms on RTX 5880 Ada.
-% Sources: outputs/arms_summary_6 (criteria), outputs/lingo_* (LingoQA),
-%          outputs/quant_final (quantization), outputs/composition_test (composition),
-%          outputs/imp_calib_v1 + outputs/iter_gates_dual (method-improvement gates).
+% Closed-loop: alpasim public_2601, 150 scenes x 2 rollouts (unchanged by the
+% protocol freeze; scene score is the open-source gated progress score in [0,1]).
+
+% ------------------------------------------------------- Table 1: protocol + baseline
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{%
+  Evaluation protocol and unpruned baseline. Open-loop rolls out one
+  chain-of-causation per clip (temperature $0.6$, top-$p$ $0.98$) and scores the
+  best of six sampled trajectories against the ground-truth path; per-clip seeds are
+  $\mathrm{sha256}(\texttt{seed}\!:\!\texttt{clip\_id})$, so every configuration sees
+  identical seeds and all comparisons are paired. OOD-val is the official-val subset
+  (262 clips) of the curated long-tail set. Closed-loop simulates 20\,s rollouts with
+  the model queried at every control step.
+}
+\label{tab:baseline6}
+\begin{tabular}{llrlr}
+\toprule
+Mode & Evaluation set & Size & Metric & Alpamayo-1.5-10B \\
+\midrule
+\multirow{3}{*}{Open-loop}
+  & In-dist.\ val   & 500 clips & minADE@6 / minFDE@6 (m) $\downarrow$ & 0.824 / 2.205 \\
+  & In-dist.\ test  & 500 clips & minADE@6 / minFDE@6 (m) $\downarrow$ & 0.842 / 2.267 \\
+  & OOD-val         & 262 clips & minADE@6 / minFDE@6 (m) $\downarrow$ & 1.000 / 2.496 \\
+\midrule
+\multirow{4}{*}{Closed-loop}
+  & \multirow{4}{*}{alpasim \texttt{public\_2601}} & \multirow{4}{*}{\shortstack[l]{150 scenes\\$\times$ 2 rollouts}}
+    & Scene score $\uparrow$        & 0.750 [0.697, 0.801] \\
+  & & & Pass rate $\uparrow$          & 0.890 \\
+  & & & At-fault collision $\downarrow$ & 0.040 \\
+  & & & Progress $\uparrow$           & 0.747 \\
+\midrule
+Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % ---------------------------------------------------------------- Table 2: criteria
 \begin{table}[t]
 \centering
 \small
-\setlength{\tabcolsep}{4.5pt}
+\setlength{\tabcolsep}{3.5pt}
 \caption{%
   Criterion decomposition at a matched budget ($-24.0\%$ parameters; per layer 19/32
-  Q heads and 7390/12288 MLP channels kept, expert and KV untouched). Combined criteria
-  beat both of their components on every set (synergy, not a trade-off); both
-  reasoning-only single criteria drive significantly worse than the \emph{unpruned}
-  model in closed loop; and the arm that best preserves reasoning (J) collides the
-  most --- CoC health is not a safety proxy. Open-loop is minADE@8 mean (m, own-rollout
-  CoC); closed-loop is the alpasim scene score over 150 scenes $\times$ 2 rollouts.
+  Q heads and 7390/12288 MLP channels kept, expert and KV untouched). Cells are
+  minADE@6 / minFDE@6 means (m). Combined criteria beat both of their components on
+  every set; both reasoning-only single criteria drive significantly worse than the
+  \emph{unpruned} model in closed loop; and the arm that best preserves reasoning
+  ($J$) collides the most --- CoC health is not a safety proxy.
 }
 \label{tab:criteria}
-\begin{tabular}{llrrrlr}
+\begin{tabular}{llccclr}
 \toprule
-Criterion & Label-free & val 500 & test 500 & OOD 1{,}533 & CL score ($\Delta$) & CL degen. \\
+Criterion & LF & val 500 & test 500 & OOD-val 262 & CL score ($\Delta$) & CL degen. \\
 \midrule
-none (baseline)            & ---        & 0.691 & 0.780 & 0.846 & 0.750             & 0.6\% \\
+none (baseline)        & ---        & 0.824 / 2.205 & 0.842 / 2.267 & 1.000 / 2.496 & 0.750 & 0.6\% \\
 \midrule
-$I_\mathrm{traj}$ only     & \checkmark & 0.841 & 0.933 & 1.063 & 0.783 ($+$0.033)  & 5.0\% \\
-$I_\mathrm{CoC}$ only      &            & 1.444 & 1.473 & 1.383 & 0.660 ($-$0.089$^*$) & 2.0\% \\
-$J$ only                   & \checkmark & 1.783 & 2.000 & 2.423 & 0.536 ($-$0.214$^*$) & 1.4\% \\
-dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ &  & \textbf{0.777} & \textbf{0.875} & \textbf{0.931} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
-jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.815 & 0.946 & 0.973 & 0.791 ($+$0.042) & 0.8\% \\
+$I_\mathrm{traj}$ only & \checkmark & 0.950 / 2.492 & 1.008 / 2.720 & 1.178 / 2.960 & 0.783 ($+$0.033) & 5.0\% \\
+$I_\mathrm{CoC}$ only  &            & 1.558 / 4.324 & 1.584 / 4.500 & 1.546 / 4.010 & 0.660 ($-$0.089$^*$) & 2.0\% \\
+$J$ only               & \checkmark & 1.942 / 5.464 & 2.158 / 5.992 & 2.557 / 6.901 & 0.536 ($-$0.214$^*$) & 1.4\% \\
+dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ & & \textbf{0.890 / 2.330} & \textbf{0.950 / 2.546} & \textbf{1.119 / 2.851} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
+jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.937 / 2.445 & 1.028 / 2.804 & 1.175 / 3.032 & 0.791 ($+$0.042) & 0.8\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -43,13 +82,14 @@ jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.815 & 0.946 & 0.973 & 0.791 (
 \small
 \setlength{\tabcolsep}{5pt}
 \caption{%
-  Language capability under pruning (LingoQA, 500 questions, Lingo-Judge accuracy) next
-  to the reference-CoC NLL. The judge separates same-budget arms by up to 43\,pp while
-  the NLL moves within 7.1\% and correlates with the judge at Spearman $-0.30$
-  ($p{=}0.62$) --- the damage is invisible to the likelihood metric. Swapping only the
-  calibration \emph{images} to the evaluation domain recovers $+35.2$\,pp of the
-  single-criterion collapse; swapping the observation context (objective) adds
-  $+1.0$\,pp. Zero-shot rows use each model's native VQA interface with 4 frames.
+  Language capability under pruning (LingoQA, 500 questions, Lingo-Judge accuracy)
+  next to the reference-CoC NLL (archival: measured on the full long-tail set under
+  the pre-freeze teacher-forced protocol). The judge separates same-budget arms by up
+  to 43\,pp while the NLL moves within 7.1\% and correlates with the judge at
+  Spearman $-0.30$ ($p{=}0.62$) --- the damage is invisible to the likelihood metric.
+  Swapping only the calibration \emph{images} to the evaluation domain recovers
+  $+35.2$\,pp of the single-criterion collapse; swapping the observation context
+  (objective) adds $+1.0$\,pp.
 }
 \label{tab:lingoqa}
 \begin{tabular}{llrr}
@@ -77,26 +117,26 @@ trajvqa $=\max(I_\mathrm{traj}, \mathrm{VQA})$ & LingoQA & 71.2 & 3.027 \\
 \begin{table}[t]
 \centering
 \small
-\setlength{\tabcolsep}{5pt}
+\setlength{\tabcolsep}{3.5pt}
 \caption{%
   Post-training quantization of the VLM pool (fake-quant, per-row bits, group-64
   scales) with the bit allocation driven by the CoC reasoning loss alone --- no
-  trajectory label enters the criterion. At the 4-bit budget the guided allocation
-  significantly beats uniform on driving in all three sets, yet loses to uniform on
-  the very metric that produced it (reference-CoC NLL); teacher-forcing the same text
-  leaves the trajectory gain intact ($-0.0152$), so the gain flows through the KV-cache
-  path the action expert reads, not through the text.
+  trajectory label enters the criterion. Cells are minADE@6 / minFDE@6 means;
+  $\Delta$ is the paired per-clip minADE@6 median on test. At the 4-bit budget the
+  guided allocation restores baseline-level driving on all three sets while uniform
+  degrades significantly --- yet it loses to uniform on the very metric that produced
+  it (reference-CoC NLL, archival column: paired delta on the full long-tail set).
 }
 \label{tab:quant}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrccclr}
 \toprule
-Arm & Eff.\ bits & test minADE@8 ($\Delta$ med) & OOD ref.-CoC NLL ($\Delta$ vs uniform) \\
+Arm & Bits & val 500 & test 500 & OOD-val 262 & $\Delta$ test & NLL vs unif.\ (arch.) \\
 \midrule
-baseline          & 16.00 & 0.780 & 3.005 \\
-uniform W8        & 8.38  & 0.781 ($-$0.000)      & --- \\
-CoC-guided W8     & 8.38  & 0.777 ($-$0.002)      & $+0.0100^{*}$ \\
-uniform W4        & 4.31  & 0.824 ($+$0.022$^*$)  & ($-0.0202^{*}$ vs baseline) \\
-CoC-guided W4     & 4.31  & \textbf{0.791 ($+$0.003)} & $+0.0595^{*}$ \\
+baseline      & 16.00 & 0.824 / 2.205 & 0.842 / 2.267 & 1.000 / 2.496 & --- & --- \\
+uniform W8    & 8.38  & 0.818 / 2.191 & 0.843 / 2.289 & 1.001 / 2.505 & $-$0.000 & --- \\
+CoC-guided W8 & 8.38  & 0.826 / 2.216 & 0.840 / 2.266 & 1.000 / 2.490 & $-$0.000 & $+0.0100^{*}$ \\
+uniform W4    & 4.31  & 0.850 / 2.321 & 0.889 / 2.406 & 1.029 / 2.633 & $+$0.027$^*$ & ($-0.0202^{*}$ vs base) \\
+CoC-guided W4 & 4.31  & \textbf{0.820 / 2.204} & \textbf{0.852 / 2.302} & \textbf{0.988 / 2.460} & $+$0.004 & $+0.0595^{*}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -107,20 +147,20 @@ CoC-guided W4     & 4.31  & \textbf{0.791 ($+$0.003)} & $+0.0595^{*}$ \\
 \small
 \setlength{\tabcolsep}{4.5pt}
 \caption{%
-  Composing structured pruning with uniform quantization (expert included), test 500.
-  The per-clip interaction $\Delta(\mathrm{both}) - \Delta(\mathrm{prune}) -
-  \Delta(\mathrm{quant})$ is not detected in either cell: the two compressions add.
-  Storage is projected from the bit allocation (fake-quant); only pruning reduces
-  compute. Quantizing the expert to 8 bits is free to measurement precision
-  ($+0.001$) while removing 9.95\,GB.
+  Composing structured pruning with uniform quantization (expert included), test 500,
+  paired mean $\Delta$minADE@6 vs baseline. The per-clip interaction
+  $\Delta(\mathrm{both}) - \Delta(\mathrm{prune}) - \Delta(\mathrm{quant})$ is not
+  detected in either cell: the two compressions add. Storage is projected from the
+  bit allocation (fake-quant); only pruning reduces compute. Quantizing the expert
+  to 8 bits is free to measurement precision while removing 9.95\,GB.
 }
 \label{tab:composition}
 \begin{tabular}{lrrrrrr}
 \toprule
 Cell & Size (ratio) & prune & quant & both & additive & interaction [95\% CI] \\
 \midrule
-prune $+$ W8$_\mathrm{all}$ & 9.44\,GB (2.35$\times$) & $+0.096^*$ & $+0.001$ & $+0.109^*$ & $+0.097$ & $+0.012$ $[-0.010, +0.040]$ \\
-prune $+$ W4$_\mathrm{all}$ & 5.48\,GB (4.04$\times$) & $+0.096^*$ & $+0.053^*$ & $+0.177^*$ & $+0.149$ & $+0.028$ $[-0.022, +0.085]$ \\
+prune $+$ W8$_\mathrm{all}$ & 9.44\,GB (2.35$\times$) & $+0.108^*$ & $+0.002$ & $+0.118^*$ & $+0.110$ & $+0.009$ $[-0.010, +0.032]$ \\
+prune $+$ W4$_\mathrm{all}$ & 5.48\,GB (4.04$\times$) & $+0.108^*$ & $+0.057^*$ & $+0.200^*$ & $+0.165$ & $+0.034$ $[-0.016, +0.090]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -137,7 +177,8 @@ prune $+$ W4$_\mathrm{all}$ & 5.48\,GB (4.04$\times$) & $+0.096^*$ & $+0.053^*$ 
   target to calibrate against; realized group damage is $5$--$55\times$ smaller than
   the sum of its members' single ablations (sub-additive); and re-scoring the masked
   model between stages doubles the cost of the same budget, consistently across sets
-  and horizons. The pruning knee sits between $24\%$ and $33\%$.
+  (paired minADE@6 medians vs the one-shot arm). The pruning knee sits between
+  $24\%$ and $33\%$.
 }
 \label{tab:negatives}
 \begin{tabular}{llll}
@@ -146,8 +187,8 @@ Attempt & Gate & Measured & Verdict \\
 \midrule
 Use score magnitudes  & Spearman/Pearson $\geq 0.7$ & 0/4 cells; target reliability $\approx 0$ & rejected \\
 First-order additivity & $|\log_2 R| \leq 1$ & group/sum $= 1/5$--$1/55$ & broken \\
-Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD $+0.012^*$ & rejected \\
-Ratio extension (u55, 33\%) & --- & minADE $+417\%$, degen.\ 71\% & collapse \\
+Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD-val $+0.026^*$ & rejected \\
+Ratio extension (u55, 33\%) & --- & minADE@6 $5.1\times$ baseline, degen.\ 71\% & collapse \\
 \bottomrule
 \end{tabular}
 \end{table}

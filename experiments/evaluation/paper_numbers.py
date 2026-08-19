@@ -1,0 +1,136 @@
+"""Every open-loop cell of the paper tables under the frozen protocol.
+
+Protocol (user-fixed 2026-08-19): rollout condition only (never teacher-forced),
+sets = indist val 500 / official test 500 / OOD-val 262, metric = minADE@6 and
+minFDE@6 with the MEAN as the headline (median beside it). All rows come from k=8
+runs that stored per-sample arrays; the first six samples are exactly what a
+6-sample run would have drawn (seeds are base+k). Arms evaluated on the full OOD
+set are reduced to OOD-val by the stored `split` field, which pairs clip-for-clip
+with the ood_val manifest runs.
+
+Prints one block per paper table; nothing is written, the .tex is edited by hand
+from this output so every number in the paper has a single recomputable source.
+
+Usage:
+  .venv/bin/python experiments/evaluation/paper_numbers.py
+"""
+
+import glob
+import json
+from pathlib import Path
+
+import numpy as np
+
+REPO = Path(__file__).resolve().parents[2]
+K = 6
+BOOT = 5000
+
+# arm -> set -> (rows dir, filter_ood_val)
+SETS = ("indist", "test", "oodval")
+ARMS = {
+    "baseline": {"indist": ("baseline_ada_ps_indist", False),
+                 "test": ("baseline_ada_ps_test", False),
+                 "oodval": ("baseline_ada_ps_oodval", False)},
+    "dual": {"indist": ("dual_u40_v2_ps_indist", False),
+             "test": ("dual_u40_v2_ps_test", False),
+             "oodval": ("dual_u40_v2_ps_ood", True)},
+    "jtraj": {"indist": ("jtraj_u40_v2_ps_indist", False),
+              "test": ("jtraj_u40_v2_ps_test", False),
+              "oodval": ("jtraj_u40_v2_ps_oodval", False)},
+    "traj": {"indist": ("traj_u40_v2_indist", False),
+             "test": ("traj_u40_v2_test", False),
+             "oodval": ("traj_u40_v2_ood", True)},
+    "coc": {"indist": ("coc_u40_v2_indist", False),
+            "test": ("coc_u40_v2_test", False),
+            "oodval": ("coc_u40_v2_ood", True)},
+    "j": {"indist": ("j_u40_v2_indist", False),
+          "test": ("j_u40_v2_test", False),
+          "oodval": ("j_u40_v2_ood", True)},
+    "it3": {"indist": ("iter_dual_indist", False),
+            "test": ("iter_dual_test", False),
+            "oodval": ("iter_dual_ood", True)},
+    "uniform_w8": {"indist": ("uniform_w8_indist", False),
+                   "test": ("uniform_w8_test", False),
+                   "oodval": ("uniform_w8_ood", True)},
+    "qvla_coc_b8": {"indist": ("qvla_coc_b8_indist", False),
+                    "test": ("qvla_coc_b8_test", False),
+                    "oodval": ("qvla_coc_b8_ood", True)},
+    "uniform_w4": {"indist": ("uniform_w4_indist", False),
+                   "test": ("uniform_w4_test", False),
+                   "oodval": ("uniform_w4_ood", True)},
+    "qvla_coc_b4": {"indist": ("qvla_coc_b4_indist", False),
+                    "test": ("qvla_coc_b4_test", False),
+                    "oodval": ("qvla_coc_b4_ood", True)},
+    "dual_u55": {"test": ("dual_u55_test", False)},
+    "jtraj_u55": {"test": ("jtraj_u55_test", False)},
+    "w8_all": {"test": ("w8_all_test", False)},
+    "w4_all": {"test": ("w4_all_test", False)},
+    "prune_w8": {"test": ("dual_u40_w8_test", False)},
+    "prune_w4": {"test": ("dual_u40_w4_test", False)},
+}
+
+
+def load(dirname, ood_val_only):
+    rows = []
+    for f in sorted(glob.glob(str(REPO / "outputs" / dirname / "*_s*of*.json"))):
+        rows.extend(json.loads(Path(f).read_text()))
+    if ood_val_only:
+        rows = [r for r in rows if r.get("split") == "val"]
+    out = {}
+    for r in rows:
+        if "ade_rollout_k" not in r:
+            raise SystemExit(f"{dirname}: {r['clip_id']} has no per-sample arrays")
+        out[r["clip_id"]] = r
+    return out
+
+
+def at6(r, key):
+    return float(np.min(np.asarray(r[key], dtype=float)[:K]))
+
+
+def stats(rows):
+    a = np.array([at6(r, "ade_rollout_k") for r in rows.values()])
+    f = np.array([at6(r, "fde_rollout_k") for r in rows.values()])
+    d = float(np.mean([r["coc_degenerate"] for r in rows.values()]))
+    return a, f, d
+
+
+def paired(base, arm):
+    ids = sorted(set(base) & set(arm))
+    da = np.array([at6(arm[i], "ade_rollout_k") - at6(base[i], "ade_rollout_k")
+                   for i in ids])
+    rng = np.random.default_rng(0)
+    meds = [np.median(da[rng.integers(0, len(da), len(da))]) for _ in range(BOOT)]
+    lo, hi = np.percentile(meds, [2.5, 97.5])
+    star = "*" if lo > 0 or hi < 0 else " "
+    return len(ids), float(np.median(da)), float(lo), float(hi), star
+
+
+def main():
+    cache = {}
+    for arm, sets in ARMS.items():
+        cache[arm] = {}
+        for s, (d, fv) in sets.items():
+            try:
+                cache[arm][s] = load(d, fv)
+            except SystemExit as e:
+                print(f"!! {e}")
+    print(f"== minADE@{K} / minFDE@{K} mean (median) | degen | paired dADE med [CI] "
+          f"vs baseline ==")
+    for arm in ARMS:
+        for s in SETS:
+            if s not in cache.get(arm, {}) or not cache[arm][s]:
+                continue
+            a, f, dg = stats(cache[arm][s])
+            line = (f"{arm:12s} {s:6s} n={len(a):4d}  "
+                    f"ADE {a.mean():.4f} ({np.median(a):.4f})  "
+                    f"FDE {f.mean():.4f} ({np.median(f):.4f})  degen {dg:.3f}")
+            if arm != "baseline" and s in cache["baseline"]:
+                _n, m, lo, hi, st = paired(cache["baseline"][s], cache[arm][s])
+                line += f"  d_med {m:+.4f} [{lo:+.4f},{hi:+.4f}]{st}"
+            print(line)
+        print()
+
+
+if __name__ == "__main__":
+    main()
