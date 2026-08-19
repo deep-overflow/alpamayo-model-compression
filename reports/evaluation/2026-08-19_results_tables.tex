@@ -1,0 +1,153 @@
+% Paper-ready result tables for the compression study. The protocol/baseline anchor
+% lives in 2026-08-11_baseline_table.tex (\label{tab:baseline}); every configuration
+% here reads as a paired delta against that table's last column.
+% Significance: * marks a paired clip/scene-level bootstrap 95% CI excluding zero.
+% Model: nvidia/Alpamayo-1.5-10B @ 7aba8293; all open-loop arms on RTX 5880 Ada.
+% Sources: outputs/arms_summary_6 (criteria), outputs/lingo_* (LingoQA),
+%          outputs/quant_final (quantization), outputs/composition_test (composition),
+%          outputs/imp_calib_v1 + outputs/iter_gates_dual (method-improvement gates).
+
+% ---------------------------------------------------------------- Table 2: criteria
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\caption{%
+  Criterion decomposition at a matched budget ($-24.0\%$ parameters; per layer 19/32
+  Q heads and 7390/12288 MLP channels kept, expert and KV untouched). Combined criteria
+  beat both of their components on every set (synergy, not a trade-off); both
+  reasoning-only single criteria drive significantly worse than the \emph{unpruned}
+  model in closed loop; and the arm that best preserves reasoning (J) collides the
+  most --- CoC health is not a safety proxy. Open-loop is minADE@8 mean (m, own-rollout
+  CoC); closed-loop is the alpasim scene score over 150 scenes $\times$ 2 rollouts.
+}
+\label{tab:criteria}
+\begin{tabular}{llrrrlr}
+\toprule
+Criterion & Label-free & val 500 & test 500 & OOD 1{,}533 & CL score ($\Delta$) & CL degen. \\
+\midrule
+none (baseline)            & ---        & 0.691 & 0.780 & 0.846 & 0.750             & 0.6\% \\
+\midrule
+$I_\mathrm{traj}$ only     & \checkmark & 0.841 & 0.933 & 1.063 & 0.783 ($+$0.033)  & 5.0\% \\
+$I_\mathrm{CoC}$ only      &            & 1.444 & 1.473 & 1.383 & 0.660 ($-$0.089$^*$) & 2.0\% \\
+$J$ only                   & \checkmark & 1.783 & 2.000 & 2.423 & 0.536 ($-$0.214$^*$) & 1.4\% \\
+dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ &  & \textbf{0.777} & \textbf{0.875} & \textbf{0.931} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
+jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.815 & 0.946 & 0.973 & 0.791 ($+$0.042) & 0.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------- Table 3: LingoQA
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{%
+  Language capability under pruning (LingoQA, 500 questions, Lingo-Judge accuracy) next
+  to the reference-CoC NLL. The judge separates same-budget arms by up to 43\,pp while
+  the NLL moves within 7.1\% and correlates with the judge at Spearman $-0.30$
+  ($p{=}0.62$) --- the damage is invisible to the likelihood metric. Swapping only the
+  calibration \emph{images} to the evaluation domain recovers $+35.2$\,pp of the
+  single-criterion collapse; swapping the observation context (objective) adds
+  $+1.0$\,pp. Zero-shot rows use each model's native VQA interface with 4 frames.
+}
+\label{tab:lingoqa}
+\begin{tabular}{llrr}
+\toprule
+Arm & Calibration data & LingoQA $\uparrow$ & Ref.-CoC NLL $\downarrow$ \\
+\midrule
+Human (5 / 1 frame)              & ---     & 96.6 / 81.8 & --- \\
+GPT-4V (zero-shot)               & ---     & 59.6        & --- \\
+Alpamayo 1.5 (zero-shot)         & ---     & \textbf{73.2} & 3.005 \\
+\midrule
+dual                             & AV      & 68.8 & 3.038 \\
+jtraj                            & AV      & 67.8 & 3.008 \\
+$I_\mathrm{traj}$ only           & AV      & 37.0 & 3.148 \\
+$J$ only                         & AV      & 32.2 & \textbf{2.986} \\
+$I_\mathrm{CoC}$ only            & AV      & 30.2 & 3.197 \\
+\midrule
+coclingo ($I_\mathrm{CoC}$, images swapped) & LingoQA & 65.4 ($+35.2$\,pp) & --- \\
+vqa (objective also swapped)     & LingoQA & 66.4 ($+1.0$\,pp)  & --- \\
+trajvqa $=\max(I_\mathrm{traj}, \mathrm{VQA})$ & LingoQA & 71.2 & 3.027 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------ Table 4: quantization
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{%
+  Post-training quantization of the VLM pool (fake-quant, per-row bits, group-64
+  scales) with the bit allocation driven by the CoC reasoning loss alone --- no
+  trajectory label enters the criterion. At the 4-bit budget the guided allocation
+  significantly beats uniform on driving in all three sets, yet loses to uniform on
+  the very metric that produced it (reference-CoC NLL); teacher-forcing the same text
+  leaves the trajectory gain intact ($-0.0152$), so the gain flows through the KV-cache
+  path the action expert reads, not through the text.
+}
+\label{tab:quant}
+\begin{tabular}{lrrr}
+\toprule
+Arm & Eff.\ bits & test minADE@8 ($\Delta$ med) & OOD ref.-CoC NLL ($\Delta$ vs uniform) \\
+\midrule
+baseline          & 16.00 & 0.780 & 3.005 \\
+uniform W8        & 8.38  & 0.781 ($-$0.000)      & --- \\
+CoC-guided W8     & 8.38  & 0.777 ($-$0.002)      & $+0.0100^{*}$ \\
+uniform W4        & 4.31  & 0.824 ($+$0.022$^*$)  & ($-0.0202^{*}$ vs baseline) \\
+CoC-guided W4     & 4.31  & \textbf{0.791 ($+$0.003)} & $+0.0595^{*}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------ Table 5: composition
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\caption{%
+  Composing structured pruning with uniform quantization (expert included), test 500.
+  The per-clip interaction $\Delta(\mathrm{both}) - \Delta(\mathrm{prune}) -
+  \Delta(\mathrm{quant})$ is not detected in either cell: the two compressions add.
+  Storage is projected from the bit allocation (fake-quant); only pruning reduces
+  compute. Quantizing the expert to 8 bits is free to measurement precision
+  ($+0.001$) while removing 9.95\,GB.
+}
+\label{tab:composition}
+\begin{tabular}{lrrrrrr}
+\toprule
+Cell & Size (ratio) & prune & quant & both & additive & interaction [95\% CI] \\
+\midrule
+prune $+$ W8$_\mathrm{all}$ & 9.44\,GB (2.35$\times$) & $+0.096^*$ & $+0.001$ & $+0.109^*$ & $+0.097$ & $+0.012$ $[-0.010, +0.040]$ \\
+prune $+$ W4$_\mathrm{all}$ & 5.48\,GB (4.04$\times$) & $+0.096^*$ & $+0.053^*$ & $+0.177^*$ & $+0.149$ & $+0.028$ $[-0.022, +0.085]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------------- Table 6: method-improvement gates
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{%
+  Pre-registered attempts to improve the one-shot $\max(\mathrm{rank},\mathrm{rank})$
+  recipe, all rejected. Single-unit ablation damage has near-zero split-half
+  reliability at 25 calibration clips, so score \emph{magnitudes} have no stable
+  target to calibrate against; realized group damage is $5$--$55\times$ smaller than
+  the sum of its members' single ablations (sub-additive); and re-scoring the masked
+  model between stages doubles the cost of the same budget, consistently across sets
+  and horizons. The pruning knee sits between $24\%$ and $33\%$.
+}
+\label{tab:negatives}
+\begin{tabular}{llll}
+\toprule
+Attempt & Gate & Measured & Verdict \\
+\midrule
+Use score magnitudes  & Spearman/Pearson $\geq 0.7$ & 0/4 cells; target reliability $\approx 0$ & rejected \\
+First-order additivity & $|\log_2 R| \leq 1$ & group/sum $= 1/5$--$1/55$ & broken \\
+Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD $+0.012^*$ & rejected \\
+Ratio extension (u55, 33\%) & --- & minADE $+417\%$, degen.\ 71\% & collapse \\
+\bottomrule
+\end{tabular}
+\end{table}
