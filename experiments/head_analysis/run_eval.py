@@ -127,11 +127,13 @@ def combined_configs(imp, n_layers, n_heads, intermediate, seed):
 
 @torch.no_grad()
 def eval_config_samples(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
-    """Teacher-forced forward + K denoisings. Returns (ade_k, fde_k, CoC NLL).
+    """Teacher-forced forward + K denoisings. Returns (ade_k, fde_k, CoC NLL, pred_k).
 
     Per-sample arrays rather than their minimum, so minADE@K' for any K' <= len(seeds)
     can be derived later without re-running: seeds are `base + k`, so the first K'
     samples of a K-sample run are exactly what a K'-sample run would have drawn.
+    pred_k (K, T, 2) is returned so a caller can re-reduce at a shorter horizon
+    (ade_fde(pred_k[:, :h], gt_xy[:h])) -- the stored scalars alone cannot.
     `eval_config` is the reducing wrapper every older runner still calls.
     """
     attention_mask = torch.ones_like(seq_tf)
@@ -156,15 +158,16 @@ def eval_config_samples(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds)
                 inputs["ego_history_rot"][:, -1].float(),
             )
             preds.append(pred_xyz[0, :, :2].cpu().numpy())
-    ade, fde = el.ade_fde(np.stack(preds), gt_xy)
+    pred_k = np.stack(preds)  # (K, T, 2)
+    ade, fde = el.ade_fde(pred_k, gt_xy)
     del out, cache
-    return ade, fde, nll
+    return ade, fde, nll, pred_k
 
 
 def eval_config(model, inputs, seq_tf, coc_start, coc_end, gt_xy, seeds):
     """minADE / minFDE over `seeds`, plus the CoC NLL."""
-    ade, fde, nll = eval_config_samples(model, inputs, seq_tf, coc_start, coc_end,
-                                        gt_xy, seeds)
+    ade, fde, nll, _ = eval_config_samples(model, inputs, seq_tf, coc_start, coc_end,
+                                           gt_xy, seeds)
     return float(ade.min()), float(fde.min()), nll
 
 

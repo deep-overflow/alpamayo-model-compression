@@ -70,8 +70,8 @@
   <h1>반복 재캘리브레이션: 스테이지별 재측정은 원샷 컷을 악화시킨다</h1>
   <div class="meta">
     2026-08-19 · <code>plans/2026-08-16_iterative-recalibration.md</code> ·
-    dual 기준, 3스테이지 · test_500 · minADE@6 · <code>nvidia/Alpamayo-1.5-10B</code>
-    @ <code>7aba8293</code> · 평가 Ada 페어드
+    dual 기준, 3스테이지 · test 500 / val 500 / OOD 1,533 · minADE@6 · 호라이즌 1.6/3.2/6.4 s ·
+    <code>nvidia/Alpamayo-1.5-10B</code> @ <code>7aba8293</code> · 평가 Ada 페어드
   </div>
 </header>
 
@@ -174,7 +174,56 @@ MLP 1633→3265→4898)로 나누고 스테이지마다 마스킹된 모델에�
   재현됐다. 관측된 차이는 전부 it3 체크포인트에서 온다.</p>
 </div>
 
-<h2><span class="num">4</span>해석</h2>
+<h2><span class="num">4</span>확장: 세 셋과 세 호라이즌에서 전부 재현된다 (사실)</h2>
+
+<p>
+게이트는 test_500에 등록됐지만, 판정 후 같은 두 arm을 val(indist_500)과 OOD(1,533,
+자체 rollout 조건)로 확장하고 모든 평가에 짧은 호라이즌(1.6 s / 3.2 s)의 per-sample
+배열을 추가했다. 전부 minADE@6 / minFDE@6 <strong>평균</strong> 기준이다
+(중앙값 병기, 페어드 델타는 중앙값 CI).
+</p>
+
+<table>
+<thead><tr><th>셋 (6.4 s)</th><th class="r">minADE@6 원샷</th><th class="r">it3</th>
+<th class="r">페어드 Δ 중앙값 [95% CI]</th><th class="r">p</th>
+<th class="r">minFDE@6 원샷</th><th class="r">it3</th></tr></thead>
+<tbody>
+<tr><td>test 500</td><td class="r">0.9498</td><td class="r">1.0207</td>
+  <td class="r"><strong>+0.0302</strong> [+0.0101, +0.0422]</td><td class="r">3.0e−04</td>
+  <td class="r">2.5459</td><td class="r">2.7869</td></tr>
+<tr><td>val 500</td><td class="r">0.8904</td><td class="r">0.9940</td>
+  <td class="r"><strong>+0.0219</strong> [+0.0041, +0.0434]</td><td class="r">1.6e−04</td>
+  <td class="r">2.3304</td><td class="r">2.6480</td></tr>
+<tr><td>OOD 1,533</td><td class="r">1.0417</td><td class="r">1.0668</td>
+  <td class="r"><strong>+0.0120</strong> [+0.0030, +0.0235]</td><td class="r">4.8e−03</td>
+  <td class="r">2.5672</td><td class="r">2.6330</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::iter::sets.png" alt="one-shot vs staged by set and horizon">
+  <figcaption>셋(열) × 지표(행) × 호라이즌(x축)의 minADE@6 / minFDE@6 평균.
+  주석은 페어드 중앙값 델타(* = 95% CI가 0 배제). 아홉 개 ADE 셀 중 여덟 개에서
+  it3가 유의하게 나쁘고, 뒤집히는 셀은 하나도 없다.</figcaption>
+</figure>
+
+<p>
+<strong>악화는 세 셋 전부에서 유의하게 재현된다</strong> — 크기는 test +0.030 &gt;
+val +0.022 &gt; OOD +0.012 순이다. 호라이즌 분해가 손상의 위치를 말해준다: 1.6 s에서는
++0.001~0.002 수준(유의하지만 미세), 3.2 s에서 +0.001~0.009, <strong>6.4 s에서
++0.012~0.030으로 격차의 대부분이 궤적 후반에서 발생</strong>한다. FDE가 ADE보다 크게
+벌어지는 것(test +0.116)도 같은 방향이다 — "압축 손실은 궤적 후반에 몰린다"는 이
+트랙의 기존 패턴이 스테이징 손상에도 그대로 적용된다.
+</p>
+
+<p>
+추론 채널의 개선도 세 셋에서 재현된다: CoC 퇴화율 원샷 → it3가 test 3.0 → 2.2%,
+val 1.4 → 1.4%, OOD 2.5 → 1.8%. 무결성 확인으로, 호라이즌 필드를 위해 재실행한
+test 행들이 게이트 판정 수치를 소수점까지 그대로 재현했다(contrast +0.0302,
+p=3.01e−04; baseline 500클립 비트 일치).
+</p>
+
+<h2><span class="num">5</span>해석</h2>
 
 <p>
 <strong>재측정 churn은 적응이 아니라 섭동이었다.</strong> R3가 이 결과를 애매하지 않게
@@ -193,7 +242,7 @@ MLP 1633→3265→4898)로 나누고 스테이지마다 마스킹된 모델에�
 "스테이징이 언어 유닛을 지키는 쪽으로 churn을 소비했다"는 사후 가설을 남긴다 (검정 없음).
 </p>
 
-<h2><span class="num">5</span>한계</h2>
+<h2><span class="num">6</span>한계</h2>
 
 <ul>
   <li><strong>3등분 스케줄 미튜닝.</strong> 등록해 둔 대로 이 기각은 "3등분이 실패했다"이다.
@@ -207,7 +256,7 @@ MLP 1633→3265→4898)로 나누고 스테이지마다 마스킹된 모델에�
     분해되지 않았다 — stage-1 컷만 적용한 부분 체크포인트를 평가하면 분리 가능하다.</li>
 </ul>
 
-<h2><span class="num">6</span>이 트랙의 위치</h2>
+<h2><span class="num">7</span>이 트랙의 위치</h2>
 
 <p>
 캘리브레이션 진단 → 반복 재캘리브레이션으로 이어진 이 갈래의 결론: 유닛별 점수의

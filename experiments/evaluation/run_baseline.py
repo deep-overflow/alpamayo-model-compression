@@ -98,8 +98,11 @@ def load_manifest(which, sets_dir, n_indist, manifest=None, cache=None):
         df = pd.read_parquet(sets_dir / f"{stem}.parquet")
         return [{"clip_id": r.clip_id, "t0_us": int(r.t0_us), "cache": cache}
                 for r in df.itertuples()]
-    df = pd.read_parquet(sets_dir / "ood.parquet")
-    return [{"clip_id": r.clip_id, "t0_us": int(r.t0_us), "cache": "ood",
+    # `manifest` also reaches the OOD branch: the set carries a train/val split, and an
+    # arm calibrated on OOD-train may only be judged on OOD-val. Defaults to the whole
+    # 1,533 so every existing run is unchanged.
+    df = pd.read_parquet(sets_dir / f"{manifest or 'ood'}.parquet")
+    return [{"clip_id": r.clip_id, "t0_us": int(r.t0_us), "cache": cache or "ood",
              "gt_coc": r.gt_coc, "cluster": r.cluster, "split": r.split}
             for r in df.itertuples()]
 
@@ -131,6 +134,9 @@ def main():
                          "uniform budget can, so pass '... expert' for those specs.")
     ap.add_argument("--strict-deterministic", action="store_true",
                     help="error instead of warn when an op has no deterministic kernel")
+    ap.add_argument("--no-tf", action="store_true",
+                    help="ood only: skip the GT-CoC teacher-forced condition, roughly "
+                         "halving per-clip cost when only rollout metrics are needed")
     args = ap.parse_args()
 
     tag = "baseline" if args.model == "baseline" else Path(args.model).name
@@ -252,29 +258,41 @@ def main():
         del roll
         # keep the per-sample arrays, not just their min: seeds are base+k, so minADE@K'
         # for any K' <= k is a prefix of these and needs no second run
-        ade_k, fde_k, nll_self = eval_config_samples(model, inputs, seq_gen, prompt_len,
-                                                     coc_end, gt_xy, traj_seeds)
+        ade_k, fde_k, nll_self, pred_k = eval_config_samples(
+            model, inputs, seq_gen, prompt_len, coc_end, gt_xy, traj_seeds)
         rec.update({"minADE_rollout": float(ade_k.min()), "minFDE_rollout": float(fde_k.min()),
                     "ade_rollout_k": [round(float(x), 6) for x in ade_k],
                     "fde_rollout_k": [round(float(x), 6) for x in fde_k],
                     "nll_self": nll_self, "gen_coc": gen_coc, "gen_len": len(gen_ids),
                     **{f"coc_{k}": v for k, v in el.coc_degenerate(gen_coc).items()}})
+        # shorter horizons (1.6 s / 3.2 s at 10 Hz) from the same denoised paths --
+        # the full-horizon scalars cannot be re-reduced, so store these per sample too
+        for h in (16, 32):
+            a_h, f_h = el.ade_fde(pred_k[:, :h], gt_xy[:h])
+            rec.update({f"ade_rollout_k_h{h}": [round(float(x), 6) for x in a_h],
+                        f"fde_rollout_k_h{h}": [round(float(x), 6) for x in f_h]})
 
         if args.which == "ood":
-            # GT-CoC condition: correct reasoning as context, and its NLL
-            seq_gt = gt_coc_seq(tok, inputs["input_ids"], m["gt_coc"], "cuda")
-            ade_tf_k, fde_tf_k, nll_gt = eval_config_samples(
-                model, inputs, seq_gt, prompt_len, seq_gt.shape[1], gt_xy, traj_seeds)
-            rec.update({"minADE_tf": float(ade_tf_k.min()), "minFDE_tf": float(fde_tf_k.min()),
-                        "ade_tf_k": [round(float(x), 6) for x in ade_tf_k],
-                        "fde_tf_k": [round(float(x), 6) for x in fde_tf_k],
-                        "nll_gtcoc": nll_gt,
-                        "gt_coc": m["gt_coc"], "cluster": m["cluster"], "split": m["split"]})
+            rec.update({"gt_coc": m["gt_coc"], "cluster": m["cluster"], "split": m["split"]})
+            if not args.no_tf:
+                # GT-CoC condition: correct reasoning as context, and its NLL
+                seq_gt = gt_coc_seq(tok, inputs["input_ids"], m["gt_coc"], "cuda")
+                ade_tf_k, fde_tf_k, nll_gt, pred_tf_k = eval_config_samples(
+                    model, inputs, seq_gt, prompt_len, seq_gt.shape[1], gt_xy, traj_seeds)
+                rec.update({"minADE_tf": float(ade_tf_k.min()),
+                            "minFDE_tf": float(fde_tf_k.min()),
+                            "ade_tf_k": [round(float(x), 6) for x in ade_tf_k],
+                            "fde_tf_k": [round(float(x), 6) for x in fde_tf_k],
+                            "nll_gtcoc": nll_gt})
+                for h in (16, 32):
+                    a_h, f_h = el.ade_fde(pred_tf_k[:, :h], gt_xy[:h])
+                    rec.update({f"ade_tf_k_h{h}": [round(float(x), 6) for x in a_h],
+                                f"fde_tf_k_h{h}": [round(float(x), 6) for x in f_h]})
 
         rows.append(rec)
         if len(rows) % 10 == 0 or i + 1 == len(man):
             rows_path.write_text(json.dumps(rows, indent=2))
-        extra = f" ade_tf={rec['minADE_tf']:.3f}" if args.which == "ood" else ""
+        extra = f" ade_tf={rec['minADE_tf']:.3f}" if "minADE_tf" in rec else ""
         print(f"[{i + 1}/{len(man)}] {m['clip_id'][:8]} {rec['bucket']:10s} "
               f"ade_ro={rec['minADE_rollout']:.3f}{extra} ({time.time() - t0:.0f}s)", flush=True)
 
@@ -282,7 +300,7 @@ def main():
     a = np.array([r["minADE_rollout"] for r in rows])
     line = (f"{tag} {args.which} shard {args.shard}/{args.n_shards}: {len(rows)} clips, "
             f"minADE(rollout) mean {a.mean():.4f} median {np.median(a):.4f}")
-    if args.which == "ood" and rows:
+    if args.which == "ood" and rows and "minADE_tf" in rows[0]:
         t = np.array([r["minADE_tf"] for r in rows])
         g = np.array([r["nll_gtcoc"] for r in rows])
         line += f", minADE(GT CoC) mean {t.mean():.4f}, NLL(GT CoC) mean {g.mean():.4f}"

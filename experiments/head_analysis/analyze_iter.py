@@ -70,13 +70,104 @@ def boot(v, fn, n=10_000, seed=0):
     return float(np.percentile(stats, 2.5)), float(np.percentile(stats, 97.5))
 
 
+SET_IDS = {"test": ("{c}_u40_v2_ps_test", "iter_{c}_test"),
+           "indist": ("{c}_u40_v2_ps_indist", "iter_{c}_indist"),
+           "ood": ("{c}_u40_v2_ps_ood", "iter_{c}_ood")}
+
+
+def metric_at_k(row, key, k):
+    if key not in row:
+        raise SystemExit(f"clip {row['clip_id']}: no {key}")
+    return float(np.min(np.asarray(row[key], dtype=float)[:k]))
+
+
+HORIZONS = (16, 32, 64)  # 1.6 s / 3.2 s / 6.4 s at 10 Hz
+
+
+def hkey(base, h):
+    return base if h == 64 else f"{base}_h{h}"
+
+
+def cross_sets(c, k, sets, out):
+    """One-shot vs it3 across sets and horizons: minADE@k and minFDE@k, paired."""
+    res, tab = {}, []
+    for s in sets:
+        o_id, t_id = (x.format(c=c) for x in SET_IDS[s])
+        one = load_rows(REPO / "outputs" / o_id / f"slim_{c}_u40_v2_s*.json")
+        it3 = load_rows(REPO / "outputs" / t_id / f"slim_{c}_u40_it3_s*.json")
+        ids = sorted(set(one) & set(it3))
+        cell = {"n": len(ids),
+                "degen_one": float(np.mean([one[i]["coc_degenerate"] for i in ids])),
+                "degen_it3": float(np.mean([it3[i]["coc_degenerate"] for i in ids]))}
+        for h in HORIZONS:
+            hs = f"{h / 10:.1f}s"
+            cell[hs] = {}
+            for m, base in (("ade", "ade_rollout_k"), ("fde", "fde_rollout_k")):
+                key = hkey(base, h)
+                ov = np.array([metric_at_k(one[i], key, k) for i in ids])
+                tv = np.array([metric_at_k(it3[i], key, k) for i in ids])
+                d = tv - ov
+                lo, hi = boot(d, np.median)
+                cell[hs][m] = {
+                    "one_mean": float(ov.mean()), "one_med": float(np.median(ov)),
+                    "it3_mean": float(tv.mean()), "it3_med": float(np.median(tv)),
+                    "d_med": float(np.median(d)), "d_med_ci": [lo, hi],
+                    "d_mean": float(np.mean(d)),
+                    "wilcoxon_p": float(wilcoxon(d).pvalue)}
+        res[s] = cell
+        a = cell["6.4s"]["ade"]
+        tab.append(f"{s:7s} n={cell['n']:4d}  ADE@{k} 6.4s one {a['one_mean']:.4f} -> "
+                   f"it3 {a['it3_mean']:.4f}  d_med {a['d_med']:+.4f} "
+                   f"[{a['d_med_ci'][0]:+.4f},{a['d_med_ci'][1]:+.4f}] "
+                   f"p={a['wilcoxon_p']:.1e}")
+    (out / "sets_summary.json").write_text(json.dumps(res, indent=2))
+
+    fig, axes = plt.subplots(2, len(sets), figsize=(3.4 * len(sets), 6.6), squeeze=False)
+    width, xs = 0.35, np.arange(len(HORIZONS))
+    hlabels = [f"{h / 10:.1f}s" for h in HORIZONS]
+    for row, m in enumerate(("ade", "fde")):
+        for col, s in enumerate(sets):
+            ax = axes[row][col]
+            ov = [res[s][hl][m]["one_mean"] for hl in hlabels]
+            tv = [res[s][hl][m]["it3_mean"] for hl in hlabels]
+            ax.bar(xs - width / 2, ov, width, color=C1, label="one-shot")
+            ax.bar(xs + width / 2, tv, width, color=C4, label="it3 (staged)")
+            for x, hl in enumerate(hlabels):
+                d = res[s][hl][m]
+                star = "*" if d["d_med_ci"][0] > 0 or d["d_med_ci"][1] < 0 else ""
+                ax.annotate(f"{d['d_med']:+.3f}{star}", (x, max(ov[x], tv[x])),
+                            textcoords="offset points", xytext=(0, 3), ha="center",
+                            fontsize=7.5, color=INK)
+            ax.set_xticks(xs, hlabels)
+            if row == 0:
+                ax.set_title(f"{s} (n={res[s]['n']})")
+            if col == 0:
+                ax.set_ylabel(f"min{m.upper()}@{k} mean (m)")
+            if row == 0 and col == 0:
+                ax.legend(fontsize=8, frameon=False)
+    fig.suptitle("one-shot vs staged by set and horizon "
+                 "(paired median delta annotated, * = CI excludes 0)", y=0.995)
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "sets.png", dpi=150)
+    plt.close(fig)
+    print("\n".join(tab))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--criterion", default="dual")
     ap.add_argument("--k", type=int, default=6)
     ap.add_argument("--baseline", default="baseline_ada_ps_test")
+    ap.add_argument("--sets", nargs="+", default=None,
+                    help="cross-set one-shot vs it3 summary (e.g. test indist ood) "
+                         "instead of the gate judgment")
     args = ap.parse_args()
     c, k = args.criterion, args.k
+    if args.sets:
+        out = REPO / "outputs" / f"iter_gates_{c}"
+        (out / "plots").mkdir(parents=True, exist_ok=True)
+        cross_sets(c, k, args.sets, out)
+        return
 
     base = load_rows(REPO / "outputs" / args.baseline / "baseline_s*.json")
     one = load_rows(REPO / "outputs" / f"{c}_u40_v2_ps_test" / f"slim_{c}_u40_v2_s*.json")
