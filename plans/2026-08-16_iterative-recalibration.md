@@ -55,9 +55,13 @@ stage 2·3: 누적 마스크를 적용한 모델에서 해당 기준의 스코�
 - importance 절반의 CoC 텍스트는 각 스테이지 모델 자신의 rollout(자기일관적, 드리프트
   있음 — 스테이지별 rollout 퇴화율을 기록해 감시). jlens 절반은 저장된 teacher refs를
   teacher-force하므로 텍스트가 스테이지 간 고정이다 — 두 절반의 비대칭을 명시해 둔다.
-- **스코어링은 Blackwell에서** (importance_v2·jlens_v2가 Blackwell 측정 — 스테이지 간
-  아키텍처 혼입 방지). **평가는 Ada에서** (`baseline_ada` 페어드). GPU가 없을 때는
-  `run_retry_host.sh`가 빈 카드를 기다린다 — 오케스트레이터 자체는 CPU 프로세스다.
+- **스코어링 카드**: 원안은 Blackwell(importance_v2·jlens_v2와 동일 아키텍처)이었으나
+  Blackwell 4장이 장기 점유되어 **2026-08-19 사용자 지시로 Ada 5–7로 변경**. stage-1
+  스코어(Blackwell 측정)와 stage-2·3(Ada 측정) 사이에 아키텍처 혼입이 생긴다 — rollout
+  텍스트가 3–4% 클립에서 갈리는 수준이고 기존 실측에서 Ada−Blackwell 페어드 평가 차이가
+  +0.0000(p=0.82)이었으므로 마스킹 churn 대비 무시 가능하다고 판단, 한계에 기록한다.
+  **평가는 Ada에서** (`baseline_ada` 페어드). GPU가 없을 때는 `run_retry_host.sh`가 빈
+  카드를 기다린다 — 오케스트레이터 자체는 CPU 프로세스다.
 
 ### 구현 (완료분)
 
