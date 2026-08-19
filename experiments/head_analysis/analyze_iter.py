@@ -26,10 +26,23 @@ import glob
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parents[2]
+
+BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
+C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"
+plt.rcParams.update({
+    "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
+    "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
+    "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
+})
 
 GATE_R1B_FRAC = 0.3
 GATE_R2_DEGEN = 0.05
@@ -125,8 +138,32 @@ def main():
          f"({len(shared)} shared clips)"),
     ]
     out = REPO / "outputs" / f"iter_gates_{c}"
-    out.mkdir(parents=True, exist_ok=True)
+    (out / "plots").mkdir(parents=True, exist_ok=True)
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
+
+    fig, (ax, axh) = plt.subplots(1, 2, figsize=(9.6, 4.0), width_ratios=[1, 1.2])
+    for x, (label, v, colour) in enumerate((("one-shot", d_one, C1),
+                                            ("it3 (staged)", d_it3, C4))):
+        m = float(np.median(v))
+        lo, hi = boot(v, np.median)
+        ax.bar(x, m, 0.55, color=colour, label=label)
+        ax.errorbar([x], [m], yerr=[[m - lo], [hi - m]], fmt="none", ecolor=INK,
+                    capsize=3, lw=1.2)
+    ax.axhline(0, color=MUTED, lw=0.8)
+    ax.set_xticks([0, 1], ["one-shot", "it3 (staged)"])
+    ax.set_ylabel(f"paired dminADE@{k} vs baseline, median (m)")
+    ax.set_title("cost of the same 24.0% budget")
+    v = np.clip(contrast, -0.3, 0.3)
+    axh.hist(v, bins=48, range=(-0.3, 0.3), color=C4, alpha=0.75)
+    axh.axvline(0, color=MUTED, lw=0.9, ls="--")
+    axh.axvspan(med_lo, med_hi, color=INK, alpha=0.12)
+    axh.axvline(med, color=INK, lw=1.4)
+    axh.set_xlabel(f"per-clip minADE@{k}: it3 - oneshot (m, clipped to +-0.3)")
+    axh.set_title(f"median {med:+.4f} [{med_lo:+.4f}, {med_hi:+.4f}], "
+                  f"wilcoxon p={p_w:.1e}")
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "gates.png", dpi=150)
+    plt.close(fig)
     (out / "metrics.json").write_text(json.dumps({
         "criterion": c, "k": k, "n": len(ids),
         "contrast_median": med, "contrast_median_ci": [med_lo, med_hi],

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>반복 재캘리브레이션: 스테이지별 재측정은 원샷 컷을 악화시킨다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b0402a;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>반복 재캘리브레이션: 스테이지별 재측정은 원샷 컷을 악화시킨다</h1>
+  <div class="meta">
+    2026-08-19 · <code>plans/2026-08-16_iterative-recalibration.md</code> ·
+    dual 기준, 3스테이지 · test_500 · minADE@6 · <code>nvidia/Alpamayo-1.5-10B</code>
+    @ <code>7aba8293</code> · 평가 Ada 페어드
+  </div>
+</header>
+
+<p class="lede">
+캘리브레이션 진단은 1차 Taylor의 가법성이 실제 컷 규모에서 5~55배 깨져 있음을 보였다
+(sub-additive). 그 간극을 메우는 자연스러운 처방 — 컷을 3스테이지로 나누고 스테이지마다
+마스킹된 모델에서 스코어를 다시 재기 — 를 dual 기준에서 1요인으로 검증했다.
+결과는 가설의 기각이고, 그것도 명확한 음성이다: <strong>재측정은 같은 예산의 대가를
+두 배로 만들었다.</strong>
+</p>
+
+<div class="callout bad">
+  <p><strong>R1a FAIL — 방향이 반대이고 유의하다.</strong> it3 − 원샷의 페어드 minADE@6
+  중앙값 +0.0302 [+0.0101, +0.0422], Wilcoxon p=3.0e−04. 원샷 대가(중앙값 +0.0524)에
+  +0.030을 더 얹었다. @8로 재도 재현된다(+0.0273, p=1.1e−03) — 지표 선택의 문제가 아니다.</p>
+</div>
+
+<div class="kpi">
+  <div><span class="v">+0.030</span><span class="k">it3 − 원샷 (m, 중앙값)</span></div>
+  <div><span class="v">2.0×</span><span class="k">원샷 대비 대가 (med +0.052 → +0.105)</span></div>
+  <div><span class="v">R1a·R1b FAIL</span><span class="k">사전 등록 주 게이트</span></div>
+  <div><span class="v">89.9 / 88.7%</span><span class="k">R3 중첩률 — 선택은 실제로 바뀜</span></div>
+  <div><span class="v">100%</span><span class="k">baseline 재현 (비트, 500클립)</span></div>
+</div>
+
+<h2><span class="num">1</span>가설과 근거</h2>
+
+<p>
+원샷 프루닝은 무손상 모델에서 스코어를 한 번 재고 레이어당 39.86%를 한꺼번에 자른다.
+스코어 |dL/dg|는 "지금의 네트워크"에서의 미분이므로, 잘리는 도중에 네트워크가 보상으로
+재배선되면 명단의 후반부는 이미 존재하지 않는 네트워크 기준의 순위다. 캘리브레이션 진단이
+이 간극을 실측했다: 그룹 손상이 단독 손상 합의 1/5~1/55(sub-additive), 그룹이 클수록 악화.
+</p>
+
+<p>
+<strong>H1</strong>: 같은 예산·같은 기준에서 컷을 3스테이지(레이어당 Q 4→9→13,
+MLP 1633→3265→4898)로 나누고 스테이지마다 마스킹된 모델에서 dual 스코어를 재측정하면,
+앞선 컷 이후 하중을 새로 짊어진 유닛을 보호해 원샷보다 test_500 minADE@6이 낮아진다.
+</p>
+
+<h2><span class="num">2</span>설계</h2>
+
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>1요인</td><td>스테이징만 — 기준(max(rank I_traj, rank I_CoC)), calib_100, uniform 할당,
+  최종 예산(−2.657B), expert/KV 미개입 전부 <code>dual_u40_v2</code>와 동일</td></tr>
+<tr><td>stage 1</td><td>저장된 <code>importance_v2</code> 그대로 (원샷과 같은 출발점, 새 측정 없음)</td></tr>
+<tr><td>stage 2·3</td><td>누적 마스크 적용 모델에서 <code>run_importance --mask</code> 재실행
+  (calib_100 전체, 마스크 hook이 게이트 hook보다 먼저라 잘린 유닛의 기울기는 정확히 0)</td></tr>
+<tr><td>R0 (구현 검증)</td><td>1스테이지 모드가 shipped 체크포인트 kept-set과 <strong>레이어 36개
+  비트 동일</strong> — 5개 기준 전부 통과 후 실행</td></tr>
+<tr><td>평가</td><td>test_500, k=8 실행 + 앞 6개 축소(시드가 base+k라 6샘플 실행과 동일),
+  baseline·원샷도 per-sample 배열로 재평가해 3 arm 완전 페어드</td></tr>
+<tr><td>범위</td><td>5개 기준으로 확장 승인됐으나 <strong>2026-08-19 사용자 결정으로 dual 단독
+  우선 검증</strong> — traj/coc는 마스크 완성 상태로 보류, j/jtraj는 jlens 재측정 중단</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">3</span>결과 (사실)</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">minADE@6 평균</th><th class="r">중앙값</th>
+<th class="r">vs baseline (중앙값)</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>baseline (무손상, 재측정)</td><td class="r">0.8417</td><td class="r">0.5086</td>
+  <td class="r">—</td><td class="r">0.6%</td></tr>
+<tr><td>원샷 <code>dual_u40_v2</code></td><td class="r">0.9498</td><td class="r">0.6637</td>
+  <td class="r">+0.0524</td><td class="r">3.0%</td></tr>
+<tr><td><strong>it3 <code>dual_u40_it3</code></strong></td><td class="r">1.0207</td><td class="r">0.6891</td>
+  <td class="r"><strong>+0.1050</strong></td><td class="r">2.2%</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::iter::gates.png" alt="staged vs one-shot cost and per-clip contrast">
+  <figcaption>왼쪽: 같은 24.0% 예산의 페어드 대가(중앙값, 부트스트랩 95% CI) — 스테이징이
+  대가를 두 배로 만든다. 오른쪽: 클립 단위 it3 − 원샷 분포(±0.3 m로 클립). 중앙값 밴드가
+  0에서 명확히 떨어져 있고, 꼬리도 악화 쪽(+0.3 경계)이 더 무겁다.</figcaption>
+</figure>
+
+<h3>게이트 판정</h3>
+
+<table>
+<thead><tr><th>게이트</th><th>사전 등록 조건</th><th>실측</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>R1a (방향)</td><td>중앙값 CI 상한 &lt; 0</td>
+  <td>+0.0302 [+0.0101, +0.0422], p=3.0e−04</td><td><strong>FAIL — 유의하게 악화</strong></td></tr>
+<tr><td>R1b (크기)</td><td>중앙값 ≤ −0.0157 (30% 회복)</td><td>+0.0302</td><td>FAIL</td></tr>
+<tr><td>R2 (추론 안전)</td><td>퇴화율 &lt; 5%</td><td>2.2% (원샷 3.0%)</td><td>PASS</td></tr>
+<tr><td>R3 (귀속)</td><td>중첩 &gt; 95%면 R1 null 무효</td><td>Q 89.9% / MLP 88.7%</td>
+  <td>선택이 실제로 바뀜 — <strong>R1은 액면 그대로</strong></td></tr>
+<tr><td>조건부 폐루프</td><td>R1a 통과 시에만</td><td>—</td><td>실행하지 않음 (등록대로)</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+  <p><strong>측정 체계 무결성.</strong> 재평가한 baseline이 기존 <code>baseline_ada_test</code>
+  행과 500클립 전부 비트 단위 일치했고, 원샷의 @8 수치(+0.0517/+0.0955)도 기존 보고와 정확히
+  재현됐다. 관측된 차이는 전부 it3 체크포인트에서 온다.</p>
+</div>
+
+<h2><span class="num">4</span>해석</h2>
+
+<p>
+<strong>재측정 churn은 적응이 아니라 섭동이었다.</strong> R3가 이 결과를 애매하지 않게
+만든다 — 재측정은 유지 집합의 10~11%를 실제로 바꿨고, 그 변화가 해로웠다. 캘리브레이션
+진단과 이어 읽으면 기제가 보인다: 유닛 수준 기울기는 실측 제거 손상에 대해 split-half
+신뢰도 ~0이었다. 마스킹된 모델에서 다시 잰 기울기도 유닛 수준에서는 여전히 정보가 아니라
+노이즈이고, 부분 컷에 대한 일시적 보상에 반응해 순위를 흔들면 — 조율된 원샷 선택에 무작위
+섭동을 가한 것과 같아진다. "명단을 다시 쓸수록 나빠진다"는 관측은 <strong>원샷 Taylor
+랭킹이 국소적으로는 이미 충분히 좋다</strong>는, 이 트랙에서 반복돼 온 패턴의 가장 직접적인
+버전이다.
+</p>
+
+<p>
+<strong>추론 채널은 오히려 좋아졌다.</strong> 퇴화율 3.0 → 2.2%, nll_self 중앙값 −0.003.
+나빠진 것은 궤적뿐이다 — 두 능력이 서로 다른 유닛에 산다는 기존 결론과 정합적이고,
+"스테이징이 언어 유닛을 지키는 쪽으로 churn을 소비했다"는 사후 가설을 남긴다 (검정 없음).
+</p>
+
+<h2><span class="num">5</span>한계</h2>
+
+<ul>
+  <li><strong>3등분 스케줄 미튜닝.</strong> 등록해 둔 대로 이 기각은 "3등분이 실패했다"이다.
+    다만 방향이 유의하게 반대인 이상 다른 스케줄에 투자할 근거는 약하다.</li>
+  <li><strong>아키텍처 혼입.</strong> stage-1 스코어는 Blackwell, stage-2·3은 Ada 측정
+    (카드 사정에 따른 사용자 지시, 계획서에 기록). churn의 일부일 수 있으나 효과 크기
+    +0.030은 아키텍처 페어드 차이(+0.0000, p=0.82)의 수십 배라 주 원인일 수 없다.</li>
+  <li><strong>dual 한 기준.</strong> traj/coc의 it3 마스크는 완성돼 있어 빌드+평가
+    (기준당 ~1.5h)만으로 음성 결과의 일반성을 확인할 수 있다.</li>
+  <li><strong>스테이지별 중간 평가 없음.</strong> 어느 스테이지에서 악화가 유입되는지는
+    분해되지 않았다 — stage-1 컷만 적용한 부분 체크포인트를 평가하면 분리 가능하다.</li>
+</ul>
+
+<h2><span class="num">6</span>이 트랙의 위치</h2>
+
+<p>
+캘리브레이션 진단 → 반복 재캘리브레이션으로 이어진 이 갈래의 결론: 유닛별 점수의
+<em>크기</em>도(G-CAL-B FAIL), <em>재측정</em>도(R1a FAIL) 프루닝을 개선하지 못한다.
+남은 것은 점수·측정 축이 아니라 <strong>데이터 축</strong>(보정 도메인이 35pp를 움직인
+VQA-문맥 발견)과 <strong>결합 구조</strong>(max의 거부권 메커니즘)다. 원샷
+<code>max(rank, rank)</code>는 이 예산에서 여전히 가장 좋은 레시피로 남는다.
+</p>
+
+<footer>
+  실행: <code>run_iter_prune.py --criterion dual</code> (스코어링 Ada 5–7) ·
+  <code>run_iter_pipeline.sh dual 4</code> (빌드 <code>--no-state</code> + 평가) ·
+  판정: <code>analyze_iter.py --criterion dual</code> ·
+  출력: <code>outputs/iter_dual_u40/</code>, <code>outputs/slim_dual_u40_it3/</code>,
+  <code>outputs/iter_dual_test/</code>, <code>outputs/iter_gates_dual/</code> ·
+  계획: <code>plans/2026-08-16_iterative-recalibration.md</code>
+</footer>
+
+</div>
+</body>
+</html>
