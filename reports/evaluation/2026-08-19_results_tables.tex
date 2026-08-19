@@ -58,7 +58,9 @@ Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
   minADE@6 / minFDE@6 means (m). Combined criteria beat both of their components on
   every set; both reasoning-only single criteria drive significantly worse than the
   \emph{unpruned} model in closed loop; and the arm that best preserves reasoning
-  ($J$) collides the most --- CoC health is not a safety proxy.
+  ($J$) collides the most --- CoC health is not a safety proxy. The staged variant
+  re-scores the masked model between three cut stages (Table~\ref{tab:negatives});
+  its closed loop was not run, per the pre-registered gate on the open-loop verdict.
 }
 \label{tab:criteria}
 \begin{tabular}{llccclr}
@@ -72,6 +74,7 @@ $I_\mathrm{CoC}$ only  &            & 1.558 / 4.324 & 1.584 / 4.500 & 1.546 / 4.
 $J$ only               & \checkmark & 1.942 / 5.464 & 2.158 / 5.992 & 2.557 / 6.901 & 0.536 ($-$0.214$^*$) & 1.4\% \\
 dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ & & \textbf{0.890 / 2.330} & \textbf{0.950 / 2.546} & \textbf{1.119 / 2.851} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
 jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.937 / 2.445 & 1.028 / 2.804 & 1.175 / 3.032 & 0.791 ($+$0.042) & 0.8\% \\
+staged dual (it3, 3 stages) &      & 0.994 / 2.648 & 1.021 / 2.787 & 1.149 / 2.892 & not run & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -189,6 +192,45 @@ Use score magnitudes  & Spearman/Pearson $\geq 0.7$ & 0/4 cells; target reliabil
 First-order additivity & $|\log_2 R| \leq 1$ & group/sum $= 1/5$--$1/55$ & broken \\
 Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD-val $+0.026^*$ & rejected \\
 Ratio extension (u55, 33\%) & --- & minADE@6 $5.1\times$ baseline, degen.\ 71\% & collapse \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------- Table 7 (appendix): horizon breakdown
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{%
+  Where the staged-recalibration damage lives: one-shot dual vs its staged variant
+  (it3) by evaluation set and prediction horizon (10\,Hz waypoints; the model emits
+  6.4\,s). Cells are minADE@6 / minFDE@6 means (m); $\Delta$ is the paired per-clip
+  median (it3 $-$ one-shot). The first 1.6\,s are near-identical (deltas of a few mm)
+  and the gap concentrates in the late trajectory, with the endpoint (FDE) widening
+  about four times more than the average error --- the same late-horizon pattern the
+  compression cost itself shows. OOD-val early-horizon cells are null at $n{=}262$.
+}
+\label{tab:horizons}
+\begin{tabular}{llrrrrrr}
+\toprule
+& & \multicolumn{3}{c}{minADE@6} & \multicolumn{3}{c}{minFDE@6} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+Set & Horizon & one-shot & it3 & $\Delta$ med & one-shot & it3 & $\Delta$ med \\
+\midrule
+\multirow{3}{*}{test 500}
+  & 1.6\,s & 0.060 & 0.062 & $+0.002^*$ & 0.152 & 0.158 & $+0.006^*$ \\
+  & 3.2\,s & 0.241 & 0.248 & $+0.001$   & 0.632 & 0.650 & $-0.001$   \\
+  & 6.4\,s & 0.950 & 1.021 & $+0.030^*$ & 2.546 & 2.787 & $+0.116^*$ \\
+\midrule
+\multirow{3}{*}{val 500}
+  & 1.6\,s & 0.053 & 0.060 & $+0.002^*$ & 0.132 & 0.154 & $+0.006^*$ \\
+  & 3.2\,s & 0.208 & 0.241 & $+0.009^*$ & 0.546 & 0.642 & $+0.036^*$ \\
+  & 6.4\,s & 0.890 & 0.994 & $+0.022^*$ & 2.330 & 2.648 & $+0.088^*$ \\
+\midrule
+\multirow{3}{*}{OOD-val 262}
+  & 1.6\,s & 0.074 & 0.074 & $-0.001$   & 0.198 & 0.199 & $-0.002$   \\
+  & 3.2\,s & 0.290 & 0.300 & $+0.006$   & 0.752 & 0.784 & $+0.025^*$ \\
+  & 6.4\,s & 1.119 & 1.149 & $+0.026^*$ & 2.851 & 2.892 & $+0.057$   \\
 \bottomrule
 \end{tabular}
 \end{table}
