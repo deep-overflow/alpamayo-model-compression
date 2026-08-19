@@ -72,16 +72,25 @@
 
 <p class="lede">
 프루닝 기준·예산·할당을 모두 고정하고 <strong>중요도를 잰 100클립만</strong> 바꿨다.
-&ldquo;평가할 분포로 캘리브레이션하면 그 분포에서 이득&rdquo;이라는 자연스러운 예상은
-<strong>기각됐다</strong>. OOD로 잰 모델은 OOD 평가에서도 나쁘고, 클립 수를 두 배로 늘려도
-나아지지 않는다. 그리고 이 요인은 <strong>24% 압축 자체보다 두 배 크다</strong>.
+&ldquo;평가할 분포로 캘리브레이션하면 그 분포에서 이득&rdquo;이라는 예상은 <strong>기각됐다</strong>
+&mdash; OOD로 잰 모델은 OOD 평가에서도 나쁘다. 하지만 더 중요한 것은 뒤늦게 추가한
+<strong>in-distribution 대조군</strong>이 말해준다: <strong>같은 분포에서 다른 100클립을 뽑기만
+해도 +0.0941 나빠진다.</strong> OOD 손해의 절반은 분포가 아니라 <strong>추출 운</strong>이다.
 </p>
 
+<div class="callout warn">
+<p><strong>이 문서는 2026-08-20에 수정됐다.</strong> 초판은 in-dist 대조군 없이
+&ldquo;원인은 추정 노이즈가 아니라 분포&rdquo;라고 결론지었다. 그 근거는 200클립 결합이
+나빠졌다는 것이었는데, 그 arm은 in-dist 100 + OOD 100이라 &ldquo;OOD 절반이 여전히
+100클립&rdquo;이라는 설명과 양립한다 &mdash; 논증에 구멍이 있었다. 대조군을 재고 나서
+해당 주장을 철회한다.</p>
+</div>
+
 <div class="kpi">
-  <div><span class="k">OOD 캘리브 대가 (test)</span><span class="v">+0.191</span>minADE@8</div>
-  <div><span class="k">OOD 캘리브 대가 (OOD-val)</span><span class="v">+0.210</span>정합 이득 없음</div>
-  <div><span class="k">압축 자체의 대가</span><span class="v">+0.096</span>절반 크기</div>
-  <div><span class="k">200클립 결합</span><span class="v">+0.084</span>늘려도 나빠짐</div>
+  <div><span class="k">추출만 바꿈 (in-dist)</span><span class="v">+0.094</span>같은 분포, 다른 100클립</div>
+  <div><span class="k">OOD 캘리브</span><span class="v">+0.191</span>그 중 절반이 추출 운</div>
+  <div><span class="k">압축 자체의 대가</span><span class="v">+0.096</span>추출 효과와 동급</div>
+  <div><span class="k">기준 선택</span><span class="v">+0.071</span>추출 효과보다 작다</div>
 </div>
 
 <h2><span class="num">1</span>질문</h2>
@@ -104,7 +113,8 @@ OOD 롱테일 셋에서 이뤄진다. <strong>평가할 분포에서 재면 그 
 <thead><tr><th>arm</th><th>캘리브레이션</th><th>n</th><th>기준·예산·할당</th></tr></thead>
 <tbody>
 <tr><td>baseline</td><td>&mdash;</td><td class="r">&mdash;</td><td>프루닝 없음</td></tr>
-<tr><td><code>dual_u40_v2</code> (in-dist)</td><td><code>calib_100</code> 공식 train, 분포 매칭</td><td class="r">100</td><td rowspan="3"><code>max(rank I<sub>traj</sub>, rank I<sub>CoC</sub>)</code><br>uniform 39.86%, VLM만<br>expert·KV 미개입<br>&minus;2,657,452,032 param</td></tr>
+<tr><td><code>dual_u40_v2</code> (in-dist)</td><td><code>calib_100</code> 공식 train, 분포 매칭</td><td class="r">100</td><td rowspan="4"><code>max(rank I<sub>traj</sub>, rank I<sub>CoC</sub>)</code><br>uniform 39.86%, VLM만<br>expert·KV 미개입<br>&minus;2,657,452,032 param</td></tr>
+<tr><td><strong><code>dual_u40_ctl</code> (대조군)</strong></td><td><code>calib_val100</code> 공식 val, 무작위 100</td><td class="r">100</td></tr>
 <tr><td><code>dual_u40_mix</code> (pooled)</td><td><code>calib_100</code> + <code>calib_ood_100</code></td><td class="r">200</td></tr>
 <tr><td><code>dual_u40_ood</code> (OOD)</td><td><code>calib_ood_100</code> OOD-train 무작위</td><td class="r">100</td></tr>
 </tbody>
@@ -139,7 +149,8 @@ n=100이므로, 두 평균의 평균이 200클립 합집합 평균과 <em>수학
 <thead><tr><th>arm</th><th class="r">test 500 minADE</th><th class="r">minFDE</th><th class="r">NLL</th><th class="r">OOD-val minADE</th><th class="r">minFDE</th><th class="r">NLL</th></tr></thead>
 <tbody>
 <tr><td>baseline</td><td class="r">0.7799</td><td class="r">2.0156</td><td class="r">0.1755</td><td class="r">0.9214</td><td class="r">2.2256</td><td class="r">0.2129</td></tr>
-<tr><td><strong>in-dist</strong></td><td class="r"><strong>0.8754</strong></td><td class="r">2.2779</td><td class="r">0.2507</td><td class="r"><strong>1.0306</strong></td><td class="r">2.5855</td><td class="r">0.2628</td></tr>
+<tr><td><strong>in-dist (train)</strong></td><td class="r"><strong>0.8754</strong></td><td class="r">2.2779</td><td class="r">0.2507</td><td class="r"><strong>1.0306</strong></td><td class="r">2.5855</td><td class="r">0.2628</td></tr>
+<tr><td><strong>in-dist 대조군 (val)</strong></td><td class="r"><strong>0.9695</strong></td><td class="r">2.5663</td><td class="r">0.2474</td><td class="r">&mdash;</td><td class="r">&mdash;</td><td class="r">&mdash;</td></tr>
 <tr><td>pooled 200</td><td class="r">0.9592</td><td class="r">2.4676</td><td class="r">0.2637</td><td class="r">1.0777</td><td class="r">2.6844</td><td class="r">0.2714</td></tr>
 <tr><td>OOD</td><td class="r">1.0659</td><td class="r">2.7584</td><td class="r">0.4868</td><td class="r">1.2407</td><td class="r">3.0504</td><td class="r">0.3668</td></tr>
 </tbody>
@@ -156,6 +167,9 @@ n=100이므로, 두 평균의 평균이 200클립 합집합 평균과 <em>수학
 <tr><td>OOD-val</td>
   <td class="r"><strong>+0.2101</strong> [+0.1010, +0.3490] <strong>*</strong></td>
   <td class="r">+0.4650 <strong>*</strong></td><td class="r">+0.1040 <strong>*</strong></td><td class="r">0.1747</td></tr>
+<tr><td><strong>대조군 &minus; in-dist</strong></td><td>test 500</td>
+  <td class="r"><strong>+0.0941</strong> [+0.0506, +0.1369] <strong>*</strong></td>
+  <td class="r">+0.2883 <strong>*</strong></td><td class="r">&minus;0.0033</td><td class="r">0.0591</td></tr>
 <tr><td rowspan="2">pooled &minus; in-dist</td><td>test 500</td>
   <td class="r"><strong>+0.0838</strong> [+0.0443, +0.1273] <strong>*</strong></td>
   <td class="r">+0.1897 <strong>*</strong></td><td class="r">+0.0130</td><td class="r">0.0591</td></tr>
@@ -181,20 +195,40 @@ test 500에서 +0.1905, OOD-val에서 <strong>+0.2101</strong>로 오히려 크�
 열등하다</strong>는 뜻이다.</p>
 </div>
 
-<h3>3.4 원인은 추정 노이즈가 아니라 분포다</h3>
+<h3>3.4 절반은 분포가 아니라 추출 운이다 (초판 철회)</h3>
 
 <p>
-남은 설명은 &ldquo;100클립으로는 롱테일의 분산을 평균해내지 못한다&rdquo;였다. 그렇다면 클립을
-두 배로 늘린 결합 arm이 in-dist 단독보다 <em>나아야</em> 한다. 반대다 &mdash;
-<strong>+0.0838 나빠졌고 CI가 0을 배제한다.</strong>
+초판은 여기서 &ldquo;원인은 추정 노이즈가 아니라 분포&rdquo;라고 결론지었다. 근거는 클립을
+100&rarr;200으로 늘린 결합 arm이 오히려 +0.0838 나빠졌다는 것이었다. 그 논증에는 구멍이
+있다 &mdash; 결합 arm은 in-dist 100 + OOD 100이므로 <em>OOD 절반은 여전히 100클립</em>이고,
+&ldquo;OOD는 더 많은 클립이 필요하다&rdquo;는 설명과 완전히 양립한다.
 </p>
 
-<pre><code>in-dist 0.8754  ->  pooled 0.9592  ->  OOD 1.0659
-선형 중간값 예측 (0.8754+1.0659)/2 = 0.9707,  실측 0.9592</code></pre>
+<p>
+가르려면 <strong>같은 분포에서 뽑은 다른 100클립</strong>이 필요하다. 공식 val에서 100개를
+뽑아(<code>calib_val100</code>, 판정 셋 test 500과 중첩 0) 같은 파이프라인을 돌렸다:
+</p>
+
+<pre><code>calib_100    (train 100)  0.8754   기준
+calib_val100 (val   100)  0.9695   +0.0941 [+0.0506, +0.1369] *
+pooled 200                0.9592   +0.0838 [+0.0443, +0.1273] *
+calib_ood_100 (OOD  100)  1.0659   +0.1905 [+0.1324, +0.2537] *</code></pre>
+
+<div class="callout warn">
+<p><strong>분포를 전혀 바꾸지 않고 추출만 바꿔도 +0.0941 나빠진다.</strong> OOD 손해
+(+0.1905)의 절반이 이것으로 설명되고, 나머지 +0.096 정도만이 OOD 고유의 몫이다.
+&ldquo;원인은 분포&rdquo;라는 초판의 주장은 철회한다.</p>
+<p>결합 arm(+0.0838)이 대조군(+0.0941)과 거의 같다는 것도 같은 해석을 지지한다 &mdash;
+200클립 결합이 나빠진 것은 OOD 오염이라기보다 <code>calib_100</code>이 우연히 좋은 추출이었기
+때문일 수 있다.</p>
+</div>
 
 <p>
-거의 정확히 중간이다. OOD 클립의 Taylor 점수는 <strong>정보가 아니라 오염</strong>이고,
-섞은 비율만큼 해가 된다. 클립 수를 늘리는 것으로는 해결되지 않는다.
+Spearman 순위상관과 split-half 안정성도 이 방향이다. 같은 세트를 50/50으로 20회 나눠 재면
+유지 집합이 in-dist는 86.3%(&plusmn;0.7), OOD는 <strong>89.6%</strong>(&plusmn;0.7) 일치한다
+&mdash; OOD 쪽이 <em>더</em> 안정적이다. &ldquo;OOD 클립의 그래디언트가 시끄럽다&rdquo;는
+설명은 데이터와 반대다. 그리고 세트 <em>간</em> 중첩(87.6%)이 세트 <em>내부</em> 노이즈와
+같은 크기라, 두 세트가 고르는 유닛의 차이는 표본 노이즈로 거의 전부 설명된다.
 </p>
 
 <h3>3.5 점수는 안정적인데 선택은 바뀐다</h3>
@@ -219,50 +253,60 @@ test 500에서 +0.1905, OOD-val에서 <strong>+0.2101</strong>로 오히려 크�
 <table>
 <thead><tr><th>설계 선택</th><th class="r">대가</th><th>측정된 곳</th></tr></thead>
 <tbody>
-<tr><td><strong>캘리브레이션을 OOD로</strong></td><td class="r"><strong>+0.1905</strong></td><td>이 실험</td></tr>
+<tr><td>캘리브레이션을 OOD로</td><td class="r">+0.1905</td><td>이 실험</td></tr>
 <tr><td>24% 압축 자체</td><td class="r">+0.0955</td><td>기준 분해</td></tr>
+<tr><td><strong>캘리브레이션 추출만 바꿈 (같은 분포)</strong></td><td class="r"><strong>+0.0941</strong></td><td>이 실험 (대조군)</td></tr>
 <tr><td>캘리브레이션에 OOD 절반 섞기</td><td class="r">+0.0838</td><td>이 실험</td></tr>
 <tr><td>4비트 양자화 추가</td><td class="r">+0.0816</td><td>합성 실험</td></tr>
 <tr><td>기준 선택 (<code>jtraj</code> &minus; <code>dual</code>)</td><td class="r">+0.0707</td><td>기준 분해</td></tr>
 </tbody>
 </table>
 
-<div class="callout">
-<p><strong>캘리브레이션 데이터는 이 프로젝트에서 측정한 단일 요인 중 가장 크다</strong> &mdash;
-압축 자체의 2배, 기준 선택의 2.7배. 지금까지 기준·할당·예산·양자화를 세밀하게 비교해 왔는데,
-그 모든 것보다 &ldquo;어느 100클립에서 재는가&rdquo;가 더 크게 작용한다.</p>
+<div class="callout warn">
+<p><strong>캘리브레이션 추출을 바꾸는 것이 24% 압축 자체와 같은 크기이고, 기준 선택보다
+크다.</strong> 이 프로젝트는 기준·할당·예산·양자화를 세밀하게 비교해 왔는데, 그 모든 비교가
+<em>단일 추출</em> <code>calib_100</code> 위에 서 있다.</p>
+<p>다행히 기존 비교들은 <strong>전부 같은 <code>calib_100</code>을 공유</strong>하므로
+페어드이고, &ldquo;A가 B보다 낫다&rdquo;는 결론은 그대로 유효하다. 위태로운 것은
+<em>절대적인</em> 대가 수치다 &mdash; &ldquo;<code>dual</code>은 압축 대가가 +0.0955&rdquo;는
+그 추출에서의 값이고, 다른 추출이었다면 다르게 나왔을 것이다.</p>
 </div>
 
 <h2><span class="num">5</span>한계</h2>
 
 <ul>
+  <li><strong>대조군이 하나뿐이다.</strong> +0.0941이 <code>calib_val100</code> 그 추출의
+  운일 수도 있다. 추출 분산을 제대로 추정하려면 3&ndash;5개의 in-dist 대조군이 필요하고,
+  그 전까지 &ldquo;추출 효과 &asymp; 0.094&rdquo;는 점추정 하나일 뿐이다.</li>
+  <li><strong>대조군의 official split이 다르다.</strong> <code>calib_100</code>은 train,
+  <code>calib_val100</code>은 val에서 뽑았다. 둘 다 in-distribution이지만 완전한 통제는
+  train에서 다시 뽑는 것이다 &mdash; train 풀은 <code>pre_processed/calib</code>에 100개만
+  캐시돼 있어 새 캐시 빌드가 필요해 이번에는 하지 않았다.</li>
+  <li><strong>OOD 고유 몫은 차감으로만 추정됐다.</strong> +0.1905 &minus; +0.0941 &asymp;
+  +0.096이라는 계산은 두 효과가 더해진다고 가정한다. 검증되지 않았다.</li>
   <li><strong>OOD-val의 검정력.</strong> 262클립으로 0.070까지만 분해한다.
-  <code>pooled &minus; in-dist</code>의 +0.0471은 그 아래이므로 &ldquo;차이 없음&rdquo;이
-  아니라 <strong>&ldquo;이 크기에서 검출 안 됨&rdquo;</strong>이다. 부호와 크기가 test 500
-  (+0.0838)과 같은 방향이라 실재할 가능성이 높다.</li>
-  <li><strong>OOD 캘리브레이션 표본 하나.</strong> <code>calib_ood_100</code>은 시드 고정
-  무작위 1회 추출이다. 다른 추출에서 얼마나 흔들리는지 모른다 &mdash; 다만 효과가 분해
-  한계의 2배 이상이라 추출 운으로 뒤집힐 여지는 작다.</li>
-  <li><strong>기준 하나.</strong> <code>dual</code>만 측정했다. <code>traj</code>/<code>coc</code>
-  단독 기준이 분포에 더/덜 민감한지는 모른다 &mdash; 유지 집합 중첩은
-  89.3% / 90.1%로 <code>dual</code>(87.6%)과 비슷했다.</li>
-  <li><strong>개루프만.</strong> 폐루프 미측정. 이 프로젝트에는 개루프 순위가 주행에서
-  뒤집힌 전례가 있다.</li>
-  <li><strong>&ldquo;분포 매칭이 좋다&rdquo;는 검증되지 않았다.</strong> 이 실험이 보인 것은
-  &ldquo;OOD가 나쁘다&rdquo;이지 &ldquo;<code>calib_100</code>의 분포 매칭이 무작위 in-dist
-  추출보다 낫다&rdquo;가 아니다. 그건 별도 arm이 필요하다.</li>
+  <code>pooled &minus; in-dist</code>의 +0.0471은 그 아래여서 &ldquo;검출 안 됨&rdquo;이다.
+  대조군은 OOD-val에서 측정하지 않았다.</li>
+  <li><strong>기준 하나, 개루프만.</strong> <code>dual</code>만, 폐루프 미측정.</li>
+  <li><strong>&ldquo;분포 매칭이 좋다&rdquo;는 여전히 미검증.</strong> 이 실험이 보인 것은
+  &ldquo;OOD가 나쁘다&rdquo;와 &ldquo;추출이 흔들린다&rdquo;이지,
+  <code>make_eval_sets.py</code>의 그리디 매칭이 무작위 추출보다 낫다는 것이 아니다.</li>
 </ul>
 
 <h2><span class="num">6</span>권고</h2>
 
 <ol>
-  <li><code>calib_100</code>을 유지한다. <strong>OOD·평가분포 정합·OOD 혼합 세 가지 모두
-  측정됐고 전부 손해다.</strong></li>
-  <li>캘리브레이션 클립 수를 늘린다면 <strong>같은 분포에서</strong> 늘린다. 200클립 결합이
-  나빠진 것은 클립 수 때문이 아니라 섞인 분포 때문이므로, in-dist 200/400은 여전히 열려 있는
-  질문이다.</li>
-  <li>향후 어떤 기준을 제안하든 <strong>캘리브레이션 세트를 고정</strong>해야 한다. 이 요인이
-  기준 효과보다 크므로, 캘리브레이션이 다른 두 기준을 비교하면 기준 차이를 볼 수 없다.</li>
+  <li><strong>캘리브레이션 세트를 고정한다.</strong> 이 요인이 기준 효과보다 크므로,
+  캘리브레이션이 다른 두 기준을 비교하면 기준 차이를 볼 수 없다. 지금까지의 모든 기준 비교가
+  <code>calib_100</code>을 공유한 것은 <em>결과적으로</em> 옳은 설계였다.</li>
+  <li><strong>절대 수치를 인용할 때 추출 의존성을 함께 적는다.</strong>
+  &ldquo;24% 압축의 대가는 +0.0955&rdquo;는 <code>calib_100</code>에서의 값이고, 추출을 바꾸면
+  같은 크기만큼 움직인다.</li>
+  <li><strong>OOD·평가분포 정합·OOD 혼합은 제안하지 않는다.</strong> 셋 다 측정됐고 전부
+  손해다. OOD 고유의 손해가 추출 효과 위에 얹혀 있다는 점은 변하지 않는다.</li>
+  <li><strong>다음 실험은 in-dist 대조군 2&ndash;4개다.</strong> 추출 분산을 추정해야
+  이 문서의 +0.0941이 점추정에서 구간추정이 되고, 그래야 &ldquo;기준 비교가 추출 노이즈에
+  묻히는가&rdquo;를 정량적으로 답할 수 있다. arm당 ~1.4시간.</li>
 </ol>
 
 <footer>

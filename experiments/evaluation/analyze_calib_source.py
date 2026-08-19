@@ -40,6 +40,7 @@ SETS = {
     "test_500": {
         "baseline": ("baseline_ada_test", "baseline"),
         "in-dist calib": ("dual_u40_v2_test", "slim_dual_u40_v2"),
+        "in-dist ctl": ("dual_u40_ctl_test", "slim_dual_u40_ctl"),
         "OOD calib": ("dual_u40_ood_test", "slim_dual_u40_ood"),
         "pooled 200": ("dual_u40_mix_test", "slim_dual_u40_mix"),
     },
@@ -111,8 +112,9 @@ plt.rcParams.update({
 # directly comparable; sources are the reports each was measured in
 OTHER_FACTORS = [
     ("calibration -> OOD", 0.1905, C4),
-    ("calibration +OOD (half)", 0.0838, C4),
     ("24% pruning itself", 0.0955, MUTED),
+    ("calibration draw, same dist.", 0.0941, C4),
+    ("calibration +OOD (half)", 0.0838, C4),
     ("+4-bit quantization", 0.0816, MUTED),
     ("criterion (jtraj-dual)", 0.0707, MUTED),
 ]
@@ -120,7 +122,7 @@ OTHER_FACTORS = [
 
 def plots(out, path):
     fig, axes = plt.subplots(1, 2, figsize=(13.0, 4.6))
-    arms = ["in-dist calib", "pooled 200", "OOD calib"]
+    arms = ["in-dist calib", "in-dist ctl", "pooled 200", "OOD calib"]
     ax = axes[0]
     for j, (s, colour, lbl) in enumerate(
             [("test_500", C1, "test 500"), ("ood_val_262", C2, "OOD-val 262")]):
@@ -137,10 +139,10 @@ def plots(out, path):
                     color=colour, ecolor=MUTED, capsize=3, ms=7, lw=1.4, label=lbl)
     ax.axhline(0, color=MUTED, lw=0.8)
     ax.set_xticks(range(len(arms)))
-    ax.set_xticklabels(["in-dist\n100", "pooled\n200", "OOD\n100"])
+    ax.set_xticklabels(["train\n100", "val\n100", "train+OOD\n200", "OOD\n100"])
     ax.set_xlabel("clips the Taylor scores were measured on")
     ax.set_ylabel("paired dminADE@8 vs unpruned (m)")
-    ax.set_title("more OOD in the calibration set is monotonically worse")
+    ax.set_title("swapping the calibration draw moves it as much as adding OOD does")
     ax.legend(frameon=False, fontsize=9)
 
     ax = axes[1]
