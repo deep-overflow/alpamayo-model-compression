@@ -114,6 +114,20 @@ def cross_sets(c, k, sets, out):
                     "d_med": float(np.median(d)), "d_med_ci": [lo, hi],
                     "d_mean": float(np.mean(d)),
                     "wilcoxon_p": float(wilcoxon(d).pvalue)}
+        if s == "ood":
+            # the set is official-val 262 (primary) + official-train 1,271 (secondary);
+            # the pooled read dilutes toward the easier train clips, so keep both
+            cell["by_split"] = {}
+            for sp in ("val", "train"):
+                sub = [i for i in ids if one[i].get("split") == sp]
+                ov = np.array([metric_at_k(one[i], "ade_rollout_k", k) for i in sub])
+                tv = np.array([metric_at_k(it3[i], "ade_rollout_k", k) for i in sub])
+                d = tv - ov
+                lo, hi = boot(d, np.median)
+                cell["by_split"][sp] = {
+                    "n": len(sub), "one_mean": float(ov.mean()),
+                    "it3_mean": float(tv.mean()), "d_med": float(np.median(d)),
+                    "d_med_ci": [lo, hi], "wilcoxon_p": float(wilcoxon(d).pvalue)}
         res[s] = cell
         a = cell["6.4s"]["ade"]
         tab.append(f"{s:7s} n={cell['n']:4d}  ADE@{k} 6.4s one {a['one_mean']:.4f} -> "

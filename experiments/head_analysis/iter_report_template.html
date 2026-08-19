@@ -200,6 +200,24 @@ MLP 1633→3265→4898)로 나누고 스테이지마다 마스킹된 모델에�
 </tbody>
 </table>
 
+<p>
+OOD 셋은 공식 val 소속 262(primary)와 train 소속 1,271(secondary)의 합집합이다.
+풀링 값(+0.0120)은 표본이 큰 train 클립의 더 쉬운 분포로 희석된 것으로,
+<strong>primary인 OOD-val만 떼어 봐도 +0.0261로 in-dist val·test와 같은 수준</strong>이며
+CI가 0을 배제한다. 어느 부분집합에서도 부호는 뒤집히지 않는다.
+</p>
+
+<table>
+<thead><tr><th>OOD 부분집합 (6.4 s)</th><th class="r">n</th><th class="r">minADE@6 원샷</th>
+<th class="r">it3</th><th class="r">Δ 중앙값 [95% CI]</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>OOD-val (primary)</td><td class="r">262</td><td class="r">1.1192</td><td class="r">1.1485</td>
+  <td class="r"><strong>+0.0261</strong> [+0.0010, +0.0558]</td><td class="r">3.2e−02</td></tr>
+<tr><td>OOD-train (secondary)</td><td class="r">1,271</td><td class="r">1.0258</td><td class="r">1.0500</td>
+  <td class="r">+0.0092 [−0.0028, +0.0215]</td><td class="r">3.5e−02</td></tr>
+</tbody>
+</table>
+
 <figure>
   <img src="PLOT::iter::sets.png" alt="one-shot vs staged by set and horizon">
   <figcaption>셋(열) × 지표(행) × 호라이즌(x축)의 minADE@6 / minFDE@6 평균.
