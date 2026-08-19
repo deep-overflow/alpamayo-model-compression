@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>중요도를 어디서 재는가: 캘리브레이션 분포 1요인 실험</title>
+<style>
+  :root { --bg:#FAF9F5; --bg-card:#FFF; --bg-code:#F0EEE6; --text:#29261B;
+    --text-muted:#6B6555; --accent:#D97757; --accent-dark:#C15F3C; --border:#E8E6DC;
+    --table-stripe:#F5F4EF; --good:#008300; --warn:#eda100; --bad:#b0402a; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); margin:0;
+    font-family:"Söhne","Pretendard","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    font-size:16px; line-height:1.7; padding:3rem 1.5rem 5rem; }
+  .container { max-width:920px; margin:0 auto; }
+  header { margin-bottom:3rem; border-bottom:2px solid var(--accent); padding-bottom:1.5rem; }
+  .eyebrow { color:var(--accent-dark); font-size:.78rem; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; margin-bottom:.6rem; }
+  h1 { font-family:"Tiempos Headline",Georgia,serif; font-size:2rem; font-weight:500;
+    line-height:1.3; margin:0 0 .75rem; }
+  .meta { color:var(--text-muted); font-size:.9rem; }
+  .meta code { background:none; padding:0; color:var(--text-muted); }
+  h2 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.4rem; font-weight:500;
+    margin:2.75rem 0 1rem; padding-top:.5rem; }
+  h2 .num { color:var(--accent); margin-right:.4rem; }
+  h3 { font-size:1.05rem; font-weight:600; margin:1.75rem 0 .6rem; }
+  p { margin:.9rem 0; }
+  code { font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.86em;
+    background:var(--bg-code); padding:.12em .35em; border-radius:4px; }
+  pre { background:var(--bg-code); padding:1rem 1.1rem; border-radius:8px; overflow-x:auto;
+    font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.84rem; line-height:1.6; }
+  pre code { background:none; padding:0; }
+  table { width:100%; border-collapse:collapse; margin:1.25rem 0 1.75rem; font-size:.9rem;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th { background:var(--bg-code); text-align:left; font-weight:600; padding:.55rem .8rem;
+    border-bottom:2px solid var(--border); white-space:nowrap; }
+  td { padding:.5rem .8rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:nth-child(even) { background:var(--table-stripe); }
+  tbody tr:last-child td { border-bottom:none; }
+  .r { text-align:right; font-variant-numeric:tabular-nums; }
+  .up { color:var(--bad); } .down { color:var(--good); }
+  .callout { background:var(--bg-card); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; padding:1rem 1.2rem; margin:1.5rem 0; }
+  .callout.good { border-left-color:var(--good); }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout p:first-child { margin-top:0; } .callout p:last-child { margin-bottom:0; }
+  .lede { font-size:1.05rem; color:var(--text-muted); }
+  figure { margin:1.75rem 0; }
+  figure img { width:100%; border:1px solid var(--border); border-radius:8px; display:block; }
+  figcaption { color:var(--text-muted); font-size:.84rem; margin-top:.6rem; }
+  ul, ol { padding-left:1.3rem; } li { margin:.35rem 0; }
+  .kpi { display:flex; flex-wrap:wrap; gap:.9rem; margin:1.5rem 0; }
+  .kpi div { flex:1 1 150px; background:var(--bg-card); border:1px solid var(--border);
+    border-radius:8px; padding:.9rem 1rem; }
+  .kpi .v { font-family:"Tiempos Headline",Georgia,serif; font-size:1.5rem; display:block; }
+  .kpi .k { color:var(--text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  footer { margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--border);
+    color:var(--text-muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>중요도를 어디서 재는가: 캘리브레이션 분포 1요인 실험</h1>
+  <div class="meta">
+    2026-08-19 · <code>nvidia/Alpamayo-1.5-10B</code> @ <code>7aba8293</code> ·
+    공식 test 500 + OOD-val 262 · minADE@8 · RTX 5880 Ada · 페어드 부트스트랩 95% CI
+  </div>
+</header>
+
+<p class="lede">
+프루닝 기준·예산·할당을 모두 고정하고 <strong>중요도를 잰 100클립만</strong> 바꿨다.
+&ldquo;평가할 분포로 캘리브레이션하면 그 분포에서 이득&rdquo;이라는 자연스러운 예상은
+<strong>기각됐다</strong>. OOD로 잰 모델은 OOD 평가에서도 나쁘고, 클립 수를 두 배로 늘려도
+나아지지 않는다. 그리고 이 요인은 <strong>24% 압축 자체보다 두 배 크다</strong>.
+</p>
+
+<div class="kpi">
+  <div><span class="k">OOD 캘리브 대가 (test)</span><span class="v">+0.191</span>minADE@8</div>
+  <div><span class="k">OOD 캘리브 대가 (OOD-val)</span><span class="v">+0.210</span>정합 이득 없음</div>
+  <div><span class="k">압축 자체의 대가</span><span class="v">+0.096</span>절반 크기</div>
+  <div><span class="k">200클립 결합</span><span class="v">+0.084</span>늘려도 나빠짐</div>
+</div>
+
+<h2><span class="num">1</span>질문</h2>
+
+<p>
+이 프로젝트의 모든 프루닝 기준은 <code>calib_100</code> &mdash; 공식 train에서
+분포 매칭으로 뽑은 100클립 &mdash; 에서 잰 1차 Taylor 점수에 기반한다. 그런데 평가의 절반은
+OOD 롱테일 셋에서 이뤄진다. <strong>평가할 분포에서 재면 그 분포에서 더 나은 모델이
+나오지 않을까?</strong>
+</p>
+
+<p>
+그럴 법한 이유가 있다. Taylor 점수는 &ldquo;지금 이 입력에서&rdquo;의 국소 미분이고,
+공사 구간·보행자 밀집 같은 장면에서 중요한 유닛은 일상 주행에서 중요한 유닛과 다를 수 있다.
+</p>
+
+<h2><span class="num">2</span>설계</h2>
+
+<table>
+<thead><tr><th>arm</th><th>캘리브레이션</th><th>n</th><th>기준·예산·할당</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>&mdash;</td><td class="r">&mdash;</td><td>프루닝 없음</td></tr>
+<tr><td><code>dual_u40_v2</code> (in-dist)</td><td><code>calib_100</code> 공식 train, 분포 매칭</td><td class="r">100</td><td rowspan="3"><code>max(rank I<sub>traj</sub>, rank I<sub>CoC</sub>)</code><br>uniform 39.86%, VLM만<br>expert·KV 미개입<br>&minus;2,657,452,032 param</td></tr>
+<tr><td><code>dual_u40_mix</code> (pooled)</td><td><code>calib_100</code> + <code>calib_ood_100</code></td><td class="r">200</td></tr>
+<tr><td><code>dual_u40_ood</code> (OOD)</td><td><code>calib_ood_100</code> OOD-train 무작위</td><td class="r">100</td></tr>
+</tbody>
+</table>
+
+<p>
+세 압축 arm은 제거 파라미터 수까지 동일하다. <strong>1요인이다.</strong>
+</p>
+
+<h3>오염 차단</h3>
+
+<p>
+OOD 1,533은 평가 셋이므로, 캘리브레이션은 <code>split=='train'</code>인 1,271개에서만 뽑고
+판정은 <strong>OOD-val 262</strong>로 한다. <code>calib_ood_100</code>과 OOD-val의 중첩은 0,
+<code>calib_100</code>과의 중첩도 0으로 확인했다. in-dist arm은 OOD 클립을 본 적이 없고
+OOD arm은 공식 train 클립을 본 적이 없으므로, 어느 판정 셋도 한쪽에 유리하지 않다.
+</p>
+
+<div class="callout">
+<p><strong>200클립 결합은 GPU 없이 정확히 만들어진다.</strong>
+<code>run_importance.py</code>가 <code>acc / n</code>으로 클립 평균을 저장하고 두 세트가 모두
+n=100이므로, 두 평균의 평균이 200클립 합집합 평균과 <em>수학적으로 같다</em>. 재측정이 필요
+없다. 결합 방식 세 가지(pool-mean / rank-mean / rank-max)는 유지 집합이 95&ndash;98% 일치해
+방식 선택은 쟁점이 아니었다.</p>
+</div>
+
+<h2><span class="num">3</span>결과</h2>
+
+<h3>3.1 절대값</h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">test 500 minADE</th><th class="r">minFDE</th><th class="r">NLL</th><th class="r">OOD-val minADE</th><th class="r">minFDE</th><th class="r">NLL</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.7799</td><td class="r">2.0156</td><td class="r">0.1755</td><td class="r">0.9214</td><td class="r">2.2256</td><td class="r">0.2129</td></tr>
+<tr><td><strong>in-dist</strong></td><td class="r"><strong>0.8754</strong></td><td class="r">2.2779</td><td class="r">0.2507</td><td class="r"><strong>1.0306</strong></td><td class="r">2.5855</td><td class="r">0.2628</td></tr>
+<tr><td>pooled 200</td><td class="r">0.9592</td><td class="r">2.4676</td><td class="r">0.2637</td><td class="r">1.0777</td><td class="r">2.6844</td><td class="r">0.2714</td></tr>
+<tr><td>OOD</td><td class="r">1.0659</td><td class="r">2.7584</td><td class="r">0.4868</td><td class="r">1.2407</td><td class="r">3.0504</td><td class="r">0.3668</td></tr>
+</tbody>
+</table>
+
+<h3>3.2 1요인 대조 (in-dist 기준)</h3>
+
+<table>
+<thead><tr><th>대조</th><th>셋</th><th class="r">minADE</th><th class="r">minFDE</th><th class="r">NLL</th><th class="r">이 셋의 분해 한계</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">OOD &minus; in-dist</td><td>test 500</td>
+  <td class="r"><strong>+0.1905</strong> [+0.1324, +0.2537] <strong>*</strong></td>
+  <td class="r">+0.4805 <strong>*</strong></td><td class="r">+0.2361 <strong>*</strong></td><td class="r">0.0872</td></tr>
+<tr><td>OOD-val</td>
+  <td class="r"><strong>+0.2101</strong> [+0.1010, +0.3490] <strong>*</strong></td>
+  <td class="r">+0.4650 <strong>*</strong></td><td class="r">+0.1040 <strong>*</strong></td><td class="r">0.1747</td></tr>
+<tr><td rowspan="2">pooled &minus; in-dist</td><td>test 500</td>
+  <td class="r"><strong>+0.0838</strong> [+0.0443, +0.1273] <strong>*</strong></td>
+  <td class="r">+0.1897 <strong>*</strong></td><td class="r">+0.0130</td><td class="r">0.0591</td></tr>
+<tr><td>OOD-val</td>
+  <td class="r">+0.0471 [&minus;0.0018, +0.0953]</td>
+  <td class="r">+0.0990</td><td class="r">+0.0085</td><td class="r">0.0703</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cs::calib_source.png" alt="캘리브레이션 분포별 성능과 요인 크기 비교">
+  <figcaption>왼쪽: 캘리브레이션에 OOD가 많이 섞일수록 두 평가 셋 모두에서 단조적으로
+  나빠진다. 오차막대는 페어드 95% CI. 오른쪽: 같은 축(test 500 페어드 ΔminADE)에서 본
+  설계 선택별 대가 &mdash; 주황이 이번 실험, 회색이 기존 측정.</figcaption>
+</figure>
+
+<h3>3.3 분포 정합 가설은 기각된다</h3>
+
+<div class="callout warn">
+<p>정합 이득이 있다면 OOD arm의 손해가 <em>OOD-val에서 작아져야</em> 한다. 그렇지 않다 &mdash;
+test 500에서 +0.1905, OOD-val에서 <strong>+0.2101</strong>로 오히려 크다. 두 셋에서 손해가
+같은 크기라는 것은 &ldquo;분포가 어긋나서&rdquo;가 아니라 <strong>OOD 클립으로 잰 점수 자체가
+열등하다</strong>는 뜻이다.</p>
+</div>
+
+<h3>3.4 원인은 추정 노이즈가 아니라 분포다</h3>
+
+<p>
+남은 설명은 &ldquo;100클립으로는 롱테일의 분산을 평균해내지 못한다&rdquo;였다. 그렇다면 클립을
+두 배로 늘린 결합 arm이 in-dist 단독보다 <em>나아야</em> 한다. 반대다 &mdash;
+<strong>+0.0838 나빠졌고 CI가 0을 배제한다.</strong>
+</p>
+
+<pre><code>in-dist 0.8754  ->  pooled 0.9592  ->  OOD 1.0659
+선형 중간값 예측 (0.8754+1.0659)/2 = 0.9707,  실측 0.9592</code></pre>
+
+<p>
+거의 정확히 중간이다. OOD 클립의 Taylor 점수는 <strong>정보가 아니라 오염</strong>이고,
+섞은 비율만큼 해가 된다. 클립 수를 늘리는 것으로는 해결되지 않는다.
+</p>
+
+<h3>3.5 점수는 안정적인데 선택은 바뀐다</h3>
+
+<pre><code>Spearman 순위상관 (전 레이어 풀링)      유지 집합 중첩 (dual)
+  traj_vlm_q    0.972                    Q head  87.6%
+  coc_vlm_q     0.947                    MLP     83.6%
+  traj_vlm_mlp  0.908
+  coc_vlm_mlp   0.971</code></pre>
+
+<p>
+상관 0.91&ndash;0.97인데 선택은 12&ndash;17% 달라진다. 39.86% 컷이 순위 분포의 조밀한
+중간을 자르기 때문이다 &mdash; 경계 근처 유닛이 빽빽해 순위가 조금만 흔들려도 컷 안팎이
+바뀐다. <strong>상관계수만 보고 &ldquo;분포는 상관없다&rdquo;고 결론 내리면 틀린다.</strong>
+레이어별로는 고르다(중앙값 89.5%, 70% 미만 1/36).
+</p>
+
+<h2><span class="num">4</span>요인 크기</h2>
+
+<p>모두 공식 test 500의 페어드 ΔminADE@8이므로 직접 비교된다.</p>
+
+<table>
+<thead><tr><th>설계 선택</th><th class="r">대가</th><th>측정된 곳</th></tr></thead>
+<tbody>
+<tr><td><strong>캘리브레이션을 OOD로</strong></td><td class="r"><strong>+0.1905</strong></td><td>이 실험</td></tr>
+<tr><td>24% 압축 자체</td><td class="r">+0.0955</td><td>기준 분해</td></tr>
+<tr><td>캘리브레이션에 OOD 절반 섞기</td><td class="r">+0.0838</td><td>이 실험</td></tr>
+<tr><td>4비트 양자화 추가</td><td class="r">+0.0816</td><td>합성 실험</td></tr>
+<tr><td>기준 선택 (<code>jtraj</code> &minus; <code>dual</code>)</td><td class="r">+0.0707</td><td>기준 분해</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p><strong>캘리브레이션 데이터는 이 프로젝트에서 측정한 단일 요인 중 가장 크다</strong> &mdash;
+압축 자체의 2배, 기준 선택의 2.7배. 지금까지 기준·할당·예산·양자화를 세밀하게 비교해 왔는데,
+그 모든 것보다 &ldquo;어느 100클립에서 재는가&rdquo;가 더 크게 작용한다.</p>
+</div>
+
+<h2><span class="num">5</span>한계</h2>
+
+<ul>
+  <li><strong>OOD-val의 검정력.</strong> 262클립으로 0.070까지만 분해한다.
+  <code>pooled &minus; in-dist</code>의 +0.0471은 그 아래이므로 &ldquo;차이 없음&rdquo;이
+  아니라 <strong>&ldquo;이 크기에서 검출 안 됨&rdquo;</strong>이다. 부호와 크기가 test 500
+  (+0.0838)과 같은 방향이라 실재할 가능성이 높다.</li>
+  <li><strong>OOD 캘리브레이션 표본 하나.</strong> <code>calib_ood_100</code>은 시드 고정
+  무작위 1회 추출이다. 다른 추출에서 얼마나 흔들리는지 모른다 &mdash; 다만 효과가 분해
+  한계의 2배 이상이라 추출 운으로 뒤집힐 여지는 작다.</li>
+  <li><strong>기준 하나.</strong> <code>dual</code>만 측정했다. <code>traj</code>/<code>coc</code>
+  단독 기준이 분포에 더/덜 민감한지는 모른다 &mdash; 유지 집합 중첩은
+  89.3% / 90.1%로 <code>dual</code>(87.6%)과 비슷했다.</li>
+  <li><strong>개루프만.</strong> 폐루프 미측정. 이 프로젝트에는 개루프 순위가 주행에서
+  뒤집힌 전례가 있다.</li>
+  <li><strong>&ldquo;분포 매칭이 좋다&rdquo;는 검증되지 않았다.</strong> 이 실험이 보인 것은
+  &ldquo;OOD가 나쁘다&rdquo;이지 &ldquo;<code>calib_100</code>의 분포 매칭이 무작위 in-dist
+  추출보다 낫다&rdquo;가 아니다. 그건 별도 arm이 필요하다.</li>
+</ul>
+
+<h2><span class="num">6</span>권고</h2>
+
+<ol>
+  <li><code>calib_100</code>을 유지한다. <strong>OOD·평가분포 정합·OOD 혼합 세 가지 모두
+  측정됐고 전부 손해다.</strong></li>
+  <li>캘리브레이션 클립 수를 늘린다면 <strong>같은 분포에서</strong> 늘린다. 200클립 결합이
+  나빠진 것은 클립 수 때문이 아니라 섞인 분포 때문이므로, in-dist 200/400은 여전히 열려 있는
+  질문이다.</li>
+  <li>향후 어떤 기준을 제안하든 <strong>캘리브레이션 세트를 고정</strong>해야 한다. 이 요인이
+  기준 효과보다 크므로, 캘리브레이션이 다른 두 기준을 비교하면 기준 차이를 볼 수 없다.</li>
+</ol>
+
+<footer>
+숫자 원본: <code>outputs/calib_source/metrics.json</code> ·
+분석: <code>experiments/evaluation/analyze_calib_source.py</code> ·
+매니페스트: <code>outputs/eval_sets/{calib_ood_100,ood_val}.parquet</code> ·
+체크포인트: <code>outputs/slim_dual_u40_{ood,mix}/</code> (레시피)
+</footer>
+
+</div>
+</body>
+</html>

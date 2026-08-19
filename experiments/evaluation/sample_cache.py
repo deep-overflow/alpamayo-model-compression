@@ -72,6 +72,22 @@ def index(split):
     return json.loads((PRE / split / "index.json").read_text())
 
 
+def calib_samples(repo, manifest="calib_100"):
+    """(clip_id, t0_us) for each calibration clip.
+
+    calib_100 sits at the fixed CALIB_T0, but a calibration set drawn from the OOD pool
+    carries its own per-clip t0 -- reading it from the manifest keeps the caller from
+    assuming one. Falls back to split.json at CALIB_T0 when the manifest is empty, for
+    the pre-2026-08-07 runs.
+    """
+    if not manifest:
+        return [(c, CALIB_T0) for c in calib_clips(repo, manifest)]
+    df = pd.read_parquet(Path(repo) / "outputs" / "eval_sets" / f"{manifest}.parquet")
+    if "t0_us" not in df.columns:
+        return [(c, CALIB_T0) for c in df["clip_id"]]
+    return list(zip(df["clip_id"], df["t0_us"].astype(int)))
+
+
 def path_for(split, clip_id, t0_us=5_100_000):
     return PRE / split / "samples" / f"{clip_id}__t0_{t0_us}.npz"
 

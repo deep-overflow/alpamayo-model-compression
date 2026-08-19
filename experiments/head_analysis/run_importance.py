@@ -128,6 +128,11 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--calib-manifest", default="calib_100",
                     help="eval_sets manifest stem; empty string falls back to split.json")
+    ap.add_argument("--cache", default="calib",
+                    help="pre_processed namespace the manifest's clips live in. The default "
+                         "'calib' pairs with calib_100 at the fixed CALIB_T0; an OOD "
+                         "calibration set lives under 'ood' and carries a per-clip t0_us, "
+                         "which is then read from the manifest instead of assumed.")
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--fm-steps", type=int, default=10)
     ap.add_argument("--reserve-gb", type=float, default=40.0)
@@ -144,7 +149,7 @@ def main():
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    calib = sc.calib_clips(REPO, args.calib_manifest)[: args.num_clips]
+    calib = sc.calib_samples(REPO, args.calib_manifest)[: args.num_clips]
 
     devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
     device = reserve_gpu(args.reserve_gb, devices=devices)
@@ -200,8 +205,8 @@ def main():
         "model": "nvidia/Alpamayo-1.5-10B",
         "purpose": "dual-objective Taylor importance for Q head / MLP channel / KV group",
         "objectives": {"coc": "CoC NLL", "traj": "flow-matching MSE vs GT trajectory"},
-        "num_clips": len(calib), "clip_ids": calib, "seed": args.seed,
-        "calib_manifest": args.calib_manifest,
+        "num_clips": len(calib), "clip_ids": [c for c, _ in calib], "seed": args.seed,
+        "calib_manifest": args.calib_manifest, "cache": args.cache,
         "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
         "mask": args.mask,
@@ -210,9 +215,9 @@ def main():
     }, indent=2))
 
     records = []
-    for ci, clip_id in enumerate(calib):
+    for ci, (clip_id, clip_t0) in enumerate(calib):
         t0 = time.time()
-        data = sc.load_cached(sc.path_for("calib", clip_id, sc.CALIB_T0))
+        data = sc.load_cached(sc.path_for(args.cache, clip_id, clip_t0))
         torch.cuda.reset_peak_memory_stats()
         clip_acc = {obj: {k: np.zeros(s) for k, s in shapes.items()} for obj in ("coc", "traj")}
         # seed from the clip id, not the loop index: sharding must not change a result
