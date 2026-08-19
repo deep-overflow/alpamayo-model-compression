@@ -1,0 +1,144 @@
+"""Judge the staged-recalibration gates for one criterion, at minADE@K.
+
+Reads three test_500 row sets -- the re-measured baseline, the one-shot arm, and the
+staged (it3) arm -- reduces every clip to minADE@K from the stored per-sample arrays
+(seeds are base+k, so the first K of an 8-sample run are exactly what a K-sample run
+would have drawn), pairs by clip id, and judges the gates pre-registered in
+plans/2026-08-16_iterative-recalibration.md:
+
+  R1a  direction: paired minADE@K (it3 - oneshot), bootstrap 95% CI upper < 0.
+       The median CI is primary (minADE deltas are heavy-tailed; house convention),
+       the mean CI is reported beside it.
+  R1b  size: median(it3 - oneshot) <= -0.3 x median(oneshot - baseline).
+  R2   CoC degeneracy of the it3 arm < 0.05, reported next to the one-shot rate.
+  R3   kept-set overlap vs the one-shot cut (recorded by run_iter_prune): > 0.95
+       reroutes a null R1 to "re-scoring did not change the selection".
+
+Also checks that the re-measured baseline reproduces the original baseline_ada rows
+bitwise (same clips, same seeds, same architecture) -- a free integrity check.
+
+Usage:
+  .venv/bin/python experiments/head_analysis/analyze_iter.py --criterion dual
+"""
+
+import argparse
+import glob
+import json
+from pathlib import Path
+
+import numpy as np
+from scipy.stats import wilcoxon
+
+REPO = Path(__file__).resolve().parents[2]
+
+GATE_R1B_FRAC = 0.3
+GATE_R2_DEGEN = 0.05
+GATE_R3_OVERLAP = 0.95
+
+
+def load_rows(pattern):
+    rows = []
+    for f in sorted(glob.glob(str(pattern))):
+        rows.extend(json.loads(Path(f).read_text()))
+    return {r["clip_id"]: r for r in rows}
+
+
+def ade_at_k(row, k):
+    if "ade_rollout_k" not in row:
+        raise SystemExit(f"clip {row['clip_id']}: no per-sample array; "
+                         "re-evaluate with the post-2026-08-11 runner")
+    return float(np.min(np.asarray(row["ade_rollout_k"], dtype=float)[:k]))
+
+
+def boot(v, fn, n=10_000, seed=0):
+    rng = np.random.default_rng(seed)
+    v = np.asarray(v, dtype=float)
+    stats = [fn(v[rng.integers(0, len(v), len(v))]) for _ in range(n)]
+    return float(np.percentile(stats, 2.5)), float(np.percentile(stats, 97.5))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--criterion", default="dual")
+    ap.add_argument("--k", type=int, default=6)
+    ap.add_argument("--baseline", default="baseline_ada_ps_test")
+    args = ap.parse_args()
+    c, k = args.criterion, args.k
+
+    base = load_rows(REPO / "outputs" / args.baseline / "baseline_s*.json")
+    one = load_rows(REPO / "outputs" / f"{c}_u40_v2_ps_test" / f"slim_{c}_u40_v2_s*.json")
+    if not one:  # arms whose 08-12 rows already carry per-sample arrays
+        one = load_rows(REPO / "outputs" / f"{c}_u40_v2_test" / f"slim_{c}_u40_v2_s*.json")
+    it3 = load_rows(REPO / "outputs" / f"iter_{c}_test" / f"slim_{c}_u40_it3_s*.json")
+    ids = sorted(set(base) & set(one) & set(it3))
+    if len(ids) < 400:
+        raise SystemExit(f"only {len(ids)} overlapping clips; something is missing")
+
+    b = np.array([ade_at_k(base[i], k) for i in ids])
+    o = np.array([ade_at_k(one[i], k) for i in ids])
+    t = np.array([ade_at_k(it3[i], k) for i in ids])
+    d_one, d_it3, contrast = o - b, t - b, t - o
+
+    med = float(np.median(contrast))
+    med_lo, med_hi = boot(contrast, np.median)
+    mean = float(np.mean(contrast))
+    mean_lo, mean_hi = boot(contrast, np.mean)
+    p_w = float(wilcoxon(contrast).pvalue)
+
+    r1a = med_hi < 0
+    r1b_thresh = -GATE_R1B_FRAC * float(np.median(d_one))
+    r1b = med <= r1b_thresh
+    degen_it3 = float(np.mean([it3[i]["coc_degenerate"] for i in ids]))
+    degen_one = float(np.mean([one[i]["coc_degenerate"] for i in ids]))
+    r2 = degen_it3 < GATE_R2_DEGEN
+    ov = json.loads((REPO / "outputs" / f"iter_{c}_u40" / "config.json").read_text())[
+        "kept_overlap_vs_oneshot"]
+    r3_unchanged = ov["q"] > GATE_R3_OVERLAP and ov["mlp"] > GATE_R3_OVERLAP
+
+    # integrity: the re-measured baseline must reproduce the original rows bitwise
+    orig = load_rows(REPO / "outputs" / "baseline_ada_test" / "baseline_s*.json")
+    shared = [i for i in ids if i in orig]
+    repro = float(np.mean([base[i]["minADE_rollout"] == orig[i]["minADE_rollout"]
+                           for i in shared])) if shared else float("nan")
+
+    nll_d = np.array([it3[i]["nll_self"] - one[i]["nll_self"] for i in ids])
+
+    lines = [
+        f"staged recalibration gates -- {c}, minADE@{k}, n={len(ids)}",
+        (f"baseline {np.mean(b):.4f} (med {np.median(b):.4f}) | "
+         f"oneshot {np.mean(o):.4f} ({np.median(o):.4f}) | "
+         f"it3 {np.mean(t):.4f} ({np.median(t):.4f})"),
+        f"oneshot - baseline: med {np.median(d_one):+.4f}  mean {np.mean(d_one):+.4f}",
+        f"it3     - baseline: med {np.median(d_it3):+.4f}  mean {np.mean(d_it3):+.4f}",
+        "",
+        (f"contrast it3 - oneshot: med {med:+.4f} [{med_lo:+.4f}, {med_hi:+.4f}]  "
+         f"mean {mean:+.4f} [{mean_lo:+.4f}, {mean_hi:+.4f}]  wilcoxon p={p_w:.2e}"),
+        f"R1a (median CI upper < 0)          -> {'PASS' if r1a else 'FAIL'}",
+        f"R1b (med <= {r1b_thresh:+.4f} = 30% recovery) -> {'PASS' if r1b else 'FAIL'}",
+        (f"R2  (it3 degeneracy {degen_it3:.3f} < 0.05; oneshot {degen_one:.3f}) "
+         f"-> {'PASS' if r2 else 'FAIL'}"),
+        f"R3  overlap q {ov['q']:.3f} mlp {ov['mlp']:.3f} -> "
+        + ("selection unchanged: a null R1 is uninformative" if r3_unchanged
+           else "selection changed: R1 reads at face value"),
+        f"nll_self it3 - oneshot: med {np.median(nll_d):+.4f}",
+        (f"baseline reproduction vs original rows: {repro:.1%} bitwise "
+         f"({len(shared)} shared clips)"),
+    ]
+    out = REPO / "outputs" / f"iter_gates_{c}"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "summary.txt").write_text("\n".join(lines) + "\n")
+    (out / "metrics.json").write_text(json.dumps({
+        "criterion": c, "k": k, "n": len(ids),
+        "contrast_median": med, "contrast_median_ci": [med_lo, med_hi],
+        "contrast_mean": mean, "contrast_mean_ci": [mean_lo, mean_hi],
+        "wilcoxon_p": p_w, "oneshot_cost_median": float(np.median(d_one)),
+        "it3_cost_median": float(np.median(d_it3)),
+        "r1a": bool(r1a), "r1b": bool(r1b), "r1b_threshold": r1b_thresh,
+        "r2": bool(r2), "degen_it3": degen_it3, "degen_oneshot": degen_one,
+        "r3_overlap": ov, "baseline_repro": repro,
+    }, indent=2))
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    main()
