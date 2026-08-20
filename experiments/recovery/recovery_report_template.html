@@ -200,6 +200,46 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 영향은 분리하지 않았다.</li>
 </ul>
 
+<h2>부록 A. alpasim 전체 지표</h2>
+<p class="muted">공식 컨벤션 (per-rollout <code>results-summary.json</code> metrics → 롤아웃 → 씬 평균 →
+씬 간 평균; 2026-08-18 전 config 표와 동일 집계). baseline·dual_u40 열은 해당 표와 전 항목 일치 검증됨.</p>
+<table>
+<tr><th>지표</th><th>baseline</th><th>dual_u40 제로샷</th><th>u55 recovered</th></tr>
+<tr><td>score</td><td>0.750</td><td>0.828</td><td><b>0.823</b></td></tr>
+<tr><td>passed</td><td>0.890</td><td>0.910</td><td>0.887</td></tr>
+<tr><td>collision_at_fault</td><td>0.040</td><td>0.023</td><td>0.030</td></tr>
+<tr><td>collision_any</td><td>0.133</td><td>0.067</td><td>0.073</td></tr>
+<tr><td>collision_front</td><td>0.030</td><td>0.013</td><td>0.023</td></tr>
+<tr><td>collision_lateral</td><td>0.010</td><td>0.010</td><td>0.007</td></tr>
+<tr><td>collision_rear</td><td>0.093</td><td>0.043</td><td>0.043</td></tr>
+<tr><td>offroad</td><td>0.070</td><td>0.067</td><td>0.083</td></tr>
+<tr><td>offroad_or_collision</td><td>0.203</td><td>0.133</td><td>0.157</td></tr>
+<tr><td>offroad_or_collision_at_fault</td><td>0.110</td><td>0.090</td><td>0.113</td></tr>
+<tr><td>open_loop_collision</td><td>0.056</td><td>0.027</td><td>0.037</td></tr>
+<tr><td>wrong_lane</td><td>0.293</td><td>0.320</td><td>0.310</td></tr>
+<tr><td>progress_clipped_rel</td><td>0.747</td><td>0.828</td><td><b>0.855</b></td></tr>
+<tr><td>progress_rel</td><td>0.820</td><td>0.869</td><td><b>0.880</b></td></tr>
+<tr><td>dist_traveled_m</td><td>124.2</td><td>140.9</td><td><b>150.6</b></td></tr>
+<tr><td>dist_to_gt_trajectory (m)</td><td>2.886</td><td>3.318</td><td>3.326</td></tr>
+<tr><td>dist_to_gt_location (m)</td><td>17.09</td><td>14.40</td><td>14.21</td></tr>
+<tr><td>plan_deviation</td><td>0.316</td><td>0.364</td><td>0.328</td></tr>
+<tr><td>min_dist_to_obstacle_m</td><td>3.148</td><td>3.887</td><td>3.026</td></tr>
+<tr><td>min_dist_to_lane_boundary_m</td><td>0.063</td><td>0.044</td><td>0.058</td></tr>
+<tr><td>duration_frac_20s</td><td>0.682</td><td>0.700</td><td>0.717</td></tr>
+</table>
+<p class="muted">gt_dist_traveled 171.6 m, eval_relevant 1.0, safety_monitor 0, img_is_black 0은
+전 config 동일. 충돌 계열은 baseline 대비 전반 우위·u40과 근접, 진행 지표는 셋 중 최고.
+약점: offroad 0.083(셋 중 최고치)과 GT 이탈 꼬리(아래).</p>
+<table>
+<tr><th>dist_to_gt_trajectory 분포</th><th>평균</th><th>중앙값</th><th>p90</th><th>최대</th><th>≥4 m</th><th>≥5 m</th></tr>
+<tr><td>baseline</td><td>2.886</td><td>3.586</td><td>4.347</td><td>6.48</td><td>138 (46%)</td><td>7</td></tr>
+<tr><td>dual_u40 제로샷</td><td>3.318</td><td>4.023</td><td>4.667</td><td>5.93</td><td>176 (59%)</td><td>15</td></tr>
+<tr><td><b>u55 recovered</b></td><td>3.326</td><td>4.041</td><td>4.932</td><td>6.31</td><td>176 (59%)</td><td><b>26</b></td></tr>
+</table>
+<p class="muted">≥4 m 카운트는 4.0 m 직후의 인공 덩어리(지표 포화) 위에 있어 서열화에 부적합 —
+꼬리 비교는 ≥5 m가 안정적이다 (2026-08-18 분석). recovered의 ≥5 m 26건(u40 15, baseline 7)은
+멀리 벗어나는 꼬리가 u40보다 두껍다는 뜻으로, offroad 0.083과 함께 남는 관찰 지점.</p>
+
 <h2>8. 재현</h2>
 <pre>
 # 데이터셋 (버킷 균형 1,200 + probe 238) + 캐시
