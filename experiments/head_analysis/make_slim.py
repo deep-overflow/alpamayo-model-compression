@@ -9,7 +9,9 @@ Configs:
                       (uniform matched budget, expert untouched, no KV drop); only the
                       within-layer score differs. Combined: dual = max(rank_traj,
                       rank_coc), j_traj = max(rank_traj, rank_J). Single-criterion
-                      controls: traj, coc, j. Expected -2.66B each.
+                      controls: traj, coc, j. Operator ablation: dualsum / dualprod
+                      keep dual's halves but combine by rank-sum / rank-product.
+                      Expected -2.66B each.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -109,14 +111,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             return jl["q_j"], jl["mlp_j"]
 
         parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j"),
-                 "trajvqa": ("traj", "vqa")}.get(stem, (stem,))
+                 "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
+                 "dualprod": ("traj", "coc")}.get(stem, (stem,))
+        # dualsum/dualprod are the operator ablation: same halves as dual, only the
+        # combination differs (plans/2026-08-20_combination-operator-ablation.md)
+        op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
         # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
         # criterion -- it only matters when two scores have to share one scale
         sq, sm = half(parts[0])
         for p in parts[1:]:
             oq, om = half(p)
-            sq = np.maximum(rank_norm(sq), rank_norm(oq))
-            sm = np.maximum(rank_norm(sm), rank_norm(om))
+            sq = op(rank_norm(sq), rank_norm(oq))
+            sm = op(rank_norm(sm), rank_norm(om))
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)

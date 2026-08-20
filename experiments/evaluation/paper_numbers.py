@@ -61,6 +61,8 @@ ARMS = {
     "qvla_coc_b4": {"indist": ("qvla_coc_b4_indist", False),
                     "test": ("qvla_coc_b4_test", False),
                     "oodval": ("qvla_coc_b4_ood", True)},
+    "dualsum": {"test": ("dualsum_u40_v2_test", False)},
+    "dualprod": {"test": ("dualprod_u40_v2_test", False)},
     "dual_u55": {"test": ("dual_u55_test", False)},
     "jtraj_u55": {"test": ("jtraj_u55_test", False)},
     "w8_all": {"test": ("w8_all_test", False)},

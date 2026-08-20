@@ -61,6 +61,11 @@ Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
   ($J$) collides the most --- CoC health is not a safety proxy. The staged variant
   re-scores the masked model between three cut stages (Table~\ref{tab:negatives});
   its closed loop was not run, per the pre-registered gate on the open-loop verdict.
+  The two operator-ablation rows keep dual's halves and swap only the within-layer
+  combination (test only): rank-sum is statistically equivalent to $\max$ (paired
+  $\Delta$minADE@6 $-0.001$ $[-0.011,+0.007]$), rank-product is significantly worse
+  ($+0.142^*$) --- what matters is keeping units that \emph{either} channel ranks
+  high, which the product is alone in breaking.
 }
 \label{tab:criteria}
 \begin{tabular}{llccclr}
@@ -75,6 +80,8 @@ $J$ only               & \checkmark & 1.942 / 5.464 & 2.158 / 5.992 & 2.557 / 6.
 dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ & & \textbf{0.890 / 2.330} & \textbf{0.950 / 2.546} & \textbf{1.119 / 2.851} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
 jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.937 / 2.445 & 1.028 / 2.804 & 1.175 / 3.032 & 0.791 ($+$0.042) & 0.8\% \\
 staged dual (it3, 3 stages) &      & 0.994 / 2.648 & 1.021 / 2.787 & 1.149 / 2.892 & not run & --- \\
+dual, rank-sum comb.\      &      & ---           & 0.960 / 2.607 & ---           & not run & --- \\
+dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---           & not run & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -192,6 +199,7 @@ Use score magnitudes  & Spearman/Pearson $\geq 0.7$ & 0/4 cells; target reliabil
 First-order additivity & $|\log_2 R| \leq 1$ & group/sum $= 1/5$--$1/55$ & broken \\
 Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD-val $+0.026^*$ & rejected \\
 Ratio extension (u55, 33\%) & --- & minADE@6 $5.1\times$ baseline, degen.\ 71\% & collapse \\
+Combination operator swap & arm$-$dual $\Delta$ADE@6 CI & sum $-0.001$ (ns); product $+0.142^*$ & $\max$ kept \\
 \bottomrule
 \end{tabular}
 \end{table}
