@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LingoQA 결과 종합 — Alpamayo 1.5 가지치기</title>
+<style>
+  :root {
+    --ground: #FAF9F5;
+    --card: #FFFFFF;
+    --sunk: #F0EEE6;
+    --stripe: #F5F4EF;
+    --ink: #29261B;
+    --muted: #6B6555;
+    --accent: #D97757;
+    --accent-deep: #B85C3C;
+    --rule: #E4E1D6;
+    --good: #3F7D3F;
+    --good-bg: #EAF2EA;
+    --bad: #B4402F;
+    --bad-bg: #FAEDEA;
+    --flat: #8A8272;
+    --flat-bg: #F0EEE6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #1C1A16;
+      --card: #242019;
+      --sunk: #2B2720;
+      --stripe: #201D17;
+      --ink: #EAE6DB;
+      --muted: #9C9484;
+      --accent: #E28C6D;
+      --accent-deep: #F0A98C;
+      --rule: #38322A;
+      --good: #7FB77F;
+      --good-bg: #22301F;
+      --bad: #E08472;
+      --bad-bg: #35211D;
+      --flat: #8A8272;
+      --flat-bg: #2B2720;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #1C1A16;
+    --card: #242019;
+    --sunk: #2B2720;
+    --stripe: #201D17;
+    --ink: #EAE6DB;
+    --muted: #9C9484;
+    --accent: #E28C6D;
+    --accent-deep: #F0A98C;
+    --rule: #38322A;
+    --good: #7FB77F;
+    --good-bg: #22301F;
+    --bad: #E08472;
+    --bad-bg: #35211D;
+    --flat: #8A8272;
+    --flat-bg: #2B2720;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    margin: 0;
+    padding: 3.5rem 1.5rem 6rem;
+    font-family: "Söhne", "Pretendard", -apple-system, BlinkMacSystemFont,
+                 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 3.25rem; }
+
+  header { display: flex; flex-direction: column; gap: 0.7rem;
+           border-bottom: 2px solid var(--accent); padding-bottom: 1.6rem; }
+  .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
+             text-transform: uppercase; color: var(--accent-deep); }
+  h1 { font-family: "Tiempos Headline", Georgia, "Nanum Myeongjo", serif;
+       font-size: clamp(1.75rem, 4vw, 2.35rem); font-weight: 500; line-height: 1.25;
+       margin: 0; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: 0.95rem; max-width: 68ch; margin: 0; }
+
+  .kpis { display: grid; gap: 0.85rem;
+          grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
+  .kpi { background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+         padding: 0.95rem 1.05rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .kpi .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--muted); }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.6rem;
+            line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .n { font-size: 0.76rem; color: var(--muted); }
+
+  section { display: flex; flex-direction: column; gap: 0.85rem; }
+  h2 { font-family: "Tiempos Headline", Georgia, "Nanum Myeongjo", serif;
+       font-size: 1.3rem; font-weight: 500; margin: 0; text-wrap: balance; }
+  h2 .num { color: var(--accent); margin-right: 0.45rem; font-size: 0.95em; }
+  .asks { color: var(--muted); font-size: 0.9rem; margin: 0; max-width: 72ch; }
+
+  .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px;
+            background: var(--card); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { background: var(--sunk); text-align: left; font-weight: 600; white-space: nowrap;
+       padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); font-size: 0.8rem;
+       letter-spacing: 0.01em; }
+  td { padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  code { font-family: ui-monospace, "SF Mono", "Berkeley Mono", Menlo, monospace;
+         font-size: 0.88em; background: var(--sunk); padding: 0.1em 0.36em;
+         border-radius: 4px; }
+  td code { background: none; padding: 0; }
+  .hero-row { background: var(--good-bg) !important; }
+  .hero-row td { font-weight: 600; }
+  .up { color: var(--good); }
+  .down { color: var(--bad); }
+
+  .pill { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.5rem;
+          border-radius: 999px; letter-spacing: 0.02em; }
+  .pill.sig { background: var(--bad-bg); color: var(--bad); }
+  .pill.ns  { background: var(--flat-bg); color: var(--flat); }
+  .pill.win { background: var(--good-bg); color: var(--good); }
+
+  .note { background: var(--card); border: 1px solid var(--rule);
+          border-left: 3px solid var(--accent); border-radius: 8px;
+          padding: 0.95rem 1.15rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .note.warn { border-left-color: var(--bad); }
+  .note p { margin: 0; font-size: 0.9rem; }
+  .note strong { font-weight: 600; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 1.3rem;
+           color: var(--muted); font-size: 0.82rem; }
+  footer p { margin: 0.3rem 0; }
+  a { color: var(--accent-deep); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 · 평가 트랙</div>
+  <h1>LingoQA 결과 종합</h1>
+  <p class="sub">Lingo-Judge 정확도, 500 질문 / 100 세그먼트. 통계는 세그먼트를 리샘플한
+  95% 클러스터 부트스트랩(10,000회)이며, 가지치기 arm은 전부 동일 예산 −24.0%
+  (8,421,074,162 params)다.</p>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><span class="k">baseline 제로샷</span><span class="v">73.2%</span>
+    <span class="n">논문 최고 제로샷 59.6%</span></div>
+  <div class="kpi"><span class="k">최고 가지치기 arm</span><span class="v">71.2%</span>
+    <span class="n"><code>trajvqa</code>, in-domain 보정</span></div>
+  <div class="kpi"><span class="k">최저 가지치기 arm</span><span class="v">30.2%</span>
+    <span class="n"><code>coc</code> 단독, AV 보정</span></div>
+  <div class="kpi"><span class="k">보정 데이터 효과</span><span class="v">+35.2pp</span>
+    <span class="n">목적함수 효과는 +1.0pp</span></div>
+</div>
+
+<section>
+  <h2><span class="num">1</span>외부 비교 — 논문 Table 5에서의 위치</h2>
+  <p class="asks">우리 수치가 어디에 놓이는가. 제로샷 블록과만 비교 가능하며 fine-tuned 블록과
+  나란히 놓아서는 안 된다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>모델</th><th>구분</th><th class="r">프레임</th><th class="r">Lingo-Judge</th></tr></thead>
+    <tbody>
+      <tr><td>사람</td><td>—</td><td class="r">5</td><td class="r">96.6</td></tr>
+      <tr><td>사람</td><td>—</td><td class="r">1</td><td class="r">81.8</td></tr>
+      <tr class="hero-row"><td>Alpamayo 1.5 baseline</td><td>zero-shot</td><td class="r">4</td><td class="r">73.2</td></tr>
+      <tr><td>Alpamayo <code>trajvqa</code></td><td>in-domain 보정</td><td class="r">4</td><td class="r">71.2</td></tr>
+      <tr><td>Alpamayo <code>dual</code></td><td>zero-shot</td><td class="r">4</td><td class="r">68.8</td></tr>
+      <tr><td>LingoQA Baseline</td><td>fine-tuned</td><td class="r">5</td><td class="r">60.8</td></tr>
+      <tr><td>GPT-4V</td><td>zero-shot</td><td class="r">5</td><td class="r">59.6</td></tr>
+      <tr><td>LLaVA</td><td>zero-shot</td><td class="r">1</td><td class="r">49.4</td></tr>
+      <tr><td>FUYU</td><td>zero-shot</td><td class="r">1</td><td class="r">45.4</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">2</span>동일 예산 arm 전체</h2>
+  <p class="asks">기준(criterion)과 보정 데이터를 바꿨을 때 무엇이 달라지는가. 델타는 baseline 대비,
+  <span class="pill sig">유의</span>는 CI가 0을 배제함을 뜻한다.
+  <code>lp_dual</code> / <code>lp_coc</code>는 외부에서 받은 수치로, 기준·보정·페어드 통계가
+  기록되지 않아 해당 칸을 비웠다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>arm</th><th>기준</th><th>보정</th><th class="r">정확도</th><th class="r">vs baseline</th><th class="r">95% CI</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr class="hero-row"><td>baseline</td><td>—</td><td>—</td><td class="r">73.2%</td><td class="r">—</td><td class="r">—</td><td>—</td></tr>
+      <tr><td><code>trajvqa</code></td><td>max(traj, VQA)</td><td>LingoQA</td><td class="r">71.2%</td><td class="r">−2.00pp</td><td class="r">—</td><td><span class="pill ns">미검출</span></td></tr>
+      <tr><td><code>dual</code></td><td>max(traj, CoC)</td><td>AV</td><td class="r">68.8%</td><td class="r">−4.40pp</td><td class="r">[−9.40, +0.40]</td><td><span class="pill ns">미검출</span></td></tr>
+      <tr><td><code>j_traj</code></td><td>max(traj, J)</td><td>AV</td><td class="r">67.8%</td><td class="r down">−5.40pp</td><td class="r">[−9.80, −0.80]</td><td><span class="pill sig">유의</span></td></tr>
+      <tr><td><code>vqa</code></td><td>VQA 단독</td><td>LingoQA</td><td class="r">66.4%</td><td class="r">−6.80pp</td><td class="r">—</td><td><span class="pill ns">미검출</span></td></tr>
+      <tr><td><code>coclingo</code></td><td>CoC 단독</td><td>LingoQA</td><td class="r">65.4%</td><td class="r">−7.80pp</td><td class="r">—</td><td><span class="pill ns">미검출</span></td></tr>
+      <tr><td><code>lp_dual</code></td><td>—</td><td>—</td><td class="r">61.8%</td><td class="r">−11.40pp</td><td class="r">—</td><td><span class="pill ns">미측정</span></td></tr>
+      <tr><td><code>lp_coc</code></td><td>—</td><td>—</td><td class="r">44.8%</td><td class="r">−28.40pp</td><td class="r">—</td><td><span class="pill ns">미측정</span></td></tr>
+      <tr><td><code>traj</code></td><td>궤적 단독</td><td>AV</td><td class="r down">37.0%</td><td class="r down">−36.20pp</td><td class="r">[−41.60, −31.00]</td><td><span class="pill sig">유의</span></td></tr>
+      <tr><td><code>j</code></td><td>J 단독</td><td>AV</td><td class="r down">32.2%</td><td class="r down">−41.00pp</td><td class="r">[−46.40, −35.60]</td><td><span class="pill sig">유의</span></td></tr>
+      <tr><td><code>coc</code></td><td>CoC 단독</td><td>AV</td><td class="r down">30.2%</td><td class="r down">−43.00pp</td><td class="r">[−48.60, −37.40]</td><td><span class="pill sig">유의</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">3</span>두 축의 분해 — 무엇이 실제로 작동했나</h2>
+  <p class="asks">목적함수를 바꾼 효과와 보정 데이터를 바꾼 효과를 분리한다. 세 arm 모두 단일 기준이며
+  예산·할당이 동일하다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>arm</th><th>목적함수</th><th>보정 이미지</th><th class="r">정확도</th><th class="r">직전 대비</th></tr></thead>
+    <tbody>
+      <tr><td><code>coc</code></td><td>CoC NLL</td><td>PhysicalAI-AV (미국)</td><td class="r">30.2%</td><td class="r">—</td></tr>
+      <tr class="hero-row"><td><code>coclingo</code></td><td>CoC NLL <em>(동일)</em></td><td>LingoQA (영국)</td><td class="r">65.4%</td><td class="r up">+35.2pp</td></tr>
+      <tr><td><code>vqa</code></td><td>VQA 답변 NLL</td><td>LingoQA (동일)</td><td class="r">66.4%</td><td class="r">+1.0pp</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note">
+    <p><strong>이득의 97%가 보정 이미지에서 왔다.</strong> 목적함수를 CoC에서 VQA로 바꾸는 것은
+    1.0pp를 더할 뿐이다. 당초 가설이었던 "관측 문맥이 병목"은 기각되고,
+    <strong>중요도를 어떤 데이터에서 쟀는가</strong>가 지배 요인으로 확인됐다.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">4</span>중요도 선택 겹침 — 성능을 예측하지 못한다</h2>
+  <p class="asks">유지집합 Jaccard. 이 표의 교훈은 겹침으로 성능을 예측하면 안 된다는 것이다 —
+  §3과 방향이 반대다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>비교</th><th>무엇이 다른가</th><th class="r">Q head</th><th class="r">MLP</th><th class="r">실제 성능 변화</th></tr></thead>
+    <tbody>
+      <tr><td>CoC(lingo) vs CoC(AV)</td><td>도메인만</td><td class="r">0.753</td><td class="r">0.686</td><td class="r up">+35.2pp</td></tr>
+      <tr><td>VQA(lingo) vs CoC(lingo)</td><td>문맥만</td><td class="r">0.611</td><td class="r">0.636</td><td class="r">+1.0pp</td></tr>
+      <tr><td>CoC(AV) vs traj(AV)</td><td><em>기준선</em> — 언어 vs 궤적</td><td class="r">0.616</td><td class="r">0.645</td><td class="r">—</td></tr>
+      <tr><td>CoC v1 vs v2</td><td><em>기준선</em> — 같은 목적, 분리 표본</td><td class="r">0.803</td><td class="r">0.707</td><td class="r">—</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note warn">
+    <p><strong>더 비슷한 선택(0.753)이 훨씬 큰 성능 변화를 만들었다.</strong>
+    겹침은 "선택이 달라졌는가"의 진단이지 "더 나아졌는가"의 예측이 아니다.
+    <code>importance_v1</code>과 <code>v2</code>는 <strong>공유 클립이 0개</strong>인 분리 표본인데도
+    0.803까지 일치하므로, 이 차이들은 추정 잡음이 아니다.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">5</span>주행 능력 트레이드오프 (G4)</h2>
+  <p class="asks">언어를 얻고 주행을 잃었는가. 개루프 평가, in-dist 500클립 / OOD 1,533클립.
+  minADE는 낮을수록 좋다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>arm</th><th class="r">LingoQA</th><th class="r">nll_gtcoc</th><th class="r">OOD minADE</th><th class="r">minADE_tf</th><th class="r">in-dist minADE</th></tr></thead>
+    <tbody>
+      <tr><td><code>dual</code></td><td class="r">68.8%</td><td class="r">3.0375</td><td class="r">0.9313</td><td class="r">0.8240</td><td class="r">0.7766</td></tr>
+      <tr><td><code>j_traj</code></td><td class="r">67.8%</td><td class="r">3.0075</td><td class="r">0.9731</td><td class="r">0.8745</td><td class="r">0.8148</td></tr>
+      <tr class="hero-row"><td><code>trajvqa</code></td><td class="r">71.2%</td><td class="r">3.0268</td><td class="r">1.0039</td><td class="r">0.8694</td><td class="r">0.8504</td></tr>
+      <tr><td><code>traj</code></td><td class="r">37.0%</td><td class="r">3.1483</td><td class="r">1.0632</td><td class="r">0.9321</td><td class="r">0.8411</td></tr>
+      <tr><td><code>coc</code></td><td class="r">30.2%</td><td class="r">3.1967</td><td class="r">1.3826</td><td class="r">1.0838</td><td class="r">1.4442</td></tr>
+      <tr><td><strong><code>trajvqa</code> vs <code>dual</code></strong></td><td class="r up">+2.4pp</td><td class="r">−0.4%</td><td class="r down">+7.8%</td><td class="r down">+5.5%</td><td class="r down">+9.5%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note warn">
+    <p><strong><code>trajvqa</code>는 순이득이 아니다.</strong> 주행이 세 지표 모두에서 나빠졌고,
+    얻은 LingoQA +2.4pp는 CI가 0을 포함한다.</p>
+    <p><strong><code>nll_gtcoc</code>가 유지된 것을 "언어 보존"의 근거로 쓸 수 없다.</strong>
+    이 지표는 arm 간 범위가 7.1%(2.986–3.197)에 불과하고 LingoQA와 Spearman −0.300 (p=0.62)로
+    무관하다. LingoQA를 38.6pp 가르는 차이를 감지하지 못하는 지표다.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">6</span>질문 유형별 (정식 벤치마크)</h2>
+  <p class="asks">가지치기 손실이 어디에 몰려 있는가. 전체 −4~5pp는 균일한 열화가 아니다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>유형</th><th class="r">n</th><th class="r">baseline</th><th class="r">dual</th><th class="r">j_traj</th><th class="r">dual−base</th><th class="r">j_traj−base</th></tr></thead>
+    <tbody>
+      <tr><td>존재 / 예-아니오</td><td class="r">178</td><td class="r">79%</td><td class="r">67%</td><td class="r">69%</td><td class="r down">−11.8pp</td><td class="r down">−10.1pp</td></tr>
+      <tr><td>고정 (action+justif)</td><td class="r">100</td><td class="r">71%</td><td class="r">75%</td><td class="r">67%</td><td class="r up">+4.0pp</td><td class="r">−4.0pp</td></tr>
+      <tr><td>행동 / 판단</td><td class="r">77</td><td class="r">71%</td><td class="r">70%</td><td class="r">74%</td><td class="r">−1.3pp</td><td class="r up">+2.6pp</td></tr>
+      <tr><td>기타 서술</td><td class="r">63</td><td class="r">73%</td><td class="r">70%</td><td class="r">73%</td><td class="r">−3.2pp</td><td class="r">0.0pp</td></tr>
+      <tr><td>개수 세기</td><td class="r">60</td><td class="r">63%</td><td class="r">62%</td><td class="r">53%</td><td class="r">−1.7pp</td><td class="r down">−10.0pp</td></tr>
+      <tr><td>색상</td><td class="r">22</td><td class="r">73%</td><td class="r">68%</td><td class="r">68%</td><td class="r">−4.5pp</td><td class="r">−4.5pp</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">7</span>응답 스타일과 길이</h2>
+  <p class="asks">논문 Appendix E는 Lingo-Judge가 장문 오답을 과대평가한다고 경고한다
+  (FUYU: 판정 45.4% vs 사람 17.69%). 사람 정답은 중앙값 9단어다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>arm</th><th class="r">unprompted</th><th class="r">concise</th><th class="r">답변 중앙값</th><th class="r">잘림률</th></tr></thead>
+    <tbody>
+      <tr><td>baseline</td><td class="r">73.2%</td><td class="r">72.0%</td><td class="r">22 → 22</td><td class="r">0.2% → 0.2%</td></tr>
+      <tr><td><code>dual</code></td><td class="r">68.8%</td><td class="r">66.8%</td><td class="r">35 → 33</td><td class="r down">34.4% → 23.6%</td></tr>
+      <tr><td><code>j_traj</code></td><td class="r">67.8%</td><td class="r">68.8%</td><td class="r">26 → 27</td><td class="r">2.0% → 1.6%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note">
+    <p><strong>concise 지시가 작동하지 않는다.</strong> 길이가 22→22단어로 그대로다. Alpamayo는
+    지시추종 챗 모델이 아니라 문체 지시를 질문의 일부로 취급한다. 논문의 concise 조건은
+    이 모델에서 재현되지 않으므로 우리 수치는 <code>unprompted</code> 하나로 확정된다.</p>
+    <p><strong>잘림은 점수의 원인이 아니다.</strong> <code>dual</code>을 상한 128 → 256토큰으로
+    올려도 68.8%로 소수점까지 동일했다(잘림 34.4% → 30.8%). 다만 256으로도 30.8%가 끝나지 않으므로
+    정지 실패 자체는 실재하는 결함이다.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">8</span>보조 트랙 — CoC 추론 프로브</h2>
+  <p class="asks">모델의 추론 텍스트에 장면 정보가 얼마나 남았는가. 모델은 질문을 받지 않고,
+  frozen reader(Qwen3-8B)가 CoC만 읽고 답한다. <strong>이 수치는 LingoQA 점수가 아니며 arm 간
+  차분으로만 해석한다.</strong></p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>조건</th><th class="r">정확도</th><th class="r">vs baseline</th><th class="r">95% CI</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>baseline</td><td class="r">62.4%</td><td class="r">—</td><td class="r">—</td><td>—</td></tr>
+      <tr><td><code>dual</code></td><td class="r">62.4%</td><td class="r">+0.00pp</td><td class="r">[−2.80, +3.00]</td><td><span class="pill win">보존</span></td></tr>
+      <tr><td><code>j_traj</code></td><td class="r">59.6%</td><td class="r">−2.80pp</td><td class="r">[−6.60, +0.80]</td><td><span class="pill ns">미검출</span></td></tr>
+      <tr><td>blind floor <em>(질문만)</em></td><td class="r">39.2%</td><td class="r down">−23.20pp</td><td class="r">[−28.20, −18.20]</td><td><span class="pill sig">유의</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note">
+    <p><strong>프로브는 유효하다.</strong> CoC 조건이 blind floor를 23.2pp 앞서므로 CoC에 질문 관련
+    정보가 실제로 담겨 있다. 다만 CoC는 <strong>존재/부재는 인코딩하지만 개수는 인코딩하지 않는다</strong> —
+    "lane is clear" → "자전거 없음"은 맞히지만 "cyclists ahead" → "3명"은 못 맞힌다.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">9</span>인용 시 반드시 붙일 단서</h2>
+  <div class="note warn">
+    <p><strong>제로샷 구분.</strong> <code>trajvqa</code> / <code>vqa</code> / <code>coclingo</code>는
+    중요도 계산에 LingoQA train을 썼으므로 <strong>제로샷이 아니다</strong>. train/eval 분리는
+    지켰으나 논문에서는 별도 블록으로 분리해야 한다. 나머지 arm과 baseline은 제로샷이다.</p>
+    <p><strong>길이 편향.</strong> 답변이 중앙값 22단어로 사람(9단어)의 2.4배다. 논문이 문서화한
+    과대평가 구간에 있으며, concise 통제가 이 모델에 먹히지 않아 보정할 수단이 없었다.</p>
+    <p><strong>프레임 4장.</strong> 논문 프로토콜은 5프레임/4초다. Alpamayo가 카메라당 4장을
+    소비하므로 마지막 4장을 쓴다. 프레임 수는 논문 Table 5에서도 행별로 공개되는 속성이며,
+    사람 성능이 5→1프레임에서 96.6→81.8로 떨어질 만큼 크게 작용한다.</p>
+    <p><strong>검정력.</strong> 100 클러스터에서 해상 가능한 차이는 5–8pp다. 1–2pp 손실은
+    원리상 검출되지 않는다.</p>
+  </div>
+</section>
+
+<footer>
+  <p>메트릭은 LingoQA 원본 <code>benchmark/judge.py::LingoJudge</code>를 그대로 임포트해 사용
+  (Eq. 1의 레퍼런스 최댓값, 임계값 logit &gt; 0). 6개 실행 모두 <code>matched 500</code> 확인.</p>
+  <p>코드 <code>experiments/lingoqa/</code> · 결과 <code>outputs/lingo_*</code> ·
+  상세 리포트 <code>reports/evaluation/2026-08-14_lingoqa-zeroshot-benchmark.html</code>,
+  <code>reports/evaluation/2026-08-16_pruning-criterion-calibration.html</code></p>
+</footer>
+
+</div>
+</body>
+</html>
