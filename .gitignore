@@ -224,4 +224,4 @@ outputs/**/slim_state.pt
 # J-lens vectors: (2, L, S, d) fp16, ~600 MB at S=1024. Rebuildable by rerunning
 # run_jlens.py with the same clips/seed; only ever written under --save-vectors.
 outputs
-logs
+logswandb/

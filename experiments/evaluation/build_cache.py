@@ -32,9 +32,21 @@ AV = Path("/mnt/nvme1n1/ad_vla/data/physicalai_av")
 PRE = AV / "pre_processed"
 
 
+_AVDI = None
+
+
+def _avdi(local_dir):
+    """Per-worker dataset interface reading the local mirror, streaming what's missing."""
+    global _AVDI
+    if _AVDI is None:
+        import physical_ai_av
+        _AVDI = physical_ai_av.PhysicalAIAVDatasetInterface(local_dir=local_dir)
+    return _AVDI
+
+
 def build_one(task):
     """Load one clip at its t0 and write the npz. Returns a status dict."""
-    clip_id, t0_us, chunk, out_root = task
+    clip_id, t0_us, chunk, out_root, local_dir = task
     out = Path(out_root) / "samples" / f"{clip_id}__t0_{t0_us}.npz"
     if out.exists():
         return {"clip_id": clip_id, "status": "skip", "bytes": out.stat().st_size}
@@ -44,7 +56,8 @@ def build_one(task):
 
     t = time.time()
     try:
-        d = load_physical_aiavdataset(clip_id, t0_us=t0_us, maybe_stream=True)
+        d = load_physical_aiavdataset(clip_id, t0_us=t0_us, maybe_stream=True,
+                                      avdi=_avdi(local_dir) if local_dir else None)
     except Exception as e:  # noqa: BLE001  per-clip failures are recorded, not fatal
         return {"clip_id": clip_id, "status": "error",
                 "error": f"{type(e).__name__}: {str(e)[:200]}"}
@@ -84,6 +97,9 @@ def main():
     ap.add_argument("--manifest", required=True, help="parquet with clip_id, t0_us, chunk")
     ap.add_argument("--cache", required=True, help="subdirectory under pre_processed/")
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--local-dir", type=str, default=None,
+                    help="local PhysicalAI-AV mirror; chunk zips already on disk are "
+                         "read directly instead of streamed")
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()
 
@@ -95,7 +111,7 @@ def main():
         man = man.head(args.limit)
     print(f"{len(man)} clips -> {out_root}", flush=True)
 
-    tasks = [(r.clip_id, int(r.t0_us), int(r.chunk), str(out_root))
+    tasks = [(r.clip_id, int(r.t0_us), int(r.chunk), str(out_root), args.local_dir)
              for r in man.itertuples()]
     done, errors, t0 = [], [], time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
