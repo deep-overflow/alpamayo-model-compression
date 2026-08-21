@@ -200,3 +200,25 @@ dual 0.950 / 68.8% → dualr 0.860 / 41.8% (궤적 −0.090\*, 언어 −27pp\*)
 탐색 이득의 조건부성도 두 세션 결과가 일치: OSSCAR selection 위에서는 유의(T2, −0.006~−0.016\*)
 하지만 dual selection 위에서는 0 (dualg +0.001 ns, tyr_r 할당 이식 +0.002 ns, dualgr−dualr ns)
 — 전역 탐색은 selection이 약할수록 보상한다.
+
+### 재구성 × selection 2×2 완성 (2026-08-21) — 언어에 대한 재구성 효과는 조건부다
+
+빠져 있던 셀(OSSCAR selection + 재구성 off = `tyr_sel_u40`)을 측정해
+{selection} × {OSSCAR 재구성 on/off}가 닫혔다. LingoQA는 세그먼트-클러스터 paired,
+궤적은 test minADE@6:
+
+| selection | 재구성 off | 재구성 on | Δ LingoQA (on−off) | Δ ADE |
+|---|---|---|---|---|
+| dual   | 68.8% / 0.950 | 41.8% / 0.860 | **−27.0pp [−32.6, −21.4]\*** | −0.090 (개선) |
+| OSSCAR | **2.2%** / 2.292 | 20.8% / 0.999 | **+18.6pp [+14.4, +22.8]\*** | −1.293 (개선) |
+
+- **궤적에서는 재구성이 두 selection 모두를 개선**한다.
+- **언어에서는 부호가 뒤집힌다**: 좋은 selection(dual) 위에서는 깎고(−27pp\*), 무너진
+  selection(OSSCAR 단독 2.2%) 위에서는 올린다(+18.6pp\*). 따라서 "재구성이 언어를 깎는다"는
+  무조건적 명제가 아니라 **selection × 재구성 상호작용**이다.
+- 해석: 최소자승 보정은 AV 프리필 분포에서 원래 레이어 출력을 복원하는 목적이므로, 언어
+  유닛이 남아 있는 selection에서는 그 유닛을 AV 목적 쪽으로 끌어당겨 손상시키고, 언어가
+  이미 파괴된 selection에서는 일반 기능을 부분 복구한다. 어느 쪽이든 dual(68.8%) 근처로는
+  못 간다 — 언어 보존의 결정 요인은 여전히 selection이다.
+- 소스: `lingo_vqa_slim_tyr_sel_u40`(2.2%), `lingo_vqa_scores_tyrsel`, 토글 분석
+  `lingo_toggle_osscar` / `lingo_toggle_dual`; dualr 수치는 dual-global 세션(69efd68).
