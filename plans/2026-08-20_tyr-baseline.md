@@ -186,3 +186,17 @@ Tyr 탐색(할당) 조합. 상태: **완료**.
 LingoQA를 20.8→34.2%로 크게 올렸지만(CoC-KL 항의 효과) dual(68.8%)과의 격차는 크다.
 결론 보강: dual의 max(rank,rank)가 주는 "두 채널 중 하나라도 높이 평가한 유닛 보존"이 언어 능력
 보존의 핵심이며, Tyr는 궤적 동급·언어 열세.
+
+### 궤적↔언어 관계의 올바른 읽기 (2026-08-21, dual-global 세션 69efd68과 대조)
+
+재구성 arm들을 나란히 놓으면 (test minADE@6, LingoQA)는
+tyr_uniform_r (0.999, 20.8) → tyr_r (0.950, 34.2) → dualr (0.860, 41.8) → dualgr (0.864, 42.2)
+로 **궤적이 좋을수록 언어도 좋다** — 둘 다 밑에 깔린 selection 품질을 따라가므로 arm 간 비교에서
+트레이드오프로 읽으면 안 된다. 트레이드오프는 **같은 selection에서 재구성을 켤 때** 나타난다:
+dual 0.950 / 68.8% → dualr 0.860 / 41.8% (궤적 −0.090\*, 언어 −27pp\*). OSSCAR selection 쪽은
+재구성 off(=`tyr_sel_*`)의 LingoQA를 재지 않아 같은 토글 비교가 없다 (필요하면
+`eval_lingo_tyr.sh --with-sensitivity`).
+
+탐색 이득의 조건부성도 두 세션 결과가 일치: OSSCAR selection 위에서는 유의(T2, −0.006~−0.016\*)
+하지만 dual selection 위에서는 0 (dualg +0.001 ns, tyr_r 할당 이식 +0.002 ns, dualgr−dualr ns)
+— 전역 탐색은 selection이 약할수록 보상한다.
