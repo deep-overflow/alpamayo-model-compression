@@ -9,9 +9,14 @@ Configs:
                       (uniform matched budget, expert untouched, no KV drop); only the
                       within-layer score differs. Combined: dual = max(rank_traj,
                       rank_coc), j_traj = max(rank_traj, rank_J). Single-criterion
-                      controls: traj, coc, j. Operator ablation: dualsum / dualprod
+                      controls: traj, coc, j; wanda / wandatxt (gradient-free
+                      |W|*||X||_2 baseline, all tokens / text+CoC tokens).
+                      Operator ablation: dualsum / dualprod
                       keep dual's halves but combine by rank-sum / rank-product.
                       Expected -2.66B each.
+  tyr_u40 / tyr_uniform_u40 -- Tyr-the-Pruner baseline: OSSCAR-reconstructed
+                      supernet weights at the searched / uniform level assignment,
+                      same -2.66B budget by construction.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -40,6 +45,7 @@ import analysis_lib as lib  # noqa: E402
 import mask_lib as ml  # noqa: E402
 import sample_cache as sc  # noqa: E402
 import slim_lib as sl  # noqa: E402
+import tyr_lib as tyr  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 from run_cocsafe import rank_norm  # noqa: E402
 from run_eval import eval_config  # noqa: E402
@@ -54,7 +60,10 @@ REPO = Path(__file__).resolve().parents[2]
 MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
 
 
-def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"):
+def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa",
+                wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
+                tyr_supernet="tyr_supernet_u40",
+                tyr_config="tyr_search_u40/final_config.json"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -69,6 +78,63 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         # loads them; plans/2026-08-16_iterative-recalibration.md.
         z = np.load(REPO / "outputs" / f"iter_{it.group(1)}_u40" / "final_masks.npz")
         vq, vm = z["vq"], z["vm"]
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif cfg_name.startswith("dualg_u40"):
+        # dual-global: dual ranking within layers, per-layer cut counts from the searched
+        # level vector (plans/2026-08-21_dual-global.md); original weights, masks only
+        cfg_path = REPO / "outputs" / tyr_config
+        levels = json.loads(cfg_path.read_text())
+        mm = json.loads((cfg_path.parent / "mask_meta.json").read_text())
+        sq, sm = tyr.dual_scores(imp)
+        kq = tyr.level_keeps(tc.num_attention_heads, mm["head_cut"], mm["head_step"],
+                             mm["num_levels"])
+        km = tyr.level_keeps(tc.intermediate_size, mm["mlp_cut"], mm["mlp_step"],
+                             mm["num_levels"])
+        vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))
+        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
+        for n, lv in levels.items():
+            i = int(n.split(".")[1])
+            if "mlp" in n:
+                vm[i, tyr.cut_lowest(sm[i], tc.intermediate_size - km[lv])] = 0.0
+            else:
+                vq[i, tyr.cut_lowest(sq[i], tc.num_attention_heads - kq[lv])] = 0.0
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif cfg_name.startswith(("tyr_u40", "tyr_uniform_u40", "tyr_sel_u40",
+                              "dualr_u40", "dualgr_u40")):
+        # Tyr baseline (plans/2026-08-20_tyr-baseline.md). The supernet stores
+        # OSSCAR-reconstructed o_proj / down_proj weights per sparsity level; this
+        # branch WRITES the chosen level's weights into the model and derives the
+        # 0/1 masks from their exactly-zero columns, so the usual surgery slices
+        # the reconstructed values. tyr_uniform_u40 = level 0 everywhere (uniform
+        # allocation + reconstruction); tyr_u40 = the searched distribution. Both
+        # keep u40_v2's removed-parameter total by type-conserving levels.
+        sup = REPO / "outputs" / tyr_supernet
+        smeta = json.loads((sup / "metadata.json").read_text())
+        levels = {n: 0 for n in smeta["layer_names"]}
+        uniform_levels = cfg_name.startswith(("tyr_uniform", "tyr_sel")) or cfg_name == "dualr_u40"
+        if not uniform_levels:
+            levels = json.loads((REPO / "outputs" / tyr_config).read_text())
+        # tyr_sel_u40: Tyr's OSSCAR *selection* at level 0 with the ORIGINAL weights
+        # (no reconstruction) -- separates "which units" from "how the rest is rewritten"
+        write_weights = not cfg_name.startswith("tyr_sel")
+        vlayers = model.vlm.model.language_model.layers
+        nh, hd = tc.num_attention_heads, tc.head_dim
+        vq = np.ones((tc.num_hidden_layers, nh))
+        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
+        for n, lv in levels.items():
+            i = int(n.split(".")[1])
+            mod = (vlayers[i].mlp.down_proj if "mlp" in n
+                   else vlayers[i].self_attn.o_proj)
+            w = torch.load(sup / n / f"{lv}.pth", map_location="cuda")
+            if write_weights:
+                mod.weight.data.copy_(w.to(mod.weight.dtype))
+            col = w.abs().sum(0).float()
+            if "mlp" in n:
+                vm[i] = (col > 0).cpu().numpy().astype(float)
+            else:
+                vq[i] = (col.reshape(nh, hd).sum(1) > 0).cpu().numpy().astype(float)
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
     elif uni:
@@ -107,6 +173,13 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 z = dict(np.load(REPO / "outputs" / vqa_imp / "importance.npz"))
                 pre = "vqa" if name == "vqa" else "coc"
                 return z[f"{pre}_vlm_q"], z[f"{pre}_vlm_mlp"]
+            if name in ("wanda", "wandatxt"):
+                # gradient-free baseline: |W| * ||X||_2 aggregated per unit, official
+                # WrappedGPT stats (plans/2026-08-20_wanda-baseline.md). `wandatxt`
+                # accumulates ||X|| over text + own-CoC tokens only (--tokens text)
+                run = wanda_run if name == "wanda" else wanda_txt_run
+                z = dict(np.load(REPO / "outputs" / run / "wanda.npz"))
+                return z["q_w"], z["mlp_w"]
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
@@ -231,6 +304,15 @@ def main():
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
                     help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
                          "trajvqa configs (measured on LingoQA train)")
+    ap.add_argument("--wanda", type=str, default="wanda_v1",
+                    help="run supplying q_w/mlp_w for the wanda config")
+    ap.add_argument("--wanda-txt", type=str, default="wanda_txt_v1",
+                    help="run supplying q_w/mlp_w for the wandatxt config")
+    ap.add_argument("--tyr-supernet", type=str, default="tyr_supernet_u40",
+                    help="supernet dir for the tyr configs")
+    ap.add_argument("--tyr-config", type=str,
+                    default="tyr_search_u40/final_config.json",
+                    help="searched level assignment for tyr_u40 (outputs-relative)")
     ap.add_argument("--sets-id", type=str, default="eval_sets")
     ap.add_argument("--no-state", action="store_true",
                     help="write only slim_meta.json, skipping the 16.8 GB slim_state.pt. "
@@ -243,6 +325,12 @@ def main():
     args = ap.parse_args()
 
     out_dir = REPO / args.out
+    if (args.config.startswith(("tyr_u40", "tyr_uniform_u40", "dualr_u40", "dualgr_u40"))
+            and args.no_state):
+        # the tyr configs REWRITE o_proj/down_proj (OSSCAR reconstruction); load_slim
+        # rebuilds a --no-state recipe from the base weights, which would silently
+        # evaluate selection-only -- that is what tyr_sel_u40 is for
+        raise SystemExit("tyr configs need slim_state.pt: drop --no-state")
     device = reserve_gpu(args.reserve_gb, devices=None if args.gpu is None else [args.gpu])
     print(f"using {device}", flush=True)
 
@@ -257,7 +345,9 @@ def main():
 
     imp = dict(np.load(REPO / "outputs" / args.importance / "importance.npz"))
     vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens,
-                                         args.vqa_importance)
+                                         args.vqa_importance, args.wanda,
+                                         args.wanda_txt,
+                                         args.tyr_supernet, args.tyr_config)
 
     full_total = sl.n_params(model)
     t0 = time.time()
