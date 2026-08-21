@@ -58,7 +58,15 @@ Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
   minADE@6 / minFDE@6 means (m). Combined criteria beat both of their components on
   every set; both reasoning-only single criteria drive significantly worse than the
   \emph{unpruned} model in closed loop; and the arm that best preserves reasoning
-  ($J$) collides the most --- CoC health is not a safety proxy. The staged variant
+  ($J$) collides the most --- CoC health is not a safety proxy. The
+  \texttt{dualg}/\texttt{dualr}/\texttt{dualgr} rows factor T\'yr-the-Pruner's two
+  devices onto dual's ranking at the same budget. The searched allocation is worth
+  nothing (paired $\Delta$minADE@6 vs dual, val / test / OOD-val:
+  $+0.003$ / $+0.001$ / $-0.001$, all n.s., and likewise when T\'yr's own searched
+  allocation is transplanted onto dual's ranking), whereas the OSSCAR reconstruction
+  removes most of the pruning cost ($-0.034^*$ / $-0.052^*$ / $-0.028^*$; on val the
+  arm becomes indistinguishable from the unpruned model) at the price of collapsing
+  language to the LingoQA floor (Table~\ref{tab:lingoqa}). The staged variant
   re-scores the masked model between three cut stages (Table~\ref{tab:negatives});
   its closed loop was not run, per the pre-registered gate on the open-loop verdict.
   The two operator-ablation rows keep dual's halves and swap only the within-layer
@@ -80,6 +88,9 @@ $J$ only               & \checkmark & 1.942 / 5.464 & 2.158 / 5.992 & 2.557 / 6.
 dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ & & \textbf{0.890 / 2.330} & \textbf{0.950 / 2.546} & \textbf{1.119 / 2.851} & \textbf{0.828 ($+$0.079$^*$)} & 2.7\% \\
 jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.937 / 2.445 & 1.028 / 2.804 & 1.175 / 3.032 & 0.791 ($+$0.042) & 0.8\% \\
 staged dual (it3, 3 stages) &      & 0.994 / 2.648 & 1.021 / 2.787 & 1.149 / 2.892 & not run & --- \\
+dualg (dual $+$ searched alloc.) & & 0.897 / 2.296 & 0.978 / 2.619 & 1.049 / 2.645 & not run & --- \\
+dualr (dual $+$ reconstruction) & & \textbf{0.814 / 2.151} & \textbf{0.860 / 2.361} & \textbf{1.106 / 2.813} & not run & --- \\
+dualgr (dual $+$ both)     &      & 0.816 / 2.161 & 0.864 / 2.363 & 1.103 / 2.782 & not run & --- \\
 dual, rank-sum comb.\      &      & ---           & 0.960 / 2.607 & ---           & not run & --- \\
 dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---           & not run & --- \\
 \bottomrule
@@ -94,31 +105,44 @@ dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---         
 \caption{%
   Language capability under pruning (LingoQA, 500 questions, Lingo-Judge accuracy)
   next to the reference-CoC NLL (archival: measured on the full long-tail set under
-  the pre-freeze teacher-forced protocol). The judge separates same-budget arms by up
-  to 43\,pp while the NLL moves within 7.1\% and correlates with the judge at
-  Spearman $-0.30$ ($p{=}0.62$) --- the damage is invisible to the likelihood metric.
-  Swapping only the calibration \emph{images} to the evaluation domain recovers
-  $+35.2$\,pp of the single-criterion collapse; swapping the observation context
-  (objective) adds $+1.0$\,pp.
+  the pre-freeze teacher-forced protocol). A constant-answer control fixes the scale:
+  replying ``No.'' to every question scores 37.0 (``Yes.'' 37.6, ``2'' 7.0), because
+  51\% of the questions are yes/no and 39\% carry a reference of at most two words.
+  $\Delta$ is the paired difference against that floor, bootstrapped over segments;
+  $^*$ marks the arms that clear it. Only the combined criteria and the
+  domain-swapped calibrations do. Every single-criterion arm lands at or below the
+  floor, so their mutual ordering carries no information --- their generations are
+  degenerate, not merely worse --- and the OSSCAR reconstruction that recovers
+  trajectory (\texttt{dualr}, Table~\ref{tab:criteria}) also leaves language
+  indistinguishable from a model that answers ``No.'' to everything. Swapping only the
+  calibration \emph{images} to the evaluation domain lifts $I_\mathrm{CoC}$ from below
+  the floor to $28.4$\,pp above it; swapping the observation context (objective) adds
+  a further $+1.0$\,pp. The NLL moves within 7.1\% across the same arms and correlates
+  with the judge at Spearman $-0.30$ ($p{=}0.62$) --- the damage is invisible to the
+  likelihood metric.
 }
 \label{tab:lingoqa}
-\begin{tabular}{llrr}
+\begin{tabular}{llrrr}
 \toprule
-Arm & Calibration data & LingoQA $\uparrow$ & Ref.-CoC NLL $\downarrow$ \\
+Arm & Calibration data & LingoQA $\uparrow$ & $\Delta$ vs floor & Ref.-CoC NLL $\downarrow$ \\
 \midrule
-Human (5 / 1 frame)              & ---     & 96.6 / 81.8 & --- \\
-GPT-4V (zero-shot)               & ---     & 59.6        & --- \\
-Alpamayo 1.5 (zero-shot)         & ---     & \textbf{73.2} & 3.005 \\
+Human (5 / 1 frame)              & ---     & 96.6 / 81.8 & ---   & --- \\
+GPT-4V (zero-shot)               & ---     & 59.6        & ---   & --- \\
+Alpamayo 1.5 (zero-shot)         & ---     & \textbf{73.2} & $+36.2^*$ & 3.005 \\
 \midrule
-dual                             & AV      & 68.8 & 3.038 \\
-jtraj                            & AV      & 67.8 & 3.008 \\
-$I_\mathrm{traj}$ only           & AV      & 37.0 & 3.148 \\
-$J$ only                         & AV      & 32.2 & \textbf{2.986} \\
-$I_\mathrm{CoC}$ only            & AV      & 30.2 & 3.197 \\
+\emph{constant ``No.'' (floor)}  & ---     & \emph{37.0} & ---   & --- \\
 \midrule
-coclingo ($I_\mathrm{CoC}$, images swapped) & LingoQA & 65.4 ($+35.2$\,pp) & --- \\
-vqa (objective also swapped)     & LingoQA & 66.4 ($+1.0$\,pp)  & --- \\
-trajvqa $=\max(I_\mathrm{traj}, \mathrm{VQA})$ & LingoQA & 71.2 & 3.027 \\
+dual                             & AV      & 68.8 & $+31.8^*$ & 3.038 \\
+jtraj                            & AV      & 67.8 & $+30.8^*$ & 3.008 \\
+dualgr (dual $+$ recon.\ $+$ search) & AV  & 42.2 & $+5.2$    & --- \\
+dualr (dual $+$ reconstruction)  & AV      & 41.8 & $+4.8$    & --- \\
+$I_\mathrm{traj}$ only           & AV      & 37.0 & $+0.0$    & 3.148 \\
+$J$ only                         & AV      & 32.2 & $-4.8$    & \textbf{2.986} \\
+$I_\mathrm{CoC}$ only            & AV      & 30.2 & $-6.8^*$  & 3.197 \\
+\midrule
+coclingo ($I_\mathrm{CoC}$, images swapped) & LingoQA & 65.4 & $+28.4^*$ & --- \\
+vqa (objective also swapped)     & LingoQA & 66.4 & $+29.4^*$ & --- \\
+trajvqa $=\max(I_\mathrm{traj}, \mathrm{VQA})$ & LingoQA & 71.2 & $+34.2^*$ & 3.027 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -200,6 +224,8 @@ First-order additivity & $|\log_2 R| \leq 1$ & group/sum $= 1/5$--$1/55$ & broke
 Staged re-calibration (3 stages) & it3$-$one-shot CI $< 0$ & test $+0.030^*$, val $+0.022^*$, OOD-val $+0.026^*$ & rejected \\
 Ratio extension (u55, 33\%) & --- & minADE@6 $5.1\times$ baseline, degen.\ 71\% & collapse \\
 Combination operator swap & arm$-$dual $\Delta$ADE@6 CI & sum $-0.001$ (ns); product $+0.142^*$ & $\max$ kept \\
+Rank arms by LingoQA below 37 & vs constant-answer floor & traj $+0.0$, $J$ $-4.8$, dualr $+4.8$: all n.s. & not interpretable \\
+Global allocation search on dual & dualg$-$dual CI $< 0$ & $+0.001$ / $+0.003$ / $-0.001$, all n.s. & no gain \\
 \bottomrule
 \end{tabular}
 \end{table}
