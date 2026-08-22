@@ -74,6 +74,17 @@ Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
   $\Delta$minADE@6 $-0.001$ $[-0.011,+0.007]$), rank-product is significantly worse
   ($+0.142^*$) --- what matters is keeping units that \emph{either} channel ranks
   high, which the product is alone in breaking.
+  Two published structural-pruning methods close the table at the same budget, both
+  label-free; neither was run in closed loop, so the last two columns are empty and the
+  degeneracies quoted here are open-loop (test). Wanda's activation-magnitude selection
+  collapses (test 2.975, CoC degeneracy 87.6\% against dual's 3.0\%). T\'yr-the-Pruner
+  ties dual on trajectory once its OSSCAR reconstruction is in place --- paired
+  $\Delta$minADE@6 vs dual $-0.023$ / $-0.001$ / $+0.002$ (val / test / OOD-val), all
+  n.s., at a lower degeneracy (0.8\%) --- and its global sparsity-distribution search is
+  what buys the tie:
+  removing it costs $+0.006^*$ / $+0.010^*$ / $+0.016^*$. The reconstruction that
+  makes this possible does not preserve language: LingoQA 34.2, indistinguishable
+  from the constant-answer floor (Table~\ref{tab:lingoqa}).
 }
 \label{tab:criteria}
 \begin{tabular}{llccclr}
@@ -93,6 +104,11 @@ dualr (dual $+$ reconstruction) & & \textbf{0.814 / 2.151} & \textbf{0.860 / 2.3
 dualgr (dual $+$ both)     &      & 0.816 / 2.161 & 0.864 / 2.363 & 1.103 / 2.782 & not run & --- \\
 dual, rank-sum comb.\      &      & ---           & 0.960 / 2.607 & ---           & not run & --- \\
 dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---           & not run & --- \\
+\midrule
+\multicolumn{7}{l}{\emph{External structural-pruning baselines, same budget}} \\
+Wanda ($|W|\cdot\|X\|_2$)      & \checkmark & 2.700 / 7.514 & 2.975 / 8.269 & 2.790 / 6.884 & not run & --- \\
+T\'yr, uniform (OSSCAR recon.) & \checkmark & 0.940 / 2.458 & 0.999 / 2.685 & 1.289 / 3.266 & not run & --- \\
+T\'yr ($+$ global search)      & \checkmark & 0.846 / 2.199 & 0.950 / 2.570 & 1.176 / 2.990 & not run & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -120,6 +136,10 @@ dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---         
   a further $+1.0$\,pp. The NLL moves within 7.1\% across the same arms and correlates
   with the judge at Spearman $-0.30$ ($p{=}0.62$) --- the damage is invisible to the
   likelihood metric.
+  Both external baselines sit below the floor as well: T\'yr's OSSCAR reconstruction,
+  which recovers trajectory to dual's level (Table~\ref{tab:criteria}), leaves
+  language there, and its selection alone --- before reconstruction --- scores 2.2
+  ($-34.8^*$).
 }
 \label{tab:lingoqa}
 \begin{tabular}{llrrr}
@@ -139,6 +159,11 @@ dualr (dual $+$ reconstruction)  & AV      & 41.8 & $+4.8$    & --- \\
 $I_\mathrm{traj}$ only           & AV      & 37.0 & $+0.0$    & 3.148 \\
 $J$ only                         & AV      & 32.2 & $-4.8$    & \textbf{2.986} \\
 $I_\mathrm{CoC}$ only            & AV      & 30.2 & $-6.8^*$  & 3.197 \\
+\midrule
+\multicolumn{5}{l}{\emph{External baselines, same budget}} \\
+T\'yr ($+$ global search)      & AV & 34.2 & $-2.8$    & --- \\
+T\'yr, uniform (OSSCAR recon.) & AV & 20.8 & $-16.2^*$ & --- \\
+Wanda                          & AV &  9.2 & $-27.8^*$ & --- \\
 \midrule
 coclingo ($I_\mathrm{CoC}$, images swapped) & LingoQA & 65.4 & $+28.4^*$ & --- \\
 vqa (objective also swapped)     & LingoQA & 66.4 & $+29.4^*$ & --- \\
