@@ -17,6 +17,9 @@ Configs:
   tyr_u40 / tyr_uniform_u40 -- Tyr-the-Pruner baseline: OSSCAR-reconstructed
                       supernet weights at the searched / uniform level assignment,
                       same -2.66B budget by construction.
+  dualscope_u40    -- dual's ranking and dual_u40_v2's exact budget, but confined to
+                      LLM-Pruner's layer scope (4..34); only WHERE the cut lands
+                      differs. Expected -2.66B.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -60,10 +63,31 @@ REPO = Path(__file__).resolve().parents[2]
 MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
 
 
+def scope_matched_counts(scope_len, target_removed, tc, ratio):
+    """Per-layer cut counts that fit `target_removed` params into `scope_len` layers.
+
+    Narrowing the scope while holding the budget means cutting deeper in the layers that
+    remain: the head count follows the depth-scaled ratio, and the MLP count is solved so
+    the total lands on `target_removed` to the parameter -- an approximate budget would
+    stop the comparison against dual_u40_v2 from being one-factor. The leftover channels
+    are spread one per layer over the front of the scope, deterministically.
+
+    Returns (heads_cut, mlp_base, n_layers_with_one_extra).
+    """
+    attn_cost = 2 * tc.hidden_size * tc.head_dim          # q_proj rows + o_proj cols
+    mlp_cost = 3 * tc.hidden_size                          # gate/up rows + down col
+    heads_cut = round(ratio * tc.num_attention_heads)
+    rest = target_removed - scope_len * heads_cut * attn_cost
+    ch_total, rem = divmod(rest, mlp_cost)
+    assert rem == 0 and 0 < ch_total < scope_len * tc.intermediate_size, (ch_total, rem)
+    base, extra = divmod(ch_total, scope_len)
+    return heads_cut, base, extra
+
+
 def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa",
                 wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
                 tyr_supernet="tyr_supernet_u40",
-                tyr_config="tyr_search_u40/final_config.json"):
+                tyr_config="tyr_search_u40/final_config.json", scope=(4, 34)):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -78,6 +102,48 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         # loads them; plans/2026-08-16_iterative-recalibration.md.
         z = np.load(REPO / "outputs" / f"iter_{it.group(1)}_u40" / "final_masks.npz")
         vq, vm = z["vq"], z["vm"]
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif cfg_name == "dualscope_u40":
+        # Same criterion, calibration, axes and budget as dual_u40_v2 -- only the layer
+        # scope changes, from all 36 layers to LLM-Pruner's 4..34 (its
+        # --block_attention_layer_start/end convention, which leaves the first four and
+        # last two layers intact). The closed-loop split that motivates this is in
+        # plans/2026-08-22_scope-matched-dual.md: at a matched budget our 36-layer cut
+        # halves collisions but deviates further from the GT path (d2gt 3.32 vs 2.88),
+        # and the layer scope is the one structural difference left to test.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq_u, rm_u = allocs["uniform"]
+        attn_cost = 2 * tc.hidden_size * tc.head_dim
+        mlp_cost = 3 * tc.hidden_size
+        # dual_u40_v2's realized budget, from the same source the u40 family draws on
+        target = tc.num_hidden_layers * (
+            round(float(rq_u[0]) * tc.num_attention_heads) * attn_cost
+            + round(float(rm_u[0]) * tc.intermediate_size) * mlp_cost)
+        layers_in = list(range(scope[0], scope[1]))
+        depth_ratio = float(rq_u[0]) * tc.num_hidden_layers / len(layers_in)
+        heads_cut, mlp_base, extra = scope_matched_counts(
+            len(layers_in), target, tc, depth_ratio)
+        rq = np.zeros(tc.num_hidden_layers)
+        rm = np.zeros(tc.num_hidden_layers)
+        for k, li in enumerate(layers_in):
+            rq[li] = heads_cut / tc.num_attention_heads
+            rm[li] = (mlp_base + (1 if k < extra else 0)) / tc.intermediate_size
+        sq, sm = tyr.dual_scores(imp)
+        vq = ml.select_mask_ratios(sq, rq)
+        vm = ml.select_mask_ratios(sm, rm)
+        cut_q = int((1.0 - vq).sum())
+        cut_m = int((1.0 - vm).sum())
+        removed = cut_q * attn_cost + cut_m * mlp_cost
+        assert removed == target, (removed, target)
+        assert vq[: scope[0]].all() and vq[scope[1]:].all(), "cut leaked outside the scope"
+        print(f"scope {scope[0]}..{scope[1]} ({len(layers_in)} layers): "
+              f"{heads_cut}/{tc.num_attention_heads} heads and "
+              f"{mlp_base}(+1 x {extra})/{tc.intermediate_size} channels per layer, "
+              f"removing {removed:,} == dual_u40_v2", flush=True)
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
     elif cfg_name.startswith("dualg_u40"):
@@ -308,6 +374,11 @@ def main():
                     help="run supplying q_w/mlp_w for the wanda config")
     ap.add_argument("--wanda-txt", type=str, default="wanda_txt_v1",
                     help="run supplying q_w/mlp_w for the wandatxt config")
+    ap.add_argument("--scope-start", type=int, default=4,
+                    help="dualscope_u40: first layer that may be cut (LLM-Pruner's "
+                         "--block_attention_layer_start)")
+    ap.add_argument("--scope-end", type=int, default=34,
+                    help="dualscope_u40: one past the last layer that may be cut")
     ap.add_argument("--tyr-supernet", type=str, default="tyr_supernet_u40",
                     help="supernet dir for the tyr configs")
     ap.add_argument("--tyr-config", type=str,
@@ -347,7 +418,8 @@ def main():
     vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens,
                                          args.vqa_importance, args.wanda,
                                          args.wanda_txt,
-                                         args.tyr_supernet, args.tyr_config)
+                                         args.tyr_supernet, args.tyr_config,
+                                         (args.scope_start, args.scope_end))
 
     full_total = sl.n_params(model)
     t0 = time.time()
