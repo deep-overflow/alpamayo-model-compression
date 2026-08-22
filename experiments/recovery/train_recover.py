@@ -13,6 +13,13 @@ all-reduce-averaged before the optimizer step -- mathematically identical to one
 batch. The probe is sharded across ranks too and gathered, so probe wall-clock divides
 by the world size. Global batch = world_size x --accum.
 
+The VLM also receives the KI-faithful motor objective: the GT trajectory, discretised by
+the model's own `traj_tokenizer` into 128 tokens, is appended after traj_future_start and
+supervised by a second CE (`--lambda-traj`). The cache is cropped before the expert runs,
+so this never leaks the answer into the flow-matching step. Rebalancing the two *channels*
+is done with --lr-vlm / --lr-expert, not --lambda-ce: with disjoint parameters, AdamW's
+scale invariance and per-channel gradient clipping make a constant loss weight cancel.
+
 Data: outputs/recovery_sets/train_official_<n>.parquet (full-model CoC, `train` cache) +
 OOD-train rows of outputs/eval_sets/ood.parquet (curated gt_coc, `ood` cache). CE learns
 the terminal tokens too, which is the direct lever on the u55 failure mode (CoC
@@ -119,16 +126,30 @@ def prepare(base, processor, tok, sample, max_coc, device="cuda"):
     ids = rl.coc_ids(tok, coc_text, max_tokens=max_coc)
     coc = torch.tensor([ids], device=device)  # (1, L_coc)
     seq_tf = torch.cat([inputs["input_ids"], coc], dim=1)  # (1, prompt+coc)
-    return inputs, x1, seq_tf, inputs["input_ids"].shape[1], seq_tf.shape[1]
+    traj = rl.traj_token_ids(base, data, device)  # (1, 128)
+    return inputs, x1, seq_tf, inputs["input_ids"].shape[1], seq_tf.shape[1], traj
 
 
-def micro_step(base, inputs, x1, seq_tf, cs, ce, t_val, noise, lam_ce):
-    """Insulated losses for one sample. Returns (loss, l_fm, l_ce) tensors."""
-    out, cache, rope_deltas = rl.vlm_forward(base, inputs, seq_tf)
-    l_ce = rl.ce_loss(base, out, seq_tf, cs, ce)
-    prefill = cache.get_seq_length()
+def micro_step(base, inputs, x1, seq_tf, cs, ce, t_val, noise, lam_ce, traj=None,
+               lam_traj=0.0):
+    """Insulated losses for one sample. Returns (loss, l_fm, l_ce, l_traj) tensors.
+
+    With `traj`, the discrete trajectory tokens are appended after traj_future_start and
+    supervised by a second CE on the VLM -- the KI-faithful motor objective for the
+    backbone. The cache is cropped back to the pre-trajectory prefill before the expert
+    runs, so the expert sees exactly the deployment context and never the answer;
+    causal attention leaves the kept positions unchanged by the appended tokens.
+    """
+    seq = seq_tf if traj is None else torch.cat([seq_tf, traj], dim=1)
+    out, cache, rope_deltas = rl.vlm_forward(base, inputs, seq)
+    l_ce = rl.ce_loss(base, out, seq, cs, ce)
+    l_traj = (rl.ce_loss(base, out, seq, ce, ce + traj.shape[1])
+              if traj is not None else torch.zeros((), device=seq.device))
+    prefill = seq_tf.shape[1]
+    if cache.get_seq_length() > prefill:
+        cache.crop(prefill)
     l_fm = rl.fm_loss_insulated(base, cache, rope_deltas, x1, prefill, t_val, noise)
-    return l_fm + lam_ce * l_ce, l_fm, l_ce
+    return l_fm + lam_ce * l_ce + lam_traj * l_traj, l_fm, l_ce, l_traj
 
 
 @torch.no_grad()
@@ -164,6 +185,21 @@ def probe_rows(base, processor, tok, samples, seed, max_gen, probe_k=6):
 
 
 FM_T_GRID = tuple(round(0.05 + 0.1 * i, 2) for i in range(10))  # 0.05 .. 0.95
+
+
+def save_state(path, peft_model, opt, sched, step, best, bad, log, args):
+    """Full resume point: adapters + optimizer + schedule + selection state.
+
+    Written atomically -- the shared cards can have a run killed at any moment, and a
+    half-written state file would be worse than none. Without this the retry loop in
+    run_ddp_retry.sh restarts at step 0 and its step-0 probe overwrites adapter_best.pt
+    with the zero-shot adapter, silently discarding the run.
+    """
+    tmp = Path(str(path) + ".tmp")
+    torch.save({"lora": rl.adapter_state(peft_model), "opt": opt.state_dict(),
+                "sched": sched.state_dict(), "step": step, "best": best, "bad": bad,
+                "log": log, "r": args.r, "alpha": args.alpha, "ckpt": args.ckpt}, tmp)
+    tmp.rename(path)
 
 
 @torch.no_grad()
@@ -232,12 +268,15 @@ def probe_stats(rows):
     return out
 
 
-def ki_check(base, processor, tok, sample, max_coc, vlm_params, expert_params):
+def ki_check(base, processor, tok, sample, max_coc, vlm_params, expert_params,
+             lam_traj=0.0):
     """FM-only backward must leave VLM LoRA untouched; CE-only likewise for the expert."""
-    inputs, x1, seq_tf, cs, ce = prepare(base, processor, tok, sample, max_coc)
+    inputs, x1, seq_tf, cs, ce, traj = prepare(base, processor, tok, sample, max_coc)
+    traj = traj if lam_traj > 0 else None
     noise = torch.randn(x1.shape, device=x1.device)
 
-    _, l_fm, l_ce = micro_step(base, inputs, x1, seq_tf, cs, ce, 0.5, noise, 0.0)
+    _, l_fm, l_ce, l_traj = micro_step(base, inputs, x1, seq_tf, cs, ce, 0.5, noise, 0.0,
+                                       traj, 0.0)
     l_fm.backward()
     leak = [n for n, p in vlm_params if p.grad is not None and p.grad.abs().max() > 0]
     assert not leak, f"KI violated: FM gradient reached VLM LoRA ({leak[:3]})"
@@ -246,18 +285,21 @@ def ki_check(base, processor, tok, sample, max_coc, vlm_params, expert_params):
 
     # l_ce still pins the whole VLM activation graph -- drop it before building a
     # second one, or the two together OOM a 47 GiB card
-    del l_fm, l_ce
+    del l_fm, l_ce, l_traj
     for _, p in vlm_params + expert_params:
         p.grad = None
-    _, l_fm, l_ce = micro_step(base, inputs, x1, seq_tf, cs, ce, 0.5, noise, 1.0)
-    l_ce.backward()
+    _, l_fm, l_ce, l_traj = micro_step(base, inputs, x1, seq_tf, cs, ce, 0.5, noise, 1.0,
+                                       traj, lam_traj)
+    (l_ce + lam_traj * l_traj).backward()  # both are VLM-side objectives
     leak = [n for n, p in expert_params if p.grad is not None and p.grad.abs().max() > 0]
     assert not leak, f"CE gradient reached expert LoRA ({leak[:3]})"
     got = sum(1 for _, p in vlm_params if p.grad is not None and p.grad.abs().max() > 0)
     assert got > 0, "CE gradient reached no VLM LoRA param"
     for _, p in vlm_params + expert_params:
         p.grad = None
-    print(f"KI CHECK PASS  (fm={l_fm.item():.4f} ce={l_ce.item():.4f})", flush=True)
+    # a base model that never saw these tokens would sit near ln(vocab) = 11.96
+    extra = f" traj_ce={l_traj.item():.4f}" if traj is not None else ""
+    print(f"KI CHECK PASS  (fm={l_fm.item():.4f} ce={l_ce.item():.4f}{extra})", flush=True)
 
 
 def main():
@@ -268,7 +310,16 @@ def main():
     ap.add_argument("--accum", type=int, default=8, help="micro-steps per rank per step")
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--warmup", type=int, default=50)
-    ap.add_argument("--lambda-ce", type=float, default=1.0)
+    ap.add_argument("--lambda-ce", type=float, default=1.0,
+                    help="DEPRECATED, near no-op: CE and FM sit on disjoint parameters, "
+                         "AdamW is invariant to a constant gradient scale, and the two "
+                         "channels are norm-clipped separately -- so this cancels. Use "
+                         "--lr-vlm / --lr-expert to actually rebalance the channels.")
+    ap.add_argument("--lambda-traj", type=float, default=0.5,
+                    help="weight of the discrete trajectory-token CE against the CoC CE. "
+                         "Both act on the VLM parameters, so this ratio is real. 0 disables.")
+    ap.add_argument("--lr-vlm", type=float, default=None, help="defaults to --lr")
+    ap.add_argument("--lr-expert", type=float, default=None, help="defaults to --lr")
     ap.add_argument("--r", type=int, default=32)
     ap.add_argument("--alpha", type=int, default=64)
     ap.add_argument("--max-coc", type=int, default=256)
@@ -281,6 +332,9 @@ def main():
                     help="OOD probe clips for the frozen-grid FM loss (0 disables)")
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--resume", choices=["auto", "off"], default="auto",
+                    help="auto: continue from state_last.pt, else warm-start from "
+                         "adapter_last.pt (optimizer state lost but weights kept)")
     ap.add_argument("--reserve-gb", type=float, default=40.0)
     ap.add_argument("--gpu", type=int, default=None)
     ap.add_argument("--gpus", type=int, nargs="+", default=None,
@@ -334,7 +388,8 @@ def main():
               flush=True)
 
     if r0:
-        ki_check(base, processor, tok, train[0], args.max_coc, vlm_params, expert_params)
+        ki_check(base, processor, tok, train[0], args.max_coc, vlm_params, expert_params,
+             args.lambda_traj)
     if world > 1:
         dist.barrier()
 
@@ -344,7 +399,9 @@ def main():
             "insulation": "fm->expert, ce->vlm",
             "steps": args.steps, "accum": args.accum, "world": world,
             "global_batch": world * args.accum, "gpus": args.gpus or [args.gpu],
-            "lr": args.lr, "warmup": args.warmup, "lambda_ce": args.lambda_ce,
+            "lr": args.lr, "lr_vlm": args.lr_vlm or args.lr,
+            "lr_expert": args.lr_expert or args.lr, "warmup": args.warmup,
+            "lambda_ce": args.lambda_ce, "lambda_traj": args.lambda_traj,
             "r": args.r, "alpha": args.alpha, "max_coc": args.max_coc,
             "n_train": len(train), "n_official": n_off, "n_probe": len(probe_samples),
             "probe_k": args.probe_k, "val_fm_clips": args.val_fm_clips,
@@ -359,7 +416,10 @@ def main():
                   if r0 else (lambda d, step: None, None))
 
     params = [p for _, p in trainable]
-    opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.01)
+    opt = torch.optim.AdamW(
+        [{"params": [p for _, p in vlm_params], "lr": args.lr_vlm or args.lr},
+         {"params": [p for _, p in expert_params], "lr": args.lr_expert or args.lr}],
+        lr=args.lr, weight_decay=0.01)
     sched = get_cosine_schedule_with_warmup(opt, args.warmup, args.steps)
     rng = np.random.default_rng([args.seed, rank])
     order, ptr = rng.permutation(len(shard)).tolist(), 0
@@ -372,7 +432,37 @@ def main():
         ptr += 1
         return s
 
-    log = {"step": [], "l_fm": [], "l_ce": [], "lr": [], "val": []}
+    log = {"step": [], "l_fm": [], "l_ce": [], "l_traj": [], "lr": [], "val": []}
+    start_step, best, bad = 0, float("inf"), 0
+    state_path = out_dir / "state_last.pt"
+    if args.resume != "off" and state_path.exists():
+        st = torch.load(state_path, map_location="cpu", weights_only=False)
+        sd = peft_model.state_dict()
+        sd.update({k: v.to("cuda") for k, v in st["lora"].items()})
+        peft_model.load_state_dict(sd)
+        opt.load_state_dict(st["opt"])
+        sched.load_state_dict(st["sched"])
+        start_step, best, bad, log = st["step"], st["best"], st["bad"], st["log"]
+        if r0:
+            print(f"RESUMED from state_last.pt at step {start_step} (best {best:.4f})",
+                  flush=True)
+    elif args.resume != "off" and (out_dir / "adapter_last.pt").exists():
+        # a run started before resume support existed: the weights survive, the
+        # optimizer moments do not. Fast-forward the schedule so lr is right.
+        extra = rl.load_adapter_(peft_model, out_dir / "adapter_last.pt")
+        start_step = int(extra.get("step", 0))
+        for _ in range(start_step):
+            sched.step()
+        if (out_dir / "adapter_best.pt").exists():
+            b = torch.load(out_dir / "adapter_best.pt", map_location="cpu",
+                           weights_only=True)["extra"]
+            best = float(b.get("val_minADE", float("inf")))
+        if (out_dir / "metrics.json").exists():
+            log = json.loads((out_dir / "metrics.json").read_text())
+            log.setdefault("l_traj", [])
+        if r0:
+            print(f"WARM-START from adapter_last.pt at step {start_step} "
+                  f"(best {best:.4f}); optimizer state lost", flush=True)
 
     def run_probe(step):
         t0 = time.time()
@@ -415,26 +505,31 @@ def main():
                   f"({(time.time() - t0) / 60:.1f}m)", flush=True)
         return res["all"]["minADE_mean"]
 
-    best, bad = run_probe(0), 0
-    if r0:
-        rl.save_adapter(peft_model, out_dir / "adapter_best.pt",
-                        {"step": 0, "val_minADE": best, "r": args.r, "alpha": args.alpha,
-                         "ckpt": args.ckpt})
+    if start_step == 0:
+        best, bad = run_probe(0), 0
+        if r0:
+            rl.save_adapter(peft_model, out_dir / "adapter_best.pt",
+                            {"step": 0, "val_minADE": best, "r": args.r,
+                             "alpha": args.alpha, "ckpt": args.ckpt})
+            save_state(state_path, peft_model, opt, sched, 0, best, bad, log, args)
 
-    for step in range(1, args.steps + 1):
+    for step in range(start_step + 1, args.steps + 1):
         t0 = time.time()
         opt.zero_grad(set_to_none=True)
-        fm_acc, ce_acc = 0.0, 0.0
+        fm_acc, ce_acc, traj_acc = 0.0, 0.0, 0.0
         for _ in range(args.accum):
             sample = next_sample()
-            inputs, x1, seq_tf, cs, ce = prepare(base, processor, tok, sample, args.max_coc)
+            inputs, x1, seq_tf, cs, ce, traj = prepare(base, processor, tok, sample,
+                                                       args.max_coc)
             t_val = float(rng.uniform())
             noise = torch.randn(x1.shape, device=x1.device)
-            loss, l_fm, l_ce = micro_step(base, inputs, x1, seq_tf, cs, ce, t_val, noise,
-                                          args.lambda_ce)
+            loss, l_fm, l_ce, l_traj = micro_step(
+                base, inputs, x1, seq_tf, cs, ce, t_val, noise, args.lambda_ce,
+                traj if args.lambda_traj > 0 else None, args.lambda_traj)
             (loss / args.accum).backward()
             fm_acc += l_fm.item() / args.accum
             ce_acc += l_ce.item() / args.accum
+            traj_acc += l_traj.item() / args.accum
         if world > 1:
             for p in params:
                 if p.grad is not None:
@@ -452,20 +547,22 @@ def main():
             assert peak < 46.0, f"rank {rank} peak {peak:.1f} GB exceeds gate"
 
         if world > 1:
-            t_ = torch.tensor([fm_acc, ce_acc], device="cuda")
+            t_ = torch.tensor([fm_acc, ce_acc, traj_acc], device="cuda")
             dist.all_reduce(t_, op=dist.ReduceOp.AVG)
-            fm_acc, ce_acc = float(t_[0]), float(t_[1])
+            fm_acc, ce_acc, traj_acc = float(t_[0]), float(t_[1]), float(t_[2])
         log["step"].append(step)
         log["l_fm"].append(fm_acc)
         log["l_ce"].append(ce_acc)
+        log["l_traj"].append(traj_acc)
         log["lr"].append(sched.get_last_lr()[0])
         if r0:
-            wlog({"train/l_fm": fm_acc, "train/l_ce": ce_acc,
+            wlog({"train/l_fm": fm_acc, "train/l_ce": ce_acc, "train/l_traj": traj_acc,
                   "train/lr": sched.get_last_lr()[0],
                   "train/sec_per_step": time.time() - t0}, step)
         if r0 and (step % 10 == 0 or step == 1):
             print(f"[step {step}/{args.steps}] L_fm={fm_acc:.5f} L_ce={ce_acc:.4f} "
-                  f"lr={sched.get_last_lr()[0]:.2e} ({time.time() - t0:.1f}s/step)", flush=True)
+                  f"L_traj={traj_acc:.4f} lr={sched.get_last_lr()[0]:.2e} "
+                  f"({time.time() - t0:.1f}s/step)", flush=True)
 
         if step % args.val_every == 0 or step == args.steps:
             v = run_probe(step)
@@ -473,6 +570,8 @@ def main():
                 rl.save_adapter(peft_model, out_dir / "adapter_last.pt",
                                 {"step": step, "val_minADE": v, "r": args.r,
                                  "alpha": args.alpha, "ckpt": args.ckpt})
+                save_state(state_path, peft_model, opt, sched, step, min(best, v),
+                           0 if v < best - 1e-4 else bad + 1, log, args)
             if v < best - 1e-4:
                 best, bad = v, 0
                 if r0:
@@ -516,7 +615,9 @@ def _plot(out_dir, log):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 3, figsize=(13.5, 3.6))
     ax[0].plot(log["step"], log["l_fm"], color="#2a78d6", label="L_fm (expert)")
-    ax[0].plot(log["step"], log["l_ce"], color="#eda100", label="L_ce (vlm)")
+    ax[0].plot(log["step"], log["l_ce"], color="#eda100", label="L_ce coc (vlm)")
+    if any(log.get("l_traj", [])):
+        ax[0].plot(log["step"], log["l_traj"], color="#e87ba4", label="L_ce traj (vlm)")
     ax[0].set_xlabel("step")
     ax[0].set_ylabel("loss")
     ax[0].legend(frameon=False)

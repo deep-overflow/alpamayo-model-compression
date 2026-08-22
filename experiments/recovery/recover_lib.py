@@ -80,6 +80,24 @@ def coc_ids(tok, text, max_tokens=256):
     return rt[: max_tokens - 2] + [COT_END, TFS]
 
 
+def traj_token_ids(model, data, device):
+    """GT future trajectory -> discrete trajectory token ids. (1, 128)
+
+    pi-0.5+KI gives the backbone its motor supervision as *discrete* action tokens (FAST)
+    while the continuous flow-matching gradient stays insulated. Alpamayo ships the same
+    machinery: `traj_tokenizer` bins the unicycle action into 3000 levels, 64 steps x 2
+    dims = 128 tokens, and the VLM vocabulary reserves ids at `future_token_start_idx`
+    (the release's ExpertLogitsProcessor masks exactly this range during CoC decoding, so
+    the base model can emit them). Supervising them costs nothing at inference.
+    """
+    hx = data["ego_history_xyz"][:, 0].to(device).float()  # (1, 16, 3)
+    hr = data["ego_history_rot"][:, 0].to(device).float()  # (1, 16, 3, 3)
+    fx = data["ego_future_xyz"][:, 0].to(device).float()  # (1, 64, 3)
+    fr = data["ego_future_rot"][:, 0].to(device).float()  # (1, 64, 3, 3)
+    bins = model.traj_tokenizer.encode(hx, hr, fx, fr)  # (1, 128) in [0, num_bins)
+    return bins + model.future_token_start_idx
+
+
 def vlm_forward(base, inputs, seq_tf):
     """Grad VLM forward over the teacher-forced sequence. Returns (out, cache, rope_deltas)."""
     with torch.autocast("cuda", dtype=torch.bfloat16):
