@@ -132,8 +132,12 @@ def micro_step(base, inputs, x1, seq_tf, cs, ce, t_val, noise, lam_ce):
 
 
 @torch.no_grad()
-def probe_rows(base, processor, tok, samples, seed, max_gen):
-    """K=1 rollout probe rows for this rank's shard of the probe set."""
+def probe_rows(base, processor, tok, samples, seed, max_gen, probe_k=6):
+    """Rollout probe rows for this rank's shard: 1 rollout + best-of-probe_k trajectories.
+
+    probe_k=6 matches the reported open-loop metric (minADE@6, seeds base+k), so
+    checkpoint selection optimizes the same quantity the evaluation reports.
+    """
     rows = []
     for cache_ns, clip_id, t0_us, source in samples:
         data = sc.load_cached(sc.path_for(cache_ns, clip_id, t0_us))
@@ -151,11 +155,69 @@ def probe_rows(base, processor, tok, samples, seed, max_gen):
         gen_coc = tok.decode([t for t in gen_ids if t not in (rl.COT_END, rl.TFS)],
                              skip_special_tokens=True)
         del roll
+        seeds = [cs + k for k in range(probe_k)]
         ade_k, _, _, _ = eval_config_samples(base, inputs, seq_gen, prompt_len, coc_end,
-                                             gt_xy, [cs])
-        rows.append({"source": source, "minADE": float(ade_k[0]),
+                                             gt_xy, seeds)
+        rows.append({"source": source, "minADE": float(ade_k.min()),
                      "degen": el.coc_degenerate(gen_coc)["degenerate"]})
     return rows
+
+
+FM_T_GRID = tuple(round(0.05 + 0.1 * i, 2) for i in range(10))  # 0.05 .. 0.95
+
+
+@torch.no_grad()
+def val_fm_rows(base, processor, tok, samples, max_coc):
+    """Flow-matching loss on a frozen (clip, t, noise) grid, GT-CoC teacher-forced.
+
+    The training L_fm redraws t ~ U(0,1) and the noise every micro-step, and the FM
+    target x1-noise keeps a t-dependent irreducible variance (at t->0 the clean action
+    is unconstrained, at t->1 the noise is), so its value tracks the draw rather than
+    the model -- it sat at 0.30 +- 0.05 for 1200 steps in both recovery runs. Freezing
+    the grid makes the number paired across checkpoints, and splitting by t says whether
+    the expert fails on global shape (low t) or on refinement (high t).
+
+    Teacher-forced on the curated gt_coc, so the cache context does not move with the
+    checkpoint's own CoC quality. Only the OOD cache carries gt_coc; callers pass an
+    OOD-only sample list.
+    """
+    rows = []
+    for cache_ns, clip_id, t0_us, source in samples:
+        data = sc.load_cached(sc.path_for(cache_ns, clip_id, t0_us))
+        gt_coc = data.get("gt_coc")
+        if not gt_coc:
+            continue
+        inputs = lib.build_inputs(base, processor, data, "cuda")
+        x1 = lib.gt_actions(base, data, "cuda").to(torch.float32)  # (1, 64, 2)
+        ids = rl.coc_ids(tok, gt_coc, max_tokens=max_coc)
+        seq_tf = torch.cat([inputs["input_ids"], torch.tensor([ids], device="cuda")], dim=1)
+        _, cache, rope_deltas = rl.vlm_forward(base, inputs, seq_tf)
+        prefill = cache.get_seq_length()
+        gen = torch.Generator().manual_seed(sc.clip_seed(0, clip_id))
+        for t_val in FM_T_GRID:
+            noise = torch.randn(x1.shape, generator=gen).to(x1.device)  # (1, 64, 2)
+            loss = rl.fm_loss_insulated(base, cache, rope_deltas, x1, prefill, t_val, noise)
+            rows.append({"source": source, "t": t_val, "fm": float(loss)})
+        del cache
+    return rows
+
+
+def fm_stats(rows):
+    """Overall + per-t + coarse-bucket means of the frozen-grid FM loss."""
+    if not rows:
+        return {}
+    arr = np.array([r["fm"] for r in rows])
+    out = {"n_pairs": len(rows), "n_clips": len(rows) // max(len(FM_T_GRID), 1),
+           "mean": float(arr.mean())}
+    for t in FM_T_GRID:
+        v = [r["fm"] for r in rows if abs(r["t"] - t) < 1e-9]
+        if v:
+            out[f"t{t:.2f}"] = float(np.mean(v))
+    for name, lo, hi in (("low", 0.0, 0.35), ("mid", 0.35, 0.7), ("high", 0.7, 1.0)):
+        v = [r["fm"] for r in rows if lo <= r["t"] < hi]
+        if v:
+            out[name] = float(np.mean(v))
+    return out
 
 
 def probe_stats(rows):
@@ -213,6 +275,10 @@ def main():
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--val-every", type=int, default=150)
     ap.add_argument("--probe-limit", type=int, default=None)
+    ap.add_argument("--probe-k", type=int, default=6,
+                    help="trajectory samples per probe clip (best-of-k, seeds base+k)")
+    ap.add_argument("--val-fm-clips", type=int, default=100,
+                    help="OOD probe clips for the frozen-grid FM loss (0 disables)")
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--reserve-gb", type=float, default=40.0)
@@ -256,6 +322,9 @@ def main():
     perm = np.random.default_rng(args.seed).permutation(len(train))
     shard = [train[i] for i in perm][rank::world]
     probe_shard = probe_samples[rank::world]
+    # gt_coc lives only in the OOD cache, and the grid must be teacher-forced
+    fm_samples = [s for s in probe_samples if s[0] == "ood"][: args.val_fm_clips]
+    fm_shard = fm_samples[rank::world]
     n_off = sum(1 for s in train if s[4] == "official")
     if r0:
         print(f"config={meta['config']}  trainable={n_train_p:,}  world={world}  "
@@ -278,6 +347,8 @@ def main():
             "lr": args.lr, "warmup": args.warmup, "lambda_ce": args.lambda_ce,
             "r": args.r, "alpha": args.alpha, "max_coc": args.max_coc,
             "n_train": len(train), "n_official": n_off, "n_probe": len(probe_samples),
+            "probe_k": args.probe_k, "val_fm_clips": args.val_fm_clips,
+            "fm_t_grid": list(FM_T_GRID),
             "trainable_params": n_train_p, "seed": args.seed,
             "gpu": torch.cuda.get_device_name(device),
         }, indent=2))
@@ -305,21 +376,41 @@ def main():
 
     def run_probe(step):
         t0 = time.time()
-        rows = probe_rows(base, processor, tok, probe_shard, args.seed, args.max_gen)
+        rows = probe_rows(base, processor, tok, probe_shard, args.seed, args.max_gen,
+                          args.probe_k)
         if world > 1:
             gathered = [None] * world
             dist.all_gather_object(gathered, rows)
             rows = [r for part in gathered for r in part]
         res = probe_stats(rows)
+        if fm_samples:
+            frows = val_fm_rows(base, processor, tok, fm_shard, args.max_coc)
+            if world > 1:
+                gathered = [None] * world
+                dist.all_gather_object(gathered, frows)
+                frows = [r for part in gathered for r in part]
+            res["fm"] = fm_stats(frows)
         res["step"] = step
         log["val"].append(res)
         if r0:
             wlog({f"val/{s}_{k}": res[s][k] for s in ("all", "official", "ood") if s in res
                   for k in ("minADE_mean", "minADE_median", "degen")}, step)
+            if res.get("fm"):
+                # mean/buckets as headline curves, per-t so the failure location is
+                # plottable (low t = global shape, high t = refinement)
+                wlog({f"val/fm_{k}": v for k, v in res["fm"].items()
+                      if k in ("mean", "low", "mid", "high")
+                      or k.startswith(("t0", "t1"))}, step)
+                f = res["fm"]
+                print(f"[val fm step {step}] mean {f['mean']:.5f}  "
+                      f"low {f.get('low', float('nan')):.5f}  "
+                      f"mid {f.get('mid', float('nan')):.5f}  "
+                      f"high {f.get('high', float('nan')):.5f}  "
+                      f"({f['n_clips']} clips x {len(FM_T_GRID)} t)", flush=True)
             a = res["all"]
             by_src = "  ".join(f"{s} {res[s]['minADE_mean']:.4f}/{res[s]['degen']:.3f}"
                                for s in ("official", "ood") if s in res)
-            print(f"[val step {step}] minADE {a['minADE_mean']:.4f} "
+            print(f"[val step {step}] minADE@{args.probe_k} {a['minADE_mean']:.4f} "
                   f"(med {a['minADE_median']:.4f}) degen {a['degen']:.3f}  [{by_src}] "
                   f"({(time.time() - t0) / 60:.1f}m)", flush=True)
         return res["all"]["minADE_mean"]

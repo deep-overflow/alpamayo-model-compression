@@ -49,10 +49,8 @@ plt.rcParams.update({
     "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
     "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
 })
-ARM_ORDER = ("baseline", "dual_u40", "u55_zeroshot", "recovered")
-ARM_LABEL = {"baseline": "baseline\n11.1B", "dual_u40": "dual_u40 zs\n8.42B",
-             "u55_zeroshot": "u55 zs\n7.41B", "recovered": "u55 recovered\n7.41B"}
-ARM_COLOR = {"baseline": MUTED, "dual_u40": C4, "u55_zeroshot": C3, "recovered": C2}
+ARM_ORDER = ("baseline", "dual_u40", "zeroshot", "recovered")
+ARM_COLOR = {"baseline": MUTED, "dual_u40": C4, "zeroshot": C3, "recovered": C2}
 
 
 def load_rows(exp_dir):
@@ -90,6 +88,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rec", type=str, default="slim_recover_dual_u55",
                     help="recovered model tag; rows live in <tag>_{indist,test,oodval}")
+    ap.add_argument("--zs", type=str, default="dual_u55",
+                    help="zero-shot arm stem; rows in <stem>_{indist,test,oodval}")
     ap.add_argument("--out", type=str, default="outputs/recovery_eval")
     args = ap.parse_args()
 
@@ -97,11 +97,11 @@ def main():
         REPO / "outputs" / "eval_sets" / "ood_val.parquet").clip_id)
     sets = {
         "val_500": {"baseline": "baseline_ada_ps_indist", "dual_u40": "dual_u40_v2_ps_indist",
-                    "u55_zeroshot": "dual_u55_indist", "recovered": f"{args.rec}_indist"},
+                    "zeroshot": f"{args.zs}_indist", "recovered": f"{args.rec}_indist"},
         "test_500": {"baseline": "baseline_ada_ps_test", "dual_u40": "dual_u40_v2_ps_test",
-                     "u55_zeroshot": "dual_u55_test", "recovered": f"{args.rec}_test"},
+                     "zeroshot": f"{args.zs}_test", "recovered": f"{args.rec}_test"},
         "ood_val": {"baseline": "baseline_ada_ps_oodval", "dual_u40": "dual_u40_v2_ps_ood",
-                    "u55_zeroshot": "dual_u55_oodval", "recovered": f"{args.rec}_oodval"},
+                    "zeroshot": f"{args.zs}_oodval", "recovered": f"{args.rec}_oodval"},
     }
 
     out = REPO / Path(args.out)
@@ -118,7 +118,7 @@ def main():
         lines.append(f"\n== {set_name} (common clips {len(ids)}; "
                      f"minADE@{K_REPORT}, rollout) ==")
         lines.append(f"{'arm':14s} {'mean':>8} {'median':>8} {'degen':>7}")
-        for a in ("baseline", "dual_u40", "u55_zeroshot", "recovered"):
+        for a in ("baseline", "dual_u40", "zeroshot", "recovered"):
             if a not in present:
                 lines.append(f"{a:14s} {'--':>8} (rows missing)")
                 continue
@@ -126,8 +126,8 @@ def main():
             entry["arms"][a] = s
             lines.append(f"{a:14s} {s['minADE6_mean']:8.4f} {s['minADE6_median']:8.4f} "
                          f"{s['degen']:7.3f}")
-        for a, b in (("recovered", "baseline"), ("recovered", "u55_zeroshot"),
-                     ("recovered", "dual_u40"), ("u55_zeroshot", "baseline")):
+        for a, b in (("recovered", "baseline"), ("recovered", "zeroshot"),
+                     ("recovered", "dual_u40"), ("zeroshot", "baseline")):
             if a in present and b in present:
                 entry["paired"][f"{a}-{b}"] = pr = paired(present[a], present[b], ids)
                 lines.append(f"  d({a}-{b}): {pr['mean']:+.4f} "
@@ -139,7 +139,7 @@ def main():
     t = report.get("test_500", {})
     if "recovered" in t.get("arms", {}):
         rec = t["arms"]["recovered"]
-        dz = t["paired"].get("recovered-u55_zeroshot", {})
+        dz = t["paired"].get("recovered-zeroshot", {})
         gates["G1_minADE6_le_1.6"] = rec["minADE6_mean"] <= 1.6
         gates["G1_improves_zeroshot"] = bool(dz.get("sig")) and dz.get("mean", 0) < 0
         gates["G2_degen_le_0.05"] = rec["degen"] <= 0.05
@@ -148,14 +148,16 @@ def main():
             lines.append(f"  {g}: {'PASS' if ok else 'FAIL'}")
     report["gates"] = gates
 
-    plot_at6(report, out / "plots")
+    labels = {"baseline": "baseline 11.1B", "dual_u40": "dual_u40 zs 8.42B",
+              "zeroshot": f"{args.zs} zs", "recovered": f"{args.rec.replace('slim_recover_', '')} recovered"}
+    plot_at6(report, out / "plots", labels)
     (out / "metrics.json").write_text(json.dumps(report, indent=2))
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("\nsaved ->", out)
 
 
-def plot_at6(report, plots_dir):
+def plot_at6(report, plots_dir, labels):
     """Grouped bars: minADE@6 and degen per set, the four arms side by side."""
     plots_dir.mkdir(parents=True, exist_ok=True)
     sets = [s for s in ("val_500", "test_500", "ood_val") if s in report]
@@ -169,7 +171,7 @@ def plot_at6(report, plots_dir):
                 if a in report[s]["arms"]:
                     xs.append(j + i * w)
                     ys.append(report[s]["arms"][a][key])
-            ax.bar(xs, ys, width=w, color=ARM_COLOR[a], label=ARM_LABEL[a].replace("\n", " "))
+            ax.bar(xs, ys, width=w, color=ARM_COLOR[a], label=labels[a])
         ax.set_xticks(np.arange(len(sets)) + w * (len(ARM_ORDER) - 1) / 2)
         ax.set_xticklabels(sets)
         ax.set_ylabel(ylab)

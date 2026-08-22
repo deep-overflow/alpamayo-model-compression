@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>폐루프(alpasim) 결과 표 — public_2601 150 scenes (2026-08-20)</title>
+<style>
+  :root {
+    --bg:#F0EEE6; --card:#FDFCFA; --ink:#191919; --muted:#6e6a60;
+    --accent:#CC785C; --accent-soft:#F5E6DE; --line:#E5E0D5; --sig-dn:#b3452f;
+  }
+  body { background:var(--bg); color:var(--ink); max-width:920px; margin:3rem auto;
+         padding:0 1.4rem; line-height:1.65;
+         font-family:'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
+  h1 { font-family:Georgia,'Iowan Old Style','Times New Roman',serif; font-weight:600;
+       font-size:1.5rem; letter-spacing:-0.01em; margin-bottom:.3rem; }
+  .rule { height:3px; width:56px; background:var(--accent); border-radius:2px; margin:.4rem 0 1.1rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:1.1rem 1.3rem; box-shadow:0 1px 3px rgba(25,25,25,.05); }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:.92rem; }
+  th { background:var(--accent); color:#FDFCFA; font-weight:600; padding:.5rem .7rem;
+       text-align:right; }
+  th:first-child { text-align:left; border-top-left-radius:8px; }
+  th:last-child { border-top-right-radius:8px; }
+  td { padding:.45rem .7rem; text-align:right; border-bottom:1px solid var(--line); }
+  td:first-child { text-align:left; }
+  tr:nth-child(even) td { background:#F7F4EC; }
+  tr.hl td { background:var(--accent-soft); }
+  tr:last-child td:first-child { border-bottom-left-radius:8px; }
+  tr:last-child td:last-child { border-bottom-right-radius:8px; }
+  .sig-up { color:var(--accent); font-weight:700; }
+  .sig-dn { color:var(--sig-dn); font-weight:700; }
+  .muted { color:var(--muted); font-size:.86em; }
+</style>
+</head>
+<body>
+<h1>폐루프(alpasim) 결과 — public_2601, 150 scenes × 2 rollouts</h1>
+<div class="rule"></div>
+<p class="muted">전 arm 동일 150 scenes, scene별 rollout 평균 → scene 간 평균. Δscore는 baseline과
+scene 단위 paired (bootstrap 95% CI, 색 강조 = CI가 0 제외). 드라이버 전부 Ada, OMP 8.
+값 출처: 각 run의 results-summary.json + analyze_alpasim 출력 (alpasim_{singles,compose,recovery}_2601).</p>
+
+<div class="card">
+<table>
+<tr><th>method (params)</th><th>scene score</th><th>Δscore vs baseline [95% CI]</th>
+    <th>passed</th><th>coll@fault</th><th>offroad</th></tr>
+<tr><td>baseline (11.08B)</td><td>0.750</td><td>—</td><td>0.890</td><td>0.040</td><td>0.070</td></tr>
+<tr><td>traj (u40, 8.42B)</td><td>0.783</td><td>+0.033 [−0.012, +0.079]</td><td>0.880</td><td>0.033</td><td>0.087</td></tr>
+<tr><td>coc (u40, 8.42B)</td><td>0.660</td><td class="sig-dn">−0.089 [−0.151, −0.029]</td><td>0.837</td><td>0.073</td><td>0.090</td></tr>
+<tr><td>j (u40, 8.42B)</td><td>0.536</td><td class="sig-dn">−0.214 [−0.281, −0.145]</td><td>0.707</td><td>0.173</td><td>0.120</td></tr>
+<tr class="hl"><td>dual (u40, 8.42B)</td><td>0.828</td><td class="sig-up">+0.079 [+0.036, +0.123]</td><td>0.910</td><td>0.023</td><td>0.067</td></tr>
+<tr><td>jtraj (u40, 8.42B)</td><td>0.791</td><td>+0.042 [−0.005, +0.088]</td><td>0.887</td><td>0.043</td><td>0.070</td></tr>
+<tr><td>lp_coc_u40</td><td>0.811</td><td>—<sup>†</sup></td><td>0.907</td><td>0.057</td><td>0.037</td></tr>
+<tr><td>dual+w8 (8.42B, 8-bit)</td><td>0.813</td><td class="sig-up">+0.064 [+0.026, +0.102]</td><td>0.897</td><td>0.020</td><td>0.083</td></tr>
+<tr><td>dual+w4 (8.42B, 4-bit)</td><td>0.768</td><td>+0.018 [−0.031, +0.067]</td><td>0.883</td><td>0.047</td><td>0.070</td></tr>
+<tr class="hl"><td><b>u55 recovered (7.41B)</b></td><td><b>0.823</b></td><td class="sig-up">+0.074 [+0.024, +0.124]</td><td>0.887</td><td>0.030</td><td>0.083</td></tr>
+</table>
+</div>
+
+<p class="muted">읽기: score는 collision_at_fault==0 AND offroad==0일 때만 진행도 점수, 아니면 0.
+baseline 대비 유의한 우위는 dual(u40)·dual+w8·u55 recovered 셋. u55 recovered는 KI-LoRA 회복
+학습(4,800샘플) 후의 값이고 나머지는 zero-shot.
+<sup>†</sup> lp_coc_u40은 별도 세션에서 측정된 수치로 표에 그대로 옮겼으며, per-scene 로그가
+이 runs-root에 없어 paired Δscore CI는 미산출 (run 경로를 받으면 동일 방식으로 추가 가능).</p>
+</body>
+</html>

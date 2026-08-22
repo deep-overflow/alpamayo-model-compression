@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>KI-LoRA 회복 학습: dual_u55 (2026-08-20)</title>
+<title>KI-LoRA 회복 학습: dual_u55와 dual_u70 (2026-08-20/21)</title>
 <style>
   body { background:#FAF9F5; color:#29261B; font-family:'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
          max-width:960px; margin:2.5rem auto; padding:0 1.2rem; line-height:1.65; }
@@ -25,7 +25,7 @@
 </head>
 <body>
 
-<h1>KI-LoRA 회복 학습: 붕괴한 dual_u55를 dual_u40 수준으로</h1>
+<h1>KI-LoRA 회복 학습: 붕괴한 dual_u55를 dual_u40 수준으로 (+ dual_u70 확장)</h1>
 <p class="muted">2026-08-20 · 계획서 <code>plans/2026-08-19_recovery-training.md</code> ·
 학습 run <code>recover_dual_u55</code> (wandb kaist-cvlab/alpamayo-recovery/82340b2q) ·
 분석 <code>outputs/recovery_eval/</code></p>
@@ -38,6 +38,9 @@ minADE@6 4.26, CoC degeneracy 71%)가 <b>4,800샘플 KI-LoRA 학습(GPU 4장 × 
 같은 품질에서 파라미터가 10억 개 더 줄었다 — <b>얕은 회복 학습이 한 단계 깊은 프루닝을
 사실상 공짜로 만든다</b>. 폐루프(alpasim 150 scenes)에서도 baseline을 +0.074로 유의하게
 이기며 (dual_u40 +0.079와 동률), 세 게이트를 모두 통과했다.
+<br><br><b>u70 확장(§6).</b> 같은 레시피를 −41.8%(6.44B)에 적용하면 격차의 93–97%가
+회복되지만 (degeneracy 0.998→0.000), u40·u55와 <b>동급은 아니다</b> — 세 세트 모두 유의한
+잔여 열위(+0.18~+0.27)가 남는다. 회복이 프루닝을 무한정 상쇄하지는 못한다.
 </div>
 
 <table>
@@ -176,19 +179,87 @@ baseline(0.145)의 절반 수준.</li>
 <p class="muted">런: <code>m2601_merged_slim_recover_dual_u55</code> (300 rollouts / 150 scenes,
 4샤드 병합) · 분석: <code>outputs/alpasim_recovery_2601</code></p>
 
-<h2>6. 해석 (의견)</h2>
+<h2>6. u70 확장 (−41.8%, 6.44B)</h2>
+<p>u55가 세 게이트를 통과했으므로 같은 레시피를 한 단계 깊은 프루닝에 적용해 회복의 한계를
+탐색했다. 변경점은 둘뿐이다: 비율 0.55→0.70, 학습 길이 600→<b>1,200 step</b>(~6.8 epoch).
+데이터·probe 세트·KI 구조·lr·global batch는 동일하고, probe만 이 arm부터
+<b>best-of-6</b>로 바꿔 보고 지표와 정렬했다.</p>
+
+<h3>6.1 출발점: 완전 붕괴</h3>
+<table>
+<tr><th>u70 zero-shot</th><th>val_500</th><th>test_500</th><th>ood_val 262</th></tr>
+<tr><td>minADE@6</td><td>6.7488</td><td>6.5533</td><td>4.8199</td></tr>
+<tr><td>CoC degeneracy</td><td>1.000</td><td>0.998</td><td>1.000</td></tr>
+<tr><td>minADE(GT CoC 강제)</td><td>—</td><td>—</td><td>2.2969</td></tr>
+<tr><td>NLL(GT CoC)</td><td>—</td><td>—</td><td>10.3802</td></tr>
+</table>
+<p class="muted">u55(degen 0.68–0.71, GT-CoC 강제 시 1.42)와 달리 u70은 <b>전 클립 붕괴</b>이고,
+추론 문맥을 강제로 고쳐줘도 2.30이 남는다 — 언어 채널 외에 액션 경로 자체의 손상이 있다는
+신호였다.</p>
+
+<h3>6.2 학습</h3>
+<p>1,200 step 완주(조기 종료 없음), best = <b>step 1050</b>. probe(500클립, K=1 rollout +
+best-of-6 궤적):</p>
+<table>
+<tr><th>step</th><th>0</th><th>150</th><th>300</th><th>450</th><th>600</th><th>750</th><th>900</th><th>1050</th><th>1200</th></tr>
+<tr><td>minADE@6</td><td>5.708</td><td>1.646</td><td>1.584</td><td>1.568</td><td>1.552</td><td>1.541</td><td>1.523</td><td><b>1.510</b></td><td>1.513</td></tr>
+<tr><td>degeneracy</td><td>1.000</td><td>0.000</td><td>0.000</td><td>0.002</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td></tr>
+</table>
+<p>PLOT::train70::training.png</p>
+<p class="muted">u55와 같은 형태다: degeneracy는 150 step(2,400샘플)에 소멸하고 이후는 궤적
+정확도의 완만한 개선. 다만 u55의 학습량에 해당하는 step 600 이후에도 1.552→1.510으로 계속
+내려갔으므로 <b>연장(1,200 step)이 실익이 있었다</b>. 초기 L_ce도 5.65로 u55(2.82)의 두 배에서
+시작했다.</p>
+
+<h3>6.3 Open-loop 결과</h3>
+<table>
+<tr><th>arm (params)</th><th>val_500</th><th>test_500</th><th>ood_val 262</th><th>degen</th></tr>
+<tr><td>baseline (11.08B)</td><td>0.8236</td><td>0.8417</td><td>0.9995</td><td>≤0.008</td></tr>
+<tr><td>dual_u40 제로샷 (8.42B)</td><td>0.8904</td><td>0.9498</td><td>1.1192</td><td>0.014–0.034</td></tr>
+<tr><td>u55 recovered (7.41B)</td><td>0.9243</td><td>1.0077</td><td>1.1556</td><td>0.000</td></tr>
+<tr><td>u70 제로샷 (6.44B)</td><td>6.7488</td><td>6.5533</td><td>4.8199</td><td>0.998–1.000</td></tr>
+<tr><td><b>u70 recovered (6.44B)</b></td><td><b>1.0921</b></td><td><b>1.1268</b></td><td><b>1.3872</b></td><td><b>0.000</b></td></tr>
+</table>
+<p>PLOT::eval70::openloop_at6.png</p>
+<table>
+<tr><th>paired Δ (u70 recovered −)</th><th>val_500</th><th>test_500</th><th>ood_val</th></tr>
+<tr><td>vs u70 제로샷</td><td>−5.657 [−6.373, −4.986]*</td><td>−5.427 [−6.003, −4.880]*</td><td>−3.433 [−4.000, −2.900]*</td></tr>
+<tr><td>vs dual_u40 제로샷</td><td>+0.202 [+0.114, +0.303]*</td><td>+0.177 [+0.111, +0.245]*</td><td>+0.268 [+0.093, +0.470]*</td></tr>
+<tr><td>vs baseline</td><td>+0.269 [+0.189, +0.354]*</td><td>+0.285 [+0.202, +0.368]*</td><td>+0.388 [+0.212, +0.585]*</td></tr>
+<tr><td><b>격차 회복률</b> (→u40)</td><td><b>96.6%</b></td><td><b>96.8%</b></td><td><b>92.8%</b></td></tr>
+</table>
+<p class="muted">* = 95% CI가 0을 제외. ood_val teacher-forced도 회복: minADE(GT CoC)
+2.297→1.113, NLL 10.380→1.206. 게이트: G1′ <span class="pass">PASS</span>
+(1.127 ≤ 1.6, 개선 CI&lt;0, 회복률 96.8% ≫ 목표 80%), G2′ <span class="pass">PASS</span>
+(degen 0.000). G3′(폐루프)는 미실행.</p>
+
+<h3>6.4 읽기: 회복에도 벽이 있다</h3>
+<ul>
+<li><b>메커니즘은 재현된다.</b> degeneracy 99.8%의 완전 붕괴도 150 step에 0으로 잡히고,
+GT-CoC NLL이 10.38→1.21로 정상화된다. "언어 채널 교정이 궤적을 끌어올린다"는 u55의 관찰이
+더 깊은 손상에서도 성립한다.</li>
+<li><b>그러나 동급은 아니다.</b> u70 recovered는 dual_u40 제로샷 대비 세 세트 모두 유의하게
+열위(+0.18~+0.27)이고, u55 recovered보다도 +0.119 [+0.058, +0.179] 나쁘다. u55에서 성립했던
+"회복하면 u40과 구분 불가"가 u70에서 깨진다 — <b>−33%와 −41.8% 사이에 회복이 메우지 못하는
+벽</b>이 있다.</li>
+<li><b>새 트레이드오프 점.</b> 1.72× 압축은 baseline 대비 minADE +0.29(+34%)를 요구한다.
+1.50×(u55)가 +0.17로 u40급이었던 것과 대비된다. 벽의 정확한 위치는 u60~u65 탐색이 필요하다.</li>
+</ul>
+
+<h2>7. 해석 (의견)</h2>
 <ul>
 <li><b>붕괴의 경로가 확인됐다.</b> u55의 궤적 손상 대부분은 망가진 추론 문맥 경유였다 —
 CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 닿지 않았는데도) 궤적
 지표가 u40 수준으로 돌아왔다. expert 쪽 FM 적응은 보조적이었을 가능성이 높다.</li>
 <li><b>압축 프론티어의 이동.</b> "u40까지는 공짜, u55부터 붕괴"였던 그림이 "u55도 4,800샘플
 회복이면 u40과 동급"으로 바뀌었다. 보고 기준을 제로샷에서 회복-후로 옮기면 동일 품질에서
-−1.0B를 더 벌 수 있다.</li>
+−1.0B를 더 벌 수 있다. 다만 이 이동은 <b>무한하지 않다</b> — u70(§6)은 격차의 93–97%를
+회복하고도 유의한 열위가 남으므로, 프론티어는 u55 부근에서 꺾인다.</li>
 <li><b>baseline과의 격차는 남는다</b> (+0.10~+0.17, 유의). 33% 프루닝 모델의 잔여 비용으로,
 회복이 프루닝을 무손실로 만들지는 않는다.</li>
 </ul>
 
-<h2>7. 한계</h2>
+<h2>8. 한계</h2>
 <ul>
 <li>단일 시드·단일 데이터 draw. 캘리브레이션-draw 연구(2026-08-19)에서 draw 하나가 +0.09를
 움직인 전례가 있어, 회복 학습 데이터 draw의 분산도 미지수다.</li>
@@ -196,6 +267,12 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 좋아질 수 있다 (공정한 frontier 비교의 다음 단계).</li>
 <li>"단순 파인튜닝 이득"과 "프루닝 손상 회복"의 분리를 위한 unpruned+동일레시피 대조군은
 미실행.</li>
+<li>u70은 폐루프(G3′)를 아직 돌리지 않았다. open-loop 열위가 실주행 점수로 이어지는지는
+미확인이며, u55에서 open-loop 열위(+0.17)에도 폐루프가 baseline을 이겼던 전례가 있어
+직접 측정이 필요하다.</li>
+<li>u55는 600 step / probe K=1, u70은 1,200 step / probe best-of-6로 학습 설정이 완전히
+동일하지는 않다 (probe는 선택에만 쓰이므로 보고 지표는 영향받지 않지만, 학습 길이 차이는
+두 arm의 직접 비교에 남는 교란 요인이다).</li>
 <li>ood_val 262는 커버리지가 좁고, official probe와 OOD gt_coc의 스타일 차이가 CE에 주는
 영향은 분리하지 않았다.</li>
 </ul>
@@ -240,7 +317,7 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 꼬리 비교는 ≥5 m가 안정적이다 (2026-08-18 분석). recovered의 ≥5 m 26건(u40 15, baseline 7)은
 멀리 벗어나는 꼬리가 u40보다 두껍다는 뜻으로, offroad 0.083과 함께 남는 관찰 지점.</p>
 
-<h2>8. 재현</h2>
+<h2>9. 재현</h2>
 <pre>
 # 데이터셋 (버킷 균형 1,200 + probe 238) + 캐시
 python experiments/recovery/make_train_set.py
@@ -258,6 +335,15 @@ python experiments/recovery/rebuild_merged.py --adapter outputs/recover_dual_u55
 python experiments/evaluation/run_baseline.py --set {indist|test} --model outputs/slim_recover_dual_u55 ...
 python experiments/evaluation/run_baseline.py --set ood --manifest ood_val --model outputs/slim_recover_dual_u55 ...
 python experiments/recovery/analyze_recovery.py
+
+# u70 (동일 레시피, 1,200 step)
+python experiments/head_analysis/make_slim.py --config dual_u70_v2 --out outputs/slim_dual_u70_v2 \
+    --importance importance_v2 --jlens jlens_v2 --gpu 4
+bash experiments/recovery/run_ddp_retry.sh 60 "4 5 6 7" experiments/recovery/train_recover.py \
+    --ckpt outputs/slim_dual_u70_v2 --exp-id recover_dual_u70 \
+    --steps 1200 --accum 4 --lr 1.4e-4 --warmup 50 --val-every 150
+python experiments/recovery/analyze_recovery.py --rec slim_recover_dual_u70 --zs dual_u70 \
+    --out outputs/recovery_eval_u70
 </pre>
 <p class="muted">체크포인트는 adapter만 저장 (443 MB; <code>rebuild_merged.py</code>가 slim meta에서
 17 GB merged를 재구성 — recipes 방식). base revision 고정 7aba8293.</p>
