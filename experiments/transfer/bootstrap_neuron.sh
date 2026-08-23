@@ -3,7 +3,11 @@
 #
 #   ssh <USER>@neuron.ksc.re.kr
 #   cd /scratch/$USER/project/alpamayo-model-compression
-#   bash experiments/transfer/bootstrap_neuron.sh
+#   /bin/bash experiments/transfer/bootstrap_neuron.sh
+#
+# Spell out /bin/bash. NEURON defines `bash` as a shell function --
+# `bash () { /bin/bash --login; }` -- which drops every argument and starts an
+# interactive login shell instead, so `bash script.sh` exits 0 having run nothing.
 #
 # The Datamover is for transfer only -- it does not build environments or submit jobs,
 # which is why this runs on the login node instead.
@@ -95,4 +99,10 @@ cat <<'NOTES'
 NOTES
 
 echo
-echo "next: source env.sh && python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2"
+if [ -x "$REPO/.venv/bin/python" ]; then
+  echo "next: source env.sh && .venv/bin/python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2"
+else
+  echo "next: build the environment above, THEN"
+  echo "      source env.sh && .venv/bin/python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2"
+  echo "      (preflight imports pandas/torch, so it cannot run before the venv exists)"
+fi

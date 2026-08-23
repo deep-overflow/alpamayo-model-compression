@@ -178,7 +178,7 @@ environments or submit jobs):
 
   ssh $USER_N@neuron.ksc.re.kr
   cd $SCRATCH/project/alpamayo-model-compression
-  bash experiments/transfer/bootstrap_neuron.sh
+  /bin/bash experiments/transfer/bootstrap_neuron.sh   # NEURON shadows `bash`
   source env.sh
   python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2
   sinfo                                    # pick a partition with >=40 GB/GPU

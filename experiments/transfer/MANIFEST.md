@@ -18,9 +18,10 @@ bash experiments/transfer/push_neuron.sh <USER>
 # 3. on the NEURON *login* node -- the Datamover neither builds envs nor submits jobs
 ssh <USER>@neuron.ksc.re.kr
 cd /scratch/$USER/project/alpamayo-model-compression
-bash experiments/transfer/bootstrap_neuron.sh
+/bin/bash experiments/transfer/bootstrap_neuron.sh    # /bin/bash, not bash -- caveat 8
+# build the venv as bootstrap prints, then
 source env.sh
-python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2
+.venv/bin/python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2
 sinfo                                    # pick a partition with >=40 GB per GPU
 sbatch experiments/transfer/train_recover.sbatch --ckpt outputs/slim_coc_u55_v2 \
     --exp-id recover_coc_u55 --steps 1200
@@ -141,7 +142,19 @@ train; use rsync instead if you want the working tree mirrored for other reasons
    and the three `launch_alpasim_*.sh`. `build_report.py` additionally hardcodes
    `REPO = /workspace/...`, so pass it absolute paths.
 
-7. **`run_ddp_retry.sh` is not for NEURON.** It polls `nvidia-smi` until cards go idle,
+7. **`github.com:22` is firewalled from NEURON**, so `git clone git@github.com:...`
+   hangs until it times out. Port 443 is open on the Datamover, so either clone over
+   HTTPS or add `HostName ssh.github.com` / `Port 443` to `~/.ssh/config` there. The
+   `code` tier sidesteps GitHub auth entirely and is what shipped here.
+
+8. **NEURON shadows `bash` with a shell function** -- `bash () { /bin/bash --login; }` --
+   which discards every argument and starts an interactive login shell. So
+   `bash some_script.sh` exits 0 having run nothing at all, with no output and no error.
+   Spell out `/bin/bash some_script.sh`, or `./some_script.sh`. This is the single most
+   confusing failure on that machine: it looks exactly like a script that silently
+   succeeded.
+
+9. **`run_ddp_retry.sh` is not for NEURON.** It polls `nvidia-smi` until cards go idle,
    which is what a shared interactive box needs and a scheduler does not. Use
    `train_recover.sbatch`.
 
