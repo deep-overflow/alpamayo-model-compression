@@ -45,14 +45,29 @@ Two questions, answered concretely.
 | `experiments/head_analysis/expert_per_clip.py` | imported first by every runner — installs the gated-hub patch and `reserve_gpu` |
 | `experiments/head_analysis/eval_lib.py` | probe metrics, `coc_degenerate` |
 | `experiments/evaluation/sample_cache.py` | reads the npz caches; `clip_seed` |
-| `experiments/evaluation/run_eval.py` | `eval_config_samples`, used by the probe |
+| `experiments/head_analysis/run_eval.py` | `eval_config_samples`, used by the probe |
 | `experiments/recovery/rebuild_merged.py` | merges the adapter afterwards (can also run here) |
 | the `alpamayo1_5` package | pinned to `@f42e594`, installed into `.venv`, not in `pyproject.toml` |
 
 `train_recover.py` puts `experiments/{recovery,head_analysis,evaluation}` on `sys.path`,
-so those three directories have to arrive together. `push_neuron.sh` sends the whole
-working tree (90 MB with `.venv`, `outputs`, `logs`, `wandb` and worktrees excluded),
-which is simpler than curating the list and carries uncommitted work along.
+so those three directories have to arrive together.
+
+Two ways to get them there:
+
+- **`git clone` on the Datamover** (the guide's method A, and the node it sanctions for
+  `git`). Clone **`server-transfer`**, not `lingoqa-reasoning-probe`: the former branches
+  off the latter at `ed9105f`, so it is a superset — one clone brings the research code
+  *and* this toolkit. The repo is private, so the Datamover needs either a read-only
+  deploy key or a fine-grained read-only PAT.
+- **`push_neuron.sh <USER> code`**, which rsyncs the working tree (90 MB with `.venv`,
+  `outputs`, `logs`, `wandb` and worktrees excluded).
+
+The difference is uncommitted work. At the time of writing the source tree has local
+edits to `CLAUDE.md`, `launch_arms.sh`, `prune_lib.py`, `run_importance.py` and
+`analyze_recovery.py`, plus untracked `plans/` and `reports/` — and **none of them is on
+the training path**. `prune_lib` appears in `recover_lib.py` only in comments describing
+where the FM convention came from, never as an import. So a clone is sufficient to
+train; use rsync instead if you want the working tree mirrored for other reasons.
 
 ### Which data
 
