@@ -4,6 +4,8 @@
 #SBATCH --comment=field=efficientai;appl=pytorch
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=240G
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.out
@@ -30,7 +32,12 @@
 #      amd_h100_2     H100-94GB  x2, 3 nodes  <- only 2 GPUs, so accum becomes 8
 #
 #    All cap at 2-00:00:00.
-# 2. --comment is mandatory on NEURON and must be exactly
+# 2. --mem is mandatory in practice. NEURON's default works out to ~481 MB per CPU,
+#    which gave job 890909 just 15.4 GB for the whole node -- and each of the four ranks
+#    stages an 11B bf16 model through CPU memory before it reaches the GPU, so it was
+#    OOM-killed at 15.0 GB RSS. 240 GB is 60 GB per rank and a quarter of a 962 GB node,
+#    proportionate to taking 4 of its 8 GPUs.
+# 3. --comment is mandatory on NEURON and must be exactly
 #    "field=<field>;appl=<program>" -- a bare value is rejected at submit time with
 #    "option is required". `showappl` on glogin01-03 prints the allowed values.
 #    efficientai = "Efficient & Scalable AI Systems, Quantization, Edge AI", which is
@@ -90,8 +97,12 @@ if [ $((16 % NP)) -ne 0 ]; then
 fi
 ACCUM=$((16 / NP))
 
+# One intra-op thread per core per rank would put 4x32 busy-waiting threads on 32
+# cores; the same trap cost alpasim 2.3x wall-clock before DRIVER_OMP_THREADS existed.
+export OMP_NUM_THREADS=${OMP_NUM_THREADS-$(( ${SLURM_CPUS_PER_TASK:-32} / NP ))}
+
 GPUS=$(seq -s' ' 0 $((NP - 1)))
-echo "node $(hostname)  gpus $NP  accum $ACCUM  global_batch 16"
+echo "node $(hostname)  gpus $NP  accum $ACCUM  global_batch 16  omp $OMP_NUM_THREADS  mem ${SLURM_MEM_PER_NODE:-?}M"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 srun --unbuffered "$ALPAMAYO_MC_REPO/.venv/bin/torchrun" \
