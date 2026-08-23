@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>KI-LoRA 회복 학습: dual_u55와 dual_u70 (2026-08-20/21)</title>
+<title>KI-LoRA 회복 학습: dual_u55와 dual_u70 (2026-08-20~23)</title>
 <style>
   body { background:#FAF9F5; color:#29261B; font-family:'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
          max-width:960px; margin:2.5rem auto; padding:0 1.2rem; line-height:1.65; }
@@ -38,6 +38,11 @@ minADE@6 4.26, CoC degeneracy 71%)가 <b>4,800샘플 KI-LoRA 학습(GPU 4장 × 
 같은 품질에서 파라미터가 10억 개 더 줄었다 — <b>얕은 회복 학습이 한 단계 깊은 프루닝을
 사실상 공짜로 만든다</b>. 폐루프(alpasim 150 scenes)에서도 baseline을 +0.074로 유의하게
 이기며 (dual_u40 +0.079와 동률), 세 게이트를 모두 통과했다.
+<br><br><b>레시피 개선(§7).</b> 학습 곡선이 두 가지를 말해줬다 — u55는 val이 아직
+내려가는 중에 끊겼고, CoC CE는 2,471개 타깃을 암기해(L_ce 0.02~0.04) KI에서 VLM으로 가는
+유일한 신호가 후반에 고갈됐다. 1,200 step 연장 + <b>이산 궤적 토큰 CE</b>(π0.5+KI의
+FAST-token 대응물, 절연 유지)로 재학습한 <b>u55 v2</b>는 세 세트 풀링에서 v1 대비
+<b>−0.034 [−0.064, −0.005]</b>로 유의하게 개선됐고, ood_val에서는 dual_u40을 앞선다.
 <br><br><b>u70 확장(§6).</b> 같은 레시피를 −41.8%(6.44B)에 적용하면 격차의 93–97%가
 회복되지만 (degeneracy 0.998→0.000), u40·u55와 <b>동급은 아니다</b> — 세 세트 모두 유의한
 잔여 열위(+0.18~+0.27)가 남는다. 회복이 프루닝을 무한정 상쇄하지는 못한다.
@@ -246,7 +251,84 @@ GT-CoC NLL이 10.38→1.21로 정상화된다. "언어 채널 교정이 궤적�
 1.50×(u55)가 +0.17로 u40급이었던 것과 대비된다. 벽의 정확한 위치는 u60~u65 탐색이 필요하다.</li>
 </ul>
 
-<h2>7. 해석 (의견)</h2>
+<h2>7. 레시피 개선: u55 v2 (1,200 step + 궤적 토큰 CE)</h2>
+
+<h3>7.1 곡선이 지적한 두 결함</h3>
+<ul>
+<li><b>u55는 잘려 있었다.</b> best가 최종 step(600)이고 100 step당 −0.05로 여전히 하강
+중이었다. u70은 1,200 step에서 평탄해졌으므로, 같은 길이를 u55에도 줘야 공정하다.</li>
+<li><b>CE가 암기됐다.</b> L_ce가 u55에서 0.159, u70에서 0.039까지 떨어졌다 — 2,471개 CoC
+문자열을 외운 것이고, KI에서 CE는 VLM으로 가는 <b>유일한</b> gradient 경로이므로 후반
+300~400 step은 사실상 expert 전용 학습이었다.</li>
+<li><b>학습 L_fm은 아무 말도 하지 않는다.</b> 매 micro-step마다 t~U(0,1)과 noise를 새로
+뽑고, FM 목표 x1−noise는 (x_t, t)가 주어져도 t에 의존하는 기약 분산을 남긴다. 두 런 모두
+1,200 step 내내 0.30±0.05에서 추세 없이 흔들렸다.</li>
+</ul>
+
+<h3>7.2 세 가지 변경</h3>
+<ul>
+<li><b>이산 궤적 토큰 CE</b> — π0.5+KI는 backbone에서 FM gradient를 차단하는 대신
+<b>FAST 이산 액션 토큰</b>으로 행동을 가르친다. 우리 레시피는 CoC 텍스트 CE만 주고 있어
+논문보다 약한 설정이었다. Alpamayo에는 이미 기계장치가 있다: <code>traj_tokenizer</code>
+(3000 bins), 미래 128토큰, <code>traj_token_start_idx</code>부터의 전용 id — 릴리스의
+<code>ExpertLogitsProcessor</code>가 CoC 디코딩 중 <b>정확히 그 구간을 마스킹</b>한다.
+KI 체크에서 측정한 초기 traj CE는 <b>4.38</b>로, 궤적 vocab 균등(ln 3000 = 8.01)이나 전체
+vocab 균등(11.96)보다 훨씬 낮다 — 베이스가 이 토큰을 실제로 학습했다는 직접 증거다.
+GT 궤적 토큰은 <code>traj_future_start</code> 뒤에 붙어 같은 forward에서 감독되고,
+<b>expert가 돌기 전 cache를 원래 prefill로 crop</b>하므로 정답이 새지 않는다(causal
+attention이라 앞 위치의 K/V는 불변). 절연은 그대로다.</li>
+<li><b>λ 설계 수정</b> — <code>--lambda-ce</code>는 사실상 무효였다: CE와 FM이 서로소
+파라미터 위에 있고, AdamW는 gradient의 상수배에 불변이며, 두 채널을 따로 norm-clip 하므로
+가중치가 상쇄된다. 채널 균형의 실제 손잡이는 <code>--lr-vlm</code> /
+<code>--lr-expert</code>(신규 param group)이고, 같은 VLM 파라미터를 공유하는 CoC CE와
+궤적 CE 사이의 <code>--lambda-traj</code>(0.5)만이 의미 있는 가중치다.</li>
+<li><b>고정 격자 val FM loss</b> — (클립, t, noise)를 얼려 GT CoC를 teacher-forcing한 채
+FM 손실을 잰다. 체크포인트 간 페어드가 되어 warmup 3 step의 −0.0004도 잡히고, t별 분해로
+전역 형태(낮은 t)와 미세 보정(높은 t)을 구분한다.</li>
+</ul>
+
+<h3>7.3 학습</h3>
+<table>
+<tr><th>step</th><th>0</th><th>150</th><th>300</th><th>450</th><th>600</th><th>750</th><th>900</th><th>1050</th><th>1200</th></tr>
+<tr><td>probe minADE@6</td><td>4.310</td><td>1.262</td><td>1.206</td><td>1.238</td><td>1.194</td><td>1.199</td><td><b>1.174</b></td><td>1.182</td><td>1.180</td></tr>
+<tr><td>degeneracy</td><td>0.674</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td></tr>
+<tr><td>val FM (고정 격자)</td><td>0.3494</td><td>0.2715</td><td>0.2656</td><td>0.2669</td><td>0.2640</td><td>0.2639</td><td>0.2633</td><td>0.2630</td><td><b>0.2630</b></td></tr>
+<tr><td>— low t</td><td>0.5114</td><td>0.3761</td><td>0.3616</td><td>0.3669</td><td>0.3599</td><td>0.3600</td><td>0.3595</td><td>0.3586</td><td>0.3585</td></tr>
+</table>
+<p>PLOT::train55v2::training.png</p>
+<p class="muted">best = step 900. 세 가지가 보인다. ① <b>연장은 값을 했다</b> — 구버전이
+끝난 600 step의 1.194에서 900 step의 1.174까지 계속 내려갔다. ② <b>새 계측이 판정을
+가능하게 했다</b> — minADE 평균이 450·750·1050에서 반등할 때도 val FM은 단조 감소해,
+정체가 아니라 꼬리 클립 변동임을 구분해 줬다. 개선은 low-t에서 −30%로 가장 크다:
+회복되는 것은 미세 보정이 아니라 <b>궤적의 전역 형태</b>다. ③ <b>궤적 토큰은 암기되지
+않는다</b> — CoC CE가 0.023까지 떨어지는 동안 L_traj는 3.64 → 1.80으로 완만히 내려가며
+끝까지 살아 있었다. 128토큰 × 3000 bins라 외우기 어렵고, 결과적으로 데이터를 늘리지
+않고도 VLM에 신호를 계속 공급했다.</p>
+
+<h3>7.4 Open-loop 결과</h3>
+<table>
+<tr><th>arm (params)</th><th>val_500</th><th>test_500</th><th>ood_val 262</th><th>degen</th></tr>
+<tr><td>baseline (11.08B)</td><td>0.8236</td><td>0.8417</td><td>0.9995</td><td>≤0.008</td></tr>
+<tr><td>dual_u40 제로샷 (8.42B)</td><td>0.8904</td><td>0.9498</td><td>1.1192</td><td>0.014–0.034</td></tr>
+<tr><td>u55 v1 (600 step)</td><td>0.9243</td><td>1.0077</td><td>1.1556</td><td>0.000</td></tr>
+<tr><td><b>u55 v2 (1200 + traj)</b></td><td><b>0.9082</b></td><td><b>0.9806</b></td><td><b>1.0739</b></td><td><b>0.000</b></td></tr>
+</table>
+<table>
+<tr><th>paired Δ (u55 v2 −)</th><th>val_500</th><th>test_500</th><th>ood_val</th><th>풀링 (1,262)</th></tr>
+<tr><td>vs u55 v1</td><td>−0.016 [−0.055, +0.021]</td><td>−0.027 [−0.073, +0.018]</td><td>−0.082 [−0.173, +0.003]</td><td><b>−0.034 [−0.064, −0.005]*</b></td></tr>
+<tr><td>vs dual_u40 제로샷</td><td>+0.018 [−0.042, +0.076]</td><td>+0.031 [−0.021, +0.084]</td><td>−0.045 [−0.159, +0.065]</td><td>—</td></tr>
+<tr><td>vs baseline</td><td>+0.085 [−0.006, +0.160]</td><td>+0.139 [+0.078, +0.201]*</td><td>+0.074 [−0.018, +0.170]</td><td>—</td></tr>
+</table>
+<p>PLOT::eval55v2::openloop_at6.png</p>
+<p class="muted">* CI가 0 제외. minFDE@6은 2.399 / 2.713 / 2.706 (v1은 2.413 / 2.797 /
+2.893). 세트별로는 v1 대비 개선이 유의하지 않지만 <b>부호가 세 번 모두 같고 풀링에서
+유의</b>하다. 개선폭은 OOD에서 가장 크다(−0.082) — 학습 데이터의 절반이 OOD였다는 점과
+정합적이다. ood_val에서는 dual_u40 제로샷을 처음으로 앞선다(1.074 vs 1.119, 다만 CI는
+0 포함이라 동급 판정). teacher-forced minADE@6은 1.066 → 0.989로 개선된 반면
+NLL(GT CoC)은 0.882 → 1.139로 악화됐다: 궤적 토큰 CE가 CoC 확률질량을 일부 가져간
+대가로 보이며, degeneracy가 0을 유지하므로 실질 피해는 관측되지 않는다.</p>
+
+<h2>8. 해석 (의견)</h2>
 <ul>
 <li><b>붕괴의 경로가 확인됐다.</b> u55의 궤적 손상 대부분은 망가진 추론 문맥 경유였다 —
 CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 닿지 않았는데도) 궤적
@@ -259,7 +341,7 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 회복이 프루닝을 무손실로 만들지는 않는다.</li>
 </ul>
 
-<h2>8. 한계</h2>
+<h2>9. 한계</h2>
 <ul>
 <li>단일 시드·단일 데이터 draw. 캘리브레이션-draw 연구(2026-08-19)에서 draw 하나가 +0.09를
 움직인 전례가 있어, 회복 학습 데이터 draw의 분산도 미지수다.</li>
@@ -270,7 +352,10 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 <li>u70은 폐루프(G3′)를 아직 돌리지 않았다. open-loop 열위가 실주행 점수로 이어지는지는
 미확인이며, u55에서 open-loop 열위(+0.17)에도 폐루프가 baseline을 이겼던 전례가 있어
 직접 측정이 필요하다.</li>
-<li>u55는 600 step / probe K=1, u70은 1,200 step / probe best-of-6로 학습 설정이 완전히
+<li><b>u55 v2의 개선은 귀속이 불가능하다</b>: 스텝 연장(600→1,200)과 궤적 토큰 CE가
+동시에 바뀌었다. 어느 쪽이 얼마나 기여했는지는 "1,200 step + λ_traj=0" 대조군 1회(~5h)로만
+가를 수 있고, 아직 실행하지 않았다.</li>
+<li>u55 v1은 600 step / probe K=1, u70은 1,200 step / probe best-of-6로 학습 설정이 완전히
 동일하지는 않다 (probe는 선택에만 쓰이므로 보고 지표는 영향받지 않지만, 학습 길이 차이는
 두 arm의 직접 비교에 남는 교란 요인이다).</li>
 <li>ood_val 262는 커버리지가 좁고, official probe와 OOD gt_coc의 스타일 차이가 CE에 주는
@@ -317,7 +402,7 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 꼬리 비교는 ≥5 m가 안정적이다 (2026-08-18 분석). recovered의 ≥5 m 26건(u40 15, baseline 7)은
 멀리 벗어나는 꼬리가 u40보다 두껍다는 뜻으로, offroad 0.083과 함께 남는 관찰 지점.</p>
 
-<h2>9. 재현</h2>
+<h2>10. 재현</h2>
 <pre>
 # 데이터셋 (버킷 균형 1,200 + probe 238) + 캐시
 python experiments/recovery/make_train_set.py
@@ -344,6 +429,14 @@ bash experiments/recovery/run_ddp_retry.sh 60 "4 5 6 7" experiments/recovery/tra
     --steps 1200 --accum 4 --lr 1.4e-4 --warmup 50 --val-every 150
 python experiments/recovery/analyze_recovery.py --rec slim_recover_dual_u70 --zs dual_u70 \
     --out outputs/recovery_eval_u70
+
+# u55 v2 (1,200 step + discrete trajectory-token CE)
+bash experiments/recovery/run_ddp_retry.sh 60 "0 1 2 3" experiments/recovery/train_recover.py \
+    --ckpt outputs/slim_dual_u55_v2 --exp-id recover_dual_u55_v2 \
+    --steps 1200 --accum 4 --lr 1.4e-4 --warmup 50 --val-every 150 \
+    --lambda-traj 0.5 --val-fm-clips 100
+python experiments/recovery/analyze_recovery.py --rec slim_recover_dual_u55_v2 --zs dual_u55 \
+    --out outputs/recovery_eval_u55v2
 </pre>
 <p class="muted">체크포인트는 adapter만 저장 (443 MB; <code>rebuild_merged.py</code>가 slim meta에서
 17 GB merged를 재구성 — recipes 방식). base revision 고정 7aba8293.</p>
