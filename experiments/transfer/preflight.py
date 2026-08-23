@@ -99,6 +99,16 @@ def main():
           f"{len(shards)} shards in {snap}")
     cos = hub / "models--nvidia--Cosmos-Reason2-8B"
     check("Cosmos tokenizer/config", any(cos.rglob("tokenizer_config.json")), str(cos))
+
+    # The `.no_exist` markers are what make HF_HUB_OFFLINE usable: they record that an
+    # optional file is genuinely absent upstream. Without them huggingface_hub cannot
+    # tell "not cached" from "does not exist" and raises LocalEntryNotFoundError, which
+    # is how NEURON jobs 890894/890895 died -- the loader probes for adapter_config.json
+    # and model.safetensors, neither of which the Alpamayo repo has.
+    marks = hub / "models--nvidia--Alpamayo-1.5-10B" / ".no_exist" / sl.MODEL_REV
+    have = sorted(p.name for p in marks.iterdir()) if marks.is_dir() else []
+    check("offline markers for the pinned rev", "model.safetensors" in have,
+          ", ".join(have) if have else f"missing {marks}")
     if FAILED:
         return report()
 

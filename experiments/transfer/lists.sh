@@ -14,9 +14,17 @@ total_of() {  # total_of <root> <listfile>
 # Listed file-by-file rather than as a directory so --files-from cannot recurse into
 # a sibling snapshot's blobs; -L then dereferences each snapshot symlink into a real
 # file on the target, which from_pretrained reads the same way.
+#
+# `.no_exist` travels too. Those empty markers record "this optional file is genuinely
+# absent upstream", and offline mode needs them: without one, huggingface_hub cannot
+# tell "not cached" from "does not exist" and raises LocalEntryNotFoundError instead of
+# reporting the file absent. That is what killed NEURON jobs 890894/890895 -- the loader
+# probes for adapter_config.json and model.safetensors, neither of which this repo has.
+# 18 empty files, 28 KB.
 hub_list() {
   local repo=models--nvidia--Alpamayo-1.5-10B
   ls "$HUB/$repo/refs" 2>/dev/null | sed "s|^|$repo/refs/|" || true
+  ( cd "$HUB/$repo" && find .no_exist -type f -printf "$repo/%p\n" 2>/dev/null ) || true
   ls "$HUB/$repo/snapshots/$MODEL_REV" | sed "s|^|$repo/snapshots/$MODEL_REV/|"
   # Cosmos: config/tokenizer/processor only. The recovery path resolves this repo
   # through the local_files_only patch in expert_per_clip, but only reads these --
@@ -26,6 +34,7 @@ hub_list() {
   local rev
   rev=$(ls "$HUB/$cos/snapshots" | head -1)
   ls "$HUB/$cos/refs" 2>/dev/null | sed "s|^|$cos/refs/|" || true
+  ( cd "$HUB/$cos" && find .no_exist -type f -printf "$cos/%p\n" 2>/dev/null ) || true
   ls "$HUB/$cos/snapshots/$rev" | grep -vE '\.(safetensors|png)$' \
     | sed "s|^|$cos/snapshots/$rev/|"
   if has cosmos; then
