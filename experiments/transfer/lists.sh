@@ -18,28 +18,52 @@ total_of() {  # total_of <root> <listfile>
 # `.no_exist` travels too. Those empty markers record "this optional file is genuinely
 # absent upstream", and offline mode needs them: without one, huggingface_hub cannot
 # tell "not cached" from "does not exist" and raises LocalEntryNotFoundError instead of
-# reporting the file absent. That is what killed NEURON jobs 890894/890895 -- the loader
-# probes for adapter_config.json and model.safetensors, neither of which this repo has.
-# 18 empty files, 28 KB.
-hub_list() {
-  local repo=models--nvidia--Alpamayo-1.5-10B
+# reporting the file absent.
+#
+# Three repos, not one. Loading Alpamayo's *config* builds a processor from
+# `vlm_name_or_path` = nvidia/Cosmos-Reason2-8B, whose own processor chains to
+# Qwen/Qwen3-VL-8B-Instruct. Neither chain step needs weights -- only configs,
+# tokenizer and preprocessor files -- but every one of them must be cached, because
+# HF_HUB_OFFLINE=1 turns a missing file into a hard error. Missing the Qwen step is
+# what killed NEURON job 890907; missing `.no_exist` killed 890894/890895.
+#
+# `_repo_meta <dir> [pinned_rev]` emits refs, markers, and the snapshot's non-weight
+# files. With no pinned rev it resolves the revision through refs/main rather than
+# guessing at the snapshots directory, which would pick the wrong one for a repo that
+# has more than one.
+_repo_meta() {
+  local repo=$1 rev=${2-}
+  [ -d "$HUB/$repo" ] || { echo "hub_list: missing $HUB/$repo" >&2; return 1; }
+  [ -n "$rev" ] || rev=$(cat "$HUB/$repo/refs/main")
+  [ -d "$HUB/$repo/snapshots/$rev" ] || {
+    echo "hub_list: $repo has no snapshot $rev" >&2; return 1; }
   ls "$HUB/$repo/refs" 2>/dev/null | sed "s|^|$repo/refs/|" || true
   ( cd "$HUB/$repo" && find .no_exist -type f -printf "$repo/%p\n" 2>/dev/null ) || true
-  ls "$HUB/$repo/snapshots/$MODEL_REV" | sed "s|^|$repo/snapshots/$MODEL_REV/|"
-  # Cosmos: config/tokenizer/processor only. The recovery path resolves this repo
-  # through the local_files_only patch in expert_per_clip, but only reads these --
-  # the four safetensors have not been touched since 2026-08-11. If a target run does
-  # ask for them it fails at load, and the `cosmos` tier (or `hf download`) fixes it.
+  ls "$HUB/$repo/snapshots/$rev" | grep -vE '\.(safetensors|png)$' \
+    | sed "s|^|$repo/snapshots/$rev/|"
+}
+
+hub_list() {
+  # Alpamayo: pinned revision, weights included -- this is the model being trained.
+  local repo=models--nvidia--Alpamayo-1.5-10B
+  _repo_meta "$repo" "$MODEL_REV"
+  ls "$HUB/$repo/snapshots/$MODEL_REV" | grep -E '\.safetensors$' \
+    | sed "s|^|$repo/snapshots/$MODEL_REV/|"
+
+  # The two processor-chain repos: metadata only. Their safetensors are never read on
+  # the training path; `cosmos` sends them anyway if a run ever proves otherwise.
   local cos=models--nvidia--Cosmos-Reason2-8B
-  local rev
-  rev=$(ls "$HUB/$cos/snapshots" | head -1)
-  ls "$HUB/$cos/refs" 2>/dev/null | sed "s|^|$cos/refs/|" || true
-  ( cd "$HUB/$cos" && find .no_exist -type f -printf "$cos/%p\n" 2>/dev/null ) || true
-  ls "$HUB/$cos/snapshots/$rev" | grep -vE '\.(safetensors|png)$' \
-    | sed "s|^|$cos/snapshots/$rev/|"
+  local qwen=models--Qwen--Qwen3-VL-8B-Instruct
+  _repo_meta "$cos"
+  _repo_meta "$qwen"
   if has cosmos; then
-    ls "$HUB/$cos/snapshots/$rev" | grep -E '\.safetensors$' \
-      | sed "s|^|$cos/snapshots/$rev/|"
+    local r
+    for r in "$cos" "$qwen"; do
+      local rv
+      rv=$(cat "$HUB/$r/refs/main")
+      ls "$HUB/$r/snapshots/$rv" | grep -E '\.safetensors$' \
+        | sed "s|^|$r/snapshots/$rv/|"
+    done
   fi
 }
 

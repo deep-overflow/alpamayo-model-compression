@@ -8,9 +8,13 @@ Checks in order of cost, stopping at the first failure:
 2. samples      every npz those manifests name resolves under AD_VLA_DATA. A missing
                 clip is silent in training until that step comes up hours in, so this
                 is the check that matters most after an interrupted rsync.
-3. weights      the pinned Alpamayo revision resolves from the local hub cache, and
-                the slim recipe (slim_meta.json) is present for --ckpt.
-4. --load       (opt-in, needs a GPU and ~24 GB VRAM) reconstruct the slim model from
+3. weights      the pinned Alpamayo revision resolves from the local hub cache, the
+                slim recipe (slim_meta.json) is present for --ckpt, and the `.no_exist`
+                markers offline mode needs are there.
+4. config       the config chain actually resolves under HF_HUB_OFFLINE -- no weights,
+                no GPU, seconds. Alpamayo's config builds a Cosmos-Reason2-8B processor
+                which chains to Qwen3-VL-8B, so three repos must be cached, not one.
+5. --load       (opt-in, needs a GPU and ~24 GB VRAM) reconstruct the slim model from
                 slim_meta.json alone -- no slim_state.pt on the target -- and attach
                 LoRA to it. That exercises the whole load path the trainer uses; the
                 numerical KI insulation gate stays where it is, in train_recover's
@@ -112,9 +116,25 @@ def main():
     if FAILED:
         return report()
 
-    # 4. the expensive one
+    # 4. resolve the config chain for real, under whatever HF_HUB_OFFLINE is set to.
+    # No weights and no GPU, so it costs seconds -- and it is the exact step that failed
+    # three times on NEURON. Loading Alpamayo's config builds a processor from
+    # `vlm_name_or_path` (Cosmos-Reason2-8B), whose processor chains to Qwen3-VL-8B;
+    # a file-presence check cannot see that, because the files it wants belong to repos
+    # the manifest never mentions.
+    import expert_per_clip  # noqa: F401  -- installs the gated-hub patch first
+    from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
+    try:
+        cfg = Alpamayo1_5.config_class.from_pretrained("nvidia/Alpamayo-1.5-10B",
+                                                       revision=sl.MODEL_REV)
+        check("config chain resolves offline", True, type(cfg).__name__)
+    except Exception as e:  # noqa: BLE001  the message names the repo that is missing
+        check("config chain resolves offline", False, f"{type(e).__name__}: {e}"[:300])
+    if FAILED:
+        return report()
+
+    # 5. the expensive one
     if args.load:
-        import expert_per_clip  # noqa: F401  -- installs the gated-hub patch first
         import recover_lib as rl
         import torch
 
