@@ -20,12 +20,22 @@ total_of() {  # total_of <root> <listfile>
 # tell "not cached" from "does not exist" and raises LocalEntryNotFoundError instead of
 # reporting the file absent.
 #
-# Three repos, not one. Loading Alpamayo's *config* builds a processor from
-# `vlm_name_or_path` = nvidia/Cosmos-Reason2-8B, whose own processor chains to
-# Qwen/Qwen3-VL-8B-Instruct. Neither chain step needs weights -- only configs,
-# tokenizer and preprocessor files -- but every one of them must be cached, because
-# HF_HUB_OFFLINE=1 turns a missing file into a hard error. Missing the Qwen step is
-# what killed NEURON job 890907; missing `.no_exist` killed 890894/890895.
+# FOUR repos, not one, and only the first needs weights:
+#
+#   nvidia/Alpamayo-1.5-10B     the model, at the pinned MODEL_REV
+#   nvidia/Cosmos-Reason2-8B    config's `vlm_name_or_path`; building the config builds
+#                               its processor, so opening the config alone reaches here
+#   Qwen/Qwen3-VL-8B-Instruct   that processor's own config chains to this
+#   Qwen/Qwen3-VL-2B-Instruct   helper.BASE_PROCESSOR_NAME -- note 2B, not 8B; the
+#                               trainer calls helper.get_processor() after model load
+#
+# HF_HUB_OFFLINE=1 turns any missing file into a hard error, so all four must be cached.
+# They were discovered one failed NEURON job at a time (890907 was the 8B, 890912 the
+# 2B). To re-derive the list rather than guess again:
+#
+#   grep -rhoE '"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"' .venv/lib/python*/site-packages/alpamayo1_5/
+#
+# plus whatever `vlm_name_or_path` the checkpoint config names.
 #
 # `_repo_meta <dir> [pinned_rev]` emits refs, markers, and the snapshot's non-weight
 # files. With no pinned rev it resolves the revision through refs/main rather than
@@ -50,19 +60,21 @@ hub_list() {
   ls "$HUB/$repo/snapshots/$MODEL_REV" | grep -E '\.safetensors$' \
     | sed "s|^|$repo/snapshots/$MODEL_REV/|"
 
-  # The two processor-chain repos: metadata only. Their safetensors are never read on
-  # the training path; `cosmos` sends them anyway if a run ever proves otherwise.
-  local cos=models--nvidia--Cosmos-Reason2-8B
-  local qwen=models--Qwen--Qwen3-VL-8B-Instruct
-  _repo_meta "$cos"
-  _repo_meta "$qwen"
+  # The processor-chain repos: metadata only. Their safetensors are never read on the
+  # training path -- the 2B repo has none cached at all, only its 12 MB of processor
+  # files -- and `cosmos` sends them anyway if a run ever proves otherwise.
+  local aux=(models--nvidia--Cosmos-Reason2-8B
+             models--Qwen--Qwen3-VL-8B-Instruct
+             models--Qwen--Qwen3-VL-2B-Instruct)
+  local r rv
+  for r in "${aux[@]}"; do
+    _repo_meta "$r"
+  done
   if has cosmos; then
-    local r
-    for r in "$cos" "$qwen"; do
-      local rv
+    for r in "${aux[@]}"; do
       rv=$(cat "$HUB/$r/refs/main")
       ls "$HUB/$r/snapshots/$rv" | grep -E '\.safetensors$' \
-        | sed "s|^|$r/snapshots/$rv/|"
+        | sed "s|^|$r/snapshots/$rv/|" || true
     done
   fi
 }

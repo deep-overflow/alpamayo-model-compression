@@ -123,13 +123,26 @@ def main():
     # a file-presence check cannot see that, because the files it wants belong to repos
     # the manifest never mentions.
     import expert_per_clip  # noqa: F401  -- installs the gated-hub patch first
+    from alpamayo1_5 import helper
     from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
+    from transformers import AutoProcessor
     try:
         cfg = Alpamayo1_5.config_class.from_pretrained("nvidia/Alpamayo-1.5-10B",
                                                        revision=sl.MODEL_REV)
         check("config chain resolves offline", True, type(cfg).__name__)
     except Exception as e:  # noqa: BLE001  the message names the repo that is missing
         check("config chain resolves offline", False, f"{type(e).__name__}: {e}"[:300])
+
+    # train_recover calls helper.get_processor() *after* the model loads, and that
+    # reaches a fourth repo the config chain never touches -- BASE_PROCESSOR_NAME is
+    # Qwen3-VL-2B, not the 8B the Cosmos processor chains to. Job 890912 got all the
+    # way through loading five shards on four ranks before dying here.
+    try:
+        AutoProcessor.from_pretrained(helper.BASE_PROCESSOR_NAME)
+        check(f"processor {helper.BASE_PROCESSOR_NAME}", True, "resolves offline")
+    except Exception as e:  # noqa: BLE001
+        check(f"processor {helper.BASE_PROCESSOR_NAME}", False,
+              f"{type(e).__name__}: {e}"[:300])
     if FAILED:
         return report()
 
