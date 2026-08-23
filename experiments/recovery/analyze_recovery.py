@@ -14,7 +14,9 @@ Sets and sources:
 Gates (plans/2026-08-19_recovery-training.md):
   G1 recovered test_500 minADE@6 mean <= 1.6 AND paired delta vs zero-shot u55 CI < 0
   G2 recovered test_500 CoC degen <= 0.05
-  (G3 closed-loop is analyze_alpasim's job.)
+  G3 (with --peer) pooled d(recovered - peer) over the three sets: CI above 0 means the
+     pruning criterion's damage survives recovery; CI containing 0 with |mean| < 0.05
+     means recovery erases it (plans/2026-08-23_coc-u55-recovery.md).
 
 Usage:
   python experiments/recovery/analyze_recovery.py [--rec slim_recover_dual_u55] \
@@ -50,7 +52,8 @@ plt.rcParams.update({
     "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
 })
 ARM_ORDER = ("baseline", "dual_u40", "zeroshot", "recovered")
-ARM_COLOR = {"baseline": MUTED, "dual_u40": C4, "zeroshot": C3, "recovered": C2}
+ARM_COLOR = {"baseline": MUTED, "dual_u40": C4, "zeroshot": C3, "recovered": C2,
+             "peer": C1}
 
 
 def load_rows(exp_dir):
@@ -90,8 +93,12 @@ def main():
                     help="recovered model tag; rows live in <tag>_{indist,test,oodval}")
     ap.add_argument("--zs", type=str, default="dual_u55",
                     help="zero-shot arm stem; rows in <stem>_{indist,test,oodval}")
+    ap.add_argument("--peer", type=str, default=None,
+                    help="second recovered arm to compare against; rows in "
+                         "<tag>_{indist,test,oodval}")
     ap.add_argument("--out", type=str, default="outputs/recovery_eval")
     args = ap.parse_args()
+    arm_order = ARM_ORDER + (("peer",) if args.peer else ())
 
     oodval_ids = set(pd.read_parquet(
         REPO / "outputs" / "eval_sets" / "ood_val.parquet").clip_id)
@@ -103,10 +110,14 @@ def main():
         "ood_val": {"baseline": "baseline_ada_ps_oodval", "dual_u40": "dual_u40_v2_ps_ood",
                     "zeroshot": f"{args.zs}_oodval", "recovered": f"{args.rec}_oodval"},
     }
+    if args.peer:
+        for set_name, suf in (("val_500", "indist"), ("test_500", "test"),
+                              ("ood_val", "oodval")):
+            sets[set_name]["peer"] = f"{args.peer}_{suf}"
 
     out = REPO / Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    report, lines = {}, []
+    report, lines, pooled_src = {}, [], {}
     for set_name, arms in sets.items():
         loaded = {a: load_rows(d) for a, d in arms.items()}
         present = {a: r for a, r in loaded.items() if r}
@@ -114,11 +125,12 @@ def main():
         if set_name == "ood_val":
             ids &= oodval_ids
         ids = sorted(ids)
+        pooled_src[set_name] = (present, ids)
         entry = {"n_common": len(ids), "arms": {}, "paired": {}}
         lines.append(f"\n== {set_name} (common clips {len(ids)}; "
                      f"minADE@{K_REPORT}, rollout) ==")
         lines.append(f"{'arm':14s} {'mean':>8} {'median':>8} {'degen':>7}")
-        for a in ("baseline", "dual_u40", "zeroshot", "recovered"):
+        for a in arm_order:
             if a not in present:
                 lines.append(f"{a:14s} {'--':>8} (rows missing)")
                 continue
@@ -127,13 +139,37 @@ def main():
             lines.append(f"{a:14s} {s['minADE6_mean']:8.4f} {s['minADE6_median']:8.4f} "
                          f"{s['degen']:7.3f}")
         for a, b in (("recovered", "baseline"), ("recovered", "zeroshot"),
-                     ("recovered", "dual_u40"), ("zeroshot", "baseline")):
+                     ("recovered", "dual_u40"), ("zeroshot", "baseline"),
+                     ("recovered", "peer")):
             if a in present and b in present:
                 entry["paired"][f"{a}-{b}"] = pr = paired(present[a], present[b], ids)
                 lines.append(f"  d({a}-{b}): {pr['mean']:+.4f} "
                              f"[{pr['ci'][0]:+.4f},{pr['ci'][1]:+.4f}] "
                              f"p={pr['wilcoxon_p']:.4f}{' *' if pr['sig'] else ''}")
         report[set_name] = entry
+
+    # Per-set deltas of the size we care about (~0.03) sit inside each set's CI, so the
+    # criterion verdict is pooled over all three sets -- the same pooling that resolved
+    # u55 v1 vs v2 (n=1,262, delta -0.0341).
+    report["pooled"] = {}
+    lines.append("\n== pooled (val_500 + test_500 + ood_val) ==")
+    for a, b in (("recovered", "zeroshot"), ("recovered", "dual_u40"),
+                 ("recovered", "peer")):
+        ds = [at_k(pr[a], ii) - at_k(pr[b], ii)
+              for pr, ii in pooled_src.values() if a in pr and b in pr]
+        if not ds:
+            continue
+        d = np.concatenate(ds)
+        _, lo, hi = el.paired_bootstrap_ci(d)
+        from scipy.stats import wilcoxon
+        pv = float(wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+        sig = not (lo <= 0 <= hi)
+        report["pooled"][f"{a}-{b}"] = {"n": int(d.size), "mean": float(d.mean()),
+                                        "median": float(np.median(d)),
+                                        "ci": [float(lo), float(hi)],
+                                        "wilcoxon_p": pv, "sig": sig}
+        lines.append(f"  d({a}-{b}) n={d.size}: {d.mean():+.4f} "
+                     f"[{lo:+.4f},{hi:+.4f}] p={pv:.4f}{' *' if sig else ''}")
 
     gates = {}
     t = report.get("test_500", {})
@@ -143,6 +179,11 @@ def main():
         gates["G1_minADE6_le_1.6"] = rec["minADE6_mean"] <= 1.6
         gates["G1_improves_zeroshot"] = bool(dz.get("sig")) and dz.get("mean", 0) < 0
         gates["G2_degen_le_0.05"] = rec["degen"] <= 0.05
+        g3 = report["pooled"].get("recovered-peer")
+        if g3:
+            # H1: the criterion's damage survives recovery. H0: recovery erases it.
+            gates["G3_criterion_persists"] = bool(g3["sig"] and g3["mean"] > 0)
+            gates["G3_recovery_erases"] = bool(not g3["sig"] and abs(g3["mean"]) < 0.05)
         lines.append("\n== gates (test_500) ==")
         for g, ok in gates.items():
             lines.append(f"  {g}: {'PASS' if ok else 'FAIL'}")
@@ -150,29 +191,31 @@ def main():
 
     labels = {"baseline": "baseline 11.1B", "dual_u40": "dual_u40 zs 8.42B",
               "zeroshot": f"{args.zs} zs", "recovered": f"{args.rec.replace('slim_recover_', '')} recovered"}
-    plot_at6(report, out / "plots", labels)
+    if args.peer:
+        labels["peer"] = f"{args.peer.replace('slim_recover_', '')} recovered"
+    plot_at6(report, out / "plots", labels, arm_order)
     (out / "metrics.json").write_text(json.dumps(report, indent=2))
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("\nsaved ->", out)
 
 
-def plot_at6(report, plots_dir, labels):
-    """Grouped bars: minADE@6 and degen per set, the four arms side by side."""
+def plot_at6(report, plots_dir, labels, arm_order=ARM_ORDER):
+    """Grouped bars: minADE@6 and degen per set, the arms side by side."""
     plots_dir.mkdir(parents=True, exist_ok=True)
     sets = [s for s in ("val_500", "test_500", "ood_val") if s in report]
     for key, ylab, fname in (("minADE6_mean", "minADE@6 (rollout)", "openloop_at6.png"),
                              ("degen", "CoC degeneracy rate", "openloop_degen.png")):
         fig, ax = plt.subplots(figsize=(8.4, 3.8))
-        w = 0.8 / len(ARM_ORDER)
-        for i, a in enumerate(ARM_ORDER):
+        w = 0.8 / len(arm_order)
+        for i, a in enumerate(arm_order):
             xs, ys = [], []
             for j, s in enumerate(sets):
                 if a in report[s]["arms"]:
                     xs.append(j + i * w)
                     ys.append(report[s]["arms"][a][key])
             ax.bar(xs, ys, width=w, color=ARM_COLOR[a], label=labels[a])
-        ax.set_xticks(np.arange(len(sets)) + w * (len(ARM_ORDER) - 1) / 2)
+        ax.set_xticks(np.arange(len(sets)) + w * (len(arm_order) - 1) / 2)
         ax.set_xticklabels(sets)
         ax.set_ylabel(ylab)
         ax.legend(frameon=False, fontsize=8.5, ncol=2)

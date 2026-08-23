@@ -328,7 +328,96 @@ FM 손실을 잰다. 체크포인트 간 페어드가 되어 warmup 3 step의 �
 NLL(GT CoC)은 0.882 → 1.139로 악화됐다: 궤적 토큰 CE가 CoC 확률질량을 일부 가져간
 대가로 보이며, degeneracy가 0을 유지하므로 실질 피해는 관측되지 않는다.</p>
 
-<h2>8. 해석 (의견)</h2>
+<h2>8. criterion은 회복 후에도 남는가 — coc_u55 (2026-08-23)</h2>
+
+<h3>8.1 질문</h3>
+<p>여기까지의 회복 실험은 전부 <code>dual</code>(= <code>max(rank I_traj, rank I_CoC)</code>)
+기준으로 잘린 체크포인트에서만 돌았다. 그래서 <b>어떤 기준으로 잘랐는지가 회복 후에도
+남는지</b>는 미측정이었다. 제로샷에서 criterion 효과가 존재하는 것은 분명하다 — 같은 예산
+u40에서 <code>coc_u40_v2</code>(단일 <code>I_CoC</code>)는 1.5577 / 1.5837, degen 0.142 / 0.150으로
+<code>dual_u40_v2</code>(0.8904 / 0.9498, degen 0.014 / 0.030)보다 크게 열위다. 문제는 그 격차가
+LoRA 회복 후에도 살아남는가이다.</p>
+<ul>
+<li><b>H1 (criterion 잔존)</b>: coc 회복본이 dual 회복본보다 유의하게 나쁘다 → 선택 기준의
+손상은 구조적이다.</li>
+<li><b>H0 (회복이 지운다)</b>: 페어드 차이가 0을 포함한다 → 선택 기준 연구는 zero-shot
+현상이고, 압축 파이프라인은 기준보다 회복 예산에 투자해야 한다.</li>
+</ul>
+
+<h3>8.2 일요인 설계</h3>
+<p><code>make_slim.build_masks</code>의 <code>^(.+)_u(\d+)_v2$</code> 분기가 예산·축·calibration을
+고정한다. <code>slim_coc_u55_v2</code>는 <code>slim_dual_u55_v2</code>와 제거 파라미터가
+<b>3,669,000,192로 정확히 동일</b>하고(층당 Q head 14/32, MLP 5530/12288), expert와 KV는 양쪽 다
+무손상, calibration도 같은 <code>importance_v2</code>다. 다른 것은 레이어 내 점수뿐이며 kept-set
+중첩은 Q 84.3% / MLP 82.3%로 잴 것이 남아 있다. 회복 레시피도 u55 v2와 동일하다
+(1,200 step 상한, accum 4, lr 1.4e-4, warmup 50, λ_traj 0.5, r=32/α=64, patience 3).</p>
+
+<h3>8.3 제로샷: 두 arm은 <i>다르게</i> 망가져 있다</h3>
+<table>
+<tr><th>제로샷 (1,262클립 페어드)</th><th>val_500</th><th>test_500</th><th>ood_val</th><th>풀링 Δ</th></tr>
+<tr><td>coc_u55 minADE@6 / degen</td><td>3.3322 / 0.856</td><td>3.4335 / 0.848</td><td>3.1747 / 0.698</td><td rowspan="2"><b>−0.6915<br>[−0.8725, −0.5120]*</b></td></tr>
+<tr><td>dual_u55 minADE@6 / degen</td><td>3.9275 / 0.694</td><td>4.2644 / 0.714</td><td>3.7835 / 0.676</td></tr>
+</table>
+<p><code>I_CoC</code> 단일 기준은 궤적을 <b>덜</b> 망가뜨리고(−0.69, 유의) CoC 생성은 <b>더</b>
+망가뜨린다(degen +0.15). KI 체크의 teacher-forced CoC NLL도 1.9067 대 2.8294로 coc 쪽이 낮다 —
+즉 GT CoC에 매기는 확률은 좋은데 자기 생성은 더 자주 무너진다. 두 지표가 갈라지는 것은
+<code>I_CoC</code> Taylor가 지키는 것이 <b>likelihood이지 생성 안정성이 아니라는</b> 뜻이다.
+고정격자 val FM(GT CoC teacher-forced)에서는 반대로 coc가 나쁘고, 특히 low-t(궤적의 전역
+형태)에서 0.5616 대 0.5114로 벌어진다.</p>
+
+<h3>8.4 학습</h3>
+<table>
+<tr><th>step</th><th>0</th><th>150</th><th>300</th><th>450</th><th>600</th><th>750</th><th>900</th><th>1050</th></tr>
+<tr><td>probe minADE@6</td><td>3.6303</td><td>1.2437</td><td>1.2102</td><td>1.2358</td><td><b>1.1693</b></td><td>1.2123</td><td>1.1885</td><td>1.1844</td></tr>
+<tr><td>degeneracy</td><td>0.784</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td><td>0.000</td></tr>
+<tr><td>val FM (고정격자)</td><td>0.35891</td><td>0.27381</td><td>0.26651</td><td>0.26725</td><td>0.26557</td><td>0.26570</td><td>0.26536</td><td><b>0.26483</b></td></tr>
+</table>
+<p>PLOT::coc::training.png</p>
+<p>best = step 600, 이후 세 번 연속 악화로 <code>patience 3</code>이 발동해 step 1050에서 조기
+종료됐다. u55 v2는 같은 규칙에서 best가 900이라 1,200을 다 돌았다 — <b>규칙은 같고 발동만
+갈렸다</b>. degeneracy 0.784는 u55·u70과 마찬가지로 150 step에 0으로 잡힌다. 프로브 minADE와
+val FM이 서로 다른 best를 가리키는 것(600 대 1050)도 u55 v2와 같은 패턴이며, 선택은 양쪽 모두
+프로브 minADE 기준을 따랐다.</p>
+
+<h3>8.5 회복 후: 구분되지 않는다</h3>
+<table>
+<tr><th>arm (minADE@6, rollout)</th><th>val_500</th><th>test_500</th><th>ood_val 262</th><th>degen</th></tr>
+<tr><td>baseline (11.08B)</td><td>0.8236</td><td>0.8417</td><td>0.9995</td><td>≤0.008</td></tr>
+<tr><td>dual_u40 제로샷 (8.42B)</td><td>0.8904</td><td>0.9498</td><td>1.1192</td><td>0.014–0.034</td></tr>
+<tr><td><b>coc_u55 회복 (7.41B)</b></td><td><b>0.9013</b></td><td><b>0.9928</b></td><td><b>1.0492</b></td><td><b>0.000</b></td></tr>
+<tr><td>dual_u55 v2 회복 (7.41B)</td><td>0.9082</td><td>0.9806</td><td>1.0739</td><td>0.000</td></tr>
+</table>
+<table>
+<tr><th>paired Δ (coc 회복 −)</th><th>val_500</th><th>test_500</th><th>ood_val</th><th>풀링 (1,262)</th></tr>
+<tr><td><b>vs dual_u55 v2 회복</b></td><td>−0.0069 [−0.0452, +0.0312]</td><td>+0.0122 [−0.0363, +0.0608]</td><td>−0.0247 [−0.1000, +0.0462]</td><td><b>−0.0031 [−0.0315, +0.0254]</b></td></tr>
+<tr><td>vs 자신의 제로샷</td><td>−2.4309 [−2.6824, −2.1860]*</td><td>−2.4407 [−2.7174, −2.1712]*</td><td>−2.1255 [−2.4902, −1.7697]*</td><td>−2.3714 [−2.5381, −2.2065]*</td></tr>
+<tr><td>vs dual_u40 제로샷</td><td>+0.0109 [−0.0526, +0.0709]</td><td>+0.0430 [−0.0162, +0.1029]</td><td>−0.0700 [−0.1871, +0.0410]</td><td>+0.0068 [−0.0358, +0.0480]</td></tr>
+<tr><td>vs baseline</td><td>+0.0777 [−0.0066, +0.1533]</td><td>+0.1511 [+0.0812, +0.2227]*</td><td>+0.0497 [−0.0419, +0.1400]</td><td>—</td></tr>
+</table>
+<p>PLOT::evalcoc::openloop_at6.png</p>
+<p>PLOT::evalcoc::openloop_degen.png</p>
+<p class="muted">* CI가 0 제외. minFDE@6은 2.387 / 2.729 / 2.718 (dual u55 v2는 2.399 / 2.713 /
+2.706). 게이트: <b>G1 PASS</b>(0.9928 ≤ 1.6, 제로샷 대비 개선 CI&lt;0), <b>G2 PASS</b>(degen
+0.000), <b>G3 → <code>recovery_erases</code> PASS / <code>criterion_persists</code>
+FAIL</b>.</p>
+
+<h3>8.6 읽기: 회복이 선택 기준의 흔적을 지운다</h3>
+<ul>
+<li><b>0.69가 0.003이 된다.</b> 제로샷에서 유의하게 벌어져 있던 격차가 회복 후 페어드
+−0.0031 [−0.0315, +0.0254]로 줄었다. CI 상한이 ±0.032이므로 남은 criterion 효과는 원래
+격차의 <b>1/20 이하</b>로 묶인다. 세 세트에서 부호도 −, +, −로 갈린다.</li>
+<li><b>같은 출발점이 아니었다는 점이 결과를 강하게 만든다.</b> 두 arm은 0.69 떨어진 채,
+게다가 <i>손상 프로파일이 반대</i>인 상태(coc는 생성이 무너지고 궤적이 남음, dual은 그 반대)에서
+출발해 같은 곳에 도착했다. 회복이 단순히 두 좋은 시작점을 유지한 것이 아니라, 서로 다른
+손상을 같은 지점으로 수렴시켰다.</li>
+<li><b>−33% + 회복 ≈ −24% 무회복.</b> coc 회복본과 dual_u40 제로샷의 풀링 차이는
++0.0068 [−0.0358, +0.0480]으로, u55 v2에서 관측된 것과 같은 결론이 criterion을 바꿔도 성립한다.</li>
+<li><b>함의.</b> 회복 학습이 파이프라인에 포함된다면, 선택 기준에 드는 노력(rollout 필요
+여부, 이중 목적, J-lens 대체 등)의 가치는 open-loop minADE 기준으로 크게 줄어든다. 다만 이는
+<b>open-loop, u55 한 점, criterion 두 개</b>에 대한 진술이다.</li>
+</ul>
+
+<h2>9. 해석 (의견)</h2>
 <ul>
 <li><b>붕괴의 경로가 확인됐다.</b> u55의 궤적 손상 대부분은 망가진 추론 문맥 경유였다 —
 CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 닿지 않았는데도) 궤적
@@ -341,7 +430,7 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 회복이 프루닝을 무손실로 만들지는 않는다.</li>
 </ul>
 
-<h2>9. 한계</h2>
+<h2>10. 한계</h2>
 <ul>
 <li>단일 시드·단일 데이터 draw. 캘리브레이션-draw 연구(2026-08-19)에서 draw 하나가 +0.09를
 움직인 전례가 있어, 회복 학습 데이터 draw의 분산도 미지수다.</li>
@@ -360,6 +449,14 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 두 arm의 직접 비교에 남는 교란 요인이다).</li>
 <li>ood_val 262는 커버리지가 좁고, official probe와 OOD gt_coc의 스타일 차이가 CE에 주는
 영향은 분리하지 않았다.</li>
+<li><b>coc_u55의 H0는 open-loop 진술이다.</b> 이 프로젝트의 원래 교훈이 "open-loop가 폐루프
+실패를 감췄다"였으므로, criterion 동등성이 실주행에서도 성립하는지는 alpasim 150씬 × arm
+(~8h)으로 따로 확인해야 한다.</li>
+<li>criterion 비교는 <b>u55 한 점, 기준 두 개</b>(coc vs dual)에서만 이뤄졌다.
+<code>j</code>·<code>traj</code> 단일 기준이나 다른 예산(u40, u70)에서 같은 결론이 나는지는
+미측정이며, 특히 회복이 메우지 못하는 벽이 있는 u70에서는 다를 수 있다.</li>
+<li>coc_u55는 patience 3이 발동해 step 1050에서 멈췄고(best 600) dual u55 v2는 1,200을 다
+돌았다(best 900). 선택 절차는 동일하지만 학습 스텝 수가 같지 않다.</li>
 </ul>
 
 <h2>부록 A. alpasim 전체 지표</h2>
@@ -402,7 +499,7 @@ CoC 생성만 언어 공간에서 교정하자 (KI라 궤적 gradient는 VLM에 
 꼬리 비교는 ≥5 m가 안정적이다 (2026-08-18 분석). recovered의 ≥5 m 26건(u40 15, baseline 7)은
 멀리 벗어나는 꼬리가 u40보다 두껍다는 뜻으로, offroad 0.083과 함께 남는 관찰 지점.</p>
 
-<h2>10. 재현</h2>
+<h2>11. 재현</h2>
 <pre>
 # 데이터셋 (버킷 균형 1,200 + probe 238) + 캐시
 python experiments/recovery/make_train_set.py
@@ -437,6 +534,18 @@ bash experiments/recovery/run_ddp_retry.sh 60 "0 1 2 3" experiments/recovery/tra
     --lambda-traj 0.5 --val-fm-clips 100
 python experiments/recovery/analyze_recovery.py --rec slim_recover_dual_u55_v2 --zs dual_u55 \
     --out outputs/recovery_eval_u55v2
+
+# coc_u55: criterion 일요인 (같은 예산/축/calibration, 레이어 내 점수만 다름)
+python experiments/head_analysis/make_slim.py --config coc_u55_v2 --out outputs/slim_coc_u55_v2 \
+    --importance importance_v2 --gpu 0
+bash experiments/recovery/run_ddp_retry.sh 60 "0 1 2 3" experiments/recovery/train_recover.py \
+    --ckpt outputs/slim_coc_u55_v2 --exp-id recover_coc_u55 \
+    --steps 1200 --accum 4 --lr 1.4e-4 --warmup 50 --val-every 150 \
+    --lambda-traj 0.5 --val-fm-clips 100
+SETS="indist test oodval" bash experiments/evaluation/launch_arms.sh init 2 \
+    coc_u55=outputs/slim_coc_u55_v2 slim_recover_coc_u55=outputs/slim_recover_coc_u55
+python experiments/recovery/analyze_recovery.py --rec slim_recover_coc_u55 --zs coc_u55 \
+    --peer slim_recover_dual_u55_v2 --out outputs/recovery_eval_cocu55
 </pre>
 <p class="muted">체크포인트는 adapter만 저장 (443 MB; <code>rebuild_merged.py</code>가 slim meta에서
 17 GB merged를 재구성 — recipes 방식). base revision 고정 7aba8293.</p>

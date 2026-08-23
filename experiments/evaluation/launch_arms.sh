@@ -48,6 +48,13 @@ worker)
     [ "$idx" -ge "$n" ] && break
     read -r tag ckpt set_name shard nsh < <(sed -n "$((idx + 1))p" "$Q")
     echo "$(date '+%H:%M:%S') gpu$gpu -> $tag $set_name shard $shard/$nsh"
+    # `oodval` is the 262-clip OOD *validation* draw, not the full 1,533-clip ood set;
+    # it is the same --set ood run restricted by its manifest, and it keeps the exp-id
+    # suffix the recovery analysis globs for (<tag>_oodval)
+    case $set_name in
+    oodval) set_args=(--set ood --manifest ood_val) ;;
+    *) set_args=(--set "$set_name") ;;
+    esac
     # a spec of the form `quant:<path.npz>` is a bit allocation applied to the unpruned
     # model rather than a checkpoint directory; everything else is a slim checkpoint
     if [[ "$ckpt" == quant:* ]]; then
@@ -61,7 +68,7 @@ worker)
     # 30 GiB default leaves the 22.2 GiB baseline.
     bash experiments/head_analysis/run_retry_host.sh "${RETRIES-480}" \
       experiments/evaluation/run_baseline.py \
-      --set "$set_name" "${model_args[@]}" --exp-id "${tag}_${set_name}" \
+      "${set_args[@]}" "${model_args[@]}" --exp-id "${tag}_${set_name}" \
       --shard "$shard" --n-shards "$nsh" --gpu "$gpu" --reserve-gb "${RESERVE-26}" \
       >>"logs/eval_${tag}_${set_name}_s${shard}.log" 2>&1
   done
