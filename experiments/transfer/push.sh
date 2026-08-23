@@ -69,58 +69,9 @@ run() {
   fi
 }
 
-# Byte total of a --files-from list, so LIST_ONLY reports volume and not just names.
-total_of() {  # total_of <root> <listfile>
-  awk -v root="$1" '{printf "%s/%s\n", root, $0}' "$2" \
-    | tr '\n' '\0' | du -cLhs --files0-from=- 2>/dev/null | tail -1
-}
-
-# --- pinned HF snapshot: only revision $MODEL_REV, not the other five ------------
-# Listed file-by-file rather than as a directory so --files-from cannot recurse into
-# a sibling snapshot's blobs; -aL then dereferences each snapshot symlink into a real
-# file on the target, which from_pretrained reads the same way.
-hub_list() {
-  local repo=models--nvidia--Alpamayo-1.5-10B
-  ls "$HUB/$repo/refs" 2>/dev/null | sed "s|^|$repo/refs/|" || true
-  ls "$HUB/$repo/snapshots/$MODEL_REV" | sed "s|^|$repo/snapshots/$MODEL_REV/|"
-  # Cosmos: config/tokenizer/processor only. The recovery path resolves this repo
-  # through the local_files_only patch in expert_per_clip, but only reads these --
-  # the four safetensors have not been touched since 2026-08-11. If a target run does
-  # ask for them it fails at load, and the `cosmos` tier (or `hf download`) fixes it.
-  local cos=models--nvidia--Cosmos-Reason2-8B
-  local rev
-  rev=$(ls "$HUB/$cos/snapshots" | head -1)
-  ls "$HUB/$cos/refs" 2>/dev/null | sed "s|^|$cos/refs/|" || true
-  ls "$HUB/$cos/snapshots/$rev" | grep -vE '\.(safetensors|png)$' \
-    | sed "s|^|$cos/snapshots/$rev/|"
-  if has cosmos; then
-    ls "$HUB/$cos/snapshots/$rev" | grep -E '\.safetensors$' \
-      | sed "s|^|$cos/snapshots/$rev/|"
-  fi
-}
-
-# --- sample-cache subsets: only the clips a manifest actually names ---------------
-sample_list() {  # sample_list <namespace> <parquet>
-  "$PY" - "$PRE" "$1" "$2" <<'PY'
-import sys
-from pathlib import Path
-
-import pandas as pd
-
-pre, ns, parquet = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-df = pd.read_parquet(parquet)
-missing = []
-for r in df.itertuples():
-    t0 = int(getattr(r, "t0_us", 5_100_000))
-    rel = f"{ns}/samples/{r.clip_id}__t0_{t0}.npz"
-    if (pre / rel).exists():
-        print(rel)
-    else:
-        missing.append(rel)
-if missing:
-    print(f"MISSING {len(missing)} of {len(df)}: {missing[:3]}", file=sys.stderr)
-PY
-}
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lists.sh
+. "$HERE/lists.sh"
 
 echo "source   $SRC"
 echo "target   $HOST:$DEST"
@@ -150,9 +101,7 @@ if has core; then
   run "${RSYNC[@]}" "$OUT/eval_sets" "$OUT/recovery_sets" "$HOST:$DEST/outputs/chan/"
   # One list, one rsync: --files-from creates the per-config directories itself, so a
   # box with 50-odd recipes does not open 50-odd ssh connections to mkdir them.
-  ( cd "$OUT" && find . -maxdepth 2 \( -path './slim_*/slim_meta.json' \
-      -o -path './slim_*/config.json' -o -path './slim_*/summary.txt' \) \
-      -printf '%P\n' | sort ) > "$TMP/slims.txt"
+  recipe_list > "$TMP/slims.txt"
   echo "  $(grep -c 'slim_meta.json$' "$TMP/slims.txt") recipes, $(total_of "$OUT" "$TMP/slims.txt")"
   run "${RSYNC[@]}" --files-from="$TMP/slims.txt" "$OUT/" "$HOST:$DEST/outputs/chan/"
 fi
