@@ -94,9 +94,22 @@ def process_clip(model, processor, data, args, seed, acc):
     del hidden, nll
 
     # ---- objective 2: trajectory flow-matching ----
-    fm_loss, grads, leaves = pl.expert_fm_grads(
-        model, cache, rope_deltas, x1, args.fm_steps, seed, prefill
-    )
+    # traj-mode `infer` swaps the measurement path only: instead of the training loss at
+    # GT-anchored x_t, it backpropagates the final trajectory error through the model's
+    # own Euler chain (plans/2026-08-23_rollout-traj-importance.md). Everything else --
+    # the CoC half, the calibration set, the step-axis aggregation -- is untouched, so
+    # the two modes differ in exactly one factor.
+    if args.traj_mode == "infer":
+        gt_xy = data["ego_future_xyz"][0, 0, :, :2].to("cuda").float()  # (64, 2)
+        fm_loss, grads, leaves = pl.expert_infer_grads(
+            model, cache, rope_deltas, gt_xy, inputs["ego_history_xyz"],
+            inputs["ego_history_rot"], seed, prefill, n_steps=args.fm_steps,
+            k_draws=args.k_draws,
+        )
+    else:
+        fm_loss, grads, leaves = pl.expert_fm_grads(
+            model, cache, rope_deltas, x1, args.fm_steps, seed, prefill
+        )
     acc["traj"]["exp_q"] += expert_gates.q_scores()
     acc["traj"]["exp_mlp"] += expert_gates.mlp_scores()
 
@@ -135,6 +148,14 @@ def main():
                          "which is then read from the manifest instead of assumed.")
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--fm-steps", type=int, default=10)
+    ap.add_argument("--traj-mode", choices=["fm", "infer"], default="fm",
+                    help="fm: the shipped training-path loss at GT-anchored x_t; "
+                         "infer: final-trajectory error through the model's own "
+                         "Euler chain (rollout path)")
+    ap.add_argument("--k-draws", type=int, default=4,
+                    help="infer only: noise draws per clip, accumulated before the "
+                         "abs (one Euler chain is a single draw, the training path "
+                         "effectively averages ten)")
     ap.add_argument("--reserve-gb", type=float, default=40.0)
     ap.add_argument("--gpu", type=str, default=None,
                     help="comma-separated card ids to restrict the scan, e.g. '0' or '0,1'")
@@ -204,13 +225,17 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B",
         "purpose": "dual-objective Taylor importance for Q head / MLP channel / KV group",
-        "objectives": {"coc": "CoC NLL", "traj": "flow-matching MSE vs GT trajectory"},
+        "objectives": {"coc": "CoC NLL",
+                       "traj": ("flow-matching MSE vs GT trajectory" if args.traj_mode == "fm"
+                                else "final-trajectory MSE through the model's own Euler chain")},
         "num_clips": len(calib), "clip_ids": [c for c, _ in calib], "seed": args.seed,
         "calib_manifest": args.calib_manifest, "cache": args.cache,
         "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
         "mask": args.mask,
         "fm_steps": args.fm_steps, "gradient_checkpointing": args.checkpoint,
+        "traj_mode": args.traj_mode,
+        "k_draws": args.k_draws if args.traj_mode == "infer" else None,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
 
