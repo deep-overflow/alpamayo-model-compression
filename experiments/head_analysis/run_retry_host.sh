@@ -8,7 +8,7 @@
 # Usage: bash run_retry_host.sh <max_attempts> <script.py> [args...]
 MAX=${1:-60}
 shift
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=${ALPAMAYO_MC_REPO-/home/cvlab21/project/chan/alpamayo-model-compression}
 cd "$REPO" || exit 1
 # CUDA orders devices by speed while nvidia-smi orders by PCI bus, so without
 # this --gpu N and `nvidia-smi -i N` mean different cards on this box

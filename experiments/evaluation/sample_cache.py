@@ -26,6 +26,7 @@ comparisons would carry the small encoding difference.
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +34,7 @@ import pandas as pd
 import torch
 from PIL import Image
 
-AV = Path("/mnt/nvme1n1/ad_vla/data/physicalai_av")
+AV = Path(os.environ.get("AD_VLA_DATA", "/mnt/nvme1n1/ad_vla/data")) / "physicalai_av"
 PRE = AV / "pre_processed"
 
 KEYS = ("image_frames", "camera_indices", "ego_history_xyz", "ego_history_rot",
