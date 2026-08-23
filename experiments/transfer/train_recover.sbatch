@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=recover
-#SBATCH --partition=CHANGE_ME
+#SBATCH --partition=amd_a100nv_8
 #SBATCH --comment=pytorch
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
@@ -20,8 +20,16 @@
 # Two things to get right before the first submit:
 #
 # 1. GPU memory. Each rank holds the full slim model plus LoRA and peaked at ~43 GB on
-#    the source box's 48 GB cards. A 32 GB V100 partition will OOM; pick 80 GB-class
-#    cards (A100 80G / H100 / H200) or the run dies at load.
+#    the source box's 48 GB cards, so the four cas_v100* partitions (32 GB) will OOM at
+#    load. NEURON's usable partitions, from `scontrol show node`:
+#
+#      amd_a100nv_8   A100-80GB x8, 8 nodes   <- default here; --gres=gpu:4 reproduces
+#                                                the source recipe exactly (world 4, accum 4)
+#      amd_h200nv_8   H200-141GB x8, 3 nodes  <- fastest, more contended
+#      amd_a100_4     A100-80GB x4, 1 node
+#      amd_h100_2     H100-94GB  x2, 3 nodes  <- only 2 GPUs, so accum becomes 8
+#
+#    All cap at 2-00:00:00.
 # 2. --comment. KISTI classifies jobs by application through this field, and the valid
 #    values are site-specific -- check the current NEURON job-script guide rather than
 #    trusting `pytorch` here.

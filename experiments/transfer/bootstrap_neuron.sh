@@ -50,20 +50,26 @@ if [ -x "$REPO/.venv/bin/python" ]; then
   echo "already present: $("$REPO/.venv/bin/python" -c 'import torch;print(torch.__version__, torch.version.cuda)')"
 else
   sed "s|REPO_PLACEHOLDER|$REPO|g" <<'ENVNOTE'
-No .venv yet. The source box ran torch 2.8.0+cu128 under uv; NEURON's CUDA stack is
-site-managed, so build against what `module avail` actually offers rather than pinning
-cu128 blindly. Either route works -- the runners only need `$REPO/.venv/bin/python`
-and `$REPO/.venv/bin/torchrun` to exist:
+No .venv yet. Build it on the LOGIN node, matching the source box: Python 3.12
+(pyproject pins requires-python = "==3.12.*") and CUDA 12.8 (torch 2.8.0+cu128).
+NEURON has exact modules for both, and pypi.org / files.pythonhosted.org / huggingface.co
+all answer on 443 from here.
 
-  # uv, if it is installed or you can install it to $HOME
-  cd REPO_PLACEHOLDER && uv sync
-  uv pip install "git+https://github.com/NVlabs/alpamayo1.5.git@f42e594"
+  module load python/3.12.4 cuda/12.8
+  cd REPO_PLACEHOLDER
+  python -m venv .venv
+  .venv/bin/pip install -U pip uv
+  .venv/bin/uv sync --frozen          # honours uv.lock, so versions match the source box
+  .venv/bin/pip install "git+https://github.com/NVlabs/alpamayo1.5.git@f42e594"
 
-  # conda, then symlink so the launchers find it
-  module load <cuda/python module>
-  conda create -p REPO_PLACEHOLDER/.venv python=3.11 -y
-  conda activate REPO_PLACEHOLDER/.venv
-  pip install -e . && pip install "git+https://github.com/NVlabs/alpamayo1.5.git@f42e594"
+Do NOT `module load python/3.14.2` (the default) -- it violates the 3.12 pin.
+
+flash-attn is the long pole: pyproject asks for >=2.8.3 and PyPI ships an sdist, so pip
+will compile it. That is heavy enough that it belongs in an interactive job rather than
+on the login node:
+
+  salloc -p amd_a100nv_8 --gres=gpu:1 -t 2:00:00 --comment pytorch
+  # then rerun the install inside the allocation, with MAX_JOBS=8 to bound the build
 
 alpamayo1_5 is not on PyPI and not in pyproject. The commit is pinned to the one alpasim
 uses; a different one may not match the slim surgery.
