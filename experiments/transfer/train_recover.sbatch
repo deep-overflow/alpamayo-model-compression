@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=recover
 #SBATCH --partition=amd_a100nv_8
-#SBATCH --comment=pytorch
+#SBATCH --comment=field=efficientai;appl=pytorch
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
 #SBATCH --time=24:00:00
@@ -30,9 +30,14 @@
 #      amd_h100_2     H100-94GB  x2, 3 nodes  <- only 2 GPUs, so accum becomes 8
 #
 #    All cap at 2-00:00:00.
-# 2. --comment. KISTI classifies jobs by application through this field, and the valid
-#    values are site-specific -- check the current NEURON job-script guide rather than
-#    trusting `pytorch` here.
+# 2. --comment is mandatory on NEURON and must be exactly
+#    "field=<field>;appl=<program>" -- a bare value is rejected at submit time with
+#    "option is required". `showappl` on glogin01-03 prints the allowed values.
+#    efficientai = "Efficient & Scalable AI Systems, Quantization, Edge AI", which is
+#    what this repo does; `aim` (Autonomous Driving & AI Mobility) fits the model's
+#    domain if you would rather classify by application. appl=pytorch rather than
+#    pytorch-ddp because train_recover.py does manual data parallelism over torchrun,
+#    not the DDP wrapper (its reducer cannot trace the vlm -> detach -> expert path).
 #
 # Wall clock on 4x48 GB Blackwell was 6.8 s/step plus a 14.5 min probe every 150 steps,
 # so 1,200 steps took ~4.6 h. --time above is deliberately generous; the trainer writes
