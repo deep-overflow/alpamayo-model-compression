@@ -53,11 +53,33 @@ mkdir -p logs
 # shellcheck disable=SC1091
 source env.sh
 
-# Compute nodes usually have no outbound network; wandb_init already degrades to a
-# no-op on failure, but offline mode keeps a syncable run directory instead of nothing.
-export WANDB_MODE=${WANDB_MODE-offline}
+# wandb: the key lives in ~/.config/wandb/recovery_key, same convention as the source
+# box's run_ddp_retry.sh. api.wandb.ai answers on 443 from the login and Datamover
+# nodes, but a compute node's egress is not guaranteed -- so probe it and fall back to
+# offline rather than letting wandb.init stall on a dead socket. Either way
+# wandb_init() swallows failures, and metrics.json is written regardless.
+if [ -r "$HOME/.config/wandb/recovery_key" ]; then
+  WANDB_API_KEY=$(cat "$HOME/.config/wandb/recovery_key")
+  export WANDB_API_KEY
+fi
+if [ -z "${WANDB_MODE-}" ]; then
+  if timeout 8 /bin/bash -c 'cat < /dev/null > /dev/tcp/api.wandb.ai/443' 2>/dev/null; then
+    export WANDB_MODE=online
+    echo "wandb: online (api.wandb.ai reachable from $(hostname))"
+  else
+    export WANDB_MODE=offline
+    echo "wandb: offline -- no egress from $(hostname); sync later with"
+    echo "       module load python; wandb sync wandb/offline-run-*  (from a login node)"
+  fi
+fi
 
 NP=${SLURM_GPUS_ON_NODE:-$(nvidia-smi -L | wc -l)}
+# Account cap: at most 4 A100s. --gres above asks for exactly that; this guard catches
+# an edited --gres or a node handing back more than was requested.
+if [ "$NP" -gt 4 ]; then
+  echo "refusing: $NP GPUs exceeds the 4-A100 allowance for this account." >&2
+  exit 1
+fi
 # Global batch is world_size x accum and the published u55 arms used 16. Holding it
 # constant is what makes a NEURON run comparable to them; a different global batch is
 # a different recipe, not the same one on new hardware.
