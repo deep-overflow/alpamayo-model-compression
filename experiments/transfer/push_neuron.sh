@@ -112,6 +112,17 @@ if has code; then
   # Overlay this toolkit, which lives on its own branch and may not be in CODE_SRC yet.
   run "${CODE_RSYNC[@]}" "$HERE/" \
       "$HOST:$SCRATCH/project/alpamayo-model-compression/experiments/transfer/"
+  # And the portability patches, for the same reason: CODE_SRC is checked out on the
+  # research branch, so without this it ships the version of sample_cache.py that still
+  # hardcodes /mnt/nvme1n1 -- which does not exist on the target, so every sample load
+  # fails. Add a line here for any further file this branch patches outside transfer/.
+  REPO_WT=$(cd "$HERE/../.." && pwd)
+  PATCHED=(experiments/evaluation/sample_cache.py
+           experiments/head_analysis/run_retry_host.sh
+           experiments/recovery/run_ddp_retry.sh)
+  echo "  overlaying ${#PATCHED[@]} portability patches from $REPO_WT"
+  ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative "${PATCHED[@]/#/./}" \
+      "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
 fi
 
 if has data; then
