@@ -50,6 +50,10 @@ def check(label, ok, detail=""):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default="outputs/slim_coc_u55_v2")
+    ap.add_argument("--train-manifest", default=None,
+                    help="train_official_*.parquet to check. Default: the one the "
+                         "trainer will pick, i.e. max() over the glob -- checking any "
+                         "other file verifies a set the run will not use.")
     ap.add_argument("--load", action="store_true", help="also build the model and step once")
     ap.add_argument("--gpu", type=int, default=None)
     args = ap.parse_args()
@@ -62,20 +66,41 @@ def main():
     import sample_cache as sc
 
     # 1. manifests
+    #
+    # Resolve the train manifest the way load_samples does -- max() over the glob, a
+    # STRING compare. That is not the largest set: "train_official_12000" sorts below
+    # "train_official_1200". Checking a hardcoded name instead let a 7,750-sample run
+    # pass preflight on the strength of the old 1,200-sample manifest (2026-08-24).
     sets = REPO / "outputs" / "recovery_sets"
     esets = REPO / "outputs" / "eval_sets"
-    for p in (sets / "train_official_1200.parquet", sets / "val_official_238.parquet",
+    if args.train_manifest:
+        train_mf = Path(args.train_manifest)
+        if not train_mf.is_absolute():
+            train_mf = REPO / train_mf
+    else:
+        cands = sorted(sets.glob("train_official_*.parquet"))
+        if not cands:
+            check("train manifest present", False, f"no train_official_*.parquet in {sets}")
+            return report()
+        train_mf = max(cands)
+        others = [c.name for c in cands if c != train_mf]
+        if others:
+            print(f"  note: glob picks {train_mf.name}; also present: {', '.join(others)}")
+
+    for p in (train_mf, sets / "val_official_238.parquet",
               esets / "ood.parquet", esets / "ood_val.parquet"):
         if not check(f"manifest {p.name}", p.exists(), str(p)):
             return report()
 
-    off = pd.read_parquet(sets / "train_official_1200.parquet")
+    off = pd.read_parquet(train_mf)
     voff = pd.read_parquet(sets / "val_official_238.parquet")
     ood = pd.read_parquet(esets / "ood.parquet")
     oodv = pd.read_parquet(esets / "ood_val.parquet")
     ood_tr = ood[ood.split == "train"]
-    check("train rows  1200 official + 1271 ood",
-          len(off) == 1200 and len(ood_tr) == 1271, f"{len(off)} + {len(ood_tr)}")
+    # The official half is whatever the manifest holds; only the OOD half and the probe
+    # are fixed, because they define the comparison across arms.
+    check(f"train rows  {len(off)} official + 1271 ood",
+          len(ood_tr) == 1271, f"{len(off)} + {len(ood_tr)} = {len(off) + len(ood_tr)}")
     check("probe rows   238 official +  262 ood",
           len(voff) == 238 and len(oodv) == 262, f"{len(voff)} + {len(oodv)}")
 
