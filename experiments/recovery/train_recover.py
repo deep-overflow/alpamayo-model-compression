@@ -94,11 +94,18 @@ def wandb_init(args, extra):
         return lambda d, step: None, None
 
 
-def load_samples(repo):
+def load_samples(repo, manifest=None):
     """[(cache, clip_id, t0_us, coc_text, source)] for train; probe list likewise."""
     sets = repo / "outputs" / "recovery_sets"
     train = []
-    off = pd.read_parquet(max(sets.glob("train_official_*.parquet")))
+    # pick the largest official manifest BY COUNT. Path comparison is lexicographic, so
+    # a bare max() returns train_official_7750 over train_official_12000 ('7' > '1') and
+    # train_official_800 over train_official_7750 -- the training set would silently stop
+    # matching the intended size as the data-scaling sweep adds manifests.
+    off_path = (Path(manifest) if manifest else
+                max(sets.glob("train_official_*.parquet"),
+                    key=lambda q: int(q.stem.rsplit("_", 1)[1])))
+    off = pd.read_parquet(off_path)
     for r in off.itertuples():
         train.append(("train", r.clip_id, int(r.t0_us), r.coc, "official"))
     ood = pd.read_parquet(repo / "outputs" / "eval_sets" / "ood.parquet")
@@ -225,9 +232,17 @@ def val_fm_rows(base, processor, tok, samples, max_coc, t_grid=FM_T_GRID):
     OOD-only sample list.
     """
     rows = []
-    for cache_ns, clip_id, t0_us, source in samples:
+    for sample in samples:
+        # probe samples are (cache, clip, t0, source); train samples carry the CoC text
+        # as well, because only the OOD cache stores gt_coc -- the official half's CoC
+        # is the teacher rollout that lives in the manifest
+        if len(sample) == 5:
+            cache_ns, clip_id, t0_us, gt_coc, source = sample
+        else:
+            cache_ns, clip_id, t0_us, source = sample
+            gt_coc = None
         data = sc.load_cached(sc.path_for(cache_ns, clip_id, t0_us))
-        gt_coc = data.get("gt_coc")
+        gt_coc = gt_coc or data.get("gt_coc")
         if not gt_coc:
             continue
         inputs = lib.build_inputs(base, processor, data, "cuda")
@@ -345,6 +360,14 @@ def main():
     ap.add_argument("--probe-limit", type=int, default=None)
     ap.add_argument("--probe-k", type=int, default=6,
                     help="trajectory samples per probe clip (best-of-k, seeds base+k)")
+    ap.add_argument("--train-manifest", type=str, default=None,
+                    help="official-half parquet; default is the largest "
+                         "outputs/recovery_sets/train_official_<n>.parquet by n")
+    ap.add_argument("--train-frac", type=float, default=1.0,
+                    help="subsample the training set to this fraction, keeping the "
+                         "official:ood ratio. Hold --steps fixed and the compute, the "
+                         "schedule and the eval sets are unchanged -- only how often a "
+                         "clip repeats. That is the data-scaling control.")
     ap.add_argument("--ce-train-clips", type=int, default=100,
                     help="held-IN OOD train clips for the teacher-forced CE, measured "
                          "through the same code as the held-out one (0 disables). The "
@@ -390,7 +413,15 @@ def main():
     n_train_p, _ = rl.param_summary(peft_model)
     assert len(vlm_params) + len(expert_params) == len(trainable)
 
-    train, probe_samples = load_samples(REPO)
+    train, probe_samples = load_samples(REPO, args.train_manifest)
+    if args.train_frac < 1.0:
+        sub_rng = np.random.default_rng(args.seed)
+        kept = []
+        for src in ("official", "ood"):
+            pool = [s for s in train if s[4] == src]
+            n = max(1, round(len(pool) * args.train_frac))
+            kept += [pool[i] for i in sub_rng.permutation(len(pool))[:n]]
+        train = kept
     if args.probe_limit is not None:
         probe_samples = probe_samples[: args.probe_limit]
     # fixed global shuffle for shard balance, then rank-strided shard
@@ -431,7 +462,8 @@ def main():
             "r": args.r, "alpha": args.alpha, "max_coc": args.max_coc,
             "n_train": len(train), "n_official": n_off, "n_probe": len(probe_samples),
             "probe_k": args.probe_k, "val_fm_clips": args.val_fm_clips,
-            "ce_train_clips": len(ce_train_samples),
+            "ce_train_clips": len(ce_train_samples), "train_frac": args.train_frac,
+            "train_manifest": args.train_manifest,
             "fm_t_grid": list(FM_T_GRID),
             "trainable_params": n_train_p, "seed": args.seed,
             "gpu": torch.cuda.get_device_name(device),
