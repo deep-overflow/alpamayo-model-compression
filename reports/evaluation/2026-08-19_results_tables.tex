@@ -66,17 +66,28 @@ Both & --- & --- & CoC degeneracy $\downarrow$ & 0.006 / 0.006 \\
   allocation is transplanted onto dual's ranking), whereas the OSSCAR reconstruction
   removes most of the pruning cost ($-0.034^*$ / $-0.052^*$ / $-0.028^*$; on val the
   arm becomes indistinguishable from the unpruned model) at the price of collapsing
-  language to the LingoQA floor (Table~\ref{tab:lingoqa}). The staged variant
+  language to the LingoQA floor (Table~\ref{tab:lingoqa}). Closed loop reverses that
+  open-loop ranking: \texttt{dualr} still beats the unpruned model ($+0.043^*$) but
+  falls below plain dual (paired $-0.036$ $[-0.072,-0.001]$), with 61\% more at-fault
+  and 64\% more total collisions, while the one family of metrics it wins is
+  GT-path imitation (distance to the GT trajectory 2.97 against dual's 3.32, close to
+  the unpruned 2.89) --- the same axis open-loop minADE measures. Proximity to the
+  human path is therefore not a proxy for driving quality here; it moves against it. The staged variant
   re-scores the masked model between three cut stages (Table~\ref{tab:negatives});
   its closed loop was not run, per the pre-registered gate on the open-loop verdict.
   The two operator-ablation rows keep dual's halves and swap only the within-layer
   combination (test only): rank-sum is statistically equivalent to $\max$ (paired
   $\Delta$minADE@6 $-0.001$ $[-0.011,+0.007]$), rank-product is significantly worse
   ($+0.142^*$) --- what matters is keeping units that \emph{either} channel ranks
-  high, which the product is alone in breaking.
+  high, which the product is alone in breaking. The second-order row replaces the
+  first-order gate score $\mathrm{mean}_c |\partial L/\partial g|$ with the diagonal
+  empirical Fisher $\mathrm{mean}_c (\partial L/\partial g)^2$ (LLM-Pruner's
+  \texttt{param\_second} on our gates): it is worse on all three sets, significantly so
+  on two, which is what the additivity diagnostic predicts --- the first-order error is
+  an off-diagonal group interaction that a diagonal curvature term cannot reach.
   Two published structural-pruning methods close the table at the same budget, both
-  label-free; neither was run in closed loop, so the last two columns are empty and the
-  degeneracies quoted here are open-loop (test). Wanda's activation-magnitude selection
+  label-free. Wanda and the uniform T\'yr variant were not run in closed loop (their
+  degeneracies are open-loop, on test); the searched T\'yr arm was. Wanda's activation-magnitude selection
   collapses (test 2.975, CoC degeneracy 87.6\% against dual's 3.0\%). T\'yr-the-Pruner
   ties dual on trajectory once its OSSCAR reconstruction is in place --- paired
   $\Delta$minADE@6 vs dual $-0.023$ / $-0.001$ / $+0.002$ (val / test / OOD-val), all
@@ -100,15 +111,16 @@ dual $=\max(I_\mathrm{traj}, I_\mathrm{CoC})$ & & \textbf{0.890 / 2.330} & \text
 jtraj $=\max(I_\mathrm{traj}, J)$ & \checkmark & 0.937 / 2.445 & 1.028 / 2.804 & 1.175 / 3.032 & 0.791 ($+$0.042) & 0.8\% \\
 staged dual (it3, 3 stages) &      & 0.994 / 2.648 & 1.021 / 2.787 & 1.149 / 2.892 & not run & --- \\
 dualg (dual $+$ searched alloc.) & & 0.897 / 2.296 & 0.978 / 2.619 & 1.049 / 2.645 & not run & --- \\
-dualr (dual $+$ reconstruction) & & \textbf{0.814 / 2.151} & \textbf{0.860 / 2.361} & \textbf{1.106 / 2.813} & not run & --- \\
+dualr (dual $+$ reconstruction) & & \textbf{0.814 / 2.151} & \textbf{0.860 / 2.361} & \textbf{1.106 / 2.813} & 0.792 ($+$0.043$^*$) & 4.5\% \\
 dualgr (dual $+$ both)     &      & 0.816 / 2.161 & 0.864 / 2.363 & 1.103 / 2.782 & not run & --- \\
+dual, second-order score   &      & 0.929 / 2.436 & 1.018 / 2.716 & 1.241 / 3.129 & not run & --- \\
 dual, rank-sum comb.\      &      & ---           & 0.960 / 2.607 & ---           & not run & --- \\
 dual, rank-product comb.\  &      & ---           & 1.238 / 3.421 & ---           & not run & --- \\
 \midrule
 \multicolumn{7}{l}{\emph{External structural-pruning baselines, same budget}} \\
 Wanda ($|W|\cdot\|X\|_2$)      & \checkmark & 2.700 / 7.514 & 2.975 / 8.269 & 2.790 / 6.884 & not run & --- \\
 T\'yr, uniform (OSSCAR recon.) & \checkmark & 0.940 / 2.458 & 0.999 / 2.685 & 1.289 / 3.266 & not run & --- \\
-T\'yr ($+$ global search)      & \checkmark & 0.846 / 2.199 & 0.950 / 2.570 & 1.176 / 2.990 & not run & --- \\
+T\'yr ($+$ global search)      & \checkmark & 0.846 / 2.199 & 0.950 / 2.570 & 1.176 / 2.990 & 0.786 ($+$0.037) & 5.9\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -251,6 +263,7 @@ Ratio extension (u55, 33\%) & --- & minADE@6 $5.1\times$ baseline, degen.\ 71\% 
 Combination operator swap & arm$-$dual $\Delta$ADE@6 CI & sum $-0.001$ (ns); product $+0.142^*$ & $\max$ kept \\
 Rank arms by LingoQA below 37 & vs constant-answer floor & traj $+0.0$, $J$ $-4.8$, dualr $+4.8$: all n.s. & not interpretable \\
 Global allocation search on dual & dualg$-$dual CI $< 0$ & $+0.001$ / $+0.003$ / $-0.001$, all n.s. & no gain \\
+Second-order score ($g^2$) & dual2nd$-$dual CI $< 0$ & test $+0.027^*$, val $+0.006$, OOD-val $+0.025^*$ & rejected \\
 \bottomrule
 \end{tabular}
 \end{table}

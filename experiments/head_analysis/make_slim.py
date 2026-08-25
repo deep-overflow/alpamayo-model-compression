@@ -17,6 +17,9 @@ Configs:
   tyr_u40 / tyr_uniform_u40 -- Tyr-the-Pruner baseline: OSSCAR-reconstructed
                       supernet weights at the searched / uniform level assignment,
                       same -2.66B budget by construction.
+  dual2nd_u40_v2   -- dual with the DIAGONAL SECOND-ORDER score: mean_clips (dL/dg)^2
+                      instead of mean_clips |dL/dg| (LLM-Pruner's `param_second` on our
+                      activation gates). Same budget, allocation and axes.
   dualscope_u40    -- dual's ranking and dual_u40_v2's exact budget, but confined to
                       LLM-Pruner's layer scope (4..34); only WHERE the cut lands
                       differs. Expected -2.66B.
@@ -87,7 +90,8 @@ def scope_matched_counts(scope_len, target_removed, tc, ratio):
 def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa",
                 wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
                 tyr_supernet="tyr_supernet_u40",
-                tyr_config="tyr_search_u40/final_config.json", scope=(4, 34)):
+                tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
+                imp_run="importance_v2"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -246,10 +250,20 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 run = wanda_run if name == "wanda" else wanda_txt_run
                 z = dict(np.load(REPO / "outputs" / run / "wanda.npz"))
                 return z["q_w"], z["mlp_w"]
+            if name in ("traj2", "coc2"):
+                # Diagonal second-order (empirical Fisher) of the same gate: the stored
+                # per-clip arrays are |dL/dg|, so squaring them gives (dL/dg)^2 exactly.
+                # First order takes mean|g| (abs inside the clip sum); this takes mean g^2,
+                # which up-weights units whose damage concentrates in a few clips.
+                z = dict(np.load(REPO / "outputs" / imp_run / "importance_perclip.npz"))
+                pre = name[:-1]
+                return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
+                        (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
-        parts = {"dual": ("traj", "coc"), "j_traj": ("traj", "j"),
+        parts = {"dual": ("traj", "coc"), "dual2nd": ("traj2", "coc2"),
+                 "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
                  "dualprod": ("traj", "coc")}.get(stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
@@ -419,7 +433,8 @@ def main():
                                          args.vqa_importance, args.wanda,
                                          args.wanda_txt,
                                          args.tyr_supernet, args.tyr_config,
-                                         (args.scope_start, args.scope_end))
+                                         (args.scope_start, args.scope_end),
+                                         args.importance)
 
     full_total = sl.n_params(model)
     t0 = time.time()
