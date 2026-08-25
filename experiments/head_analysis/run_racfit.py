@@ -95,9 +95,18 @@ REPO = Path(__file__).resolve().parents[2]
 STREAMS = ("V", "T", "D")
 FOLDS = ("A", "B")
 FOLD_SEED = 20260825          # fold membership is a clip-id hash, never the loop index
-# D's natural share (~0.5%) multiplied by this; None = D only.
-MIX_MULT = {"VT": 0.0, "nat": 1.0, "d10": 10.0, "d100": 100.0, "d1000": 1000.0,
-            "Donly": None}
+# Multipliers on each stream's NATURAL token share, (V, T, D). `t4`/`t10`/`t100` are
+# the regularisation controls: they up-weight a small non-vision population instead
+# of the decode one, so "does the decode stream matter, or would any extra direction
+# have conditioned the solve?" is answerable. `t4` is the SHARE-MATCHED control at
+# K=4 seeds -- it puts the prompt-text stream at ~17.6% of the mixture, against
+# `d10`'s 16.6% for the decode stream (the runner prints both).
+MIX_MULT = {"VT": (1.0, 1.0, 0.0), "nat": (1.0, 1.0, 1.0),
+            "d10": (1.0, 1.0, 10.0), "d100": (1.0, 1.0, 100.0),
+            "d1000": (1.0, 1.0, 1000.0), "Donly": (0.0, 0.0, 1.0),
+            "t4": (1.0, 4.0, 0.0), "t10": (1.0, 10.0, 0.0),
+            "t100": (1.0, 100.0, 0.0), "Tonly": (0.0, 1.0, 0.0)}
+DEFAULT_MIXES = ["VT", "nat", "d10", "d100", "d1000", "Donly"]
 DEFAULT_KEEPS_Q = [32, 29, 26, 23, 19, 16, 13, 10]
 DEFAULT_KEEPS_M = [12288, 11264, 10240, 9216, 7390, 6144, 4096, 2048]
 U40_KEEP_Q, U40_KEEP_M = 19, 7390       # the u40_v2 budget: cut 13/32 heads, 4898/12288 ch
@@ -108,14 +117,17 @@ def key(fold, stream):
 
 
 def mix_weights(name, n_fold):
-    """Per-stream weights on the token-normalised Hessians for one mixture."""
-    if MIX_MULT[name] is None:
-        return {"V": 0.0, "T": 0.0, "D": 1.0}
+    """Per-stream weights on the token-normalised Hessians for one mixture.
+
+    w_s = mult_s * (N_s / N_total), so `VT` reproduces the plain prefill sum
+    H_V + H_T (Tyr's Hessian) and `nat` reproduces the paper's [X_P X_D]
+    concatenation. Overall scale is irrelevant to the solve.
+    """
     total = sum(n_fold.values())
     if total == 0:
         return {s: 0.0 for s in STREAMS}
-    frac = {s: n_fold[s] / total for s in STREAMS}
-    return {"V": frac["V"], "T": frac["T"], "D": MIX_MULT[name] * frac["D"]}
+    mult = MIX_MULT[name]
+    return {s: mult[i] * (n_fold[s] / total) for i, s in enumerate(STREAMS)}
 
 
 def spearman(a, b):
@@ -297,7 +309,7 @@ def main():
     ap.add_argument("--layer-end", type=int, default=None)
     ap.add_argument("--layer-chunk", type=int, default=3,
                     help="layers hooked per calibration pass; 3 keeps peak VRAM ~38 GB")
-    ap.add_argument("--mixes", nargs="+", default=list(MIX_MULT))
+    ap.add_argument("--mixes", nargs="+", default=DEFAULT_MIXES, choices=list(MIX_MULT))
     ap.add_argument("--keeps-q", type=int, nargs="+", default=DEFAULT_KEEPS_Q)
     ap.add_argument("--keeps-m", type=int, nargs="+", default=DEFAULT_KEEPS_M)
     ap.add_argument("--damp", type=float, default=1e-2,
@@ -308,6 +320,8 @@ def main():
     ap.add_argument("--no-dual", action="store_true", help="skip the dual-selection control")
     ap.add_argument("--dump-u40-mix", default=None,
                     help="save this mixture's u40-level solutions to <exp>/sol/ (gate G0)")
+    ap.add_argument("--dump-hessian", action="store_true",
+                    help="also save the fold-A per-stream Hessians to <exp>/sol/ (gate G0)")
     ap.add_argument("--importance", default="importance_v2")
     ap.add_argument("--reserve-gb", type=float, default=44.0)
     ap.add_argument("--gpu", type=str, default=None)
@@ -447,6 +461,11 @@ def main():
                     dump = (out_dir / "sol" / f"L{li:02d}_{tag}_{args.dump_u40_mix}.pt",
                             args.dump_u40_mix,
                             U40_KEEP_Q if tag == "o" else U40_KEEP_M)
+                if args.dump_hessian:
+                    (out_dir / "sol").mkdir(exist_ok=True)
+                    torch.save({s: hook.H[key("A", s)].cpu() for s in STREAMS}
+                               | {f"n_{s}": hook.n[key("A", s)] for s in STREAMS},
+                               out_dir / "sol" / f"L{li:02d}_{tag}_H.pt")
                 res[tag][li] = solve_module(mod, hook, n_groups, gs, upd, keeps,
                                             args.mixes, fold_pairs, args.damp, dsel,
                                             dump)

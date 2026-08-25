@@ -198,6 +198,17 @@ def main():
     for s in streams:
         n = tk.get(f"A/{s}", 0) + tk.get(f"B/{s}", 0)
         L.append(f"  {s} {SLBL[s]:<20s} {n:>8d}  {100 * n / tot:5.2f}%")
+    # what each mixture actually weights, given the realised token counts
+    nat = {s: (tk.get(f"A/{s}", 0) + tk.get(f"B/{s}", 0)) / tot for s in streams}
+    L.append("effective stream share of each mixture H(w) = sum_s w_s H_s / N_s:")
+    for m in mixes:
+        mm = cfg["mix_mult"][m]
+        mult = ((0.0, 0.0, 1.0) if mm is None else
+                (1.0, 1.0, float(mm)) if isinstance(mm, (int, float)) else tuple(mm))
+        w = {s: mult[i] * nat[s] for i, s in enumerate(streams)}
+        sw = sum(w.values()) or 1.0
+        L.append(f"  {m:<8s}" + "  ".join(f"{s} {100 * w[s] / sw:6.2f}%" for s in streams))
+    L.append("")
     roll_p = REPO / "outputs" / (cfg.get("rollouts_from") or args.exp_id[0]) / "rollouts.json"
     if roll_p.exists():
         rj = json.loads(roll_p.read_text())
@@ -365,6 +376,10 @@ def make_plots(plots, d, err, msk, ov_mat, rst, frac, iu40, im, isr, mixes, stre
             a.set_title(f"{MODNAME[t].split(' (')[0]} -> eval {SLBL[s]}")
             a.set_xlabel("removal fraction")
             a.set_ylabel("held-out rel. output error")
+            # ill-conditioned mixtures overshoot 1 by an order of magnitude, so a
+            # linear axis would flatten every arm that matters
+            a.set_yscale("symlog", linthresh=0.01)
+            a.axhline(1.0, color=MUTED, lw=0.8, ls=":")
             a.grid(color=GRID, lw=0.6)
     ax[0, 0].legend(fontsize=7, frameon=False, ncol=2)
     fig.tight_layout()
@@ -376,6 +391,7 @@ def make_plots(plots, d, err, msk, ov_mat, rst, frac, iu40, im, isr, mixes, stre
     for i, t in enumerate(("o", "m")):
         z = err[t][:, im[pm], :, isr["D"]]
         h = ax[i].imshow(z, aspect="auto", origin="lower", cmap="magma",
+                         vmin=0, vmax=float(np.nanpercentile(z, 98)),
                          extent=[frac[t][0], frac[t][-1], layers[0], layers[-1]])
         ax[i].set_title(f"{MODNAME[t]} -- err on decode, mix `{pm}`")
         ax[i].set_xlabel("removal fraction")

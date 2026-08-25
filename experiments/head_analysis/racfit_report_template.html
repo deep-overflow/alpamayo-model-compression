@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>레이어 출력 재구성의 한계 — 무엇을 보고 재구성하고 있었나</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.84rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 레이어 출력 재구성 &times; 캘리브레이션 스트림</div>
+  <h1>TITLE_TBD</h1>
+  <div class="meta">
+    2026-08-25 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (VLM 타워 36층)
+    &middot; 계획 <code>plans/2026-08-25_cot-reconstruction.md</code>
+    &middot; 참조 <em>Reasoning Models Can be Accurately Pruned Via Chain-of-Thought
+    Reconstruction</em> (arXiv:2509.12464)
+  </div>
+</header>
+
+<p>BODY_TBD</p>
+
+</div>
+</body>
+</html>
