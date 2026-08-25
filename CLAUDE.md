@@ -144,10 +144,13 @@ Shared libraries:
 - `mask_lib.py` — Phase P2/P3: 0/1 forward-pre-hook masks on o_proj input (per Q head) and
   down_proj input (per MLP channel); masked is functionally identical to removed. Selection is
   per-layer so a width sweep does not silently become a depth sweep.
-- `jlens_lib.py` — **label-free** criterion. Jacobian lens `J_l = E[dh_final/dh_l]` with rows of
+- `jlens_lib.py` — **rollout-free** criterion. Jacobian lens `J_l = E[dh_final/dh_l]` with rows of
   `W_U` as cotangents, so one backward per dictionary token yields that token's lens vector at
   *every* layer; unit scores then follow by matmul from second moments of activations, with no
-  per-unit backward. `jfrac = j / write_norm` separates "writes a lot, none of it verbalizable"
+  per-unit backward. Three independent things get conflated as "label-free" in this repo, so keep
+  them apart: **human annotation** (no criterion here uses any), **model generation** (CoC-NLL
+  Taylor needs a rollout, J-lens does not), and **ground-truth data** (`I_traj` needs GT actions,
+  the other two do not). J-lens's advantage over CoC-NLL Taylor is the second axis, not the first. `jfrac = j / write_norm` separates "writes a lot, none of it verbalizable"
   from the converse. Source positions are restricted to text/CoC tokens (vision tokens dominate the
   prompt and only dilute `J_l`).
 - `eval_lib.py` — multi-sample minADE/minFDE, geometry-derived scenario buckets from the GT path
@@ -170,7 +173,7 @@ Runner tracks (each `run_*.py` pairs with an `analyze_*.py`):
 | P2 mask sweeps | `run_ablation.py`, `run_expert_ablation.py` | `analyze_ablation.py` |
 | P3 combined configs | `run_eval.py`, `run_integrated.py`, `run_cocsafe.py`, `run_kvfix.py`, `scan_buckets.py` | `analyze_eval.py` |
 | criterion × allocation grid | `run_grid.py` | `analyze_grid.py` |
-| J-space (label-free) | `run_jlens.py` (build lens, gates G1/G2), `run_jspace_sweep.py` (criterion sweep at matched ratios, `--jlens` picks the lens run), `run_kviso.py` (KV-drop choice isolation; writes its own summary, no analyze pair) | `analyze_jspace.py`, `analyze_jsweep.py` |
+| J-space (rollout-free) | `run_jlens.py` (build lens, gates G1/G2), `run_jspace_sweep.py` (criterion sweep at matched ratios, `--jlens` picks the lens run), `run_kviso.py` (KV-drop choice isolation; writes its own summary, no analyze pair) | `analyze_jspace.py`, `analyze_jsweep.py` |
 | physical removal + latency | `make_slim.py`, `verify_slim.py`, `bench_fast*.py`, `profile_stages.py` | `analyze_slim.py`, `analyze_fastpipe.py`, `aggregate_profile.py` |
 | OOD / recovery | `eval_ood.py`, `train_lora.py`, `eval_recovered.py` | `analyze_ood.py` |
 | closed-loop (alpasim) | `launch_alpasim_matrix.sh` (config per GPU), `launch_alpasim_shards.sh` (one config split over GPUs) + `merge_alpasim_shards.py` | `analyze_alpasim.py`, `analyze_collisions.py`, `analyze_longitudinal.py` |
@@ -242,7 +245,7 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `integrated_mag` | trajectory Taylor | late-heavy graded 30/50 + layer-35 kv-only | VLM + expert + KV1 (−3.25B) |
 | `cocsafe_full_r20` / `_r30` | dual `max(rank I_traj, rank I_CoC)` | uniform 20% / 30% | VLM + expert + KV1 (−2.01B at r20) |
 | `dual_uniform` | dual | uniform | VLM only (bit-identical to the grid cell) |
-| `j_traj_full_r20` / `_r30` | `max(rank I_traj, rank J)` — **label-free** | uniform | VLM + expert + KV1 |
+| `j_traj_full_r20` / `_r30` | `max(rank I_traj, rank J)` — **rollout-free** | uniform | VLM + expert + KV1 |
 | `dual_u40_v2` / `j_traj_u40_v2` | dual / `max(rank I_traj, rank J)` | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `traj_u40_v2` / `coc_u40_v2` / `j_u40_v2` | `I_traj` / `I_CoC` / `J`, single criterion | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 
@@ -258,7 +261,8 @@ monotone map and `select_mask_ratios` only argsorts within a layer. Kept-set ove
 `dual_u40_v2` and `j_traj_u40_v2` (2026-08-09) are the one-factor pair: same matched budget, same
 uniform allocation, expert and KV untouched, and both halves of the criterion drawn from the same
 100 calibration clips (`importance_v2` + `jlens_v2`). Only `X` in `max(rank I_traj, rank X)`
-differs, so the comparison isolates "does the J-lens replace the CoC labels?". Their kept sets
+differs, so the comparison isolates "can the J-lens replace the CoC rollout?" (labels were never
+involved -- see the note below). Their kept sets
 overlap 84.8% (Q heads) / 83.3% (MLP), so there is something to measure. Built with
 `--config dual_u40_v2 --importance importance_v2` (and `--jlens jlens_v2` for the J arm); calling
 `dual_u40_v2` with `importance_v1` reproduces shipped `slim_dual_uniform` bit-identically, which is
@@ -266,9 +270,16 @@ how the recipe was verified. The uniform ratio is **0.3985632694**, not 0.40 —
 `run_grid.allocations()` matching `slim_integrated_mag`'s realized budget, and rounding to 0.40
 moves 17 MLP channels per layer.
 
-`j_traj` is the label-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes, with
-only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so the
-comparison is a one-factor test of "do we still need reference CoC text?". The reference lens run
+`j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
+with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
+the comparison is a one-factor test of "does the criterion still need the model to write its own
+CoC first?". It was previously described here as a test of "do we still need reference CoC text",
+which was wrong: `run_importance` scores the NLL of the model's **own rollout**
+(`seq_tf = roll["sequences"]`), and `calib_100` has no `gt_coc` column at all, so no reference text
+was ever involved. What the CoC half needs is a *generation*, not a label — and that matters
+because a collapsed model's degenerate CoC contaminates its own NLL signal, which J-lens is immune
+to. (`make_teacher_refs.py` does pre-generate CoC sequences, but for LoRA recovery training, not
+for importance.) The reference lens run
 is `jlens_coc32` (32 calibration clips; split-half stability 0.98/0.95) — the original 8-clip
 `jlens_coc` carries ~25% pick churn, but the shipped checkpoints stand: the `max(rank, rank)`
 guardrail absorbs the width churn (`jsweep32_summary`) and the KV-1 group choice is insensitive
