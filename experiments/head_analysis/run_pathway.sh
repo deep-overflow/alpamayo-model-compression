@@ -9,6 +9,11 @@
 set -u
 MAX=${1:-20}
 shift
+SCRIPT=run_pathway.py
+if [ "${1:-}" = "--stage2" ]; then
+  SCRIPT=run_pathway2.py
+  shift
+fi
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VENV=/mnt/nvme1n1/ad_vla/venvs/alpamayo-mc/bin/python
 SHARED_OUT=/home/cvlab21/project/chan/alpamayo-model-compression/outputs
@@ -27,7 +32,7 @@ export HF_TOKEN
 
 for i in $(seq 1 "$MAX"); do
   echo "$(date '+%H:%M:%S') attempt $i/$MAX"
-  if "$VENV" "$HERE/run_pathway.py" --outputs-root "$SHARED_OUT" "$@"; then
+  if "$VENV" "$HERE/$SCRIPT" --outputs-root "$SHARED_OUT" "$@"; then
     echo "$(date '+%H:%M:%S') completed"
     exit 0
   fi
