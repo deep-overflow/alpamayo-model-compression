@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>재구성이 보존해야 할 경로를 망친다 — 레이어 출력 재구성의 캘리브레이션 스트림</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.82rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.88rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 165px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; } .good { color: #008300; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 레이어 출력 재구성 &times; 캘리브레이션 스트림</div>
+  <h1>재구성이 보존해야 할 경로를 <em>망친다</em> &mdash; Alpamayo에 RAC 적용</h1>
+  <div class="meta">
+    2026-08-25 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> VLM 타워 36층
+    &middot; <code>calib_100</code> 100클립, 2-fold held out, K=4 on-policy CoC
+    &middot; 계획 <code>plans/2026-08-25_cot-reconstruction.md</code><br>
+    참조 <em>Reasoning Models Can be Accurately Pruned Via Chain-of-Thought
+    Reconstruction</em> (arXiv:2509.12464)
+  </div>
+</header>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v bad">+0.0197</div><div class="l">현행 Tyr 재구성이 <b>decode 경로를 악화</b>시키는 양 (MLP, u40, CI 0 배제)</div></div>
+  <div class="kpi"><div class="v">0.117</div><div class="l">decode 스트림 에너지 중 vision 상위-512 고유공간이 설명하는 비율 (MLP 중앙값)</div></div>
+  <div class="kpi"><div class="v good">&minus;35%</div><div class="l">선택을 <code>dual</code>로 고정한 채 H만 바꿨을 때 decode 오차 (0.4123 &rarr; 0.2683)</div></div>
+  <div class="kpi"><div class="v">1.92%</div><div class="l">전체 토큰 중 CoC 비중. 그런데 이것만 넣어도 효과의 88%가 나온다</div></div>
+  <div class="kpi"><div class="v bad">2.91%</div><div class="l">배포된 damp 1e-2 설정의 <b>run-to-run 목적값 차이</b> (재현 불가)</div></div>
+  <div class="kpi"><div class="v">30&times;</div><div class="l">같은 배율로 <b>프롬프트 텍스트</b> 대신 <b>decode</b>를 올렸을 때의 이득 차이 (정칙화 대조군)</div></div>
+</div>
+
+<h2><span class="num">1</span> 이 저장소는 이미 논문이 지목한 쪽에 서 있었다</h2>
+
+<p>RAC 논문의 주장은 한 줄이다. 표준 LLM 프루닝은 레이어 출력을 <strong>입력(프롬프트) 활성값</strong>
+에서만 재구성하는데, reasoning은 decode-dominated 태스크이므로 재구성 캘리브레이션에
+<strong>모델 자신의 on-policy CoT 활성값</strong>을 함께 넣어야 한다. 수식은 단순한 열 결합이고,
+따라서 Hessian은 가법적이다.</p>
+
+<pre><code>min_Ŵ ‖(W − Ŵ)[X_P  X_D]‖²_F   ⇒   H_RAC = H_P + H_D</code></pre>
+
+<p>이 저장소에는 Týr-the-Pruner / OSSCAR을 포팅한 레이어별 최소제곱 재구성이 이미 있다
+(<code>tyr_lib.py</code>). 그리고 <code>run_tyr_supernet.py:142</code>가 자기 metadata에 이렇게 적어 둔다.</p>
+
+<pre><code>"hessian_tokens": "full fused prompt prefill, no labels"</code></pre>
+
+<p>100클립 × 3,086토큰 = <strong>308,600 프리필 포지션이고 그중 93%가 vision 토큰</strong>이다.
+정확히 논문이 말하는 "input reconstruction"이다. 그러므로 RAC 이식은 새 알고리즘이 아니라
+<strong>H를 쌓는 토큰 집합을 바꾸는 1-factor 변경</strong>이다.</p>
+
+<div class="callout">
+<strong>저장소가 이미 이 가설을 지지하는 증거를 남겨 두었다.</strong> 커밋 <code>69efd68</code>은
+"reconstruction buys trajectory, <em>costs language</em>"라고 적혀 있고, Tyr 게이트 T1은
+"재구성은 <code>dual</code> 대비 궤적 이득 없음"으로 미달이었다. LingoQA에서
+<code>tyr_uniform_r</code> 20.8% / <code>tyr_r</code> 34.2%는 <strong>퇴화 하한 37.0% 아래</strong>이고
+(<code>dual</code> 68.8%, baseline 73.2%), 폐루프에서 Týr의 CoC degen 5.9%는 전부 "빈 출력"이었다.
+<code>2026-08-23_tyr-closedloop.html</code>의 자체 진단이 이미
+"AV prefill 분포에 맞춰진 재구성이 분포 밖에서 표류하며 침묵한다"였다.
+<strong>지금까지 없던 것은 그 진단을 레이어 수준에서 직접 잰 측정이다.</strong>
+</div>
+
+<h2><span class="num">2</span> Alpamayo는 R1처럼 decode-dominated가 아니다 — 그런데 그게 문제가 아니었다</h2>
+
+<p><code>calib_100</code>에서 실측한 토큰 질량이다.</p>
+
+<table>
+<thead><tr><th>스트림</th><th class="r">토큰/클립</th><th class="r">100클립 합</th><th class="r">비중</th></tr></thead>
+<tbody>
+<tr><td><b>V</b> vision + traj-history + sink</td><td class="r">2,929</td><td class="r">292,900</td><td class="r">93.09%</td></tr>
+<tr><td><b>T</b> 프롬프트 텍스트</td><td class="r">157</td><td class="r">15,700</td><td class="r">4.99%</td></tr>
+<tr><td><b>D</b> 모델 자신의 CoC rollout (K=4 시드)</td><td class="r">15.1 × 4</td><td class="r">6,039</td><td class="r"><b>1.92%</b></td></tr>
+</tbody>
+</table>
+
+<p>논문은 CoT가 최대 8,192토큰이라 단순 concat만으로 H가 뒤집히지만, Alpamayo의 CoC는
+중앙값 15토큰이다. 그래서 <em>사전 예측은 "단순 concat은 no-op"</em>이었고, 이식은 토큰수
+정규화 혼합이어야 한다고 설계했다.</p>
+
+<pre><code>H(w) = w_V·(H_V/N_V) + w_T·(H_T/N_T) + w_D·(H_D/N_D),   w_s = mult_s · (N_s/N_total)</code></pre>
+
+<table>
+<thead><tr><th>혼합</th><th>정체</th><th class="r">V</th><th class="r">T</th><th class="r">D</th></tr></thead>
+<tbody>
+<tr><td><code>VT</code></td><td><b>현행 Tyr의 H 그 자체</b> (prefill only)</td><td class="r">94.91%</td><td class="r">5.09%</td><td class="r">0%</td></tr>
+<tr><td><code>nat</code></td><td><b>논문 레시피를 문자 그대로</b> 적용한 concat</td><td class="r">93.09%</td><td class="r">4.99%</td><td class="r">1.92%</td></tr>
+<tr><td><code>d10</code></td><td>정규화 이식 (사전등록 주 arm)</td><td class="r">79.38%</td><td class="r">4.25%</td><td class="r">16.37%</td></tr>
+<tr><td><code>d100</code> / <code>d1000</code></td><td>과가중 스윕</td><td class="r">32.1 / 4.6%</td><td class="r">1.7 / 0.3%</td><td class="r">66.2 / 95.1%</td></tr>
+<tr><td><code>Donly</code></td><td>텍스트-only 코너 (조건수로 이미 탈락한 지점)</td><td class="r">0%</td><td class="r">0%</td><td class="r">100%</td></tr>
+</tbody>
+</table>
+
+<p>결과부터 말하면 <strong>예측이 틀렸다.</strong> 1.92%짜리 <code>nat</code>이 이미 효과의 88%를
+가져간다(&sect;5). 이유는 &sect;4에 있다 — 두 스트림이 거의 직교하기 때문에 질량이 작아도
+prefill H에 <em>없던 방향</em>을 추가한다.</p>
+
+<h2><span class="num">3</span> 측정 — held-out이 아니면 아무 의미가 없다</h2>
+
+<p>클립을 해시로 50:50 분할해(fold A 46 / B 54) 한쪽에서 H를 맞추고 <strong>다른 쪽에서만</strong>
+오차를 읽는다. Tyr은 fit = eval이라 이 구분이 없었다. 활성값은 저장하지 않는다 —
+평가 fold의 Hessian만 있으면 되기 때문이다.</p>
+
+<pre><code>rel_err = sqrt( tr((W − Ŵ) H_eval (W − Ŵ)ᵀ) / tr(W H_eval Wᵀ) )   = ‖(W−Ŵ)X‖_F / ‖WX‖_F</code></pre>
+
+<p>단위 검증: 전부 유지하면 정확히 0.0, 재구성 없이 전부 제거하면 정확히 1.0, 제거율에 대해
+단조. 스윕은 혼합 6 × keep 레벨 8(제거율 0→84%) × 36레이어 × {<code>o_proj</code>(Q head 32),
+<code>down_proj</code>(채널 12,288)}, damp는 Tyr 최종 판정대로 1e-2.</p>
+
+<h2><span class="num">4</span> G0 &amp; G1 — 배포된 재구성은 재현되지도 않고, 두 스트림은 다른 분포다</h2>
+
+<h3>G0: 가중치 동일성은 애초에 잘못된 테스트였다</h3>
+
+<p>레이어 0에서 H의 유효랭크(participation ratio)는 <strong>o_proj 13.3 / 4096</strong>,
+<strong>down_proj 45.9 / 12288</strong>이다. 308,600개 프리필 토큰이 실제로는 수십 차원만 채운다.
+<code>inv(H_kk)</code>가 비유일하므로, 같은 알고리즘이라도 fp32 누적 순서만 다르면 해가 널스페이스
+안에서 이동한다. 그래서 <strong>각 해가 달성하는 목적값</strong>으로 판정했다.</p>
+
+<table>
+<thead><tr><th>damp</th><th>모듈</th><th>kept-set</th><th class="r">‖ΔW‖/‖W_ref‖</th><th>목적값 ours vs Tyr</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><b>1.0</b></td><td>o_proj</td><td>완전 일치</td><td class="r">3.0e&minus;3</td><td><b>0.168015 vs 0.168016</b> (4e&minus;6)</td><td class="good">G0a PASS</td></tr>
+<tr><td><b>1.0</b></td><td>down_proj</td><td>0.9999</td><td class="r">0.908</td><td>0.066010 vs 0.066014 (7e&minus;5)</td><td class="good">G0a PASS</td></tr>
+<tr><td>1e&minus;2</td><td>o_proj</td><td>완전 일치</td><td class="r">0.600</td><td>0.132846 vs 0.136828 (<b>2.91% 차이</b>)</td><td class="bad">G0b</td></tr>
+<tr><td>1e&minus;2</td><td>down_proj</td><td>0.9896 (77/7390 다름)</td><td class="r">1.297</td><td>0.048381 vs 0.048196 (0.38%)</td><td class="bad">G0b</td></tr>
+</tbody>
+</table>
+
+<p><strong>G0a PASS</strong> — damp 1.0에서 목적값이 5–6자리까지 일치하므로 이 구현의 산술 경로는
+Tyr의 것과 동일하다. down_proj의 가중치가 0.908 떨어져 있으면서 목적값이 같다는 사실 자체가
+널스페이스의 직접 증거다. <strong>G0b</strong> — 반면 <em>배포된</em> damp 1e-2 설정은 같은 코드·같은
+100클립인데 목적값이 2.91% 다르고 MLP 채널 77개가 다르게 선택된다.
+<strong>현행 Tyr 재구성은 run-to-run 재현되지 않는다.</strong> 계획 문서의 damping 판정이 세 번
+뒤집힌 이력이 이것으로 설명된다.</p>
+
+<h3>G1: vision과 decode는 같은 분포가 아니다 — <span class="good">PASS</span></h3>
+
+<table>
+<thead><tr><th>모듈</th><th class="r">Spearman(diag H_V, diag H_D) 중앙값</th><th class="r">상위-512 에너지 중첩</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>o_proj</td><td class="r">0.257 (&lt;0.95)</td><td class="r">0.447 (&lt;0.90)</td><td class="good">PASS</td></tr>
+<tr><td>down_proj</td><td class="r">0.223 (&lt;0.95)</td><td class="r"><b>0.117</b> (&lt;0.90)</td><td class="good">PASS</td></tr>
+</tbody>
+</table>
+
+<p>MLP에서는 <strong>decode 스트림 에너지의 88%가 prefill Hessian의 상위 512차원 밖</strong>에 있다.
+후반 레이어(27–35)에서는 중첩이 0.11–0.22, Spearman은 거의 0(일부 음수)이다.
+CoC 토큰이 전체의 1.92%뿐인데도 H를 실질적으로 바꾸는 이유가 이것이다.</p>
+
+<figure>
+  <img src="PLOT::racfit::conditioning.png" alt="스트림별 Hessian 유효랭크">
+  <figcaption>스트림별 Hessian 유효랭크(participation ratio). 세 스트림 모두 수십 차원 수준이며
+  vision이 가장 크다. 12,288차원 시스템을 40~50차원짜리 타깃에 맞추고 있다는 뜻이고,
+  이것이 G0b의 재현 불가와 아래의 과적합을 동시에 설명한다.</figcaption>
+</figure>
+
+<h2><span class="num">5</span> 핵심 결과 — prefill-only 재구성은 decode 경로를 <em>악화</em>시킨다</h2>
+
+<p>u40 지점(레이어당 Q head 19/32, MLP 채널 7,390/12,288 유지)에서, 재구성한 해의 오차와
+<strong>재구성을 아예 하지 않은</strong> 해(살아남은 열만 두고 나머지 0)의 오차 차이다.
+음수면 재구성이 도움, 양수면 해가 된다. 36레이어 paired bootstrap.</p>
+
+<table>
+<thead><tr><th>혼합</th><th colspan="2">o_proj &nbsp;(eval V / T / D)</th><th colspan="2">down_proj &nbsp;(eval V / T / D)</th></tr></thead>
+<tbody>
+<tr><td><code>VT</code> (현행 Tyr)</td>
+    <td>V &minus;0.0319 helps &nbsp; T &minus;0.0918 helps</td><td class="bad"><b>D +0.0349 HURTS</b></td>
+    <td>V &minus;0.0275 helps &nbsp; T &minus;0.0526 helps</td><td class="bad"><b>D +0.0197 HURTS</b></td></tr>
+<tr><td><code>nat</code> (논문 그대로)</td>
+    <td>V &minus;0.0431 helps &nbsp; T &minus;0.0906 helps</td><td class="good">D &minus;0.0573 helps</td>
+    <td>V &minus;0.0275 helps &nbsp; T &minus;0.0516 helps</td><td class="good">D &minus;0.0424 helps</td></tr>
+<tr><td><code>d10</code></td>
+    <td>V &minus;0.0305 helps &nbsp; T &minus;0.0693 helps</td><td>D &minus;0.0272 ~</td>
+    <td>V &minus;0.0263 helps &nbsp; T &minus;0.0475 helps</td><td class="good">D &minus;0.0394 helps</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>이것이 이 리포트의 핵심이다.</strong> 현행 Tyr의 Hessian(<code>VT</code>)은
+<strong>두 모듈 모두에서 재구성이 decode 경로를 "재구성을 안 한 것"보다 나쁘게 만드는 유일한
+arm</strong>이다. 같은 재구성이 vision과 프롬프트 텍스트 경로는 개선한다.
+"reconstruction buys trajectory, costs language"가 레이어 수준에서 그대로 측정된다.
+모델 자신의 CoC를 <em>자연 비중 1.92%로만</em> 넣어도 두 부호가 모두 뒤집힌다.
+</div>
+
+<p>u40 지점의 held-out 상대오차 전체(36레이어 중앙값)는 다음과 같다. 대각선이 아니라
+<strong>행(무엇으로 맞췄나) × 열(어디서 재나)</strong>로 읽어야 한다.</p>
+
+<table>
+<thead><tr><th rowspan="2">fit &#92; eval</th><th colspan="4" style="text-align:center">o_proj</th><th colspan="4" style="text-align:center">down_proj</th></tr>
+<tr><th class="r">V</th><th class="r">T</th><th class="r">D</th><th class="r">재구성없음(D)</th><th class="r">V</th><th class="r">T</th><th class="r">D</th><th class="r">재구성없음(D)</th></tr></thead>
+<tbody>
+<tr><td><code>VT</code></td><td class="r">0.2554</td><td class="r">0.3189</td><td class="r bad"><b>0.5868</b></td><td class="r">0.5203</td>
+    <td class="r">0.3176</td><td class="r">0.1617</td><td class="r bad"><b>0.4936</b></td><td class="r">0.4758</td></tr>
+<tr><td><code>nat</code></td><td class="r">0.2613</td><td class="r">0.2986</td><td class="r">0.4341</td><td class="r">0.4737</td>
+    <td class="r">0.3183</td><td class="r">0.1607</td><td class="r">0.3597</td><td class="r">0.3993</td></tr>
+<tr><td><code>d10</code></td><td class="r">0.2682</td><td class="r">0.3436</td><td class="r good">0.4041</td><td class="r">0.4035</td>
+    <td class="r">0.3226</td><td class="r">0.1597</td><td class="r good">0.2675</td><td class="r">0.3388</td></tr>
+<tr><td><code>d100</code></td><td class="r">0.3096</td><td class="r">0.4298</td><td class="r">0.4036</td><td class="r">0.3374</td>
+    <td class="r">0.3455</td><td class="r">0.1608</td><td class="r good">0.2352</td><td class="r">0.2921</td></tr>
+<tr><td><code>d1000</code></td><td class="r">0.7897</td><td class="r">0.9394</td><td class="r">1.0650</td><td class="r">0.3108</td>
+    <td class="r">0.3938</td><td class="r">0.1864</td><td class="r">0.2880</td><td class="r">0.3341</td></tr>
+<tr><td><code>Donly</code></td><td class="r">2.8800</td><td class="r">2.5424</td><td class="r">2.4377</td><td class="r">0.3079</td>
+    <td class="r">1.3209</td><td class="r">1.3551</td><td class="r">0.8457</td><td class="r">0.5546</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::racfit::stream_matrix.png" alt="fit 혼합 × eval 스트림 오차 행렬">
+  <figcaption>같은 표의 히트맵. <code>Donly</code>(텍스트-only 코너)가 폭발하는 것은
+  이미 알려진 조건수 문제이고, 그래서 <em>혼합</em>이 필요하다.</figcaption>
+</figure>
+
+<h3>선택 효과를 완전히 배제한 1-factor 판정</h3>
+
+<p>위 표는 OSSCAR이 유닛도 스스로 고른다. 선택을 저장소의 <code>dual</code> 기준
+(<code>max(rank I_traj, rank I_CoC)</code>)으로 <strong>고정</strong>하고 재구성 H만 바꾸면:</p>
+
+<table>
+<thead><tr><th>fit</th><th class="r">o_proj V</th><th class="r">o_proj D</th><th class="r">down_proj V</th><th class="r">down_proj D</th></tr></thead>
+<tbody>
+<tr><td><code>VT</code></td><td class="r">0.2984</td><td class="r bad">0.5590</td><td class="r">0.3315</td><td class="r bad">0.4123</td></tr>
+<tr><td><code>nat</code></td><td class="r">0.3046</td><td class="r">0.4391</td><td class="r">0.3315</td><td class="r">0.3189</td></tr>
+<tr><td><code>d10</code></td><td class="r">0.3124</td><td class="r good">0.4128</td><td class="r">0.3328</td><td class="r good">0.2683</td></tr>
+</tbody>
+</table>
+
+<p>유닛이 완전히 동일한 상태에서 <strong>decode 오차가 26%(o_proj) / 35%(down_proj) 줄고
+vision 오차는 사실상 그대로</strong>다(0.3315 → 0.3328). 효과는 전적으로 <em>재적합</em>에서 온다.</p>
+
+<h2><span class="num">6</span> 사전등록 게이트 판정</h2>
+
+<table>
+<thead><tr><th>게이트</th><th>판정 대상</th><th>결과</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><b>G1</b> 전제</td><td>V와 D가 같은 분포인가</td><td>Spearman 0.257 / 0.223, 에너지 중첩 0.447 / 0.117</td><td class="good">PASS</td></tr>
+<tr><td><b>G2</b> 본안</td><td>err_D(<code>nat</code>) − err_D(<code>d10</code>)</td><td>o +0.0386 [+0.0073, +0.0507] p=0.012 &middot; m +0.0361 [+0.0153, +0.0697] p=2.9e&minus;11</td><td class="good">PASS</td></tr>
+<tr><td><b>G2b</b></td><td>err_D(<code>VT</code>) − err_D(<code>d10</code>)</td><td>o <b>+0.164</b> [+0.134, +0.246] &middot; m <b>+0.185</b> [+0.176, +0.210]</td><td class="good">PASS</td></tr>
+<tr><td><b>G2c</b></td><td>err_D(<code>VT</code>) − err_D(<code>nat</code>) = 논문을 문자 그대로 썼을 때</td><td>o +0.145 [+0.108, +0.218] &middot; m +0.151 [+0.129, +0.178] &mdash; <b>전체 효과의 88% / 81%</b></td><td class="good">PASS</td></tr>
+<tr><td><b>G3</b> 선택 이동</td><td>kept-set 중첩 vs 잡음 바닥</td><td>o 0.849 (바닥 0.860) &middot; m 0.893 (바닥 0.782)</td><td>FAIL &rarr; <b>G2는 선택이 아니라 재적합</b></td></tr>
+<tr><td><b>G4</b> 비용</td><td>err_V(<code>d10</code>) − err_V(<code>nat</code>)</td><td>o +0.0146 [+0.0112, +0.0408] &middot; m +0.0049 [+0.0035, +0.0069]</td><td>o FAIL / m PASS</td></tr>
+<tr><td><b>G5</b> 배분</td><td>r*(ε=0.10)의 레이어간 표준편차</td><td>o 0.058 &middot; m <b>0.287</b> (&gt;0.05)</td><td class="good">PASS</td></tr>
+</tbody>
+</table>
+
+<p><b>G3의 FAIL은 좋은 소식이다.</b> 게이트는 "선택이 유의하게 움직였는가"를 물었고 답은
+"거의 아니다"이므로, G2의 효과가 <em>다른 유닛을 골라서</em>가 아니라 <em>같은 유닛을 다르게
+재적합해서</em> 나온다는 귀속이 확정된다. <b>G4</b>는 o_proj에서만 미달인데, 절대 악화가
++0.0146(상대 5.7%)이고 같은 arm의 decode 이득은 +0.164다 — 사전등록한 +0.02 절대 임계를
+넘긴 것은 사실이므로 실패로 기록하되, 트레이드오프는 명백히 유리하다.</p>
+
+<figure>
+  <img src="PLOT::racfit::mean_curves.png" alt="혼합별 held-out 오차 곡선">
+  <figcaption>제거율에 대한 held-out 상대오차(36레이어 중앙값). 점선이 "재구성 없음".
+  아래 오른쪽 패널(MLP → decode)에서 회색 <code>VT</code>가 점선 위/근처에 붙어 있는 반면
+  <code>nat</code>·<code>d10</code>·<code>d100</code>은 명확히 아래에 있다. y축은 symlog
+  (<code>d1000</code>·<code>Donly</code>가 1을 크게 넘기 때문).</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::racfit::overlap.png" alt="혼합 간 kept-set 중첩">
+  <figcaption>혼합 간 kept-set 중첩. <code>VT</code> vs <code>d10</code>은 0.849 / 0.893으로
+  캘리브레이션 잡음 바닥(0.860 / 0.782) 근처다 &mdash; 선택은 거의 움직이지 않는다.</figcaption>
+</figure>
+
+<h2><span class="num">7</span> 레이어마다 얼마나 제거할 수 있나</h2>
+
+<p>사용자 질문의 직접적 답이다. 허용오차 ε에서 상대오차가 ε 이하로 유지되는 최대 제거율
+r*(ℓ, ε)를 <code>d10</code> 혼합, 세 eval 스트림 평균으로 잰다.</p>
+
+<table>
+<thead><tr><th>모듈</th><th>ε</th><th class="r">평균</th><th class="r">표준편차</th><th class="r">최소</th><th class="r">최대</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">o_proj (Q head)</td><td>0.05</td><td class="r">0.044</td><td class="r">0.024</td><td class="r">0.000 (L7)</td><td class="r">0.106 (L3)</td></tr>
+<tr><td>0.10</td><td class="r">0.094</td><td class="r">0.058</td><td class="r">0.000 (L7)</td><td class="r">0.259 (L3)</td></tr>
+<tr><td>0.20</td><td class="r">0.205</td><td class="r">0.112</td><td class="r">0.001 (L7)</td><td class="r">0.484 (L3)</td></tr>
+<tr><td rowspan="3">down_proj (채널)</td><td>0.05</td><td class="r">0.142</td><td class="r">0.221</td><td class="r">0.022 (L27)</td><td class="r">0.782 (L4)</td></tr>
+<tr><td>0.10</td><td class="r">0.237</td><td class="r">0.287</td><td class="r">0.045 (L27)</td><td class="r">0.833 (L1)</td></tr>
+<tr><td>0.20</td><td class="r">0.394</td><td class="r">0.274</td><td class="r">0.097 (L27)</td><td class="r">0.833 (L0)</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::racfit::rstar_profile.png" alt="레이어별 최대 제거율">
+  <figcaption>레이어별 r*(ε). MLP는 <strong>레이어 0–5가 ε=0.10에서 70–83%를 내놓는 반면
+  레이어 6–33은 5–13%밖에 못 내놓는다</strong>(레이어 34–35에서 다시 상승). 0.833은 측정 상한
+  (keep 2,048)이라 그 구간은 절단된 값이다. o_proj는 훨씬 평평하고 훨씬 낮으며, 레이어 7이
+  가장 민감하다(r* ≈ 0). 점선은 uniform u40(0.3986).</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::racfit::layer_heat.png" alt="레이어 × 제거율 오차 히트맵">
+  <figcaption><code>d10</code> 혼합, decode 스트림에서 잰 레이어 × 제거율 오차.</figcaption>
+</figure>
+
+<h3>같은 예산을 다시 나누면</h3>
+
+<p>u40 예산(제거 2,657,452,032 파라미터)을 <strong>모든 레이어가 동일한 재구성 오차에 놓이도록</strong>
+재배분하면(ε을 이분탐색해 예산에 맞춤, 실현 오차 0.000%):</p>
+
+<table>
+<thead><tr><th>배분</th><th class="r">Q head 제거율</th><th class="r">MLP 채널 제거율</th><th class="r">예산 오차</th></tr></thead>
+<tbody>
+<tr><td><b>등오차 (주)</b> — 전 레이어 rel_err = 0.2279</td><td class="r">평균 0.239, σ 0.125, [0.000, 0.531]</td><td class="r">평균 0.436, σ 0.259, [0.124, 0.833]</td><td class="r">0.000%</td></tr>
+<tr><td>uniform u40 (현행)</td><td class="r">0.3986 (전 레이어)</td><td class="r">0.3986 (전 레이어)</td><td class="r">0%</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::racfit::alloc.png" alt="예산 매칭 배분 프로파일">
+  <figcaption>등오차 배분. MLP는 앞 7개 블록과 뒤 2개 블록이 상한(83.3%)에 붙고 가운데 25개
+  블록은 0.12–0.4에 머문다. Q head는 평균 0.239로 <strong>uniform보다 40% 덜 자르고</strong>,
+  그만큼을 MLP(0.436)로 옮긴다. 벡터는 <code>outputs/racfit_v1/alloc.npz</code>에
+  <code>run_grid.allocations()</code>와 같은 형식(길이 36 float <code>rq</code>/<code>rm</code>)으로 저장했다.</figcaption>
+</figure>
+
+<div class="note">
+Lagrangian water-filling도 함께 계산했지만 <strong>bang-bang 코너 해로 퇴화</strong>한다
+(각 레이어가 0 아니면 측정 상한). 측정된 오차 곡선이 제거율에 대해 <em>오목</em>하기 때문이다 —
+상대오차는 레이어가 크게 망가지면 포화한다. 그래서 Lagrangian의 볼록 포락선에는 내부 최적점이
+없고, 등오차 배분이 비퇴화 해석이다. 두 결과 모두 <code>alloc.npz</code>에 들어 있다.
+</div>
+
+<h2><span class="num">8</span> 정칙화 대조군 — decode 특이적인가, 그냥 조건수 개선인가</h2>
+
+<p>&sect;4에서 봤듯 prefill Hessian의 유효랭크는 수십 차원이다. 그렇다면 <em>어떤</em> 작고 구별되는
+토큰 집단이든 가중치를 올리면 시스템이 좋아지는 것 아닌가? 이 대안 설명을 배제하려고
+같은 배율로 <strong>decode 대신 프롬프트 텍스트</strong>를 올린 <code>t4</code>·<code>t10</code>을
+같은 프로토콜로 돌렸다(36레이어, 별도 실행 <code>racfit_ctrl</code>).</p>
+
+<table>
+<thead><tr><th>비교 (u40, 36레이어 paired bootstrap)</th><th class="r">o_proj</th><th class="r">down_proj</th></tr></thead>
+<tbody>
+<tr><td>err_D(<code>VT</code>) &minus; err_D(<code>t4</code>) &nbsp;&mdash; 프롬프트 텍스트를 4배</td>
+    <td class="r">&minus;0.0049 [&minus;0.0101, &minus;0.0000] p=0.23</td>
+    <td class="r">+0.0028 [+0.0021, +0.0052] p=1.7e&minus;4</td></tr>
+<tr><td>err_D(<code>VT</code>) &minus; err_D(<code>t10</code>) &nbsp;&mdash; 10배</td>
+    <td class="r">&minus;0.0023 [&minus;0.0152, +0.0161] p=0.6</td>
+    <td class="r">+0.0058 [+0.0033, +0.0097] p=1.6e&minus;4</td></tr>
+<tr><td><b>err_D(<code>VT</code>) &minus; err_D(<code>d10</code>)</b> &nbsp;&mdash; decode를 10배</td>
+    <td class="r good"><b>+0.1640</b> [+0.1337, +0.2461] p=1.8e&minus;6</td>
+    <td class="r good"><b>+0.1849</b> [+0.1755, +0.2102] p=2.9e&minus;11</td></tr>
+<tr><td><b>err_D(<code>t10</code>) &minus; err_D(<code>d10</code>)</b> &nbsp;&mdash; 배율 맞춘 직접 비교</td>
+    <td class="r good"><b>+0.1636</b> [+0.1464, +0.2224] p=5.4e&minus;6</td>
+    <td class="r good"><b>+0.1803</b> [+0.1676, +0.2026] p=2.9e&minus;11</td></tr>
+<tr><td><i>정상 작동 확인</i>: err_T(<code>VT</code>) &minus; err_T(<code>t10</code>) &mdash; <code>t10</code>은 <em>자기</em> 스트림은 개선하는가</td>
+    <td class="r">+0.0726 [+0.0532, +0.0851] p=5.8e&minus;11</td>
+    <td class="r">+0.0172 [+0.0124, +0.0322] p=1.4e&minus;7</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>효과는 decode 특이적이다.</strong> 같은 배율로 프롬프트 텍스트를 올리면 decode 오차는
+&plusmn;0.006 안에서 움직이지 않는다. 같은 배율로 decode를 올리면 <b>+0.164 / +0.185</b>다 &mdash;
+<strong>30배 차이</strong>이고 배율을 맞춘 <code>t10</code> vs <code>d10</code> 직접 비교에서도 그대로다.
+<code>t10</code>이 고장난 것도 아니다: 자기 스트림(프롬프트 텍스트)은 제대로 개선한다.
+조건수 개선만으로는 설명되지 않는다.
+</div>
+
+<p>부수적으로 나온 것 하나. <strong>배포된 <code>VT</code> 대비로 보면 <code>d10</code>은 vision에서도
+비용이 없다</strong>: err_V(<code>VT</code>) &minus; err_V(<code>d10</code>) = &minus;0.0110 (o_proj) /
+&minus;0.0055 (down_proj), 즉 오히려 근소하게 낫다. &sect;6의 G4가 잡아낸 비용(+0.0146)은
+<code>nat</code>을 기준으로 했을 때만 존재한다.</p>
+
+<p>이 대조군은 또 다른 이력도 설명한다. <code>wanda --tokens text</code>는 프롬프트 텍스트와 CoC를
+한 덩어리로 묶었고 기각됐는데, 여기서 보듯 <strong>프롬프트 텍스트는 CoC의 대리물이 아니다</strong>.</p>
+
+<h2><span class="num">9</span> 해석과 다음 단계</h2>
+
+<ol>
+<li><strong>기전이 확인됐다.</strong> Tyr의 재구성이 언어를 망가뜨린 것은 재구성이라는 연산 자체
+때문이 아니라 <em>무엇을 보고 재구성했는가</em> 때문이다. prefill H로 맞춘 재적합은 vision과
+프롬프트 텍스트 경로는 개선하면서 decode 경로는 "재구성 안 함"보다 나쁘게 만든다.
+정칙화 대조군(&sect;8)이 조건수 개선이라는 대안 설명을 배제한다.</li>
+<li><strong>고치는 비용이 거의 없다.</strong> 모델 자신의 CoC를 자연 비중 1.92%로 넣기만 해도 부호가
+뒤집힌다. rollout 캐시 1회(100클립 × 4시드, ~10분) 외에 추가 비용이 없고, 라벨도 필요 없다.</li>
+<li><strong>배포된 damping은 재현되지 않는다.</strong> damp 1e-2에서 목적값이 run-to-run 2.91%
+흔들린다. 후속 빌드는 damp를 재검토하거나 최소한 시드/누적 순서를 고정해야 한다.</li>
+<li><strong>uniform 배분은 잘못된 배분이다.</strong> 같은 예산에서 앞 7개 MLP 블록은 80% 이상을
+내놓을 수 있고 가운데 블록은 10%대다.</li>
+</ol>
+
+<p><b>후속(별도 승인 필요)</b>: <code>run_tyr_supernet.py</code>에 <code>--streams/--mix</code>를 추가해
+error-accumulation 포함 supernet을 RAC H로 재생성 → <code>make_slim.py</code>에
+<code>rac_u40</code> 브랜치(가중치를 다시 쓰므로 <code>--no-state</code> 금지 목록에 등록, 17 GB)
+→ <code>launch_arms.sh</code>로 indist/test/OOD-val + LingoQA. 비교 상대는
+<code>tyr_uniform_u40_r</code>, <code>tyr_u40_r</code>, <code>dual_u40_v2</code>이고,
+<strong>핵심 판정 지표는 LingoQA가 37.0% 퇴화 하한을 넘는가</strong>이다.</p>
+
+<h2><span class="num">10</span> 재현</h2>
+
+<pre><code># 1. on-policy CoC 롤아웃 캐시 (100클립 × 4시드, ~10분)
+bash experiments/head_analysis/run_retry_host.sh 30 \
+    experiments/head_analysis/run_racfit.py --gpu 0 --exp-id racfit_v1 --rollout-only
+
+# 2. 36레이어를 카드 4장에 샤딩 (샤드당 ~30분)
+bash experiments/head_analysis/launch_racfit.sh racfit_v1 racfit_v1 "0 1 2 3"
+
+# 3. 게이트·플롯·배분
+python experiments/head_analysis/analyze_racfit.py \
+    --exp-id racfit_v1_l00 racfit_v1_l09 racfit_v1_l18 racfit_v1_l27 --out racfit_v1
+
+# 4. 정칙화 대조군 (§8): 같은 배율로 decode 대신 프롬프트 텍스트를 올린다
+EXTRA="--mixes VT nat t4 t10 d10" \
+    bash experiments/head_analysis/launch_racfit.sh racfit_ctrl racfit_v1 "0 1 2 3"
+python experiments/head_analysis/analyze_racfit.py \
+    --exp-id racfit_ctrl_l00 racfit_ctrl_l09 racfit_ctrl_l18 racfit_ctrl_l27 --out racfit_ctrl
+
+# G0: Hessian 한 번 덤프해서 두 damp를 오프라인 재현
+bash experiments/head_analysis/run_retry_host.sh 10 \
+    experiments/head_analysis/run_racfit.py --gpu 4 --exp-id racfit_g0h \
+    --num-clips 100 --k-seeds 1 --layer-end 1 --folds 1 --mixes VT \
+    --keeps-q 19 --keeps-m 7390 --no-dual --dump-hessian
+python experiments/head_analysis/verify_racfit_g0.py --exp-id racfit_g0h</code></pre>
+
+<p class="meta">산출물: <code>outputs/racfit_v1/{racfit_summary.txt, alloc.npz, metrics_analysis.json, plots/}</code>,
+샤드 <code>outputs/racfit_v1_l{00,09,18,27}/racfit.npz</code>.
+계획·게이트는 <code>plans/2026-08-25_cot-reconstruction.md</code>.</p>
+
+</div>
+</body>
+</html>
