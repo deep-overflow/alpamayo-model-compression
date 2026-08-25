@@ -417,6 +417,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-09_criterion-oneshot.html` | `arms_report_template.html` | CoC Taylor vs J-lens, one-factor, 7,599 clips |
 | `2026-08-11_baseline-anchor.html` | `baseline_anchor_report_template.html` | unpruned baseline in both modes + the paper table |
 | `2026-08-11_criterion-closedloop.html` | `closedloop_report_template.html` | the same one-factor pair in alpasim, 150 scenes × 3 arms |
+| `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
