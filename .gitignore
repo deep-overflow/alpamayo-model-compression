@@ -226,3 +226,9 @@ outputs/**/slim_state.pt
 outputs
 logs
 wandb/
+
+# Claude Code worktrees: each is a full checkout of this repo (91 MB and up) that
+# another session may be actively working in. Untracked and NOT ignored, a
+# `git add -A` from the main checkout sweeps them into the commit. Only the
+# worktrees are ignored, not all of .claude/, so a settings file can still be tracked.
+.claude/worktrees/
