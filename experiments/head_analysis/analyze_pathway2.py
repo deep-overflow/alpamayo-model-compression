@@ -242,7 +242,10 @@ def main():
     fig, axes = plt.subplots(1, 3, figsize=(16.5, 4.6))
     for ax, M, title in [(axes[0], A, "action channel  (ΔminADE, m)"),
                          (axes[1], N, "language channel  (ΔCoC NLL)")]:
-        v = np.nanmax(np.abs(M))
+        # One cell (CoC<-instruction) is ~10x the next largest, so a max-scaled colormap
+        # washes out every other cell. Clip the scale to the 90th percentile; the printed
+        # numbers carry the true value for the saturated cells.
+        v = float(np.nanpercentile(np.abs(M), 90)) or float(np.nanmax(np.abs(M)))
         im = ax.imshow(M, cmap="RdBu_r", vmin=-v, vmax=v, aspect="auto")
         ax.set_xticks(range(len(BANDS))); ax.set_xticklabels(BANDS, rotation=30, ha="right")
         ax.set_yticks(range(len(EDGES))); ax.set_yticklabels([PRETTY[e] for e in EDGES], fontsize=8)
@@ -250,8 +253,9 @@ def main():
         for i in range(M.shape[0]):
             for j in range(M.shape[1]):
                 if np.isfinite(M[i, j]):
-                    ax.text(j, i, f"{M[i, j]:+.2f}", ha="center", va="center",
-                            fontsize=7, color=INK)
+                    # saturated cells get white text or they vanish into the colormap
+                    ax.text(j, i, f"{M[i, j]:+.2f}", ha="center", va="center", fontsize=7,
+                            color="#FFFFFF" if abs(M[i, j]) > 0.65 * v else INK)
         fig.colorbar(im, ax=ax, fraction=0.046)
     ax = axes[2]
     col = {"action": C3, "language": C1, "both": C4, "-": MUTED}
