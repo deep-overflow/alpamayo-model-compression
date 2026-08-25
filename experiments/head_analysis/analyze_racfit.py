@@ -261,10 +261,28 @@ def main():
         L.append("    fit \\ eval  " + "".join(f"{SLBL[s][:12]:>14s}" for s in streams)
                  + "     (mask-only)")
         for m in mixes:
-            row = [np.nanmean(err[t][:, im[m], iu40[t], isr[s]]) for s in streams]
-            mk = np.nanmean(msk[t][:, im[m], iu40[t], isr["D"]])
+            row = [np.nanmedian(err[t][:, im[m], iu40[t], isr[s]]) for s in streams]
+            mk = np.nanmedian(msk[t][:, im[m], iu40[t], isr["D"]])
             L.append(f"    {m:<11s}" + "".join(f"{v:14.4f}" for v in row)
                      + f"      D={mk:.4f}")
+    L.append("")
+
+    # the headline: does fitting the refit on prefill tokens make the DECODE path
+    # worse than not refitting at all?
+    L.append("does the reconstruction help or hurt, per eval stream? "
+             "(refit error - mask-only error, u40, median over layers, "
+             "negative = reconstruction helps)")
+    for t in ("o", "m"):
+        L.append(f"  {MODNAME[t]}")
+        for m in mixes:
+            cells = []
+            for s in streams:
+                dd = (err[t][:, im[m], iu40[t], isr[s]]
+                      - msk[t][:, im[m], iu40[t], isr[s]])
+                med, lo, hi, _ = boot(dd)
+                mark = "HURTS" if lo > 0 else ("helps" if hi < 0 else "  ~  ")
+                cells.append(f"{s} {med:+.4f} {mark}")
+            L.append(f"    {m:<9s}" + "   ".join(cells))
     L.append("")
 
     # dual-fixed selection: reconstruction effect with selection held constant
@@ -274,12 +292,14 @@ def main():
         for t in ("o", "m"):
             L.append(f"  {MODNAME[t]}")
             for m in mixes:
-                row = [np.nanmean(dual[t][:, im[m], isr[s]]) for s in streams]
+                row = [np.nanmedian(dual[t][:, im[m], isr[s]]) for s in streams]
                 L.append(f"    {m:<11s}" + "".join(f"{v:14.4f}" for v in row))
         L.append("")
 
     # ---- G3 selection movement -------------------------------------------
-    L += ["G3  does the mixture move the selection? kept-set overlap vs VT at u40"]
+    L += ["G3  does the mixture move the SELECTION, or only the reconstruction?",
+          "    (a pass means the kept sets differ by more than calibration noise, so part",
+          "     of G2 is a selection effect; a fail attributes G2 purely to the refit)"]
     ov_mat = {}
     for t in ("o", "m"):
         k = kept[t][:, :, :, iu40[t], :]                         # (L, M, P, U)
@@ -295,7 +315,9 @@ def main():
                  f"(noise floor {NOISE_FLOOR[t]:.3f}) -> "
                  f"{'PASS (selection moved)' if vs < NOISE_FLOOR[t] else 'fail (within noise)'}")
     g3 = all(ov_mat[t][im["VT"], im[pm]] < NOISE_FLOOR[t] for t in ("o", "m"))
-    L.append(f"  VERDICT G3: {'PASS' if g3 else 'FAIL'}")
+    L.append(f"  VERDICT G3: {'PASS' if g3 else 'FAIL'}"
+             + ("" if g3 else "  -- G2 is attributable to the REFIT, not to a"
+                              " different set of units being kept"))
     L.append("")
 
     # ---- G4 cost on the vision stream ------------------------------------
@@ -330,21 +352,41 @@ def main():
     amix = args.alloc_mix or pm
     curves = {t: (removed[t], np.nanmean(err[t][:, im[amix]], axis=-1)) for t in ("o", "m")}
     step = {"o": 1, "m": args.mlp_step}
-    pick, got = waterfill(curves, U40_BUDGET, step)
-    rq = pick["o"] / N_UNITS["o"]
-    rm = pick["m"] / N_UNITS["m"]
+    n_l = len(layers)
+    # per-axis budgets: exactly what u40 removes on each axis, so the reallocation is
+    # a pure DEPTH move and stays comparable to run_grid.allocations()
+    ax_budget = {"o": n_l * 13 * P_UNIT["o"], "m": n_l * 4898 * P_UNIT["m"]}
+    alloc = {}
+    for mode in ("free", "per_axis"):
+        if mode == "free":
+            pick, got = waterfill(curves, U40_BUDGET, step)
+        else:
+            pick, got = {}, 0
+            for t in ("o", "m"):
+                p, g = waterfill({t: curves[t]}, ax_budget[t], step)
+                pick[t] = p[t]
+                got += g
+        alloc[mode] = (pick["o"] / N_UNITS["o"], pick["m"] / N_UNITS["m"], got)
+    rq, rm, got = alloc["per_axis"]
     np.savez(out_dir / "alloc.npz", rq=rq, rm=rm, layers=layers, mix=amix,
              removed=got, budget=U40_BUDGET,
-             uniform=np.full(len(layers), 0.3985632694))
-    L += [(f"budget-matched allocation from the `{amix}` curves "
-           f"(u40 budget {U40_BUDGET:,}; realised {got:,}, "
-           f"shortfall {100 * (U40_BUDGET - got) / U40_BUDGET:.3f}%)"),
-          (f"  Q-head  prune fraction: mean {rq.mean():.3f} std {rq.std():.3f} "
-           f"range [{rq.min():.3f}, {rq.max():.3f}]"),
-          (f"  MLP-ch  prune fraction: mean {rm.mean():.3f} std {rm.std():.3f} "
-           f"range [{rm.min():.3f}, {rm.max():.3f}]"),
-          ("  uniform reference 0.3986 for both axes; alloc.npz holds (rq, rm) in "
-           "run_grid.allocations() form"), ""]
+             rq_free=alloc["free"][0], rm_free=alloc["free"][1],
+             removed_free=alloc["free"][2],
+             uniform=np.full(n_l, 0.3985632694))
+    L += [f"budget-matched allocation from the `{amix}` curves (u40 = {U40_BUDGET:,} params)"]
+    for mode in ("per_axis", "free"):
+        q, m, g = alloc[mode]
+        tag = ("per-axis (each axis keeps its own u40 budget -- a pure depth move)"
+               if mode == "per_axis" else
+               "free (budget may move between the head and channel axes)")
+        L += [(f"  {tag}: realised {g:,}, "
+               f"shortfall {100 * (U40_BUDGET - g) / U40_BUDGET:.3f}%"),
+              (f"    Q-head  prune fraction mean {q.mean():.3f} std {q.std():.3f} "
+               f"range [{q.min():.3f}, {q.max():.3f}]"),
+              (f"    MLP-ch  prune fraction mean {m.mean():.3f} std {m.std():.3f} "
+               f"range [{m.min():.3f}, {m.max():.3f}]")]
+    L += [("  uniform reference 0.3986 on both axes; alloc.npz holds (rq, rm) in "
+           "run_grid.allocations() form (per-axis is the primary)"), ""]
 
     (out_dir / "racfit_summary.txt").write_text("\n".join(L) + "\n")
     print("\n".join(L))
@@ -369,9 +411,9 @@ def make_plots(plots, d, err, msk, ov_mat, rst, frac, iu40, im, isr, mixes, stre
         for c, s in enumerate(streams):
             a = ax[r, c]
             for m in mixes:
-                a.plot(frac[t], np.nanmean(err[t][:, im[m], :, isr[s]], axis=0),
+                a.plot(frac[t], np.nanmedian(err[t][:, im[m], :, isr[s]], axis=0),
                        "-o", ms=3, color=COL.get(m, MUTED), label=m, lw=1.6)
-            a.plot(frac[t], np.nanmean(msk[t][:, im["VT"], :, isr[s]], axis=0),
+            a.plot(frac[t], np.nanmedian(msk[t][:, im["VT"], :, isr[s]], axis=0),
                    "--", color=INK, lw=1.2, label="no reconstruction")
             a.set_title(f"{MODNAME[t].split(' (')[0]} -> eval {SLBL[s]}")
             a.set_xlabel("removal fraction")
@@ -419,7 +461,7 @@ def make_plots(plots, d, err, msk, ov_mat, rst, frac, iu40, im, isr, mixes, stre
     # 4. fit-mixture x eval-stream matrix at u40
     fig, ax = plt.subplots(1, 2, figsize=(11, 4.4))
     for i, t in enumerate(("o", "m")):
-        z = np.array([[np.nanmean(err[t][:, im[m], iu40[t], isr[s]]) for s in streams]
+        z = np.array([[np.nanmedian(err[t][:, im[m], iu40[t], isr[s]]) for s in streams]
                       for m in mixes])
         h = ax[i].imshow(z, cmap="viridis")
         ax[i].set_xticks(range(len(streams)), [SLBL[s] for s in streams], rotation=20)
