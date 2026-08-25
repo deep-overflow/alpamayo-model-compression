@@ -196,3 +196,141 @@ def reconstruct_levels(module, H, keep_sets, damp=1e-2):
         Bk[k, :] = torch.linalg.solve(H[k][:, k], G[k, :])
         out[key] = Bk.t().contiguous()
     return out
+
+
+# ---------------------------------------------------------------------------
+# RAC (chain-of-thought reconstruction) additions -- plans/2026-08-25_cot-reconstruction.md
+#
+# The Tyr path above accumulates ONE Hessian over the whole fused-prompt prefill
+# ("hessian_tokens": "full fused prompt prefill, no labels"), i.e. exactly the
+# input-only reconstruction arXiv:2509.12464 argues against. Because
+# H = sum_t x_t x_t^T is additive over token subsets, keeping the streams apart
+# lets any mixture be formed afterwards without re-running a forward.
+# ---------------------------------------------------------------------------
+
+
+class StreamHessianHook:
+    """HessianHook split by token stream (and calibration fold).
+
+    One buffer per key: H[k] = sum_{t in masks[k]} x_t x_t^T (fp32) at the module
+    input. The caller fills `masks` with {key: (T,) bool} right before each
+    forward; keys absent from `masks` are skipped for that forward.
+    """
+
+    def __init__(self, module, keys, device=None):
+        d = module.in_features
+        dev = device if device is not None else module.weight.device
+        self.H = {k: torch.zeros((d, d), device=dev, dtype=torch.float32) for k in keys}
+        self.n = {k: 0 for k in keys}
+        self.masks = {}
+        self.handle = module.register_forward_pre_hook(self._hook)
+
+    @torch.no_grad()
+    def _hook(self, _module, args):
+        x = args[0].reshape(-1, args[0].shape[-1])       # (T, d)
+        for k, m in self.masks.items():
+            xs = x[m].float()                            # (n_k, d)
+            if xs.shape[0] == 0:
+                continue
+            self.H[k] += xs.t() @ xs
+            self.n[k] += xs.shape[0]
+
+    def free(self):
+        self.H = {}
+
+    def remove(self):
+        self.handle.remove()
+
+
+@torch.no_grad()
+def mix_hessians(H, n, weights):
+    """H(w) = sum_s w_s * H_s / N_s -- the per-token-mean mixture.
+
+    Overall scale is irrelevant: the least-squares solve and the relative damping
+    (`damp` x mean diag) are both invariant under H -> cH, so `weights` only has to
+    be right up to a constant. Returns None if every requested stream is empty.
+    """
+    acc = None
+    for s, w in weights.items():
+        if w == 0.0 or n.get(s, 0) == 0:
+            continue
+        term = H[s].mul(w / n[s])
+        acc = term if acc is None else acc.add_(term)
+    return acc
+
+
+@torch.no_grad()
+def dense_energy(W, H_eval):
+    """tr(W H W^T) -- the recon_error denominator, computed once per (module, H)."""
+    return (W @ H_eval).mul_(W).sum().clamp_min(0.0)
+
+
+@torch.no_grad()
+def recon_error(W, W_hat, H_eval, denom=None):
+    """rel_err = sqrt( tr(D H D^T) / tr(W H W^T) ), D = W - W_hat, W (out, in).
+
+    Equals ||(W - W_hat) X||_F / ||W X||_F for any X with X X^T = H, so a held-out
+    error needs only the eval-fold Hessian -- activations are never stored.
+    """
+    diff = W - W_hat
+    num = (diff @ H_eval).mul_(diff).sum().clamp_min(0.0)
+    if denom is None:
+        denom = dense_energy(W, H_eval)
+    if float(denom) <= 0.0:
+        return float("nan")
+    return float(torch.sqrt(num / denom))
+
+
+@torch.no_grad()
+def kept_groups(W_sol, num_groups):
+    """Group indices surviving in a solution (removed groups are exactly zero).
+
+    Same test run_tyr_supernet.py:180 asserts on, applied to an (out, in) tensor.
+    """
+    gs = W_sol.shape[1] // num_groups
+    alive = W_sol.abs().sum(0).reshape(num_groups, gs).sum(1) != 0
+    return torch.nonzero(alive).flatten()
+
+
+@torch.no_grad()
+def mask_only(W, kept_idx, group_size=1):
+    """W with every non-kept input column zeroed -- pruning without reconstruction."""
+    out = torch.zeros_like(W)
+    if group_size > 1:
+        cols = (kept_idx[:, None] * group_size
+                + torch.arange(group_size, device=W.device)).reshape(-1)
+    else:
+        cols = kept_idx
+    out[:, cols] = W[:, cols]
+    return out
+
+
+@torch.no_grad()
+def energy_overlap(H_a, H_b, k=512, niter=4):
+    """Fraction of H_b's energy captured by H_a's top-k eigenspace.
+
+    tr(U^T H_b U) / tr(H_b) with U the leading k eigenvectors of H_a (PSD, so a
+    randomized SVD gives them). 1.0 means the two streams live in the same subspace
+    and mixing them cannot change the solve -- gate G1.
+    """
+    q = min(k + 32, H_a.shape[0] - 1)
+    U, _, _ = torch.svd_lowrank(H_a, q=q, niter=niter)
+    ut = U[:, :k].t()                                    # (k, d)
+    num = (ut @ H_b).mul_(ut).sum()
+    den = torch.diagonal(H_b).sum()
+    return float(num / den) if float(den) > 0 else float("nan")
+
+
+@torch.no_grad()
+def cond_stats(H):
+    """Cheap conditioning diagnostics: trace, squared Frobenius norm, effective rank.
+
+    pr_rank = tr(H)^2 / ||H||_F^2 in [1, d] is the participation ratio, the effective
+    number of directions carrying the energy. Chosen over eigvalsh because a 12288^2
+    eigendecomposition per (layer, mixture) would dominate the run; the exact
+    eigen-based version for four reference layers is in outputs/tyr_hdiag.json.
+    """
+    tr = float(torch.diagonal(H).sum())
+    fro2 = float(H.pow(2).sum())
+    return {"trace": tr, "fro2": fro2,
+            "pr_rank": (tr * tr / fro2) if fro2 > 0 else float("nan")}

@@ -161,6 +161,15 @@ Shared libraries:
   and runs `num_key_value_groups=1`; `bind_identity()` puts the unpruned model on that same path
   for honest paired latency. Checkpoints are `torch.save` state_dicts + `slim_meta.json` of kept
   indices (`save_pretrained` cannot round-trip non-uniform layer shapes); reload with `load_slim()`.
+- `tyr_lib.py` — layer-output **reconstruction**, ported from Týr-the-Pruner / OSSCAR
+  (`local_prune_core`, math unchanged). `HessianHook` accumulates `H = Σ x xᵀ` at an o_proj /
+  down_proj input; `prune_levels` does second-order group removal **plus** the least-squares
+  refit `W_kept = H_kk⁻¹ (H W)_k` at each level; `reconstruct_levels` refits an externally
+  chosen kept set. Damping is `damp × mean diag` and the value matters — upstream 1e-2 is what
+  works here, 1.0 regresses (`plans/2026-08-20_tyr-baseline.md`). Reconstruction is the one
+  criterion family that **rewrites weights**, so its configs must save `slim_state.pt`.
+  `StreamHessianHook` / `mix_hessians` / `recon_error` (2026-08-25) split that Hessian by token
+  stream so a mixture can be formed post hoc, which is what `run_racfit.py` sweeps.
 
 Runner tracks (each `run_*.py` pairs with an `analyze_*.py`):
 
@@ -174,6 +183,7 @@ Runner tracks (each `run_*.py` pairs with an `analyze_*.py`):
 | physical removal + latency | `make_slim.py`, `verify_slim.py`, `bench_fast*.py`, `profile_stages.py` | `analyze_slim.py`, `analyze_fastpipe.py`, `aggregate_profile.py` |
 | OOD / recovery | `eval_ood.py`, `train_lora.py`, `eval_recovered.py` | `analyze_ood.py` |
 | closed-loop (alpasim) | `launch_alpasim_matrix.sh` (config per GPU), `launch_alpasim_shards.sh` (one config split over GPUs) + `merge_alpasim_shards.py` | `analyze_alpasim.py`, `analyze_collisions.py`, `analyze_longitudinal.py` |
+| layer-output reconstruction × calibration stream (RAC) | `run_racfit.py` (+ `launch_racfit.sh` to shard the 36 layers, `verify_racfit_g0.py` for the Tyr reproduction gate) | `analyze_racfit.py` |
 
 Fixed data protocol: `outputs/split.json`, created once by `make_split.py` (seed 20260721) from
 `notebooks/clip_ids.parquet` — train/val/test = 900/131/150, with the 50 calibration clips a subset
