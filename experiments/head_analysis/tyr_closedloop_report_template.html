@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Týr-the-Pruner 폐루프 평가 — 궤적은 근접, 우위는 dual</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF; --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 980px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  .tblwrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.87rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: right; font-weight: 600; padding: 0.5rem 0.7rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  th:first-child { text-align: left; }
+  td { padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--border);
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td:first-child { text-align: left; white-space: normal; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .best { color: var(--good); font-weight: 600; }
+  .bad { color: var(--accent-dark); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .fn { color: var(--text-muted); font-size: 0.84rem; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 170px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 Model Compression · Closed-loop</div>
+  <h1>Týr-the-Pruner 폐루프 평가 — 궤적은 근접, 우위는 dual</h1>
+  <div class="meta">2026-08-23 · alpasim <code>public_2601</code> 150 scenes × 2 rollouts ·
+    드라이버 Ada 4–7 (4 shards) · 동일 예산 −2,657,452,032 (−24.0%) ·
+    <code>outputs/alpasim_tyr_2601</code></div>
+</header>
+
+<p class="lede">개루프 3셋에서 dual과 통계적으로 동급이었던 Týr(OSSCAR 재구성 + 전역 탐색)를
+기존 arm들과 <b>완전히 같은 150개 씬</b>에서 폐루프로 돌렸다. 결과는 개루프와 다르다:
+Týr는 baseline보다 낫지만 dual에는 못 미치고, 폐루프 CoC 붕괴율은 오히려 개루프와 부호가 뒤집힌다.</p>
+
+<div class="kpi">
+  <div><span class="k">Týr scene score</span><span class="v">0.786</span>baseline 0.750 · dual 0.828</div>
+  <div><span class="k">Týr − dual</span><span class="v">−0.042*</span>[−0.085, −0.000] p=0.099</div>
+  <div><span class="k">Týr − baseline</span><span class="v">+0.037</span>[−0.010, +0.084] p=0.007</div>
+  <div><span class="k">폐루프 CoC degen</span><span class="v">5.9%</span>dual 2.7% · baseline 0.6%</div>
+</div>
+
+<h2><span class="num">1</span>결과 (사실)</h2>
+
+<div class="tblwrap">
+<table>
+<thead><tr><th>config</th><th>scene score</th><th>pass %</th><th>at-fault coll.</th>
+  <th>off-road</th><th>progress</th><th>d2gt (m)</th><th>CoC degen</th></tr></thead>
+<tbody>
+<tr><td>baseline (11.08B)</td><td>0.750</td><td>89.0</td><td>0.040</td><td>0.070</td>
+    <td>0.747</td><td>2.89</td><td>0.006</td></tr>
+<tr><td><b>dual</b> (−24.0%)</td><td class="best">0.828</td><td class="best">91.0</td>
+    <td class="best">0.023</td><td class="best">0.067</td><td class="best">0.828</td>
+    <td>3.32</td><td>0.027</td></tr>
+<tr><td><b>Týr</b> (재구성 + 탐색, −24.0%)</td><td>0.786</td><td>88.3</td><td>0.030</td>
+    <td class="bad">0.087</td><td>0.794</td><td>3.04</td><td class="bad">0.059</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>씬 단위 페어드 비교 (150 씬, bootstrap 평균 CI가 주 판정 · Wilcoxon 보조)</h3>
+<div class="tblwrap">
+<table>
+<thead><tr><th>비교</th><th>Δ scene score</th><th>95% CI</th><th>Wilcoxon p</th><th>W / L / T</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>dual − baseline</td><td>+0.0787</td><td>[+0.0355, +0.1234]</td><td>0.0001</td>
+    <td>56 / 20 / 74</td><td class="best">유의 개선</td></tr>
+<tr><td>Týr − baseline</td><td>+0.0368</td><td>[−0.0099, +0.0835]</td><td>0.0072</td>
+    <td>58 / 23 / 69</td><td>CI 미확정 (Wilcoxon만 유의)</td></tr>
+<tr><td><b>Týr − dual</b></td><td>−0.0419</td><td>[−0.0848, −0.0004]</td><td>0.0989</td>
+    <td>29 / 34 / 87</td><td class="bad">dual 우세 (경계)</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="tblwrap">
+<table>
+<thead><tr><th>config</th><th>평균</th><th>중앙값</th><th>완주(1.0)</th><th>실패(&lt;0.5)</th>
+  <th>반복 노이즈</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>0.750</td><td>0.978</td><td>49.3%</td><td>20.0%</td><td>0.145</td></tr>
+<tr><td>dual</td><td>0.828</td><td>1.000</td><td class="best">65.3%</td><td class="best">12.0%</td><td>0.067</td></tr>
+<tr><td>Týr</td><td>0.786</td><td>1.000</td><td>57.3%</td><td>18.0%</td><td>0.076</td></tr>
+</tbody>
+</table>
+</div>
+<p class="fn">반복 노이즈 = 같은 씬의 두 rollout 점수 차의 절대값 평균. 씬 점수는 두 rollout의 평균.</p>
+
+<figure>PLOT::tyr::scene_score.png<figcaption>씬 점수 분포. 세 arm 모두 절반 이상이 만점 부근에 몰려 있고
+차이는 실패 꼬리에서 난다 — dual의 실패(&lt;0.5) 12.0%, Týr 18.0%, baseline 20.0%.</figcaption></figure>
+
+<figure>PLOT::tyr::paired_deltas.png<figcaption>baseline 대비 씬별 페어드 델타. Týr는 이긴 씬이 58개로 dual(56)보다 많지만
+진 씬의 손실이 커서 평균 CI가 0을 포함한다.</figcaption></figure>
+
+<figure>PLOT::tyr::incident_rates.png<figcaption>사건 발생률. Týr의 off-road 0.087은 세 arm 중 가장 높고,
+at-fault 충돌 0.030은 baseline(0.040)과 dual(0.023) 사이다.</figcaption></figure>
+
+<figure>PLOT::tyr::coc_vs_score.png<figcaption>CoC 건강도와 씬 점수. Týr의 붕괴는 전부 <b>빈 출력</b>(empty 0.059,
+soup 0.000)이고 CoC 길이도 63 토큰으로 짧다 — dual은 empty 0.013 / soup 0.014, 길이 74.</figcaption></figure>
+
+<h2><span class="num">2</span>공정성 근거</h2>
+<div class="callout good">
+<p>실행 전 <code>launch_alpasim_tyr.sh</code>의 preflight 4항목이 모두 통과했고, 시뮬레이션 설정은
+기존 arm들과 <b>같은 코드 경로</b>(<code>launch_alpasim_shards.sh</code>)에서 나왔다:</p>
+<ul>
+<li><b>동일 씬</b>: <code>public_2601</code> 상위 150개가 <code>m2601_merged_baseline</code>·
+  <code>m2601_merged_slim_dual_u40_v2</code>의 씬 집합과 정확히 일치(150/150). 셰이딩은 suite CSV로만
+  하고 <code>scenes.scene_ids</code>는 쓰지 않았다(26.04 렌더 바꿔치기 방지).</li>
+<li><b>동일 예산</b>: <code>slim_meta.json</code> 기준 제거 파라미터 2,657,452,032 — dual과 동일.</li>
+<li><b>재구성이 실제로 적재됨</b>: 드라이버의 <code>load_slim</code>은 <code>slim_state.pt</code>를
+  무조건 strict 로드한다. Týr에서는 이 파일이 곧 OSSCAR 재구성이므로, 없으면 크래시할 뿐
+  selection-only로 조용히 대체되지 않는다.</li>
+<li><b>동일 하드웨어 계열</b>: 드라이버 4장 모두 Ada(4–7), 스택 전체가 샤드당 한 카드.</li>
+</ul>
+</div>
+<div class="callout warn">
+<p><b>기존 불일치 한 가지</b>: shipped 런들의 driver 스레드 설정이 균일하지 않다.
+baseline·traj·coc·j·w4·w8·znorm·recover는 <code>OMP_NUM_THREADS=8</code>로 돌았지만
+<code>slim_dual_u40_v2</code>(두 샤드 모두)와 jtraj 샤드 1은 미설정이었다. 스레드 수는 CPU reduction
+순서를 바꾸므로 재현성에 영향을 준다(체계적 편향은 아니다). 이번 Týr 런은 baseline 및 다수 arm에
+맞춰 <b>8</b>로 돌렸으므로, Týr−baseline 비교는 설정이 일치하고 Týr−dual 비교는 이 불일치를 포함한다.</p>
+</div>
+
+<h2><span class="num">3</span>개루프와의 대조</h2>
+<div class="tblwrap">
+<table>
+<thead><tr><th>축</th><th>dual</th><th>Týr</th><th>개루프 판정</th><th>폐루프 판정</th></tr></thead>
+<tbody>
+<tr><td>궤적 (minADE@6 test / 폐루프 score)</td><td>0.950 / 0.828</td><td>0.950 / 0.786</td>
+    <td>동급 (3셋 CI 0 포함)</td><td class="bad">dual 우세 (−0.042*)</td></tr>
+<tr><td>CoC 붕괴율</td><td>3.0% / 2.7%</td><td>0.8% / 5.9%</td>
+    <td class="best">Týr 우세</td><td class="bad">dual 우세 (부호 반전)</td></tr>
+<tr><td>언어 (LingoQA)</td><td>68.8%</td><td>34.2%</td>
+    <td colspan="2">Týr는 상수 하한(37.0%)과 구분 불가 (−2.8 ns)</td></tr>
+</tbody>
+</table>
+</div>
+<p><b>붕괴율 부호 반전</b>이 이번 런의 가장 눈에 띄는 발견이다. 개루프(AV 클립, 클립당 1회 생성)에서
+Týr는 0.8%로 dual(3.0%)보다 건강했는데, 폐루프(시뮬 씬, 매 제어 스텝 생성)에서는 5.9%로 dual(2.7%)의
+두 배가 된다. 게다가 그 붕괴가 전부 <b>빈 출력</b>이다(soup 0.000). 두 지표의 임계값 정의는
+<code>eval_lib.coc_degenerate</code>와 <code>analyze_alpasim.coc_stats</code>가 서로 맞춰져 있으므로
+정의 차이가 아니라 <b>분포와 호출 빈도</b>의 차이로 읽어야 한다 — 재구성된 모델은 학습 분포에서 벗어난
+시뮬 렌더 위에서, 그리고 반복 호출될수록 침묵하는 경향이 있다.</p>
+
+<h2><span class="num">4</span>분석 (해석)</h2>
+<div class="callout">
+<ul>
+<li><b>Týr는 baseline보다 낫지만 dual에는 못 미친다.</b> 주 판정(bootstrap 평균 CI)으로 Týr−dual은
+  −0.042 [−0.085, −0.000]로 0을 아슬아슬하게 배제하고, 보조 판정(Wilcoxon p=0.099)은 미달이다.
+  N=150의 해상도가 0.080인 점을 감안하면 "dual이 낫다, 다만 효과 크기가 검출 한계 부근"이 정직한 서술이다.</li>
+<li><b>개루프 동급이 폐루프 동급을 보장하지 않았다.</b> 세 셋 모두에서 CI가 0을 포함했던 두 arm이
+  폐루프에서는 갈렸다. 폐루프는 오차가 누적되는 축이라, 같은 평균 정확도라도 실패 꼬리가 두꺼운 쪽이
+  손해를 본다 — 실제로 Týr의 실패 씬 비율은 18.0%로 dual 12.0%보다 높다.</li>
+<li><b>Týr의 약점은 이탈(off-road 0.087)과 침묵(empty CoC 5.9%)이다.</b> 충돌은 baseline보다 적으므로
+  "위험하게 운전한다"기보다 "경로를 놓치고 말을 잃는다"에 가깝다. OSSCAR 재구성이 AV 프리필 분포에서
+  출력을 복원하도록 맞춰진 결과가, 분포 밖(시뮬 렌더)에서 이렇게 드러난 것으로 본다.</li>
+<li><b>종합하면 Týr의 최종 위치는 바뀌지 않는다</b>: 개루프 궤적 동급, 폐루프 열세(경계), 언어는 하한
+  이하, 비용은 supernet 41GB + ~2 GPU-h. dual은 역전파 1회로 이 모두를 이긴다.
+  다만 <b>재구성 자체는 유효한 축</b>이며(dual+재구성 = dualr는 개루프 최고 궤적 0.860/0.814),
+  폐루프에서 그 조합을 확인하는 것이 다음 실험으로 자연스럽다.</li>
+</ul>
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<p class="fn">
+실행: <code>GPUS="4 5 6 7" CONFIGS="slim_tyr_u40_r" bash experiments/head_analysis/launch_alpasim_tyr.sh</code>
+(preflight → 4샤드 → 머지 → 분석). 산출물: 샤드
+<code>alpasim-runs/m2601_slim_tyr_u40_r_sh{0..3}</code>, 머지
+<code>m2601_merged_slim_tyr_u40_r</code>(<code>--expect-scenes 150</code>), 분석
+<code>outputs/alpasim_tyr_2601</code>. 씬 점수는 각 샤드의 <code>aggregate/results-summary.json</code>에서
+그대로 복사되며 재계산하지 않는다. 개루프 수치는 <code>experiments/evaluation/paper_numbers.py</code>,
+LingoQA 하한은 <code>lingo_vs_constant_floor</code>. 미실행 arm:
+<code>slim_tyr_uniform_u40_recon</code>(폐루프에서 전역 탐색 효과를 분리하는 대조군, ~7.5 h).
+</p>
+
+</div>
+</body>
+</html>
