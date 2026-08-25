@@ -152,6 +152,34 @@ def waterfill(curves, budget, step):
     return pick, params
 
 
+def equal_error(curves, frac, budget):
+    """Allocation that puts every layer at the SAME reconstruction error.
+
+    "Remove as much as possible while the layer output is still preserved" is a
+    tolerance, not a Lagrangian: pick eps, give each layer its r*(eps), and bisect
+    eps until the removed-parameter total hits the budget. Preferred over
+    waterfill() here because the measured error curves are CONCAVE in the removal
+    fraction (relative error saturates once a layer is badly damaged), so the
+    Lagrangian's convex envelope degenerates to a bang-bang corner solution.
+    """
+    def total(eps):
+        pick = {}
+        for tag, (_, e) in curves.items():
+            r = np.array([rstar(frac[tag], e[i], eps) for i in range(len(e))])
+            pick[tag] = np.round(r * N_UNITS[tag]).astype(int)
+        return sum(int(pick[t].sum()) * P_UNIT[t] for t in pick), pick
+
+    lo, hi = 0.0, 5.0
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if total(mid)[0] > budget:
+            hi = mid
+        else:
+            lo = mid
+    params, pick = total(lo)
+    return pick, params, lo
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp-id", nargs="+", default=["racfit_v1"])
@@ -255,7 +283,7 @@ def main():
 
     # full mixture x eval-stream table at u40
     L.append(f"held-out rel_err at the u40 level (keep {U40_KEEP['o']}/32 heads, "
-             f"{U40_KEEP['m']}/12288 channels), mean over layers:")
+             f"{U40_KEEP['m']}/12288 channels), MEDIAN over layers:")
     for t in ("o", "m"):
         L.append(f"  {MODNAME[t]}")
         L.append("    fit \\ eval  " + "".join(f"{SLBL[s][:12]:>14s}" for s in streams)
@@ -366,27 +394,35 @@ def main():
                 p, g = waterfill({t: curves[t]}, ax_budget[t], step)
                 pick[t] = p[t]
                 got += g
-        alloc[mode] = (pick["o"] / N_UNITS["o"], pick["m"] / N_UNITS["m"], got)
-    rq, rm, got = alloc["per_axis"]
+        alloc[mode] = (pick["o"] / N_UNITS["o"], pick["m"] / N_UNITS["m"], got, None)
+    pick, got, eps = equal_error(curves, frac, U40_BUDGET)
+    alloc["equal_error"] = (pick["o"] / N_UNITS["o"], pick["m"] / N_UNITS["m"], got, eps)
+    rq, rm, got, eps = alloc["equal_error"]
     np.savez(out_dir / "alloc.npz", rq=rq, rm=rm, layers=layers, mix=amix,
-             removed=got, budget=U40_BUDGET,
+             removed=got, budget=U40_BUDGET, eps=eps,
+             rq_axis=alloc["per_axis"][0], rm_axis=alloc["per_axis"][1],
              rq_free=alloc["free"][0], rm_free=alloc["free"][1],
-             removed_free=alloc["free"][2],
              uniform=np.full(n_l, 0.3985632694))
     L += [f"budget-matched allocation from the `{amix}` curves (u40 = {U40_BUDGET:,} params)"]
-    for mode in ("per_axis", "free"):
-        q, m, g = alloc[mode]
-        tag = ("per-axis (each axis keeps its own u40 budget -- a pure depth move)"
-               if mode == "per_axis" else
-               "free (budget may move between the head and channel axes)")
+    for mode in ("equal_error", "per_axis", "free"):
+        q, m, g, e = alloc[mode]
+        tag = {"equal_error": f"equal-error (PRIMARY): every layer sits at "
+                              f"rel_err = {e:.4f}" if e else "equal-error",
+               "per_axis": "waterfill, per-axis (each axis keeps its own u40 budget)",
+               "free": "waterfill, free (budget may move between the two axes)"}[mode]
         L += [(f"  {tag}: realised {g:,}, "
                f"shortfall {100 * (U40_BUDGET - g) / U40_BUDGET:.3f}%"),
               (f"    Q-head  prune fraction mean {q.mean():.3f} std {q.std():.3f} "
                f"range [{q.min():.3f}, {q.max():.3f}]"),
               (f"    MLP-ch  prune fraction mean {m.mean():.3f} std {m.std():.3f} "
                f"range [{m.min():.3f}, {m.max():.3f}]")]
-    L += [("  uniform reference 0.3986 on both axes; alloc.npz holds (rq, rm) in "
-           "run_grid.allocations() form (per-axis is the primary)"), ""]
+    L += [("  the two waterfill rows degenerate to a bang-bang corner solution because the "
+           "measured\n  error curves are CONCAVE in the removal fraction (relative error "
+           "saturates once a layer\n  is badly damaged), so the Lagrangian's convex envelope "
+           "has no interior optimum. The\n  equal-error row is the non-degenerate reading and "
+           "is what the plan asked for."),
+          ("  uniform reference 0.3986 on both axes; alloc.npz holds (rq, rm) in "
+           "run_grid.allocations() form (equal-error is the primary)"), ""]
 
     (out_dir / "racfit_summary.txt").write_text("\n".join(L) + "\n")
     print("\n".join(L))
