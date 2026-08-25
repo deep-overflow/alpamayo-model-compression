@@ -58,15 +58,31 @@ def merge(shard_dirs):
     return cfgs, meta, per_clip, buckets, clips, nll
 
 
+def median_ci(d, n_boot=10000, seed=0, alpha=0.05):
+    """Bootstrap CI for the median of a paired difference vector."""
+    rng = np.random.RandomState(seed)
+    idx = rng.randint(0, len(d), size=(n_boot, len(d)))
+    boots = np.median(d[idx], axis=1)
+    lo, hi = np.percentile(boots, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return float(np.median(d)), float(lo), float(hi)
+
+
 def paired(a, b):
-    """a - b as a paired vector plus mean CI, median and Wilcoxon."""
+    """a - b as a paired vector.
+
+    minADE deltas are heavy-tailed here (per-clip baselines span 0.21 - 7.2 m, and a
+    perturbation can land closer to GT on a clip the baseline already failed), so the
+    median and its bootstrap CI are the primary read and the mean is reported beside
+    it -- the convention this repo settled on in the 2026-07-29 grid.
+    """
     d = np.asarray(a, float) - np.asarray(b, float)
-    mean, lo, hi = el.paired_bootstrap_ci(d)
+    mean, mlo, mhi = el.paired_bootstrap_ci(d)
+    med, lo, hi = median_ci(d)
     try:
         p = float(wilcoxon(d).pvalue)
     except ValueError:
         p = float("nan")
-    return d, mean, lo, hi, float(np.median(d)), p
+    return d, med, lo, hi, mean, mlo, mhi, p
 
 
 def main():
@@ -88,17 +104,20 @@ def main():
     L.append(f"unblocked minADE: mean {np.mean(base):.4f}  median {np.median(base):.4f}")
     L.append(f"CoC NLL (identical across configs by construction): mean {np.mean(nll):.4f}")
     L.append("")
-    L.append(f"{'config':22s} {'span':22s} {'n_tok':>6s} {'minADE':>8s} "
-             f"{'delta':>9s} {'95% CI':>20s} {'median':>8s} {'p':>9s} {'worse':>6s}")
+    L.append("primary = paired median delta with bootstrap CI; mean shown beside it")
+    L.append(f"{'config':22s} {'span':22s} {'n_tok':>6s} {'medADE':>8s} "
+             f"{'med d':>9s} {'95% CI (median)':>20s} {'mean d':>9s} {'p':>9s} {'worse':>7s}")
     for c in cfgs:
-        d, mean, lo, hi, med, p = paired(per_clip[c]["ade"], base)
-        rows[c] = dict(mean=mean, lo=lo, hi=hi, med=med, p=p,
-                       n_tok=meta[c]["n"], span=meta[c]["span"],
-                       abs_mean=float(np.mean(per_clip[c]["ade"])),
-                       worse=int((d > 0).sum()), sig=bool(lo > 0 or hi < 0))
+        d, med, lo, hi, mean, mlo, mhi, p = paired(per_clip[c]["ade"], base)
+        rows[c] = {"med": med, "lo": lo, "hi": hi, "mean": mean, "mlo": mlo, "mhi": mhi,
+                   "p": p, "n_tok": meta[c]["n"], "span": meta[c]["span"],
+                   "abs_med": float(np.median(per_clip[c]["ade"])),
+                   "abs_mean": float(np.mean(per_clip[c]["ade"])),
+                   "worse": int((d > 0).sum()),
+                   "sig": bool((lo > 0 or hi < 0) and p < 0.05)}
         r = rows[c]
-        L.append(f"{c:22s} {r['span']:22s} {r['n_tok']:6d} {r['abs_mean']:8.4f} "
-                 f"{mean:+9.4f} [{lo:+8.4f},{hi:+8.4f}] {med:+8.4f} {p:9.2e} "
+        L.append(f"{c:22s} {r['span']:22s} {r['n_tok']:6d} {r['abs_med']:8.4f} "
+                 f"{med:+9.4f} [{lo:+8.4f},{hi:+8.4f}] {mean:+9.4f} {p:9.2e} "
                  f"{r['worse']:3d}/{n}")
 
     # ---- G0: span vs size-matched random control -------------------------------
@@ -113,35 +132,38 @@ def main():
     g0 = {}
     for c in [k for k in SPAN_OF if f"{k}_rand" in per_clip]:
         frac = meta[c]["n"] / seq_len
-        d, mean, lo, hi, med, p = paired(per_clip[c]["ade"], per_clip[f"{c}_rand"]["ade"])
+        d, med, lo, hi, mean, mlo, mhi, p = paired(per_clip[c]["ade"],
+                                                   per_clip[f"{c}_rand"]["ade"])
         degenerate = frac > 0.5
-        g0[c] = dict(mean=mean, lo=lo, hi=hi, med=med, p=p, frac=frac,
-                     sig=bool(lo > 0), gated=not degenerate)
+        sig = bool(lo > 0 and p < 0.05)
+        g0[c] = {"med": med, "lo": lo, "hi": hi, "mean": mean, "p": p, "frac": frac,
+                 "sig": sig, "gated": not degenerate}
         verdict = ("n/a (span is %.0f%% of cache -- random control degenerate)" % (100 * frac)
-                   if degenerate else ("PASS" if lo > 0 else "not separated"))
-        L.append(f"  {c:22s} {mean:+9.4f} [{lo:+8.4f},{hi:+8.4f}] median {med:+8.4f} "
+                   if degenerate else ("PASS" if sig else "not separated"))
+        L.append(f"  {c:22s} med {med:+9.4f} [{lo:+8.4f},{hi:+8.4f}] mean {mean:+9.4f} "
                  f"p={p:.2e}  {verdict}")
 
     # ---- G1: damage ranking vs attention-mass ranking ---------------------------
     cfg_json = json.loads((Path(root / args.shards[0]) / "config.json").read_text())
     mass = cfg_json["attention_mass_reference"]
     keys = [k for k in SPAN_OF if SPAN_OF[k] in mass]
-    dmg = [rows[k]["mean"] for k in keys]
+    dmg = [rows[k]["med"] for k in keys]
     msk = [mass[SPAN_OF[k]] for k in keys]
     rho = float(spearmanr(dmg, msk).statistic)
     L.append("")
     L.append(f"G1  Spearman(damage, attention mass) over {len(keys)} spans = {rho:+.3f}"
              f"   {'PASS (rankings differ)' if rho < 0.9 else 'FAIL (mass already told us)'}")
     for k in keys:
-        L.append(f"    {SPAN_OF[k]:16s} mass {mass[SPAN_OF[k]]:.4f}   damage {rows[k]['mean']:+.4f}")
+        L.append(f"    {SPAN_OF[k]:16s} mass {mass[SPAN_OF[k]]:.4f}   "
+                 f"damage {rows[k]['med']:+.4f}")
 
     # ---- G2 / G3 ---------------------------------------------------------------
     g2, g3 = rows["X3_coc"], rows["X1_vision"]
     L.append("")
-    L.append(f"G3  (positive control) vision block delta {g3['mean']:+.4f} "
+    L.append(f"G3  (positive control) vision block delta {g3['med']:+.4f} "
              f"[{g3['lo']:+.4f},{g3['hi']:+.4f}]  "
-             f"{'PASS' if g3['sig'] and g3['mean'] > 1.0 else 'FAIL -- no power, do not read G2'}")
-    L.append(f"G2  (main) generated-CoC block delta {g2['mean']:+.4f} "
+             f"{'PASS' if g3['sig'] and g3['med'] > 1.0 else 'FAIL -- no power, do not read G2'}")
+    L.append(f"G2  (main) generated-CoC block delta {g2['med']:+.4f} "
              f"[{g2['lo']:+.4f},{g2['hi']:+.4f}] median {g2['med']:+.4f} p={g2['p']:.2e}")
     if g2["sig"]:
         L.append("    -> CI excludes 0: the CoC contributes causally to the trajectory.")
@@ -157,7 +179,7 @@ def main():
         L.append("per-camera vision blocks")
         for c in cams:
             r = rows[c]
-            L.append(f"  {c:22s} n={r['n_tok']:5d} {r['mean']:+9.4f} "
+            L.append(f"  {c:22s} n={r['n_tok']:5d} {r['med']:+9.4f} "
                      f"[{r['lo']:+8.4f},{r['hi']:+8.4f}] p={r['p']:.2e}")
 
     # ---- plots -----------------------------------------------------------------
@@ -165,36 +187,36 @@ def main():
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
     ax = axes[0]
     y = np.arange(len(main_cfgs))
-    mm = [rows[c]["mean"] for c in main_cfgs]
-    err = [[rows[c]["mean"] - rows[c]["lo"] for c in main_cfgs],
-           [rows[c]["hi"] - rows[c]["mean"] for c in main_cfgs]]
+    mm = [rows[c]["med"] for c in main_cfgs]
+    err = [[rows[c]["med"] - rows[c]["lo"] for c in main_cfgs],
+           [rows[c]["hi"] - rows[c]["med"] for c in main_cfgs]]
     ax.barh(y, mm, xerr=err, color=[C3 if rows[c]["sig"] else C2 for c in main_cfgs],
-            height=0.6, error_kw=dict(ecolor=MUTED, lw=1))
+            height=0.6, error_kw={"ecolor": MUTED, "lw": 1})
     ax.set_yticks(y); ax.set_yticklabels([rows[c]["span"] for c in main_cfgs])
     ax.set_xscale("symlog", linthresh=0.05)
     ax.axvline(0, color=INK, lw=1)
     ax.set_xlabel("paired ΔminADE vs unblocked (m, symlog)")
-    ax.set_title("무엇을 막으면 궤적이 무너지는가", fontsize=10)
+    ax.set_title("which cache span does the trajectory need", fontsize=10)
 
     ax = axes[1]
     ks = [k for k in SPAN_OF if k in g0 and g0[k]["gated"]]
     x = np.arange(len(ks)); w = 0.38
-    ax.bar(x - w / 2, [rows[k]["mean"] for k in ks], w, color=C1, label="span")
-    ax.bar(x + w / 2, [rows[f"{k}_rand"]["mean"] for k in ks], w, color=MUTED,
+    ax.bar(x - w / 2, [rows[k]["med"] for k in ks], w, color=C1, label="span")
+    ax.bar(x + w / 2, [rows[f"{k}_rand"]["med"] for k in ks], w, color=MUTED,
            label="size-matched random")
     ax.set_xticks(x); ax.set_xticklabels([SPAN_OF[k] for k in ks], rotation=20, ha="right")
     ax.set_yscale("symlog", linthresh=0.05)
     ax.set_ylabel("ΔminADE (m, symlog)"); ax.legend(frameon=False, fontsize=8)
-    ax.set_title("G0 — 무작위 통제 대비", fontsize=10)
+    ax.set_title("G0 - span vs size-matched random", fontsize=10)
 
     ax = axes[2]
     for k in keys:
-        ax.scatter(mass[SPAN_OF[k]], max(rows[k]["mean"], 1e-4), s=60, color=C1, zorder=3)
-        ax.annotate(SPAN_OF[k], (mass[SPAN_OF[k]], max(rows[k]["mean"], 1e-4)),
+        ax.scatter(mass[SPAN_OF[k]], max(rows[k]["med"], 1e-4), s=60, color=C1, zorder=3)
+        ax.annotate(SPAN_OF[k], (mass[SPAN_OF[k]], max(rows[k]["med"], 1e-4)),
                     textcoords="offset points", xytext=(6, 4), fontsize=8, color=MUTED)
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("expert attention mass (07-20)"); ax.set_ylabel("ΔminADE (m)")
-    ax.set_title(f"G1 — 질량 vs 인과 (ρ={rho:+.2f})", fontsize=10)
+    ax.set_title(f"G1 - attention mass vs causal damage (rho={rho:+.2f})", fontsize=10)
     fig.tight_layout(); fig.savefig(out_dir / "plots" / "pathway_x.png", dpi=150)
     plt.close(fig)
 
@@ -208,7 +230,7 @@ def main():
             "G0": {k: v["sig"] for k, v in g0.items() if v["gated"]},
             "G1": bool(rho < 0.9),
             "G2": bool(rows["X3_coc"]["sig"]),
-            "G3": bool(rows["X1_vision"]["sig"] and rows["X1_vision"]["mean"] > 1.0),
+            "G3": bool(rows["X1_vision"]["sig"] and rows["X1_vision"]["med"] > 1.0),
         },
     }, indent=2))
     print("\n".join(L))
