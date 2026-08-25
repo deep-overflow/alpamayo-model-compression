@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>정보 경로 지도 — expert는 캐시의 무엇을 필요로 하는가</title>
+
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Pathway map</div>
+  <h1>정보 경로 지도 — expert는 캐시의 무엇을 필요로 하는가</h1>
+  <div class="meta">
+    2026-08-25 · 모델 <code>nvidia/Alpamayo-1.5-10B</code> · val 50 clips × K=8 · Ada 4장 샤딩<br>
+    코드 <code>experiments/head_analysis/run_pathway.py</code>, <code>analyze_pathway.py</code> ·
+    산출물 <code>outputs/pathway_x_v1/</code> ·
+    계획 <code>plans/2026-08-25_pathway-map.md</code><br>
+    방법론 선행: Map the Flow (arXiv 2510.13251) · 미실행 후속 항목:
+    2026-07-20 attention 분석 §4
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">4 / 4</div><div class="l">사전 등록 게이트 통과</div></div>
+  <div class="kpi"><div class="v">43×</div><div class="l">CoC의 토큰당 손상 (vs prompt text)</div></div>
+  <div class="kpi"><div class="v">+0.134</div><div class="l">CoC 차단 ΔminADE 중앙값 (m)</div></div>
+  <div class="kpi"><div class="v">−0.0001</div><div class="l">sink 차단 — 인과적으로 0</div></div>
+</div>
+
+<p>07-20 리포트는 expert가 VLM 캐시의 각 구간에 배분하는 attention <strong>질량</strong>을 쟀고
+(vision 72.6% / prompt text 16.7% / traj-history 3.9% / 생성 CoC 2.3% / sink 1.1%),
+같은 리포트가 곧바로 <strong>“질량은 중요도의 대리 지표가 아니다”</strong>를 보였다.
+그러니 그 표는 “expert가 어디를 보는가”이지 “무엇을 필요로 하는가”가 아니다.
+후자는 한 번도 측정된 적이 없었고, 07-20의 다음 단계 목록에 적힌 뒤 실행되지 않았다.</p>
+
+<p>이 실험은 그 항목을 Map the Flow의 attention-knockout으로 실행한다. 결과는 질량 순서를
+두 곳에서 뒤집는다.</p>
+
+<div class="callout">
+  <strong>핵심.</strong> 생성된 CoC는 캐시에서 중앙값 <strong>10 토큰</strong>에 불과하고 expert가
+  주는 attention 질량도 전 구간 중 가장 작은 2.3%인데, 그것을 막으면
+  <strong>157 토큰짜리 prompt text를 통째로 막는 것보다 2.7배 더 아프다</strong>.
+  토큰당으로는 prompt text의 <strong>43배</strong>, vision의 <strong>16배</strong>다.
+  반대로 sink(1.1% 질량)는 인과적으로 정확히 0이다.
+</div>
+
+<h2><span class="num">1.</span>왜 이 조작이 부분이 아니라 완전 ablation인가</h2>
+
+<p>VLM prefill은 causal이다. 따라서 프롬프트 위치의 K/V는 <strong>뒤이어 생성된 CoC의 영향을 받을
+수 없다.</strong> CoC가 캐시에 남기는 것은 오직 <code>[coc_start, coc_end)</code> 구간의 K/V뿐이고,
+expert는 캐시를 통해서만 VLM과 통신한다.</p>
+
+<p>그러므로 <code>prefix_mask[coc_start:coc_end] = 0</code>은 CoC가 궤적에 미치는 영향을
+<strong>100% 제거</strong>한다. 07-20이 제기했던 두 가설 —
+(a) attention 경로, (b) cache 갱신 경로 — 중 <strong>(b)는 causal masking 하에서 구조적으로
+불가능</strong>하다. 이 실험은 (a)의 크기를 직접 잰다.</p>
+
+<div class="note">
+  <strong>부수 confound 하나.</strong> <code>offset = prefill</code>이 CoC 길이를 포함하므로,
+  CoC 위치를 막아도 diffusion 토큰의 RoPE 위치는 CoC 길이만큼 밀려 있다.
+  동일 길이 무작위 구간 차단(G0)이 이 효과를 흡수한다 — 실측된 무작위 통제 효과는 −0.0001로 0이다.
+</div>
+
+<h2><span class="num">2.</span>설계</h2>
+
+<p>조작은 신규 수술 코드가 필요 없었다. 릴리스의 <code>denoise_with_cache</code>가 이미 캐시
+위치별 <code>prefix_mask</code>를 받고, <code>_build_expert_pos_ids_and_attn_mask</code>가
+그것을 <code>finfo.min</code>으로 바꿔 36개 expert layer 전부에 적용한다.</p>
+
+<pre>클립당
+  1) 무손상 모델이 CoC를 1회 생성                         (rollout)
+  2) 그 토큰열로 teacher-forced VLM forward 1회  →  캐시 하나
+  3) 16개 config가 그 캐시를 그대로 재사용, prefix_mask만 교체
+  4) config마다 K=8 denoise, 시드는 config 간 동일
+  5) minADE@8</pre>
+
+<p>이 구조가 통제하는 것이 설계의 전부다. <strong>VLM 쪽이 config 간 비트 단위로 동일</strong>하므로
+CoC NLL이 config 간 상수이고(실제로 클립당 한 번만 기록: 0.179), <strong>텍스트 변화와 경로
+변화가 섞일 수 없다.</strong> 이것이 OOD teacher-forcing 실험(GT CoC vs 자기 rollout)이 하지
+못했던 분리다 — 거기서는 텍스트가 바뀌면 그 뒤 캐시 전체가 바뀐다.</p>
+
+<p>시드는 <code>sha256(seed:clip_id)</code>로 클립 정체성에서 유도하므로 샤딩·순서·재시작이
+결과를 바꾸지 못한다. (기존 <code>run_eval.py</code>는 루프 인덱스를 써서 샤드와 전체 실행이
+어긋나는 알려진 함정이 있다.)</p>
+
+<h2><span class="num">3.</span>결과 (사실)</h2>
+
+<p>n=50 val clips, K=8. 무차단 minADE는 중앙값 0.4677 / 평균 0.9597.
+minADE 델타가 heavy-tailed이므로(클립별 baseline이 0.04–7.2 m) <strong>중앙값과 그
+bootstrap CI가 주 판독</strong>이고 평균은 병기한다 — 2026-07-29 grid에서 정착한 관례다.</p>
+
+<table>
+<thead><tr><th>차단 구간</th><th class="r">토큰</th><th class="r">중앙값 Δ</th>
+<th class="r">95% CI (중앙값)</th><th class="r">평균 Δ</th><th class="r">p</th><th class="r">악화</th></tr></thead>
+<tbody>
+<tr><td>vision</td><td class="r">2,880</td><td class="r bad">+2.3786</td><td class="r">[+1.450, +3.345]</td><td class="r">+3.0198</td><td class="r">5.9e−10</td><td class="r">45/50</td></tr>
+<tr><td>hist + text + sink + coc</td><td class="r">216</td><td class="r bad">+0.4797</td><td class="r">[+0.297, +0.826]</td><td class="r">+0.6455</td><td class="r">6.5e−05</td><td class="r">40/50</td></tr>
+<tr><td><strong>생성 CoC</strong></td><td class="r">10</td><td class="r bad">+0.1336</td><td class="r">[+0.029, +0.220]</td><td class="r">−0.0088</td><td class="r">4.0e−02</td><td class="r">34/50</td></tr>
+<tr><td>traj-history</td><td class="r">48</td><td class="r bad">+0.1243</td><td class="r">[+0.055, +0.189]</td><td class="r">+0.1731</td><td class="r">2.9e−04</td><td class="r">36/50</td></tr>
+<tr><td>prompt text</td><td class="r">157</td><td class="r">+0.0488</td><td class="r">[−0.002, +0.072]</td><td class="r">+0.0889</td><td class="r">2.0e−02</td><td class="r">31/50</td></tr>
+<tr><td>sink (pos 0)</td><td class="r">1</td><td class="r good">−0.0001</td><td class="r">[−0.005, +0.004]</td><td class="r">−0.0102</td><td class="r">0.63</td><td class="r">24/50</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::pathway::pathway_x.png" alt="pathway map results">
+  <figcaption>좌: 구간별 paired ΔminADE(symlog). 분홍 = CI가 0을 배제.
+  중앙: 각 구간과 동일 크기 무작위 차단의 대조 — 무작위 통제는 전부 0에 붙어 있다.
+  우: attention 질량(x) 대 인과 손상(y), 양축 로그. 두 축이 정렬하지 않는다.</figcaption>
+</figure>
+
+<h3>3.1 토큰당으로 보면 순서가 완전히 바뀐다</h3>
+
+<table>
+<thead><tr><th>구간</th><th class="r">토큰</th><th class="r">중앙값 Δ</th><th class="r">토큰당 손상</th>
+<th class="r">attention 질량</th><th class="r">토큰당 질량</th></tr></thead>
+<tbody>
+<tr><td><strong>생성 CoC</strong></td><td class="r">10</td><td class="r">+0.1336</td><td class="r bad">1.34e−02</td><td class="r">0.0230</td><td class="r">2.30e−03</td></tr>
+<tr><td>traj-history</td><td class="r">48</td><td class="r">+0.1243</td><td class="r">2.59e−03</td><td class="r">0.0393</td><td class="r">8.19e−04</td></tr>
+<tr><td>vision</td><td class="r">2,880</td><td class="r">+2.3786</td><td class="r">8.26e−04</td><td class="r">0.7255</td><td class="r">2.52e−04</td></tr>
+<tr><td>prompt text</td><td class="r">157</td><td class="r">+0.0488</td><td class="r">3.11e−04</td><td class="r">0.1667</td><td class="r">1.06e−03</td></tr>
+<tr><td>sink</td><td class="r">1</td><td class="r">−0.0001</td><td class="r good">−1.15e−04</td><td class="r">0.0109</td><td class="r">1.09e−02</td></tr>
+</tbody>
+</table>
+
+<p>토큰당 손상비: <strong>CoC / prompt text = 43.0×</strong>, CoC / vision = 16.2×,
+CoC / traj-history = 5.2×.</p>
+
+<h3>3.2 게이트 판정</h3>
+
+<table>
+<thead><tr><th>게이트</th><th>조건</th><th>실측</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><strong>G3</strong> 양성 통제</td><td>vision 차단이 파국적</td>
+<td>+2.379 [+1.450, +3.345], p=5.9e−10</td><td class="good">PASS</td></tr>
+<tr><td><strong>G0</strong> 무작위 통제</td><td>구간이 동일 크기 무작위보다 나쁨</td>
+<td>hist +0.130 · CoC +0.140 · text +0.060 (전부 CI가 0 배제) ·
+sink −0.000 (분리 안 됨)</td><td class="good">PASS</td></tr>
+<tr><td><strong>G1</strong> 질량 ≠ 인과</td><td>Spearman(손상, 질량) &lt; 0.9</td>
+<td>ρ = +0.600</td><td class="good">PASS</td></tr>
+<tr><td><strong>G2</strong> 주 판정</td><td>CoC 차단 CI가 0 배제</td>
+<td>+0.134 [+0.029, +0.220], p=0.040</td><td class="good">PASS (경계)</td></tr>
+</tbody>
+</table>
+
+<p>무작위 통제 자체는 전부 0이다 — hist_rand −0.0005, coc_rand −0.0001, text_rand −0.0024,
+sink_rand +0.0002 (모두 p&gt;0.18). 즉 “10개 토큰을 아무거나 막는 것”은 무해하고,
+<strong>그 10개가 CoC일 때만</strong> +0.134가 된다.</p>
+
+<p>sink만 무작위와 분리되지 않는데, 이는 게이트 실패가 아니라 <strong>sink의 손상 자체가
+0이라 분리할 대상이 없기 때문</strong>이다(구간 −0.0001 vs 무작위 +0.0002).
+G0가 판정하는 것은 손상이 있는 구간에서 그 손상이 위치 특이적인가이고, 세 구간 모두 그렇다.</p>
+
+<div class="note">
+  <strong>vision의 G0는 구조적으로 판정 불가다.</strong> vision은 캐시의 93%라 동일 크기
+  무작위 2,880개가 사실상 전체를 막는다 — 실제로 무작위 쪽이 더 파괴적이다(+2.563 vs +2.379).
+  통제가 아니라 퇴화이므로 게이트에서 제외했다.
+</div>
+
+<h3>3.3 카메라 — 망원 하나만 인과적으로 필요하다</h3>
+
+<table>
+<thead><tr><th>카메라 (프롬프트 순서 = 인덱스 오름차순)</th><th class="r">토큰</th>
+<th class="r">중앙값 Δ</th><th class="r">95% CI</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>cross_left_120</td><td class="r">720</td><td class="r">+0.0101</td><td class="r">[−0.012, +0.042]</td><td class="r">0.24</td></tr>
+<tr><td>front_wide_120</td><td class="r">720</td><td class="r">−0.0121</td><td class="r">[−0.044, +0.024]</td><td class="r">0.49</td></tr>
+<tr><td>cross_right_120</td><td class="r">720</td><td class="r">+0.0154</td><td class="r">[−0.007, +0.047]</td><td class="r">0.17</td></tr>
+<tr><td><strong>front_tele_30</strong></td><td class="r">720</td><td class="r bad">+0.0803</td><td class="r">[+0.026, +0.157]</td><td class="r">2.2e−03</td></tr>
+</tbody>
+</table>
+
+<p>네 카메라 중 <strong>전방 망원만</strong> 차단이 유의하고, 나머지 셋은 개별적으로 잉여다.
+07-20이 잰 카메라별 attention 질량은 cross-left 20.1% / front-wide 9.3% /
+<strong>front-tele 6.4%</strong> / cross-right 3.4%였다 — 질량으로는 아래에서 두 번째인
+카메라가 인과적으로는 유일하게 필요한 카메라다.</p>
+
+<h2><span class="num">4.</span>분석 (해석)</h2>
+
+<h3>4.1 질량 대 인과의 어긋남이 구체적인 숫자가 됐다</h3>
+
+<p>이 저장소가 반복해서 배운 “attention 질량 ≠ 중요도”가 지금까지는 유닛 축의 상관계수
+(layer 내 ρ=+0.078)로만 있었다. 이제 구간 축에서 방향까지 뒤집힌 사례가 둘이다:</p>
+
+<ul>
+  <li><strong>CoC vs prompt text</strong> — 질량은 CoC가 1/7인데(2.3% vs 16.7%) 손상은 2.7배다.</li>
+  <li><strong>front-tele vs 나머지 카메라</strong> — 질량은 아래에서 둘째인데 유일하게 유의하다.</li>
+  <li><strong>sink</strong> — 1.1%의 질량을 받으면서 인과적으로 정확히 0이다(−0.0001, p=0.63).
+    attention sink가 “질량 주차”라는 해석이 tower를 건너서도 확인된다.</li>
+</ul>
+
+<h3>4.2 CoC의 밀도는 07-20의 관찰과 정합적이다</h3>
+
+<p>07-20은 <em>토큰당</em> attention으로 보면 CoC가 vision보다 8–10배 높은 attention을 받는다고
+기록했다. 이번 결과는 그 관찰의 인과 버전이고 배율이 더 크다 — <strong>토큰당 손상으로는
+vision의 16.2배</strong>. 총 질량이 작은 것은 선호도가 낮아서가 아니라 CoC 토큰 자체가
+적기 때문이라는 해석이 인과 측정으로 확인된다.</p>
+
+<h3>4.3 G2는 통과했지만 경계선이고, 그 이유가 흥미롭다</h3>
+
+<div class="callout">
+  <strong>정직하게.</strong> CoC 차단의 <strong>중앙값</strong>은 +0.134로 CI가 0을 배제하지만
+  (p=0.040), <strong>평균</strong>은 −0.0088로 오히려 음수이고 유의하지 않다.
+  전형적인 클립에서는 CoC를 막으면 아프지만, baseline이 이미 크게 실패한 소수 클립
+  (클립별 baseline 최대 7.2 m)에서는 섭동이 우연히 GT에 가까워져 평균을 끌어내린다.
+</div>
+
+<p>그래서 정확한 진술은 <strong>“전형적인 클립에서 CoC는 궤적에 인과적으로 기여한다”</strong>이고,
+“평균적으로 기여한다”가 아니다. p=0.040은 강한 증거가 아니며, 재현을 요구할 만한 강도는
+아니다. 다만 G2는 실행 전에 주 종점으로 등록된 확증 검정이고, 같은 방향이
+G0 대조(+0.140, p=0.031)에서 독립적으로 재현된다.</p>
+
+<h3>4.4 이 결과가 이 저장소의 서사에 하는 일</h3>
+
+<p>이 프로젝트는 한 달 동안 “추론 보존이 안전을 산다”를 <strong>상관</strong>으로 주장해 왔다
+(OOD +0.499 vs +0.112, 폐루프 과실충돌 2→8건, THW 5%ile −1.19초). 이번 실험은 처음으로
+<strong>경로</strong>를 끊어 크기를 쟀다. §1의 causal 논증에 의해 이것이 전체 통로이므로,
+결과는 “CoC는 attention 경로로 궤적에 직접 기여하며 그 크기는 전형적 클립에서 +0.134 m”다.</p>
+
+<p>동시에 그 크기가 <strong>vision(+2.379)의 1/18</strong>이라는 점도 같이 읽어야 한다.
+추론은 실재하지만 지배적이지 않다 — 폐루프에서 관측된 큰 안전 효과(충돌 4배)는 이
+경로 하나로 설명되지 않으며, 거기서는 CoC가 붕괴하면 캐시 텍스트 자체가 바뀌므로
+이 실험이 끊은 경로 <em>밖의</em> 효과가 살아 있다.</p>
+
+<h2><span class="num">5.</span>한계</h2>
+
+<ul>
+  <li><strong>layer 해상도가 없다.</strong> <code>prefix_mask</code>는 36개 expert layer에 일괄
+    적용된다. “몇 번째 layer에서 CoC가 필요한가”는 Stage 2의 per-layer hook이 필요하다.</li>
+  <li><strong>key 차단은 softmax 질량을 재분배한다.</strong> head 제거와 달리 불가피하며
+    Map the Flow도 같은 조건이다. “knockout 효과 = 제거 효과”가 아니다.</li>
+  <li><strong>다중비교.</strong> 16개 config를 쟀다. G2·G3는 사전 등록된 확증 검정이지만
+    카메라별 분해와 토큰당 비율은 탐색적이다.</li>
+  <li><strong>VLM 내부 edge는 미측정이다.</strong> cross-frame / cross-camera / vision→CoC 등
+    E 계열은 Stage 2다.</li>
+  <li><strong>개루프 전용이고 n=50이다.</strong> 이 저장소의 반복된 교훈상 폐루프 판정은 별개다.</li>
+  <li>CoC 길이는 클립마다 9–19 토큰으로 다르다. 토큰당 수치는 첫 클립의 10 토큰을 기준으로
+    한 근사다.</li>
+</ul>
+
+<h2><span class="num">6.</span>다음</h2>
+
+<ul>
+  <li><strong>Stage 2 (E 계열).</strong> VLM 내부 edge를 layer window(k=9)로 끊어 경로 지도를
+    완성한다. readout이 둘(CoC NLL / 궤적)이라 Map the Flow가 그릴 수 없는 지도가 된다.</li>
+  <li><strong>front-tele 결과의 확인.</strong> 카메라 하나가 인과를 독점한다는 것은 vision token
+    예산 배분(07-27 조사의 1순위 축)에 직접 쓰이는 결과다. 탐색적이므로 별도 표본이 필요하다.</li>
+  <li><strong>CoC 길이 조건부 분해.</strong> CoC가 긴 클립에서 손상이 큰지 보면 “추론의 양이
+    궤적에 얼마나 값하는가”가 곡선으로 나온다 — 추가 실행 없이 저장된 per-clip 값으로 가능하다.</li>
+</ul>
+
+<h2><span class="num">7.</span>재현</h2>
+
+<pre>bash experiments/head_analysis/run_pathway.sh 20 --gpu 4 --num-clips 13 --clip-offset 0 \
+     --k 8 --exp-id pathway_x_s0            # (+ s13 / s26 / s38 을 GPU 5·6·7 에)
+
+python experiments/head_analysis/analyze_pathway.py \
+     --shards pathway_x_s0 pathway_x_s13 pathway_x_s26 pathway_x_s38 \
+     --out pathway_x_v1 --outputs-root &lt;abs&gt;/outputs</pre>
+
+<p class="meta">시드 42 (클립 유도), K=8, Ada(RTX 5880) 4장, val split 앞 50클립.
+게이트 산식은 <code>plans/2026-08-25_pathway-map.md</code>.</p>
+
+</div>
+</body>
+</html>
