@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Denoising 스텝별 중요도 — Action Expert</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>Denoising 스텝별 중요도 &mdash; action expert의 Taylor 기준이 magnitude에 지는 이유</h1>
+  <div class="meta">
+    2026-08-21 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>)
+    &middot; 중요도 측정 <code>calib_100</code> 100 clips, Ada
+    &middot; 마스킹 스윕 <code>indist_500</code>[:60], K=4 &middot; 집계 arm <code>indist_500</code>[60:260], K=8, minADE@6
+    &middot; 전부 Ada (GPU 6&ndash;7)
+    &middot; 코드 <code>run_step_importance.py</code> / <code>run_step_mask.py</code> / <code>run_expert_agg.py</code>
+    &middot; 산출물 <code>outputs/stepimp_analysis/</code>, <code>outputs/stepagg_analysis/</code>
+    &middot; 계획 <code>plans/2026-08-21_denoise-step-importance.md</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>요약</h2>
+
+<div class="callout">
+  <p><strong>결론.</strong> denoising 스텝마다 중요한 유닛이 실제로 다르다. 각 스텝이 혼자 고르면 남길
+  Q head 중 <strong>45.8%만이 10개 스텝 전부에서 살아남고</strong>, 합집합은 1.45배 &mdash; 60% 폭 마스크
+  하나로 10개 스텝을 모두 덮으려면 <strong>90.5%</strong> 폭이 필요하다 &mdash; 예산은 62.5%만
+  허용한다. 현행 정적 마스크는 어느 스텝과도 74&ndash;87%만 일치하는 타협안이다.</p>
+  <p><strong>다만 기전은 예상과 달랐다.</strong> 코드 실사에서 찾은 부호 상쇄
+  (스텝 축은 <code>|&Sigma;<sub>s</sub> g<sub>s</sub>|</code>, 클립 축은 <code>&Sigma;|&middot;|</code>)는
+  실재하지만 선택을 거의 바꾸지 않았고(겹침 0.93), 대신 <strong>사전 등록에 없던 결함</strong>이 같은
+  크기로 드러났다: 클립 평균이 소수 클립에 지배된다 &mdash; step 0에서 100개 중 1개 클립이 전체
+  중요도 질량의 <strong>49%</strong>를 차지하고, 상위 10%를 절사하면 선택의 14%가 바뀐다.
+  (두 축은 독립이 아니다 &mdash; 클립 이상치가 스텝 불균형을 부풀린다. 9.3절.)</p>
+  <p><strong>그리고 고치면 실제로 나아진다 &mdash; expert에서는.</strong> 같은 기울기를 스텝별로
+  레이어 내 z-정규화만 해서 다시 합치면(<code>znorm</code>), r=0.25에서 ΔminADE@6이
+  <strong>+0.0977 &rarr; +0.0003</strong>으로 떨어져 무압축과 구별되지 않고, magnitude(+0.0601)를
+  넘어선다. 이 트랙의 출발점이었던 "expert에서는 magnitude가 Taylor를 이긴다"는 관측은
+  <strong>Taylor 신호의 한계가 아니라 스텝 축 집계의 결함</strong>이었다.</p>
+  <p style="margin-bottom:0"><strong>그러나 VLM tower로는 이전되지 않는다 (11절).</strong> 출시된
+  <code>*_u40_v2</code> 기준의 절반인 <code>traj_vlm_*</code>도 똑같은 <code>|&Sigma;<sub>s</sub>|</code>
+  결함을 갖고 있어 같은 수정을 적용해 봤는데, 매칭 예산 one-factor에서 minADE@6이
+  <strong>+0.79 악화</strong>했다. 기전은 <strong>스텝 질량 프로파일의 모양</strong>이다: expert는 U자라
+  늦은 스텝이 다시 중요해지는데 합산이 그걸 묻어버리고(정규화가 회복), VLM은 단조 감소라 질량
+  순서가 곧 진짜 중요도다(정규화가 파괴). 질량 순서를 보존하는 유일한 대안
+  <code>sumabs</code>는 무효과였다(&minus;0.006). <strong>VLM에서 스텝 축은 고칠 결함이 아니라
+  이미 맞는 것이고, "질량이 N배 불균형하다"는 사실만으로는 정규화의 방향을 알 수 없다.</strong></p>
+  <p style="margin-bottom:0"><strong>폐루프는 아직 판정 불가다 (12절).</strong> expert znorm을
+  물리 체크포인트로 만들어 alpasim 150 scene을 돌렸으나 &Delta;score &minus;0.0297
+  [&minus;0.065, +0.005]로, 이 표본이 분해할 수 있는 크기(&plusmn;0.080)의 절반도 안 된다.
+  방향은 음수이고(31승 52패, p=0.067) 압축률이 4.8%뿐이라는 점이 신경 쓰인다.
+  <strong>배포 주장은 아직 할 수 없다.</strong></p>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">+0.0003</div><div class="l"><strong>expert</strong> <code>znorm</code> r=0.25<br>현행 +0.0977, magnitude +0.0601</div></div>
+  <div class="kpi"><div class="v">+0.79</div><div class="l"><strong>VLM</strong> 같은 수정<br>매칭 예산에서 악화</div></div>
+  <div class="kpi"><div class="v">0.717</div><div class="l">스텝 간 ρ (expert Q)<br>잡음 바닥 0.929</div></div>
+  <div class="kpi"><div class="v">45.8%</div><div class="l">모든 스텝에서 살아남는<br>expert Q head 비율</div></div>
+</div>
+
+<table>
+  <tr><th>게이트</th><th>내용</th><th>판정</th><th>근거</th></tr>
+  <tr><td>G0</td><td>분해가 원본 기준을 재현하는가</td><td><strong>PASS</strong></td>
+      <td class="r">rel err 6.3e&minus;05 / ρ 0.99992</td></tr>
+  <tr><td>G1</td><td>스텝 간 부호 상쇄가 기전인가</td><td><strong>INCONCLUSIVE</strong></td>
+      <td class="r">C 중앙 0.637, 겹침 0.925</td></tr>
+  <tr><td>G2</td><td>스텝마다 중요 유닛이 다른가</td><td><strong>ACCEPT</strong></td>
+      <td class="r">ρ 0.717 [0.647,0.787] &lt; 바닥 0.929</td></tr>
+  <tr><td>G3</td><td>훈련 경로 ≠ 추론 경로인가</td><td><strong>REJECT</strong></td>
+      <td class="r">aggregate ρ 0.799 / 0.941</td></tr>
+  <tr><td>G4</td><td>손상이 스텝에 의존하는가</td><td><strong>ACCEPT</strong><br><span class="meta">단, 기전은 유닛이 아니라 체인 위치</span></td>
+      <td class="r">dev max/min 5.15, 기준 간 모양 r=0.990</td></tr>
+  <tr><td>&mdash;</td><td>클립 평균이 이상치에 지배되는가 <span class="tag">사전 등록 외</span></td>
+      <td><strong>확인됨</strong></td><td class="r">top-clip 49%, 절사 시 겹침 0.858</td></tr>
+  <tr><td>G5a</td><td>재집계한 <code>sum</code>이 현행 기준인가</td><td><strong>PASS</strong></td>
+      <td class="r">kept-overlap 1.000000 / 0.999714</td></tr>
+  <tr><td>G5b</td><td>더 나은 집계가 현행을 이기는가 (r=0.25)</td><td><strong>ACCEPT</strong></td>
+      <td class="r"><code>znorm</code> &minus;0.0973 [&minus;0.154, &minus;0.046]</td></tr>
+  <tr><td>G5c</td><td>magnitude와의 격차를 50% 이상 줄이는가</td><td><strong>PASS</strong><br><span class="meta">닫힌 게 아니라 뒤집힘</span></td>
+      <td class="r"><code>znorm</code>이 magnitude보다 0.0598 우수</td></tr>
+  <tr><td>G5d</td><td><code>sumabs</code>는 무효과일 것 (음성 예측)</td><td><strong>부분 적중</strong></td>
+      <td class="r">r25 무효과, r40에서는 &minus;0.1185로 유의</td></tr>
+  <tr><td colspan="4" style="background:var(--bg-code);font-weight:600">VLM tower (11절, 2026-08-22)</td></tr>
+  <tr><td>V0</td><td>VLM 분해가 원본을 재현하는가</td><td><strong>PASS</strong></td>
+      <td class="r">rel 8.7e&minus;04, kept-overlap 1.0000</td></tr>
+  <tr><td>V1</td><td>수정이 선택을 바꾸는가 (무료 go/no-go)</td><td><strong>GO</strong></td>
+      <td class="r">traj 단독 8.5% / 10.8% 변화</td></tr>
+  <tr><td>V2</td><td>VLM에서도 더 나은가 (<code>znorm</code>)</td><td><strong>REGRESSION</strong></td>
+      <td class="r">+0.7926 [+0.650, +0.938] &mdash; Stage 3 취소</td></tr>
+  <tr><td>V2b</td><td>질량 순서를 보존하는 <code>sumabs</code>는</td><td><strong>무효과</strong></td>
+      <td class="r">&minus;0.0060 [&minus;0.077, +0.072], p=0.60</td></tr>
+  <tr><td>V4</td><td>backward 1회로 근사 가능한가</td><td><strong>REJECT</strong></td>
+      <td class="r">겹침 0.956 / 0.922 (문턱 0.98)</td></tr>
+  <tr><td colspan="4" style="background:var(--bg-code);font-weight:600">폐루프 (12절, 2026-08-23)</td></tr>
+  <tr><td>&mdash;</td><td>expert znorm이 폐루프에서 무압축과 같은가</td>
+      <td><strong>판정 불가</strong><br><span class="meta">해상도 아래</span></td>
+      <td class="r">&Delta;score &minus;0.0297 [&minus;0.065, +0.005]<br><span class="meta">N=150은 0.080까지만 분해</span></td></tr>
+</table>
+
+<h2><span class="num">2.</span>왜 이걸 쟀나</h2>
+
+<p>Expert tower에서만 기준의 우열이 뒤집힌다. 같은 예산에서 <strong>VLM</strong>은 Taylor 계열이 압도하는데
+(activation-aware magnitude인 Wanda는 test_500 minADE 2.77 / CoC degen 87.6%로 붕괴, dual Taylor는
+0.74 / 3.2%), <strong>expert</strong>는 r10&ndash;r25 구간에서 순수 weight magnitude가 trajectory Taylor를
+이긴다.</p>
+
+<table>
+  <tr><th>ratio (expert, 전체 layer)</th><th class="r">traj Taylor ΔminADE</th><th class="r">magnitude ΔminADE</th><th class="r">random ΔminADE</th></tr>
+  <tr><td>r10</td><td class="r">+0.0176</td><td class="r"><strong>&minus;0.0021</strong></td><td class="r">+0.0952*</td></tr>
+  <tr><td>r25</td><td class="r">+0.0776*</td><td class="r"><strong>+0.0091</strong></td><td class="r">+0.4386*</td></tr>
+  <tr><td>r40</td><td class="r"><strong>+0.1505*</strong></td><td class="r">+0.1671*</td><td class="r">+0.6433*</td></tr>
+  <tr><td>r50</td><td class="r"><strong>+0.4980*</strong></td><td class="r">+1.2935*</td><td class="r">+2.0364*</td></tr>
+</table>
+<p class="meta">출처 <code>outputs/expert_abl_summary</code> (n=80, 구 프로토콜). * = 95% bootstrap CI가 0을 배제.</p>
+
+<p>타워를 바꾸면 기준의 우열이 뒤집히므로, 원인은 기준 자체가 아니라 expert tower의 구조적
+특성일 가능성이 높다. 두 타워의 가장 큰 구조적 차이는 <strong>VLM은 1회, expert는 서로 다른 diffusion
+time으로 10회 실행된다</strong>는 점이다. 하나의 정적 마스크가 10번의 서로 다른 계산을 모두 감당해야
+한다면, 스텝 축을 뭉갠 중요도는 기준으로서 손해일 수 있다 &mdash; 이것이 이번 측정의 가설이다.</p>
+
+<h3>2.1 코드 실사: 현행 기준의 정확한 정의</h3>
+
+<p><code>prune_lib.expert_fm_grads</code>는 10개 스텝(t = 0.05 … 0.95)마다 <code>loss.backward()</code>를
+부르지만 <strong>스텝 사이에 게이트 grad를 zero하지 않는다</strong>. 따라서 유닛 <em>u</em>의 점수는</p>
+
+<table>
+  <tr><th>축</th><th>집계 규칙</th><th>결과</th></tr>
+  <tr><td>스텝</td><td><code>|&Sigma;<sub>s</sub> &part;L<sub>s</sub>/&part;g<sub>u</sub>|</code></td><td>합의 절댓값 &mdash; 부호가 엇갈리면 <strong>상쇄</strong></td></tr>
+  <tr><td>클립</td><td><code>&Sigma;<sub>clips</sub> |&middot;|</code></td><td>절댓값의 합 &mdash; 상쇄 없음</td></tr>
+</table>
+
+<p>두 축의 집계 규칙이 비대칭이다. 같은 비대칭이 <code>traj_vlm_*</code>·<code>traj_kv_*</code>에도 있다
+(캐시 leaf의 grad가 10스텝 누적된 뒤 단 한 번의 VLM backward를 태우므로 역시 <code>|&Sigma;<sub>s</sub>|</code>).
+이 관찰이 H1(부호 상쇄) 가설의 출발점이었다.</p>
+
+<h2><span class="num">3.</span>측정 설계</h2>
+
+<table>
+  <tr><th>측정</th><th>무엇</th><th>산출</th></tr>
+  <tr><td>A. FM 경로</td>
+      <td>스텝마다 grad를 읽고 zero &mdash; 부호 있는 <code>g<sub>u,s</sub></code> 보존.
+          <code>--noise-mode per_step</code>은 원본 구성을 정확히 재현(G0),
+          <code>shared</code>는 하나의 ε를 t 격자에 공유해 스텝 비교를 짝지음</td>
+      <td><code>stepimp_fm_perstep_v2</code><br><code>stepimp_fm_shared_v2</code></td></tr>
+  <tr><td>B. 추론 경로</td>
+      <td>모델 자신의 Euler 궤적(t = 0.0 … 0.9)을 grad 켠 채 돌리고 <strong>스텝별 게이트</strong>를 태워,
+          최종 궤적 오차에 대한 한 번의 backward로 모든 스텝의 grad를 얻음. noise draw K=4</td>
+      <td><code>stepimp_infer</code></td></tr>
+  <tr><td>C. 스텝-한정 마스킹</td>
+      <td>기울기 가정 없이: 고정 마스크를 <strong>정확히 한 스텝에만</strong> 적용하고 나머지 아홉은 dense</td>
+      <td><code>stepmask_v1</code></td></tr>
+</table>
+
+<div class="note">
+  <strong>G0 기준선은 왜 다시 쟀나.</strong> 원본 <code>importance_v2</code>는 Blackwell에서 측정됐고 이번
+  분해는 Ada에서 돈다. 아키텍처가 다르면 3&ndash;4% 클립의 CoC 텍스트가 달라져 캐시가 달라지므로, 그
+  차이가 구현 오차로 오독된다. 같은 100클립·같은 시드로 원본을 Ada에서 다시 돌려
+  (<code>importance_v2_ada</code>) 비교했다. 실측된 아키텍처 드리프트는 상대오차 중앙값 <strong>2.1%</strong>
+  (Q head, 레이어별 ρ 0.9916)로, 구현 오차 6.3e&minus;05의 약 <strong>340배</strong>다 &mdash; 다시 재지
+  않았다면 G0는 통과하지 못했을 것이다.
+</div>
+
+<div class="note">
+  <strong>측정 B의 Euler 루프는 검증했다.</strong> <code>FlowMatching.sample</code>이
+  <code>@torch.no_grad</code>로 감싸여 있어 추론 경로의 스텝별 기울기를 재려면 Euler 적분을
+  재구현해야 했다. 재구현이 조용히 어긋나면 추론-경로 수치 전부가 모델이 실제로 밟지 않는 궤적을
+  묘사하게 되므로, 같은 x<sub>0</sub>를 양쪽에 주입해 최종 액션을 비교했다
+  (<code>verify_step_euler.py</code>). <strong>첫 검증은 FAIL</strong>(상대차 1.46e&minus;02, 재시도
+  5회에서 완전히 동일 &mdash; 확률적 잡음이 아님)이었고, 원인은 <code>action_in_proj</code>에 넘기는
+  <code>x</code>를 bf16으로 미리 캐스팅한 것이었다. 공식 <code>step_fn</code>은 fp32를 그대로 넘기고
+  autocast가 Linear 내부에서 처리한다. 수정 후 <strong>PASS</strong>(상대차 7.4e&minus;03, 평균 절대차
+  3.6배 감소)이며, 남은 잔차는 36레이어 &times; 10스텝 bf16 누적 수준이다. 본문의 추론-경로 수치는
+  전부 수정 후 재측정한 것이다.
+</div>
+
+<h2><span class="num">4.</span>G2 &mdash; 스텝마다 중요한 유닛이 다르다 <span class="tag">주 결과</span></h2>
+
+<p>스텝 <em>s</em>와 <em>s&prime;</em>의 유닛 랭킹 상관(레이어 내 Spearman, 레이어 평균)을, <strong>같은 스텝
+안에서 클립을 반으로 나눈 상관</strong>(잡음 바닥)과 비교한다. 바닥이 없으면 낮은 스텝 간 상관이 "100
+클립으로는 랭킹이 안 정해진다"와 구별되지 않는다. 바닥은 각 절반이 50클립뿐이므로 Spearman-Brown
+(<code>2r/(1+r)</code>)으로 100클립 등가로 보정했다 &mdash; 보정하지 않으면 바닥이 과소평가되어 분석이
+스텝 이질성 쪽으로 편향된다.</p>
+
+<table>
+  <tr><th>유닛</th><th class="r">스텝 간 ρ (중앙값, 95% CI)</th><th class="r">클립 split-half 바닥 (보정)</th><th>판정</th></tr>
+  <tr><td>Q head</td><td class="r"><strong>0.717</strong> [0.647, 0.787]</td><td class="r">0.929 [0.924, 0.933]</td><td>바닥 아래</td></tr>
+  <tr><td>MLP channel</td><td class="r"><strong>0.877</strong> [0.857, 0.895]</td><td class="r">0.945 [0.940, 0.954]</td><td>바닥 아래</td></tr>
+</table>
+
+<p>CI가 겹치지 않는다 &mdash; 스텝 간 차이는 표집 잡음이 아니다. <strong>Q head가 MLP 채널보다 훨씬
+스텝-특화</strong>되어 있다(0.717 vs 0.877). 선택 수준에서 보면 더 직접적이다.</p>
+
+<table>
+  <tr><th>유닛</th><th class="r">스텝 간 kept 겹침 (중앙/최소)</th><th class="r">모든 스텝에서 살아남는 비율</th><th class="r">합집합 / k</th><th class="r">모든 스텝 커버에 필요한 폭</th></tr>
+  <tr><td>Q head</td><td class="r">0.822 / 0.658</td><td class="r"><strong>0.458</strong></td><td class="r">1.45&times;<br><span class="meta">14.47 / 16개</span></td><td class="r"><strong>90.5%</strong><br><span class="meta">예산은 62.5%</span></td></tr>
+  <tr><td>MLP channel</td><td class="r">0.869 / 0.802</td><td class="r">0.659</td><td class="r">1.36&times;<br><span class="meta">6749 / 8256개</span></td><td class="r">81.8%<br><span class="meta">예산은 60.0%</span></td></tr>
+</table>
+
+<div class="note">
+  <strong>"합집합 1.45배"를 구체적으로.</strong> expert Q head는 레이어당 16개고, 이 예산은 그중
+  <strong>10개</strong>를 남긴다. 10개 스텝 각각에게 "혼자 고른다면 어느 10개?"를 물으면, 그
+  열 벌의 답이 합쳐서 <strong>14.47종류</strong>의 유닛을 가리킨다(= 10의 1.45배). 예산은 10개뿐이니
+  <strong>약 4.5개가 초과 수요</strong>다. 바꿔 말해 어떤 정적 마스크를 골라도 "어떤 스텝에게는
+  필요한데 잘려나간" 유닛이 최소 4~5개 남는다 &mdash; 기준을 아무리 잘 만들어도 이 예산 안에서는
+  원리적으로 해소되지 않는다. 모든 스텝을 만족시키려면 16개 중 14.47개, 즉 <strong>90.5%</strong>를
+  남겨야 하는데 예산은 62.5%다.
+</div>
+
+<figure>
+  <img src="PLOT::sa::step_rho.png" alt="step-to-step Spearman heatmap">
+  <figcaption>스텝 간 유닛 랭킹 상관 행렬. 대각에서 멀어질수록 상관이 떨어진다 &mdash; 인접 스텝끼리는
+  비슷하고 먼 스텝끼리는 다르다는 뜻으로, 무작위 잡음이라면 나올 수 없는 구조다.</figcaption>
+</figure>
+
+<p>현행 정적 마스크(<code>traj_exp_*</code>)가 어느 스텝을 대변하는지 보면, Q head 기준 스텝별 겹침이
+0.85, 0.87, 0.83, 0.83, 0.81, 0.81, 0.79, 0.78, 0.77, <strong>0.74</strong>다. 특정 스텝에 특화된 것이
+아니라 <strong>모든 스텝과 고르게 어긋나 있다</strong> &mdash; 그리고 뒤로 갈수록 더 어긋난다.</p>
+
+<figure>
+  <img src="PLOT::sa::depth_by_step.png" alt="depth profile per step">
+  <figcaption>스텝별 깊이 프로파일(행 정규화). Q head 중요도의 무게중심은 t가 커질수록 레이어 23.7 →
+  20.8로 앞당겨진다. 늦은 diffusion time일수록 expert는 더 이른 레이어에 의존한다.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>주의: "스텝 0의 질량이 크다" &ne; "초반 스텝이 실제로 중요하다".</strong>
+  이 표들의 질량은 <em>그 스텝의 손실 <code>L<sub>s</sub></code>가 유닛에 얼마나 민감한가</em>일
+  뿐이고, 세 가지 서로 다른 양을 구분해야 한다.
+  <table style="margin:0.75rem 0">
+    <tr><th>양</th><th>무엇을 재나</th><th class="r">최대인 스텝 (expert)</th></tr>
+    <tr><td>기울기 질량</td><td>스텝별 손실의 유닛 민감도</td><td class="r"><strong>s=0</strong></td></tr>
+    <tr><td>실측 손상 <code>dev(s)</code></td><td>그 스텝의 섭동이 최종 궤적에 남는 정도</td><td class="r"><strong>s=9</strong> (5.2배)</td></tr>
+    <tr><td>유닛 중요도</td><td>가지치기가 실제로 알고 싶은 것</td><td class="r">&mdash;</td></tr>
+  </table>
+  <p style="margin:0 0 0.6rem">앞의 둘이 <strong>정반대 스텝에서 최대</strong>라는 것이 셋이 같지
+  않다는 직접 증거다(8절). 기울기 질량은 스텝별 손실만 보고, 그 오차가 뒤에서 교정될지 여부는
+  모른다.</p>
+  <p style="margin:0"><strong>그리고 답이 타워마다 다르다 &mdash; 이것이 이 보고서의 핵심이다.</strong>
+  VLM에서는 질량 순서가 <em>참</em>이었다(평탄화하니 +0.79 악화, 11절). expert에서는 상당 부분
+  <em>허상</em>이었다: 평탄화하니 &minus;0.097 개선됐고(9절), 이상치 클립을 잘라내자 불균형이
+  7.68배 &rarr; 2.78배로 무너졌다(9.3절). <strong>질량 프로파일만 보고는 어느 쪽인지 알 수 없고,
+  잘라서 재봐야 안다.</strong></p>
+</div>
+
+<h2><span class="num">5.</span>G1 &mdash; 부호 상쇄는 주 기전이 아니다</h2>
+
+<div class="note">
+  <strong>"기전은 예상과 달랐다"를 풀어서.</strong> 코드를 읽고 세운 예상은 이랬다 &mdash;
+  스텝 축은 <code>|g<sub>0</sub> + g<sub>1</sub> + &hellip; + g<sub>9</sub>|</code>로 <em>먼저 더하고
+  절댓값</em>을 취한다. 그러면 스텝 0에서 +5, 스텝 5에서 &minus;5인 유닛은 합이 0이 되어
+  <strong>양쪽 스텝 모두에서 중요한데도 "안 중요하다"고 채점</strong>된다. 클립 축은 반대로
+  <em>절댓값을 먼저</em> 취하므로 이런 소거가 없다. 이 비대칭이 범인일 것이라고 봤다.
+  <br><br>
+  <strong>절반만 맞았다.</strong> 상쇄는 실제로 일어난다 &mdash; 기울기 크기의 36%(Q head)가
+  소거된다. 그런데 <strong>어느 유닛을 자를지는 거의 안 바뀐다</strong>(겹침 0.925). 이유는
+  단순하다: 상쇄가 <em>거의 모든 유닛의 점수를 비슷한 비율로</em> 줄이기 때문에 <strong>순위가
+  보존</strong>되고, 가지치기는 점수의 크기가 아니라 레이어 안에서의 순위만 본다. 숫자를 전부
+  바꾸지만 순서를 안 바꾸는 결함은 선택에 무해하다.
+  <br><br>
+  <strong>대신 안 보던 곳에 같은 크기의 결함이 있었다</strong>(6절). 점수는 100개 캘리브레이션
+  클립의 <em>평균</em>인데, 스텝 0에서 <strong>단 1개 클립이 전체 중요도 질량의 49%</strong>를
+  차지한다. 즉 "100클립 평균"이 사실상 그 한 클립의 의견이다. 상위 10% 클립을 잘라내면
+  선택의 14%가 바뀐다 &mdash; 스텝 축을 통째로 바꿀 때와 같은 규모다.
+</div>
+
+<div class="note">
+  <strong>정리하면 후보 결함이 셋이었고 결과가 갈렸다</strong> (D 단계 r=0.25 실측, 9절):
+  <table style="margin:0.75rem 0 0">
+    <tr><th>후보</th><th>축</th><th>실재하나</th><th class="r">선택을 바꾸나</th><th class="r">minADE가 나아지나</th></tr>
+    <tr><td>부호 상쇄 <span class="tag">예상했던 것</span></td><td>스텝</td><td>O (36% 소거)</td><td class="r">거의 아님 (0.925)</td><td class="r">아님 (+0.050, n.s.)</td></tr>
+    <tr><td>스텝 질량 불균형</td><td>스텝</td><td>O (7.7배)</td><td class="r">O (0.887)</td><td class="r"><strong>O (&minus;0.097)</strong></td></tr>
+    <tr><td>클립 이상치 지배 <span class="tag">사전 등록 외</span></td><td>클립</td><td>O (1클립 49%)</td><td class="r">O (0.858)</td><td class="r">O (&minus;0.052)</td></tr>
+  </table>
+  <p style="margin:0.75rem 0 0">예상했던 것은 무해했고, 실제로 효과를 낸 둘 중 하나는 아예
+  사전 등록에 없던 축이었다. 그래서 "기전은 예상과 달랐다"고 적었다.</p>
+</div>
+
+<p>상쇄비 <code>C<sub>u</sub> = |&Sigma;<sub>s</sub> g<sub>s</sub>| / &Sigma;<sub>s</sub> |g<sub>s</sub>|</code>는
+Q head 중앙값 0.637, MLP 0.567 &mdash; 스텝 간 부호 엇갈림으로 기울기 크기의 <strong>35&ndash;45%가
+소거</strong>된다. 상쇄는 실재한다. 그러나 <code>sum</code>과 <code>sumabs</code>의 kept 겹침은 r=0.40에서
+<strong>0.925 / 0.952</strong>로, 선택은 거의 바뀌지 않는다. 사전 등록 문턱(C &lt; 0.5 <em>그리고</em> 겹침
+&lt; 0.90)을 넘지 못했으므로 <strong>H1은 채택되지 않는다</strong>.</p>
+
+<figure>
+  <img src="PLOT::sa::cancellation.png" alt="cancellation ratio histogram">
+  <figcaption>상쇄비 분포. 1.0(상쇄 없음)에서 왼쪽으로 넓게 퍼져 있지만 0 근처로 무너진 유닛은 드물다 &mdash;
+  크기는 줄지만 순서는 대체로 보존된다는 뜻이고, 그래서 선택이 거의 안 바뀐다.</figcaption>
+</figure>
+
+<h2><span class="num">6.</span>클립 평균이 소수 클립에 지배된다 <span class="tag">사전 등록 외</span></h2>
+
+<p>스텝별 중요도 질량 프로파일을 검증하다 발견했다. 클립 평균 프로파일에서 step 0이 다른 스텝의
+7.7배로 보였는데, 이는 모델의 성질이 아니라 <strong>단일 클립</strong> 때문이었다.</p>
+
+<table>
+  <tr><th>유닛</th><th class="r">step 0에서 최상위 1클립의 몫</th><th class="r">질량 max/min (클립 평균)</th><th class="r">질량 max/min (10% 절사)</th><th class="r">kept 겹침 (평균 vs 절사)</th></tr>
+  <tr><td>Q head</td><td class="r"><strong>0.49</strong></td><td class="r">7.68</td><td class="r">2.64</td><td class="r"><strong>0.858</strong></td></tr>
+  <tr><td>MLP channel</td><td class="r">0.47</td><td class="r">3.85</td><td class="r">1.57</td><td class="r">0.901</td></tr>
+</table>
+
+<figure>
+  <img src="PLOT::sa::step_mass.png" alt="importance mass by step, mean vs trimmed">
+  <figcaption>스텝별 중요도 질량. 클립 평균(실선)과 10% 절사평균(점선)이 <strong>질적으로 다른 모양</strong>을
+  그린다. 절사하면 매끈한 단조 감소이고, 평균의 뾰족한 봉우리는 이상치 클립의 흔적이다.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>왜 중요한가.</strong> 클립 축의 절사는 스텝과 무관한 <strong>1줄 수정</strong>인데, 그것만으로
+  선택의 14%(Q head)가 바뀐다 &mdash; 스텝을 바꿀 때의 변화(겹침 0.822)와 <strong>같은 크기</strong>다.
+  기존 CVaR 트랙은 VLM에서 "위험 회피 가중치는 랭크를 바꾸지 못한다(클립별 난이도가 공통 배율이므로)"고
+  결론냈는데, expert에서는 그 전제가 성립하지 않는다.
+</div>
+
+<div class="note">
+  <strong>이 절의 MLP 수치는 한 번 틀렸다가 정정됐다.</strong> per-clip 배열을 처음에는 용량을 아끼려
+  fp16으로 저장했는데, 이 기울기는 중앙값 7.6e&minus;09로 fp16의 subnormal 영역(min normal
+  6.1e&minus;5)에 있어 <strong>MLP 항목의 74.7%가 정확히 0으로 underflow</strong>했다. 재집계 시 상대오차
+  중앙값 0.22 &mdash; 그 파일로 계산한 MLP의 split-half 바닥과 절사 겹침은 무의미했다. Q head는
+  fp32로 저장돼 무사했고(재집계 상대오차 정확히 0), 이 보고서의 헤드라인 수치는 전부 Q head
+  또는 fp64 집계본 기반이라 영향이 없었다. fp32로 재측정한 결과 <strong>판정은 하나도 바뀌지
+  않았다</strong>: MLP 바닥 0.905 → 0.945(G2 마진은 오히려 증가), 절사 겹침 0.885 → 0.901.
+  <code>analyze_step_importance.perclip_fidelity()</code>가 이제 per-clip 배열이 fp64 집계본을
+  재현하는지 먼저 검사하고, 통과 못한 유닛 타입은 per-clip 통계에서 자동 제외한다.
+</div>
+
+<h2><span class="num">7.</span>G3 &mdash; 훈련 경로와 추론 경로는 대체로 일치한다</h2>
+
+<div class="note">
+  <strong>"두 경로"가 무엇인지부터.</strong> expert는 노이즈 낀 액션
+  <code>x<sub>t</sub></code>와 시각 <code>t</code>를 받아 방향을 예측하는 디노이저인데,
+  <strong>중요도를 재는 자리</strong>와 <strong>실제로 주행하는 자리</strong>가 다르다.
+  <table style="margin:0.75rem 0">
+    <tr><th></th><th>훈련 경로 (현행 기준이 쓰는 곳)</th><th>추론 경로 (실제 주행)</th></tr>
+    <tr><td><strong>점</strong></td>
+        <td><code>x<sub>t</sub> = (1&minus;t)&epsilon; + t&middot;x<sub>1</sub></code><br>
+            노이즈와 <strong>정답</strong>을 잇는 직선 위</td>
+        <td><code>x &larr; x + dt&middot;v&#770;(x, t)</code><br>
+            모델이 자기 예측으로 밟아온 <strong>자신의 반복값</strong></td></tr>
+    <tr><td><strong>t 격자</strong></td><td>0.05, 0.15, …, 0.95</td><td>0.0, 0.1, …, 0.9</td></tr>
+    <tr><td><strong>노이즈</strong></td><td>스텝마다 새로 뽑음</td><td>시작점 x<sub>0</sub> 하나뿐</td></tr>
+  </table>
+  <p style="margin:0">훈련 경로의 점은 <strong>정답을 알고 찍은 이상적인 점</strong>이고, 추론
+  경로의 점은 <strong>모델이 자기 오차를 안고 실제로 밟는 점</strong>이다. 그래서 "기준이 모델이
+  가본 적 없는 자리에서 중요도를 재는 것 아니냐"는 의심이 성립한다 &mdash; 이것이 G3의 질문이다.</p>
+</div>
+
+<div class="note">
+  <strong>왜 하필 양 끝에서 어긋나는가</strong> (아래 표의 s=0, s=9). 구조를 보면 설명된다 &mdash;
+  다만 이것은 <em>해석</em>이고 별도로 측정하지는 않았다.
+  <ul style="margin:0.6rem 0 0 1.2rem">
+    <li><strong>s=0</strong>: 훈련 경로는 <code>0.95&epsilon; + 0.05x<sub>1</sub></code>로 아직 95%
+    노이즈지만 <strong>정답이 5% 섞여 있다</strong>. 추론 경로는 t=0이라 <strong>순수 노이즈,
+    정답 힌트 0%</strong>. 두 점의 성격이 가장 다르다.</li>
+    <li><strong>s=9</strong>: 훈련 경로는 <code>0.05&epsilon; + 0.95x<sub>1</sub></code>로 거의
+    <strong>정답</strong>. 추론 경로는 아홉 걸음 걸어온 <strong>모델 자신의 답</strong> 근처다.
+    모델의 답이 정답과 다르면 여기서 갈라진다.</li>
+    <li><strong>중간</strong>: 양쪽 다 "그럴듯한 노이즈 낀 액션"이라 성격이 비슷하고, ρ가
+    0.87&ndash;0.90으로 붙는다.</li>
+  </ul>
+</div>
+
+<p>훈련 경로(GT 직선 위의 <code>x<sub>t</sub></code>)와 추론 경로(모델 자신의 Euler 반복값)에서 잰
+중요도의 상관은 Q head 0.799, MLP 0.941로, 사전 등록 문턱 0.7을 넘는다 &mdash; <strong>경로 불일치는
+기각</strong>된다. 다만 스텝별로 보면 균일하지 않다.</p>
+
+<table>
+  <tr><th>유닛</th><th class="r">s=0</th><th class="r">1</th><th class="r">2</th><th class="r">3</th><th class="r">4</th><th class="r">5</th><th class="r">6</th><th class="r">7</th><th class="r">8</th><th class="r">9</th></tr>
+  <tr><td>Q head</td><td class="r"><strong>0.50</strong></td><td class="r">0.88</td><td class="r">0.87</td><td class="r">0.90</td><td class="r">0.90</td><td class="r">0.89</td><td class="r">0.87</td><td class="r">0.83</td><td class="r">0.79</td><td class="r"><strong>0.66</strong></td></tr>
+  <tr><td>MLP channel</td><td class="r">0.79</td><td class="r">0.94</td><td class="r">0.95</td><td class="r">0.96</td><td class="r">0.95</td><td class="r">0.94</td><td class="r">0.93</td><td class="r">0.90</td><td class="r">0.88</td><td class="r">0.79</td></tr>
+</table>
+<p class="meta">dtype 수정 전 측정과 비교하면 집계 ρ는 0.799 / 0.942 → 0.799 / 0.941, kept 겹침 0.861 → 0.867로
+사실상 변화가 없다 &mdash; 그 버그는 G3의 결론을 바꾸지 않았지만, 그 사실은 검증을 하고 나서야 알 수 있었다.</p>
+
+<p>두 경로는 <strong>양 끝에서 가장 어긋난다</strong>(Q head s=0에서 0.50). 그리고 s=0은 질량이 가장 큰
+스텝이므로, <strong>기준의 지배적 기여분이 하필 두 경로가 가장 다른 지점에서 측정된다</strong>. 게이트는
+기각이지만 이 편중은 기록해 둘 값이다.</p>
+
+<figure>
+  <img src="PLOT::sa::path_mass.png" alt="mass by step on both paths">
+  <figcaption>두 경로의 스텝별 질량. 전체 모양은 비슷하지만 훈련 경로가 초반 스텝에 더 쏠려 있다.</figcaption>
+</figure>
+
+<h2><span class="num">8.</span>G4 &mdash; 스텝-한정 마스킹</h2>
+
+<p>기울기 가정 없는 실증. 고정 마스크(r=0.40)를 <strong>정확히 한 스텝에만</strong> 적용하고 나머지
+아홉은 dense로 둔다. 주 지표는 <code>dev</code> &mdash; 같은 노이즈 시드로 뽑은 마스크 없는 경로와의
+waypoint 평균 거리다. 한 스텝만 마스킹하면 ΔminADE가 전체 마스크의 1/10 수준(~0.015 m)이라
+n=60의 해상도에 묻히는데, <code>dev</code>는 같은 섭동을 자기 자신의 대조군에 대고 재므로 곡선이
+분해된다.</p>
+
+<table>
+  <tr><th>구성</th><th class="r">s=0</th><th class="r">1</th><th class="r">2</th><th class="r">3</th><th class="r">4</th><th class="r">5</th><th class="r">6</th><th class="r">7</th><th class="r">8</th><th class="r">9</th><th class="r">max/min</th></tr>
+  <tr><td>only<sub>s</sub> traj (dev)</td><td class="r">0.075</td><td class="r">0.096</td><td class="r">0.073</td><td class="r">0.061</td><td class="r">0.054</td><td class="r">0.051</td><td class="r">0.051</td><td class="r">0.052</td><td class="r">0.059</td><td class="r"><strong>0.261</strong></td><td class="r"><strong>5.15</strong></td></tr>
+  <tr><td>only<sub>s</sub> magnitude (dev)</td><td class="r">0.102</td><td class="r">0.081</td><td class="r">0.073</td><td class="r">0.057</td><td class="r">0.052</td><td class="r">0.048</td><td class="r">0.046</td><td class="r">0.047</td><td class="r">0.054</td><td class="r"><strong>0.306</strong></td><td class="r"><strong>6.64</strong></td></tr>
+  <tr><td>except<sub>s</sub> traj (dev)</td><td class="r">0.681</td><td class="r">0.646</td><td class="r">0.668</td><td class="r">0.685</td><td class="r">0.689</td><td class="r">0.691</td><td class="r">0.688</td><td class="r">0.684</td><td class="r">0.672</td><td class="r"><strong>0.510</strong></td><td class="r">1.36</td></tr>
+</table>
+
+<p>스텝 9(마지막 Euler 스텝)만 마스킹하면 편차가 최소 스텝의 <strong>5.2배</strong>
+(traj: +0.2099 [+0.1042, +0.3509], p&lt;0.0001)다. 거꾸로 스텝 9 <em>하나만</em> dense로 두면
+(<code>except9</code>) 편차가 0.510으로, 다른 스텝을 빼줄 때(~0.68)보다 훨씬 낮다 &mdash; 같은 사실의
+양면이다. 과제 지표로도 나타난다: <code>only9_magnitude</code>의 ΔminADE는 +0.115
+[+0.045, +0.211]로 CI가 0을 배제한다(traj는 +0.060 [+0.003, +0.156], p=0.10으로 경계).</p>
+
+<figure>
+  <img src="PLOT::sa::step_damage.png" alt="damage by masked step">
+  <figcaption>마스크가 한 스텝만 때릴 때의 손상. 왼쪽 = 마스크 없는 경로와의 편차(주 지표),
+  오른쪽 = 과제 지표 ΔminADE. 두 기준 모두 스텝 9에서 급등하고 중간 스텝에서 최소가 되는 U자를
+  그린다.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>단, 이 곡선은 유닛 이질성의 증거가 아니다.</strong> traj 기준과 magnitude 기준은 서로 다른
+  유닛을 고르는데도(kept 겹침이 낮음) 정규화한 곡선 모양이 <strong>r = 0.990</strong>으로 사실상
+  동일하다. 즉 "스텝 9가 위험하다"는 것은 <em>어떤 유닛을 자르냐</em>가 아니라 <strong>Euler 체인에서의
+  위치</strong> 때문이다 &mdash; 마지막 스텝의 섭동은 뒤이어 교정될 스텝이 없으므로 그대로 출력에
+  실린다. 어떤 마스크든 공유하는 구조적 성질이다.
+  <br><br>
+  따라서 <strong>"스텝마다 중요한 파라미터가 다른가"에 답하는 것은 G4가 아니라 G2</strong>다. G4가
+  더하는 것은 다른 사실이다: 스텝들은 서로 교환 가능하지 않으며, 예산을 스텝 축에 고르게
+  배분하는 것이 최적이 아닐 수 있다(늦은 스텝에서 더 보수적으로 자르는 편이 낫다).
+</div>
+
+<h2><span class="num">9.</span>D 단계 &mdash; 집계를 고치면 실제로 나아지는가</h2>
+
+<p>같은 기울기를 아홉 가지로 재집계해 매칭 예산에서 평가했다. 새 GPU 측정은 없다 &mdash; 전부
+`stepimp_fm_perstep_v2`의 per-clip &times; per-step 배열에서 계산된다. 평가는 고정 프로토콜
+(rollout-only, K=8 &rarr; minADE@6), <code>indist_500</code>의 61&ndash;260번째 클립 200개.
+앞 60개를 건너뛴 이유는 <code>damagewt</code>의 가중치가 그 클립들의 스텝 마스킹 결과에서
+나오기 때문이다 &mdash; 그대로 쓰면 그 arm만 평가셋에서 조율된 셈이 된다.</p>
+
+<p class="meta">무결성(G5a): 재집계한 <code>sum</code>이 원본 <code>traj_exp_*</code>와 레이어별
+Spearman ρ 0.99992 / 0.999999, kept-set 겹침 1.000000 / 0.999714로 일치 &mdash; 즉 이 표의
+<code>sum</code> 행은 현행 기준 그 자체다. per-clip 배열의 재집계 일치도 실행 전에 강제 검사한다.</p>
+
+<h3>9.1 r = 0.25 (주 판정)</h3>
+
+<table>
+  <tr><th>arm</th><th class="r">ΔminADE@6 vs 무압축</th><th class="r">95% CI</th><th class="r">Δ vs <code>sum</code></th><th class="r">95% CI</th><th class="r">kept 겹침(vs sum)</th></tr>
+  <tr><td><code>sum</code> <span class="tag">현행</span></td><td class="r">+0.0977</td><td class="r">[&minus;0.034, +0.190]</td><td class="r">&mdash;</td><td class="r">&mdash;</td><td class="r">1.000</td></tr>
+  <tr><td><strong><code>znorm</code></strong></td><td class="r"><strong>+0.0003</strong></td><td class="r">[&minus;0.159, +0.099]</td><td class="r"><strong>&minus;0.0973</strong></td><td class="r"><strong>[&minus;0.154, &minus;0.046]</strong></td><td class="r">0.887</td></tr>
+  <tr><td><code>trimclip</code></td><td class="r">+0.0453</td><td class="r">[&minus;0.048, +0.115]</td><td class="r"><strong>&minus;0.0524</strong></td><td class="r"><strong>[&minus;0.098, &minus;0.001]</strong></td><td class="r">0.894</td></tr>
+  <tr><td><code>trimclip_znorm</code></td><td class="r">+0.0470</td><td class="r">[&minus;0.016, +0.101]</td><td class="r">&minus;0.0506</td><td class="r">[&minus;0.120, +0.032]</td><td class="r">0.873</td></tr>
+  <tr><td><code>magnitude</code> <span class="tag">참조</span></td><td class="r">+0.0601</td><td class="r">[&minus;0.094, +0.164]</td><td class="r">&minus;0.0375</td><td class="r">[&minus;0.096, +0.018]</td><td class="r">0.852</td></tr>
+  <tr><td><code>infer</code></td><td class="r">+0.0615</td><td class="r">[&minus;0.098, +0.163]</td><td class="r">&minus;0.0362</td><td class="r">[&minus;0.090, +0.013]</td><td class="r">0.882</td></tr>
+  <tr><td><code>maxrank</code></td><td class="r">+0.1080</td><td class="r">[&minus;0.049, +0.213]</td><td class="r">+0.0103</td><td class="r">[&minus;0.035, +0.053]</td><td class="r">0.905</td></tr>
+  <tr><td><code>damagewt</code></td><td class="r">+0.1336</td><td class="r">[+0.077, +0.190]</td><td class="r">+0.0359</td><td class="r">[&minus;0.029, +0.131]</td><td class="r">0.921</td></tr>
+  <tr><td><code>sumabs</code></td><td class="r">+0.1473</td><td class="r">[+0.095, +0.203]</td><td class="r">+0.0496</td><td class="r">[&minus;0.022, +0.172]</td><td class="r">0.949</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>G5b ACCEPT.</strong> <code>znorm</code>과 <code>trimclip</code>이 현행 <code>sum</code>을
+  이긴다(CI 전체가 0 미만). 승자 <code>znorm</code>은 expert 폭의 25%를 잘라내고도
+  <strong>ΔminADE@6 = +0.0003</strong> &mdash; 무압축과 구별되지 않는다. 같은 예산에서 현행 기준은
+  +0.0977, magnitude는 +0.0601이었다.</p>
+  <p style="margin-bottom:0"><strong>G5c PASS &mdash; 격차가 닫힌 정도가 아니라 뒤집혔다.</strong>
+  <code>sum</code>&minus;<code>magnitude</code> 격차는 +0.0375였는데, <code>znorm</code>은 magnitude보다
+  <strong>0.0598 더 좋다</strong>. 즉 이 트랙의 출발점이었던 "expert에서는 magnitude가 Taylor를
+  이긴다"는 관측은 <strong>Taylor 신호의 한계가 아니라 스텝 축 집계의 결함</strong>이었고, 그것을
+  고치면 Taylor 계열이 다시 앞선다.</p>
+</div>
+
+<h3>9.2 r = 0.40, 그리고 틀린 예측 하나</h3>
+
+<table>
+  <tr><th>arm</th><th class="r">ΔminADE@6 vs 무압축</th><th class="r">Δ vs <code>sum</code></th><th class="r">95% CI</th></tr>
+  <tr><td><code>sum</code></td><td class="r">+0.3227</td><td class="r">&mdash;</td><td class="r">&mdash;</td></tr>
+  <tr><td><code>magnitude</code></td><td class="r"><strong>+0.1506</strong></td><td class="r">&minus;0.1721</td><td class="r">[&minus;0.266, &minus;0.081]</td></tr>
+  <tr><td><strong><code>trimclip_znorm</code></strong></td><td class="r"><strong>+0.1579</strong></td><td class="r">&minus;0.1648</td><td class="r">[&minus;0.232, &minus;0.102]</td></tr>
+  <tr><td><code>sumabs</code></td><td class="r">+0.2042</td><td class="r">&minus;0.1185</td><td class="r">[&minus;0.192, &minus;0.053]</td></tr>
+  <tr><td><code>maxrank</code></td><td class="r">+0.2057</td><td class="r">&minus;0.1170</td><td class="r">[&minus;0.205, &minus;0.034]</td></tr>
+  <tr><td><code>znorm</code></td><td class="r">+0.2152</td><td class="r">&minus;0.1075</td><td class="r">[&minus;0.172, &minus;0.048]</td></tr>
+  <tr><td><code>infer</code></td><td class="r">+0.2615</td><td class="r">&minus;0.0613</td><td class="r">[&minus;0.153, +0.059]</td></tr>
+  <tr><td><code>trimclip</code></td><td class="r">+0.2730</td><td class="r">&minus;0.0497</td><td class="r">[&minus;0.110, +0.009]</td></tr>
+  <tr><td><code>damagewt</code></td><td class="r">+0.2837</td><td class="r">&minus;0.0390</td><td class="r">[&minus;0.089, +0.005]</td></tr>
+</table>
+
+<p>더 깊은 절단에서는 현행 <code>sum</code>이 유독 나쁘고(+0.3227) 거의 모든 대안이 이긴다. 두 축을
+동시에 고친 <code>trimclip_znorm</code>(+0.1579)이 magnitude(+0.1506)와 통계적으로 구별되지 않는
+수준까지 따라붙는다 &mdash; r25에서처럼 앞서지는 못한다.</p>
+
+<div class="note">
+  <strong>G5d: 예측은 주 판정 지점에서만 맞았다.</strong> <code>sumabs</code>는 <code>sum</code>과
+  kept 겹침이 0.949로 높으니 무효과일 것이라고 사전 등록했다. r=0.25에서는 그대로다
+  (+0.0496 [&minus;0.022, +0.172], 무효과). 그러나 <strong>r=0.40에서는 &minus;0.1185
+  [&minus;0.192, &minus;0.053]로 유의하게 좋다</strong>. 선택의 5%만 달라져도 절단이 깊어지면
+  결과가 갈릴 수 있다는 뜻이고, "겹침이 높으니 무해하다"는 5절의 해석은 얕은 절단에서만
+  성립한다. 부호 상쇄가 무해하다는 결론은 r=0.25로 한정해서 읽어야 한다.
+</div>
+
+<p><code>damagewt</code>(체인 위치 가중)와 <code>maxrank</code>는 두 예산 모두에서 사실상 효과가
+없었다. G4가 실측한 스텝 손상 비대칭은 실재하지만, 그것을 <em>중요도 가중치</em>로 옮기는 것은
+도움이 되지 않는다 &mdash; 8절에서 이미 본 대로 그 비대칭은 유닛과 무관한 체인 성질이므로,
+유닛 순위를 바꾸는 데 쓸 정보가 아니었다. 사후적으로는 당연하지만, 재는 것이 더 쌌다.</p>
+
+<figure>
+  <img src="PLOT::ag::arms_r25.png" alt="aggregation arms at ratio 0.25">
+  <figcaption>r=0.25에서 각 arm의 무압축 대비 paired ΔminADE@6 (주황 = 현행 기준, 초록 = magnitude).
+  왼쪽일수록 좋다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::ag::arms_r40.png" alt="aggregation arms at ratio 0.40">
+  <figcaption>r=0.40. 현행 기준만 유독 오른쪽에 있다.</figcaption>
+</figure>
+
+<h3>9.3 두 축은 독립이 아니다 <span class="tag">정정</span></h3>
+
+<p>초고는 <code>znorm</code>(스텝 축)과 <code>trimclip</code>(클립 축)을 "각각 실재하는 두 결함"으로
+적었다. 각각 개선을 내는 것은 맞지만 <strong>독립이라는 서술은 틀렸다</strong>. 클립 이상치를
+잘라내면 <strong>스텝 질량 불균형 자체가 줄어든다</strong>:</p>
+
+<table>
+  <tr><th>expert Q head 스텝 질량</th><th class="r">s=0</th><th class="r">1</th><th class="r">2</th><th class="r">…</th><th class="r">9</th><th class="r">max/min</th></tr>
+  <tr><td>클립 평균 (현행)</td><td class="r">1.00</td><td class="r">0.39</td><td class="r">0.30</td><td class="r">…</td><td class="r">0.19</td><td class="r"><strong>7.68</strong></td></tr>
+  <tr><td>10% 절사 후</td><td class="r">1.00</td><td class="r">0.86</td><td class="r">0.73</td><td class="r">…</td><td class="r">0.44</td><td class="r"><strong>2.78</strong></td></tr>
+</table>
+
+<p>즉 <strong>"스텝 0이 압도적으로 무겁다"는 현상의 절반 이상이 소수 이상치 클립이 만든 것</strong>이다.
+<code>znorm</code>이 고치려던 불균형과 <code>trimclip</code>이 고치려던 이상치는 상당 부분 같은
+현상의 두 얼굴이다.</p>
+
+<p>효과가 가산되지 않는 것이 그 증거다. r=0.25에서 <code>znorm</code> &minus;0.0973,
+<code>trimclip</code> &minus;0.0524인데 둘을 합친 <code>trimclip_znorm</code>은 <strong>&minus;0.0506</strong>
+&mdash; 가산적이라면 &minus;0.15 부근이어야 한다. 클립을 먼저 절사하면 스텝 불균형이 2.78배로
+줄어들어 <code>znorm</code>이 고칠 것이 별로 남지 않는다.</p>
+
+<p class="meta">단 CI가 겹치므로(&minus;0.0973 [&minus;0.154,&minus;0.046] vs &minus;0.0506
+[&minus;0.120,+0.032]) "합친 것이 znorm 단독보다 유의하게 나쁘다"고는 말할 수 없다. 그리고
+r=0.40에서는 반대로 합친 것이 &minus;0.1648로 가장 좋다 &mdash; 절단이 깊어지면 두 축이 다시
+갈라진다. 얕은 절단에서 겹치고 깊은 절단에서 갈라지는 이유는 이 실험이 답하지 않는다.</p>
+
+<h2><span class="num">10.</span>해석 (의견)</h2>
+
+<p><strong>사용자 가설은 데이터로 확인됐다.</strong> denoising 스텝마다 중요한 파라미터가 다르고, 정적
+마스크 하나로 10개 스텝을 모두 잘 섬길 수 없다. 특히 Q head가 그렇다 &mdash; 각 스텝이 원하는 keep-set의
+합집합이 예산의 1.45배라, 60% 폭에서는 원리적으로 어느 스텝에겐가 손해를 볼 수밖에 없다.</p>
+
+<p>다만 "왜 Taylor가 magnitude에 지는가"의 답으로는 <strong>스텝 이질성만으로 충분하지 않았다</strong>.
+magnitude 역시 스텝-무관하므로 같은 한계를 공유하는데도 이겼기 때문이다. 측정이 지목한 것은
+<strong>집계의 취약성</strong>이었다: 현행 점수는 (1) 스텝 축에서 질량이 큰 소수 스텝에(max/min 7.7배),
+(2) 클립 축에서 소수 이상치 클립에(step 0에서 1클립이 49%) 지배된다. magnitude는 데이터를 보지
+않으므로 두 축 모두에 면역이고, 그래서 Taylor의 정보 이점이 집계 잡음에 잠식되는 구간에서 이길
+수 있었다.</p>
+
+<div class="callout">
+  <strong>D 단계가 이 설명을 검증했다.</strong> 스텝별로 레이어 내 z-정규화만 해서 질량 지배를
+  제거하면(<code>znorm</code>), 같은 기울기·같은 예산에서 r=0.25의 ΔminADE@6이 +0.0977 &rarr;
+  <strong>+0.0003</strong>으로 떨어지고 magnitude(+0.0601)를 넘어선다. <strong>기울기 신호가 부족했던
+  것이 아니라, 그것을 스텝 축에서 합산한 방식이 틀렸던 것이다.</strong> 클립 축 절사
+  (<code>trimclip</code>, +0.0453)도 <code>sum</code> 대비 개선을 낸다(&minus;0.0524
+  [&minus;0.098, &minus;0.0014]). 다만 <strong>두 축은 독립이 아니다</strong> &mdash; 아래 11.4절 참조.
+</div>
+
+<p>그렇다고 스텝 이질성(G2)이 무관한 것은 아니다. <code>znorm</code>이 작동하는 이유 자체가 스텝마다
+랭킹이 다르기 때문이다 &mdash; 스텝들이 같은 순위를 냈다면 정규화해도 합산과 같은 답이 나왔을 것이다.
+정확히 말하면: <strong>스텝마다 중요한 유닛이 다르다는 것이 사실이고(G2), 그 사실을 무시한 채 스케일이
+제각각인 스텝들을 그냥 더한 것이 실패의 기전이며(D), 스케일만 맞춰줘도 대부분 회복된다</strong>.</p>
+
+<p>남는 한계는 예산 의존성이다. r=0.25에서는 고친 Taylor가 magnitude를 앞서지만, r=0.40에서는
+두 축을 모두 고쳐도(<code>trimclip_znorm</code> +0.1579) magnitude(+0.1506)와 동률에 그친다. 깊은
+절단에서는 집계 외의 요인 &mdash; 1차 Taylor 근사 자체의 한계, GT 단일 mode 의존 &mdash; 이 남아 있을
+수 있고, 그것은 이 실험이 답하지 않는다.</p>
+
+<h2><span class="num">11.</span>VLM tower에 옮겨봤다 &mdash; 역효과였다 <span class="tag">2026-08-22</span></h2>
+
+<p>2.1절에서 본 대로 <code>traj_vlm_*</code>도 <code>|&Sigma;<sub>s</sub>|</code>다(캐시 leaf의 grad가
+10스텝 누적된 뒤 단 한 번의 VLM backward를 태운다). 그리고 출시된 <code>*_u40_v2</code> 패밀리
+기준이 <code>max(rank I<sub>traj</sub>, rank X)</code>로 <strong>바로 그 I<sub>traj</sub>를 쓴다</strong>.
+그래서 expert에서 통한 수정을 VLM에 그대로 옮겨봤다. 계획과 사전 등록 게이트는
+<code>plans/2026-08-22_vlm-step-aggregation.md</code>.</p>
+
+<p>스텝별 VLM 중요도는 스텝마다 VLM backward가 한 번씩 필요하다(실측 +5.9 s/클립, 100클립
+22분). 무결성은 통과했다 &mdash; 스텝을 되합치면 원본 <code>run_importance</code>를 재현한다
+(상대오차 중앙값 8.7e&minus;04, u40_v2 kept-overlap 1.0000 / 0.9987). 그리고 znorm은 선택을
+실제로 바꿨다: <code>traj</code> 단독 기준 <strong>8.5% (Q head) / 10.8% (MLP)</strong> &mdash;
+expert에서 0.097 m의 이득을 만든 변화폭(11%)과 같은 규모다.</p>
+
+<table>
+  <tr><th>arm (traj_u40_v2, val 500, paired)</th><th class="r">선택 변화<br>(q / mlp)</th><th class="r">minADE@6</th><th class="r">중앙값</th><th class="r">paired Δ vs 대조군</th><th class="r">95% CI</th></tr>
+  <tr><td>대조군 = 현행 <code>sum</code> (Ada 재측정)</td><td class="r">&mdash;</td><td class="r">0.9770</td><td class="r">0.6515</td><td class="r">&mdash;</td><td class="r">&mdash;</td></tr>
+  <tr><td><strong><code>znorm</code></strong> &mdash; 스텝 질량 평탄화</td><td class="r">8.5% / 10.8%</td><td class="r"><strong>1.7696</strong></td><td class="r">1.2192</td><td class="r"><strong>+0.7926</strong></td><td class="r">[+0.650, +0.938]</td></tr>
+  <tr><td><code>sumabs</code> &mdash; 부호 상쇄만 제거, 질량 순서 보존</td><td class="r">3.1% / 4.0%</td><td class="r">0.9710</td><td class="r">0.6645</td><td class="r">&minus;0.0060</td><td class="r">[&minus;0.077, +0.072]</td></tr>
+</table>
+
+<p class="meta">두 arm은 같은 config·같은 uniform 비율·같은 축이고 <strong>정확히 2,657,452,032</strong>
+파라미터를 제거하며 레이어별 유지 개수도 동일하다. importance 파일만 다르다. 대조군을 Ada에서
+새로 만든 이유는 Ada&ndash;Blackwell 드리프트만으로 이 선택이 2&ndash;3% 움직이기 때문이다(출시된
+Blackwell 행을 쓰면 교란된다). minFDE@6도 2.5998 &rarr; 5.3289로 같은 방향이다.</p>
+
+<div class="callout">
+  <strong>V2 REGRESSION &mdash; expert의 결과는 VLM으로 이전되지 않는다.</strong> 사전 등록대로
+  Stage 3(<code>dual</code> 쌍 &times; 3셋)는 <strong>취소</strong>했다. 이것은 실패한 실험이 아니라
+  <strong>게이트가 제 역할을 한 경우</strong>다 &mdash; val500 한 쌍(약 3시간)으로 4시간짜리 Stage 3를
+  막았고, 무엇보다 "expert에서 통했으니 VLM에도 넣자"는 잘못된 배포를 막았다.
+  <br><br>
+  <strong>후속 <code>sumabs</code>는 무효과다</strong>(&minus;0.0060 [&minus;0.077, +0.072], p=0.60).
+  두 arm을 함께 읽으면 결론이 갈라진다: <strong>질량 순서를 건드리면 크게 나빠지고(znorm +0.79),
+  건드리지 않으면 아무 일도 일어나지 않는다(sumabs &minus;0.006)</strong>. 즉 VLM에서 스텝 축은
+  <em>고칠 결함</em>이 아니라 <em>이미 맞는 것</em>이었다.
+</div>
+
+<h3>11.1 왜 방향이 뒤집혔나 (기전)</h3>
+
+<p>버그가 아니다. 두 타워의 <strong>스텝 질량 프로파일 모양이 근본적으로 다르다</strong>.</p>
+
+<table>
+  <tr><th>tower</th><th class="r">s=0</th><th class="r">1</th><th class="r">2</th><th class="r">…</th><th class="r">8</th><th class="r">9</th><th class="r">꼬리/최소</th></tr>
+  <tr><td>expert q</td><td class="r">1.000</td><td class="r">0.386</td><td class="r">0.303</td><td class="r">…</td><td class="r">0.147</td><td class="r"><strong>0.189</strong></td><td class="r"><strong>1.45</strong></td></tr>
+  <tr><td>expert mlp</td><td class="r">1.000</td><td class="r">0.499</td><td class="r">0.451</td><td class="r">…</td><td class="r">0.365</td><td class="r"><strong>0.659</strong></td><td class="r"><strong>2.54</strong></td></tr>
+  <tr><td>VLM q</td><td class="r">1.000</td><td class="r">0.363</td><td class="r">0.224</td><td class="r">…</td><td class="r">0.053</td><td class="r">0.051</td><td class="r">1.00</td></tr>
+  <tr><td>VLM mlp</td><td class="r">1.000</td><td class="r">0.383</td><td class="r">0.239</td><td class="r">…</td><td class="r">0.052</td><td class="r">0.054</td><td class="r">1.04</td></tr>
+</table>
+
+<figure>
+  <img src="PLOT::av::tower_mass_shape.png" alt="step mass profile shape, both towers">
+  <figcaption>expert(초록)는 <strong>U자</strong>로 늦은 스텝에서 다시 올라오고, VLM(파랑)은
+  <strong>단조 감소</strong>해 그대로 바닥에 눕는다. 같은 "질량 불균형"이라도 의미가 반대다.</figcaption>
+</figure>
+
+<p><strong>expert가 U자인 것이 znorm이 통한 이유다.</strong> 늦은 스텝이 실제로 다시 중요해지는데
+단순 합산이 그것을 과소평가하므로, 정규화가 묻혀 있던 신호를 되살린다.</p>
+
+<p><strong>VLM이 단조 감소인 것이 znorm이 해로운 이유다.</strong> 여기서는 질량 순서가 곧 진짜
+중요도다 &mdash; t가 커지면 <code>x<sub>t</sub> &asymp; x<sub>1</sub></code>이라 expert가 답을 자기
+입력에서 읽을 수 있고 VLM 문맥이 <em>실제로</em> 덜 필요하다. 늦은 스텝의 작은 기울기는 스케일
+아티팩트가 아니라 참인 정보다. 정규화는 그 정보를 지우고 잡음을 넣는다.</p>
+
+<p>교체된 유닛을 보면 확인된다. znorm이 <strong>버리는</strong> 유닛의 현행 점수 백분위는 중앙값
+0.484인데, <strong>넣는</strong> 유닛은 0.355다(MLP도 0.498 &rarr; 0.318). 즉 znorm은 다른 종류의
+유효한 신호를 제시하는 것이 아니라 <strong>같은 신호의 더 나쁜 버전</strong>을 내놓는다 &mdash; 점수
+자체가 망가진(degenerate) 것이 아니라 판단이 나빠진 것이고, 이것이 버그 가설을 배제한다.</p>
+
+<div class="note">
+  <strong>이 트랙에서 가져갈 규칙.</strong> 스텝 축 집계를 새 타워나 새 기준으로 옮기기 전에
+  <strong>질량 프로파일의 모양을 먼저 보라.</strong> U자면 정규화가 이득이고, 단조면 손해다.
+  "스텝 질량이 N배 불균형하다"는 사실만으로는 방향을 알 수 없다 &mdash; VLM은 19.5배로 expert의
+  7.7배보다 심했는데도 정규화가 해로웠다.
+</div>
+
+<h3>11.2 부수 결과</h3>
+
+<ul>
+  <li><strong>싼 근사는 불가능하다 (V4 REJECT).</strong> 역전파는 seed에 선형이므로 가중
+  <em>부호 있는</em> 합은 backward 1회로 얻을 수 있다. 그러나 znorm은 스텝마다
+  <code>|g<sub>s</sub>|</code>를 먼저 취하는 비선형 연산이라 seed에 접히지 않는다. 측정된
+  겹침은 0.956 (q) / 0.922 (mlp)로 문턱 0.98에 못 미친다. <code>seedz</code>는 "싼 znorm"이
+  아니라 "재가중된 <code>sum</code>"이다.</li>
+  <li><strong>가드레일이 절반을 흡수한다.</strong> <code>traj</code> 절반이
+  <code>max(rank, rank)</code>에서 binding인 비율은 Q head 54.4% / MLP 49.2%이고, 실제로 선택
+  변화도 8.5% &rarr; 4.5% (dual 내부)로 줄었다. 이번에는 그 흡수가 <em>손해를 줄이는</em> 쪽으로
+  작용한 셈이다.</li>
+  <li><strong>KV 축</strong>: KV-1 드롭 선택이 36개 레이어 중 80.6%에서만 일치한다. u40_v2는 KV를
+  쓰지 않지만 <code>cocsafe</code>/<code>j_traj</code>/<code>integrated_mag</code>는 쓰므로, 그 config들에
+  대해서는 별도 영향이 있다(이번 결과로 보아 건드리지 않는 편이 안전하다).</li>
+</ul>
+
+<h3>11.3 <code>sumabs</code> &mdash; 예측을 세우고 확인했다</h3>
+
+<p>11.1절의 설명이 맞다면 <strong>질량을 평탄화하는 모든 집계</strong>가 같은 이유로 해로워야 하고
+(<code>trimz</code>, <code>maxrank</code> 포함), <strong><code>sumabs</code></strong>만 예외여야 한다 &mdash;
+질량 순서는 그대로 두고 부호 상쇄만 제거하기 때문이다. 그래서 이것 하나를 추가로 돌렸다.</p>
+
+<p>먼저 무료 진단으로 상한을 잡았다. VLM의 상쇄비는 <strong>C 중앙값 0.753 (q) / 0.746 (mlp)</strong>로
+expert(0.637 / 0.567)보다 <strong>약하다</strong> &mdash; 지워지는 기울기가 25% 정도로 expert의
+35&ndash;45%보다 적다. 그 결과 <code>sumabs</code>가 바꾸는 선택은 <strong>3.1% / 4.0%</strong>뿐이다
+(znorm은 8.5% / 10.8%).</p>
+
+<p>측정 결과는 <strong>무효과</strong>다: paired ΔminADE@6 &minus;0.0060 [&minus;0.077, +0.072],
+p=0.60. minFDE@6도 &minus;0.0593 [&minus;0.308, +0.182]로 방향만 같고 유의하지 않다. 버킷별로도
+cruise &minus;0.050 [&minus;0.104, +0.001], accel +0.214 [&minus;0.004, +0.582]로 어느 쪽도 CI가
+0을 배제하지 않는다.</p>
+
+<div class="note">
+  <strong>이것은 expert에서의 예측과도 일치한다.</strong> D 단계에서 <code>sumabs</code>는 r=0.25에서
+  무효과일 것으로 사전 등록했고 실제로 그랬다(+0.0496, CI가 0 포함). 두 타워에서 같은 예측이 같은
+  방식으로 맞았으므로, "겹침이 높으면 결과도 안 바뀐다"는 읽기는 <strong>얕은 절단에서는</strong>
+  타워와 무관하게 성립한다. (expert r=0.40에서는 &minus;0.1185로 깨졌다 &mdash; 절단이 깊어지면
+  작은 선택 차이도 결과를 가른다.)
+</div>
+
+<p><strong>두 arm을 함께 읽은 결론.</strong> VLM의 스텝 축에서는 두 종류의 개입만 가능한데 &mdash;
+질량 순서를 바꾸거나(znorm 계열), 바꾸지 않거나(sumabs) &mdash; 전자는 <strong>+0.79로 크게
+나빠지고</strong> 후자는 <strong>아무 일도 일어나지 않는다</strong>. 그러므로 VLM에서 스텝 축은
+<strong>고칠 결함이 아니라 이미 맞는 것</strong>이다. 현행 <code>|&Sigma;<sub>s</sub>|</code>는
+"실수로 맞은" 셈인데, 이 타워에서는 스텝 질량이 곧 진짜 중요도라서 그것을 그대로 통과시키는
+합산이 우연히 옳은 집계가 된다.</p>
+
+<p class="meta">남은 미탐색 영역: r=0.40보다 깊은 절단. expert에서 <code>sumabs</code>가 r=0.25
+무효과 &rarr; r=0.40 유의로 뒤집혔으므로, VLM에서도 더 깊은 예산에서는 달라질 수 있다. 다만
+u40_v2 셀(0.3986)이 이 트랙의 운영 지점이므로 우선순위는 낮다.</p>
+
+<h2><span class="num">12.</span>폐루프 확인 &mdash; 판정 불가 <span class="tag">2026-08-23</span></h2>
+
+<p>지금까지의 결과는 전부 개루프다. 이 트랙에는 개루프 minADE가 폐루프 실패를 가린 전례가 있어
+(<code>2026-08-11_criterion-closedloop</code>), 9절의 승자를 alpasim에서 확인했다.</p>
+
+<p>D 단계는 전부 런타임 마스크였으므로 <strong>이 실험을 위해 처음으로 물리 체크포인트를
+만들었다</strong> &mdash; alpasim 드라이버는 실제 <code>slim_state.pt</code>를 읽고 런타임 마스크를
+받지 못한다. config는 <code>expert_u25</code>(expert tower만, uniform r=0.25, VLM·KV 불변),
+점수는 D 단계가 쓴 것과 <strong>배열 수준에서 동일</strong>한 znorm 재집계다(kept-set 겹침 1.000000).</p>
+
+<table>
+  <tr><th>항목</th><th class="r">값</th></tr>
+  <tr><td>제거 파라미터</td><td class="r">532,021,248 (<strong>전체의 4.80%</strong>)</td></tr>
+  <tr><td>레이어별</td><td class="r">expert Q head 16&rarr;12, MLP 8256&rarr;6192</td></tr>
+  <tr><td>VLM</td><td class="r">36개 레이어 전부 불변</td></tr>
+  <tr><td>scene / rollout</td><td class="r">150 &times; 2 (2601 suite), GPU 6&middot;7 2-way 샤딩 후 병합</td></tr>
+  <tr><td>대조군</td><td class="r"><code>m2601_merged_baseline</code> (무압축, 동일 suite&middot;scene&middot;rollout)</td></tr>
+</table>
+
+<table>
+  <tr><th>config</th><th class="r">score</th><th class="r">pass%</th><th class="r">충돌@fault</th><th class="r">off-road</th><th class="r">progress</th><th class="r">CoC degen</th></tr>
+  <tr><td>무압축 baseline</td><td class="r">0.750</td><td class="r">89.0</td><td class="r">0.040</td><td class="r">0.070</td><td class="r">0.747</td><td class="r">0.006</td></tr>
+  <tr><td>expert znorm r25</td><td class="r">0.720</td><td class="r">87.7</td><td class="r">0.040</td><td class="r">0.083</td><td class="r">0.711</td><td class="r">0.006</td></tr>
+</table>
+
+<p><strong>paired &Delta;score = &minus;0.0297 [&minus;0.0652, +0.0052], Wilcoxon p=0.067,
+W/L/T 31/52/67.</strong></p>
+
+<div class="callout">
+  <strong>판정: 확인도 반증도 아니다 &mdash; 이 설계의 해상도 아래다.</strong>
+  scene당 paired delta의 σ &asymp; 0.32이고 N=150은 <strong>0.080</strong>까지만 분해한다
+  (CLAUDE.md 실측 power). 관측된 &minus;0.030은 그 절반도 안 되므로 <strong>애초에 이 표본으로는
+  잡을 수 없는 크기</strong>다. 정확한 서술은 "차이 없음"이 아니라 <strong>"모른다"</strong>이다.
+  <br><br>
+  그럼에도 <strong>방향은 일관되게 음수</strong>다(150 scene 중 31승 52패, p=0.067). 개루프에서
+  무압축과 동률(+0.0003)이었던 것과 견주면 이 트랙의 전례 &mdash; 개루프가 폐루프 열화를 가린다 &mdash;
+  와 같은 방향의 간극이 다시 보인다. 크기는 작지만 <strong>4.8% 압축에서 이렇다</strong>는 점이
+  신경 쓰인다.
+</div>
+
+<p>CoC 건강도는 두 arm이 완전히 동일하다(degen 0.006, 길이 74, uniq 0.94). expert만 잘랐으므로
+VLM의 추론 텍스트가 영향받지 않는다는 설계상의 예측이 그대로 확인된다 &mdash; 무결성 점검으로서의
+값어치는 있다.</p>
+
+<h3>12.1 이것을 매듭지으려면</h3>
+
+<p>표본을 늘리는 것은 비용 대비 효율이 나쁘다. N=250이 0.062, N=600이라야 0.040이고, 관측치
+&minus;0.030은 그래도 빠듯하다. GPU 2장에서 N=150이 15시간이었으므로 N=600은 60시간이다.</p>
+
+<p><strong>비교를 바꾸는 편이 낫다.</strong> 배포 결정은 "무압축과 같은가"가 아니라 <strong>"지금 쓰는
+magnitude보다 나은가"</strong>이다 &mdash; 출시 config들은 expert를 magnitude로 자른다
+(<code>make_slim.build_masks</code>의 <code>expert_masks(..., "magnitude")</code>). 같은 예산에서
+znorm과 magnitude를 직접 붙이면 두 arm이 공유하는 열화가 상쇄되어 검정력이 올라가고, 답도
+실제 의사결정에 바로 쓰인다. 체크포인트 1개(21 GB)와 폐루프 15시간이 든다.</p>
+
+<p class="meta">한 가지 더: D 단계는 expert를 <strong>uniform</strong>으로 잘랐지만 출시
+<code>integrated_mag</code>의 expert 할당은 <strong>초반 40% / 후반 10% 그라데이션</strong>이다.
+znorm을 실제 config에 넣으려면 그 할당에서 다시 재야 하며, 이 폐루프 결과가 그대로 이전되지
+않는다.</p>
+
+<h2><span class="num">13.</span>다음 단계</h2>
+
+<p class="meta">VLM 축은 <strong>닫혔다</strong>: 질량 순서를 바꾸는 개입은 크게 해롭고(znorm +0.79),
+보존하는 개입은 무효과다(sumabs &minus;0.006). 남은 작업은 전부 expert 쪽 결과를 굳히는 일이다.</p>
+
+<ol>
+  <li><strong>폐루프를 <code>znorm</code> vs <code>magnitude</code>로 다시 (최우선).</strong> 무압축
+  대비는 해상도 아래였다(12절). 출시 config가 expert를 magnitude로 자르므로 그것과 직접 붙이면
+  공통 열화가 상쇄되어 검정력이 오르고, 답이 곧 의사결정이다. 체크포인트 1개 + 15시간.</li>
+  <li><strong>출시 할당에서 재측정.</strong> D와 폐루프는 expert uniform이지만
+  <code>integrated_mag</code>의 expert 할당은 초반 40%/후반 10% 그라데이션이다. 그 할당에서
+  znorm의 이득이 남는지는 따로 재야 한다.</li>
+  <li><strong>r=0.40에 남은 격차.</strong> 두 축을 모두 고쳐도 magnitude와 동률에 그친다. 깊은
+  절단에서 남는 원인 후보는 1차 Taylor 근사의 한계(&rarr; Hessian/OBS 계열, Tyr 트랙과 합류)와
+  GT 단일 mode 의존(expert는 다봉 분포를 학습하는데 FM 목적은 GT 한 mode만 본다)이다.</li>
+  <li><strong>물리 제거 체크포인트.</strong> 지금까지는 전부 마스크 수준이다(<code>mask_lib</code>
+  문서대로 기능적으로 동일). <code>znorm</code>을 실제 config로 승격하려면 <code>make_slim.py</code>로
+  체크포인트를 만들고 고정 3셋(val/test/OOD-val) 전체를 돌려야 한다.</li>
+</ol>
+
+<h2><span class="num">14.</span>재현</h2>
+
+<pre style="background:var(--bg-code);border-radius:8px;padding:1rem;overflow-x:auto;font-size:0.86rem"><code>R=experiments/head_analysis
+# A. 스텝 분해 (per_step = G0 재현용, shared = 짝지은 스텝 비교)
+bash $R/run_retry_host.sh 60 $R/run_step_importance.py --gpu 4 --mode fm \
+    --noise-mode per_step --num-clips 100 --exp-id stepimp_fm_perstep_v2 --reserve-gb 28
+bash $R/run_retry_host.sh 60 $R/run_step_importance.py --gpu 5 --mode fm \
+    --noise-mode shared --num-clips 100 --exp-id stepimp_fm_shared_v2 --reserve-gb 28
+# G0 기준선 (같은 아키텍처에서 원본 재측정)
+bash $R/run_retry_host.sh 90 $R/run_importance.py --gpu 4,5 --num-clips 100 \
+    --exp-id importance_v2_ada --reserve-gb 42
+# B. 추론 경로 (먼저 Euler 재구현 충실도 검증)
+bash $R/run_retry_host.sh 5 $R/verify_step_euler.py --gpu 6 --num-clips 3 --reserve-gb 36
+bash $R/run_retry_host.sh 60 $R/run_step_importance.py --gpu 6 --mode infer \
+    --num-clips 100 --k 4 --exp-id stepimp_infer_v2 --reserve-gb 36
+# C. 스텝-한정 마스킹
+bash $R/run_retry_host.sh 60 $R/run_step_mask.py --gpu 7 --num-clips 60 --k 4 \
+    --exp-id stepmask_v1 --reserve-gb 28
+# 분석
+.venv/bin/python $R/analyze_step_importance.py --fm-perstep stepimp_fm_perstep_v2 \
+    --fm-shared stepimp_fm_perstep_v2 --infer stepimp_infer_v2 --stepmask stepmask_v1 \
+    --importance importance_v2_ada --importance-alt importance_v2 --out stepimp_analysis
+# D. 집계 arm (재집계만, 새 기울기 측정 없음) — 2-way 샤딩
+for s in 0 1; do bash $R/run_retry_host.sh 90 $R/run_expert_agg.py --gpu $((6+s)) \
+    --exp-id stepagg_v1 --num-clips 200 --shard $s --n-shards 2 --reserve-gb 30 & done
+.venv/bin/python $R/analyze_expert_agg.py --exp-id stepagg_v1 --out stepagg_analysis
+
+# 11절 — VLM tower (스텝마다 VLM backward 1회, 인터리브)
+bash $R/run_retry_host.sh 60 $R/run_step_importance_vlm.py --gpu 6 \
+    --num-clips 100 --exp-id importance_stepvlm_v1 --reserve-gb 44
+.venv/bin/python $R/make_stepvlm_importance.py --stepvlm importance_stepvlm_v1 \
+    --ref importance_v2_ada          # -> importance_stepvlm_{sum,znorm,trimz,seedz}
+.venv/bin/python $R/analyze_stepvlm.py --stepvlm importance_stepvlm_v1 \
+    --ref importance_v2_ada --out stepvlm_analysis                      # V0 / V1 / V4 / V5
+# arm 빌드: make_slim 수정 없이 importance 파일만 교체 (--no-state, 17 GB 체크포인트 불필요)
+$R/make_slim.py --config traj_u40_v2 --importance importance_v2_ada \
+    --out outputs/slim_traj_ada_ctl --no-state --gpu 6
+$R/make_slim.py --config traj_u40_v2 --importance importance_stepvlm_znorm \
+    --out outputs/slim_traj_znorm --no-state --gpu 7
+experiments/evaluation/run_baseline.py --set indist --manifest val_500 --no-tf \
+    --model outputs/slim_traj_znorm --exp-id trajznorm_val --gpu 7
+.venv/bin/python $R/analyze_stepvlm_arms.py --control trajctl_val --arm trajznorm_val \
+    --out stepvlm_arms_val                                                       # V2
+# 11.3절 — sumabs (대조군 재사용, 새 arm 하나만; val500을 두 카드에 샤딩)
+$R/make_slim.py --config traj_u40_v2 --importance importance_stepvlm_sumabs \
+    --out outputs/slim_traj_sumabs --no-state --gpu 6
+for s in 0 1; do experiments/evaluation/run_baseline.py --set indist --manifest val_500 \
+    --no-tf --model outputs/slim_traj_sumabs --exp-id trajsumabs_val \
+    --gpu $((6+s)) --shard $s --n-shards 2 & done
+.venv/bin/python $R/analyze_stepvlm_arms.py --control trajctl_val --arm trajsumabs_val \
+    --out stepvlm_arms_sumabs_val                                                # V2b
+
+# 12절 — 폐루프. D 단계는 런타임 마스크였으므로 물리 체크포인트를 먼저 만든다
+.venv/bin/python $R/make_stepexp_importance.py --stepimp stepimp_fm_perstep_v2 \
+    --ref importance_v2_ada          # -> importance_stepexp_{sum,znorm,sumabs,trimclip_znorm}
+$R/make_slim.py --config expert_u25 --importance importance_stepexp_znorm \
+    --out outputs/slim_expert_znorm_r25 --gpu 6      # --no-state 불가: 드라이버가 state를 읽는다
+# outputs/ 와 드라이버 디렉터리는 같은 마운트여야 한다 (하드링크는 파일시스템을 못 넘는다)
+cp -l /mnt/nvme1n1/ad_vla/outputs/chan/slim_expert_znorm_r25/* \
+      /mnt/nvme1n1/ad_vla/data/alpasim/drivers/slim_expert_znorm_r25/
+DRIVER_OMP_THREADS=8 bash $R/launch_alpasim_shards.sh slim_expert_znorm_r25 150 2 "6 7"
+.venv/bin/python $R/merge_alpasim_shards.py --runs-root ~/project/chan/alpasim-runs \
+    --shards m2601_slim_expert_znorm_r25_sh{0,1} \
+    --out m2601_merged_slim_expert_znorm_r25 --expect-scenes 150
+cd ~/project/chan/alpasim &amp;&amp; uv run python $R/analyze_alpasim.py \
+    --runs-root ~/project/chan/alpasim-runs --prefix m2601_merged_ \
+    --configs baseline slim_expert_znorm_r25 --out &lt;abs&gt;/outputs/alpasim_stepexp</code></pre>
+
+<p class="meta">본문의 G1&ndash;G3 수치는 <code>stepimp_fm_perstep_v2</code>(원본 구성을 정확히 재현하는 런) 기준이다.
+<code>stepimp_fm_shared_v2</code>는 스텝 비교를 짝지어 같은 결론을 재현하며(Q head 스텝 간 ρ 0.651 vs 바닥
+0.904), 두 noise 모드에서 결론이 동일하다는 점이 이 결과가 noise draw의 산물이 아님을 보인다.</p>
+
+</div>
+</body>
+</html>

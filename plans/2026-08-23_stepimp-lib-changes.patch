@@ -1,0 +1,398 @@
+# prune_lib.py / make_slim.py changes from the denoise-step-importance track
+#
+# These two files could NOT be copied over: main advanced past this branch's base while
+# the work ran (make_slim gained wanda / tyr / dual2nd / dualscope; prune_lib gained its
+# own expert_infer_grads), and overwriting would have discarded that. The rest of the
+# track -- 12 scripts, the report template, the report, both plans -- was copied over
+# directly and needs nothing.
+#
+# What this patch adds:
+#   prune_lib.py   StepGates, expert_fm_grads_stepwise, expert_step_cache_grads,
+#                  vlm_backward_from_cache, expert_infer_grads_stepwise, and
+#                  UnitGates.q_signed/mlp_signed. Note main already has its own
+#                  `expert_infer_grads` covering similar ground -- reconcile rather than
+#                  add both.
+#   make_slim.py   the `expert_u<pct>` branch in build_masks (expert tower only, uniform
+#                  ratio, VLM and KV untouched), used to turn a D-stage runtime mask into
+#                  a real checkpoint for alpasim.
+#
+# Apply with a 3-way merge, not a straight apply:
+#   git apply -3 plans/2026-08-23_stepimp-lib-changes.patch
+#
+# Base of this diff: merge-base of lingoqa-reasoning-probe and the (now deleted) branch
+# worktree-denoise-step-importance, commit fcf8aef.
+# Report: reports/evaluation/2026-08-21_denoise-step-importance.html
+#
+diff --git a/experiments/head_analysis/make_slim.py b/experiments/head_analysis/make_slim.py
+index cad32b1..20f4b3d 100644
+--- a/experiments/head_analysis/make_slim.py
++++ b/experiments/head_analysis/make_slim.py
+@@ -62,7 +62,24 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
+     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
+     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
+     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
+-    if it:
++    exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
++    if exp_only:
++        # Expert tower only, uniform ratio, VLM and KV untouched -- the shape the D-stage
++        # aggregation arms were measured in (run_expert_agg.py evaluated exactly this as a
++        # runtime mask). The within-layer score is whatever `traj_exp_*` the importance file
++        # carries, so the aggregation is selected by --importance rather than by a new stem:
++        #   --importance importance_v2_ada        the shipped |sum_s| rule
++        #   --importance importance_stepexp_znorm the step-normalised one
++        # This exists so a mask-level open-loop result can be carried into alpasim, which
++        # needs a real slim_state.pt and cannot take runtime masks.
++        ratio = int(exp_only.group(1)) / 100
++        all_e = list(range(ec.num_hidden_layers))
++        eq = ml.select_mask(imp["traj_exp_q"], ratio, all_e)
++        em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)
++        vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))
++        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
++        kvonly = ()
++    elif it:
+         # Staged re-calibration masks from run_iter_prune.py: same budget, allocation
+         # and axes as the *_u40_v2 family (verified by its R0 gate), only the score
+         # measurement schedule differs. The masks are precomputed, so this branch just
+diff --git a/experiments/head_analysis/prune_lib.py b/experiments/head_analysis/prune_lib.py
+index aac0d6f..e888f08 100644
+--- a/experiments/head_analysis/prune_lib.py
++++ b/experiments/head_analysis/prune_lib.py
+@@ -70,6 +70,20 @@ class UnitGates:
+     def mlp_scores(self):
+         return self._scores(self.mlp_gates, self.intermediate)  # (L, I)
+ 
++    @staticmethod
++    def _signed(gates, size):
++        return np.stack([
++            g.grad.float().cpu().numpy() if g.grad is not None else np.zeros(size)
++            for g in gates
++        ])
++
++    def q_signed(self):
++        """dL/dg without the abs, for callers that aggregate the sign themselves."""
++        return self._signed(self.q_gates, self.n_heads)  # (L, H)
++
++    def mlp_signed(self):
++        return self._signed(self.mlp_gates, self.intermediate)  # (L, I)
++
+     def zero_grads(self):
+         for g in self.q_gates + self.mlp_gates:
+             g.grad = None
+@@ -188,3 +202,317 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill):
+ 
+     grads = [(k.grad, v.grad) for k, v in leaves]
+     return float(np.mean(losses)), grads, leaves
++
++
++# ---------------------------------------------------------------------------
++# Denoising-step decomposition (2026-08-21)
++#
++# The shipped expert criterion accumulates ten backwards into one gate grad and reads
++# |sum_s dL_s/dg|, while the clip axis accumulates sum_clips |.|. The two axes therefore
++# aggregate by different rules, and steps of opposite sign cancel on the step axis only.
++# Everything below keeps the step axis so that asymmetry is measurable, not assumed.
++# ---------------------------------------------------------------------------
++
++
++class StepGates:
++    """Per-denoising-step gates on one tower, for a single backward through the chain.
++
++    One leaf per layer carrying a leading step axis, plus a mutable `step` the hooks read.
++    Running the Euler loop with grad enabled and bumping `step` each iteration means one
++    backward from the final loss yields dL/dg separately for every step, which is what
++    "how much does unit u matter AT step s, for the final trajectory" requires. UnitGates
++    cannot express this: it holds one gate per unit for the whole rollout.
++    """
++
++    def __init__(self, layers, n_heads, head_dim, intermediate, n_steps, device, dtype):
++        self.n_heads = n_heads
++        self.head_dim = head_dim
++        self.intermediate = intermediate
++        self.n_steps = n_steps
++        self.step = 0
++        self.q_gates = [
++            torch.ones(n_steps, n_heads, device=device, dtype=dtype, requires_grad=True)
++            for _ in layers
++        ]
++        self.mlp_gates = [
++            torch.ones(n_steps, intermediate, device=device, dtype=dtype, requires_grad=True)
++            for _ in layers
++        ]
++        self._handles = []
++        for i, layer in enumerate(layers):
++            self._handles.append(
++                layer.self_attn.o_proj.register_forward_pre_hook(self._make_q_hook(i))
++            )
++            self._handles.append(
++                layer.mlp.down_proj.register_forward_pre_hook(self._make_mlp_hook(i))
++            )
++
++    def _make_q_hook(self, i):
++        def hook(module, args):
++            x = args[0]  # (B, T, H*D)
++            b, t, _ = x.shape
++            g = self.q_gates[i][self.step].view(1, 1, -1, 1)
++            x = x.view(b, t, self.n_heads, self.head_dim) * g
++            return (x.view(b, t, -1),)
++        return hook
++
++    def _make_mlp_hook(self, i):
++        def hook(module, args):
++            x = args[0]  # (B, T, intermediate)
++            return (x * self.mlp_gates[i][self.step].view(1, 1, -1),)
++        return hook
++
++    @staticmethod
++    def _grads(gates, n_steps, size):
++        # (L, S, U) -> (S, L, U); the gate value is 1, so g * dL/dg == dL/dg
++        g = np.stack([
++            x.grad.float().cpu().numpy() if x.grad is not None else np.zeros((n_steps, size))
++            for x in gates
++        ])
++        return g.transpose(1, 0, 2)
++
++    def q_grads(self):
++        return self._grads(self.q_gates, self.n_steps, self.n_heads)  # (S, L, H)
++
++    def mlp_grads(self):
++        return self._grads(self.mlp_gates, self.n_steps, self.intermediate)  # (S, L, I)
++
++    def zero_grads(self):
++        for g in self.q_gates + self.mlp_gates:
++            g.grad = None
++
++    def remove(self):
++        for h in self._handles:
++            h.remove()
++        self._handles = []
++
++
++def expert_fm_grads_stepwise(model, cache, rope_deltas, x1, fm_steps, seed, prefill,
++                             gates, noise_mode="shared"):
++    """Per-step flow-matching gradients on the expert gates, signed.
++
++    Identical construction to expert_fm_grads -- same t grid ((s+0.5)/S), same
++    x_t = (1-t) eps + t x1, same target x1 - eps -- except the gate grads are read and
++    zeroed after every step. The shipped path never zeroes them, so its score is
++    |sum_s dL_s/dg| and steps of opposite sign cancel; keeping the signed per-step term
++    lets that cancellation be measured, and any other step aggregation be built.
++
++    noise_mode:
++      "per_step"  a fresh eps per step, exactly as expert_fm_grads draws it -- summing the
++                  returned grads over s then reproduces the shipped score, the integrity check.
++      "shared"    one eps for the whole t grid, so step-to-step differences are paired and
++                  carry no noise-draw variance. The analysis default.
++
++    Returns (losses (S,), q (S,L,H), mlp (S,L,I), kv_k (S,L,KV), kv_v (S,L,KV)).
++    kv_* use the same within-step form as kv_group_scores (|k * dL/dk| summed over
++    positions) on detached cache leaves, so no VLM backward is needed.
++    """
++    device = x1.device
++    n_layers = len(model.expert.layers)
++    leaves = []
++    for i in range(n_layers):
++        k, v = lib.cache_layer_kv(cache, i)
++        leaves.append((k.detach().requires_grad_(True), v.detach().requires_grad_(True)))
++
++    offset = torch.tensor([prefill], device=device)
++    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
++    n_tok = model.action_space.get_action_space_dims()[0]  # 64
++    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
++        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
++        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
++    )
++    forward_kwargs = {}
++    if model.config.expert_non_causal_attention:
++        forward_kwargs["is_causal"] = False
++
++    gen = torch.Generator(device="cpu").manual_seed(seed)
++    shared = torch.randn(x1.shape, generator=gen).to(device) if noise_mode == "shared" else None
++
++    n_kv = leaves[0][0].shape[1]
++    losses, q_s, mlp_s, kv_k_s, kv_v_s = [], [], [], [], []
++    gates.zero_grads()
++    for s in range(fm_steps):
++        t_val = (s + 0.5) / fm_steps
++        noise = shared if shared is not None \
++            else torch.randn(x1.shape, generator=gen).to(device)  # (1, 64, 2)
++        x_t = (1.0 - t_val) * noise + t_val * x1
++        v_target = x1 - noise  # (1, 64, 2)
++        t = torch.full((1, 1, 1), t_val, device=device)
++        for i, (k, v) in enumerate(leaves):
++            lib.set_cache_layer_kv(cache, i, k, v)
++        with torch.autocast("cuda", dtype=torch.bfloat16):
++            embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
++            if embeds.dim() == 2:
++                embeds = embeds.view(1, n_tok, -1)
++            out = model.expert(
++                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
++                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
++            )
++            cache.crop(prefill)
++            pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
++        loss = F.mse_loss(pred.float(), v_target)
++        loss.backward()
++
++        losses.append(loss.item())
++        q_s.append(gates.q_signed())
++        mlp_s.append(gates.mlp_signed())
++        kk = np.zeros((n_layers, n_kv))
++        vv = np.zeros((n_layers, n_kv))
++        with torch.no_grad():
++            for i, (k, v) in enumerate(leaves):
++                if k.grad is not None:
++                    kk[i] = (k * k.grad).abs().sum((0, 2, 3)).float().cpu().numpy()
++                if v.grad is not None:
++                    vv[i] = (v * v.grad).abs().sum((0, 2, 3)).float().cpu().numpy()
++        kv_k_s.append(kk)
++        kv_v_s.append(vv)
++
++        gates.zero_grads()
++        for k, v in leaves:
++            k.grad = None
++            v.grad = None
++
++    del leaves
++    return (np.array(losses), np.stack(q_s), np.stack(mlp_s),
++            np.stack(kv_k_s), np.stack(kv_v_s))
++
++
++def vlm_backward_from_cache(cache_t, seed_grads, retain=True):
++    """Seed the VLM graph with a per-layer cache gradient and backprop through it.
++
++    This is the operation run_importance performs exactly once, with seed
++    sum_s dL_s/dcache, which is why the shipped VLM trajectory score is |sum_s dL_s/dg|.
++    Backprop is linear in the seed, so calling this per step recovers the step axis, and
++    calling it once with sum_s w_s (dL_s/dcache) returns sum_s w_s (dL_s/dg) for any fixed
++    weighting -- one backward instead of ten.
++
++    Caller owns zeroing: gate .grad and cache_t .grad both accumulate across calls.
++    """
++    ts, gs = [], []
++    for (k, v), (gk, gv) in zip(cache_t, seed_grads):
++        for t_, g_ in ((k, gk), (v, gv)):
++            if g_ is not None:
++                ts.append(t_)
++                gs.append(g_.to(t_.dtype))
++    torch.autograd.backward(ts, gs, retain_graph=retain)
++
++
++def expert_step_cache_grads(model, cache, rope_deltas, x1, s, fm_steps, prefill,
++                            leaves, noise):
++    """One flow-matching step's gradient onto the detached cache leaves. Returns the loss.
++
++    Split out of expert_fm_grads so the caller can interleave a VLM backward after each
++    step instead of accumulating ten of them: holding all ten cache-gradient sets at once
++    peaked at 45.0 GB on a 47.4 GB card, while one set at a time stays at the ~41 GB the
++    shipped pass already uses.
++    """
++    device = x1.device
++    n_tok = model.action_space.get_action_space_dims()[0]  # 64
++    offset = torch.tensor([prefill], device=device)
++    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
++    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
++        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
++        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
++    )
++    forward_kwargs = {}
++    if model.config.expert_non_causal_attention:
++        forward_kwargs["is_causal"] = False
++
++    t_val = (s + 0.5) / fm_steps
++    x_t = (1.0 - t_val) * noise + t_val * x1
++    v_target = x1 - noise  # (1, 64, 2)
++    t = torch.full((1, 1, 1), t_val, device=device)
++    for i, (k, v) in enumerate(leaves):
++        lib.set_cache_layer_kv(cache, i, k, v)
++    with torch.autocast("cuda", dtype=torch.bfloat16):
++        embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
++        if embeds.dim() == 2:
++            embeds = embeds.view(1, n_tok, -1)
++        out = model.expert(
++            inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
++            attention_mask=attention_mask, use_cache=True, **forward_kwargs,
++        )
++        cache.crop(prefill)
++        pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
++    loss = F.mse_loss(pred.float(), v_target)
++    loss.backward()
++    return float(loss.item())
++
++
++def expert_infer_grads_stepwise(model, cache, rope_deltas, prefill, step_gates, gt_xy,
++                                hist_xyz, hist_rot, seed, n_steps=10, x0=None):
++    """Per-step gradients along the model's OWN Euler trajectory, w.r.t. the final path.
++
++    The shipped criterion measures on the training path: x_t = (1-t) eps + t x1, a point on
++    the straight line to the GT action, at t = 0.05 .. 0.95. Inference walks a different
++    path -- x_{i+1} = x_i + dt v(x_i), t = 0.0 .. 0.9, one noise draw -- whose iterates carry
++    the model's own accumulated error. This runs that loop with grad on and a separate gate
++    per step, so one backward from MSE(pred_xy, gt_xy) gives d(final path error)/d(gate at
++    step s): the deployment-relevant score.
++
++    FlowMatching.sample is decorated @torch.no_grad, so its Euler loop is reproduced here.
++    The prefill cache is re-seated from detached leaves each step, so the graph holds only
++    the expert's own contribution rather than ten nested cats of the VLM cache.
++
++    x0 overrides the initial noise, which is what lets the reimplementation be checked
++    against the official sampler on identical input (see verify_step_euler.py); left None
++    it is drawn from a CPU generator so the draw does not depend on the GPU architecture.
++
++    Returns (loss, q (S,L,H), mlp (S,L,I), action (1,64,2)); the grads are signed.
++    """
++    device = gt_xy.device
++    n_layers = len(model.expert.layers)
++    leaves = []
++    for i in range(n_layers):
++        k, v = lib.cache_layer_kv(cache, i)
++        leaves.append((k.detach(), v.detach()))
++
++    offset = torch.tensor([prefill], device=device)
++    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
++    n_tok = model.action_space.get_action_space_dims()[0]  # 64
++    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
++        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
++        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
++    )
++    forward_kwargs = {}
++    if model.config.expert_non_causal_attention:
++        forward_kwargs["is_causal"] = False
++
++    dims = model.action_space.get_action_space_dims()  # (64, 2)
++    if x0 is None:
++        gen = torch.Generator(device="cpu").manual_seed(seed)
++        x = torch.randn(1, *dims, generator=gen).to(device)
++    else:
++        x = x0.to(device)
++    dt = 1.0 / n_steps
++
++    step_gates.zero_grads()
++    with torch.autocast("cuda", dtype=torch.bfloat16):
++        for s in range(n_steps):
++            step_gates.step = s
++            t = torch.full((1, 1, 1), s * dt, device=device)
++            for i, (k, v) in enumerate(leaves):
++                lib.set_cache_layer_kv(cache, i, k, v)
++            # x stays fp32 here, as the release step_fn and denoise_with_cache pass it --
++            # autocast casts inside action_in_proj's Linears, and pre-casting to bf16
++            # instead cost ~1% of the final trajectory (verify_step_euler.py). The
++            # training-path twin above does cast, matching the shipped expert_fm_grads.
++            embeds = model.action_in_proj(x, t)  # (1, 64, 2048)
++            if embeds.dim() == 2:
++                embeds = embeds.view(1, n_tok, -1)
++            out = model.expert(
++                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
++                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
++            )
++            cache.crop(prefill)
++            v_field = model.action_out_proj(out.last_hidden_state[:, -n_tok:]).view(1, *dims)
++            x = x + dt * v_field.float()
++
++    pred_xyz, _ = model.action_space.action_to_traj(
++        x.float(), hist_xyz[:, -1].float(), hist_rot[:, -1].float()
++    )  # (1, 64, 3)
++    loss = F.mse_loss(pred_xyz[0, :, :2], gt_xy)
++    loss.backward()
++    del leaves
++    return (float(loss.item()), step_gates.q_grads(), step_gates.mlp_grads(),
++            x.detach())
