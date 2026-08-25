@@ -1,0 +1,272 @@
+<meta charset="utf-8">
+<title>회복 학습의 병목: 데이터 다양성</title>
+<style>
+  body { max-width: 62rem; margin: 2rem auto; padding: 0 1.2rem;
+         font-family: -apple-system, "Helvetica Neue", "Noto Sans KR", sans-serif;
+         line-height: 1.62; color: #23201A; background: #FAF8F2; }
+  h1 { font-size: 1.7rem; margin-bottom: .2rem; }
+  h2 { font-size: 1.22rem; margin-top: 2.4rem; border-bottom: 2px solid #DAD3C2;
+       padding-bottom: .3rem; }
+  h3 { font-size: 1.02rem; margin-top: 1.6rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #DAD3C2; padding: .42rem .6rem; text-align: right; }
+  th { background: #EFEBE0; font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; }
+  code { background: #F0EDE4; padding: .1rem .3rem; font-size: .88em; }
+  pre { background: #F0EDE4; padding: .7rem 1rem; overflow-x: auto; font-size: .85rem; }
+  .callout { background: #EFF4E9; border-left: 4px solid #6F9E4C; padding: .9rem 1.1rem;
+             margin: 1.3rem 0; }
+  .warn { background: #FBF1E4; border-left: 4px solid #C88A34; padding: .9rem 1.1rem;
+          margin: 1.3rem 0; }
+  .pass { color: #008300; font-weight: 600; }
+  .fail { color: #B03030; font-weight: 600; }
+  .muted { color: #6B6555; font-size: .88em; }
+  .win { color: #008300; font-weight: 600; }
+  img { max-width: 100%; border: 1px solid #DAD3C2; background: #fff; }
+</style>
+
+<h1>회복 학습의 병목은 데이터 다양성이다</h1>
+<p class="muted">2026-08-25 · 계획서 <code>plans/2026-08-23_data-scaling-recovery.md</code> ·
+학습 <code>recover_dual_u55_d5</code> (NEURON job 892052) ·
+대조군 <code>recover_dual_u55_e3</code> (Blackwell) ·
+분석 <code>outputs/recovery_eval_dualD5/</code>, <code>outputs/ce_gap_diag/</code></p>
+
+<div class="callout">
+<b>헤드라인.</b> KI-LoRA 회복 학습의 데이터를 2,471 → 9,021 샘플로 늘리자
+(고유 장면 1,200 → 7,750, <b>6.5배</b>) test_500 minADE@6이
+<b>0.9806 → 0.9301</b>로 개선됐다 — 페어드 <b>−0.0505 [−0.0970, −0.0035]</b>,
+풀링 1,262클립에서 <b>−0.0629 [−0.0910, −0.0346]</b>. 사전등록 주 판정 게이트
+(CI 상한 &lt; 0) 통과로 <b>H1 채택</b>이며, 회복본이 <b>처음으로 한 단계 얕은 절단
+(<code>dual_u40_v2</code>, −24%)을 앞섰다</b> (풀링 −0.053, p=0.026). 33% 절단 + 회복이
+24% 절단 제로샷보다 낫다.
+<br><br><b>기전은 expert가 아니라 VLM이다.</b> held-out 고정격자 FM loss는
+0.2630 → 0.2621로 <b>−0.0009</b>, 사전등록 임계(0.005) 근처도 못 갔다. 행동 채널은
+데이터를 3.65배 줘도 더 쓰지 못했다. 대신 held-out CoC CE가 <b>1.1548 → 0.8506</b>
+(−26%)으로 떨어졌고, 학습 클립에서의 CE는 오히려 <b>0.0354 → 0.3970</b>으로 올라갔다.
+즉 <b>덜 외우고 더 잘 일반화</b>했으며, 개선은 expert가 읽는 문맥의 품질에서 왔다.
+<br><br><b>그러나 "덜 외우기"만으로는 부족하다.</b> 같은 2,471 샘플을 3에폭만 돌린
+대조군(<code>e3</code>)은 암기를 풀었는데도(train L_ce 0.019 → 0.28~0.41) probe가
+1.1745 → <b>1.2176으로 나빠졌다</b>. 레버는 반복 횟수가 아니라 <b>고유 장면의 수</b>다.
+</div>
+
+<h2>1. 사전등록 게이트</h2>
+
+<table>
+<tr><th>게이트</th><th>기준</th><th>실측</th><th>판정</th></tr>
+<tr><td>G1 회복 성립</td><td>test_500 minADE@6 ≤ 1.6</td><td>0.9301</td>
+    <td class="pass">PASS</td></tr>
+<tr><td>G1 제로샷 개선</td><td>페어드 CI 상한 &lt; 0</td>
+    <td>−3.3344 [−3.6719, −3.0039]</td><td class="pass">PASS</td></tr>
+<tr><td>G2 degeneracy</td><td>≤ 0.05</td><td>0.000 (세 세트 모두)</td>
+    <td class="pass">PASS</td></tr>
+<tr><td><b>주 판정</b> (데이터 효과)</td><td>test_500 <code>d(d5 − peer)</code> CI 상한 &lt; 0</td>
+    <td><b>−0.0505 [−0.0970, −0.0035]</b></td><td class="pass">H1 채택</td></tr>
+<tr><td>보조 (기전)</td><td>held-out FM plateau −0.005 이상 하락</td>
+    <td>−0.0009 (임계 미달)</td><td class="fail">행동 채널 불변</td></tr>
+</table>
+
+<p>보조 게이트 실패는 계획서가 미리 예상한 경우다 — §3에 "0.002 이내면 진단 확인, 이때
+minADE가 개선됐다면 FM 이외의 채널이 원인이므로 별도 설명이 필요하다"고 적어두었다.
+§3이 그 설명이다.</p>
+
+<h2>2. 개루프 결과</h2>
+
+<p class="muted">minADE@6 · minFDE@6, rollout, Ada 5–7, 클립 유도 페어드 시드.
+고정 프로토콜(2026-08-19)에 따라 teacher-forced 수치는 보고에 쓰지 않는다.</p>
+
+<table>
+<tr><th>arm</th><th colspan="2">val_500</th><th colspan="2">test_500</th>
+    <th colspan="2">OOD-val 262</th><th colspan="2">풀링 n=1,262</th></tr>
+<tr><th></th><th>ADE6</th><th>FDE6</th><th>ADE6</th><th>FDE6</th>
+    <th>ADE6</th><th>FDE6</th><th>ADE6</th><th>FDE6</th></tr>
+<tr><td>baseline (무손상, 11.1B)</td><td>0.8236</td><td>2.2050</td><td>0.8417</td><td>2.2673</td>
+    <td>0.9995</td><td>2.4959</td><td>0.8673</td><td>2.2901</td></tr>
+<tr><td>dual_u40_v2 (−24%, 8.42B)</td><td>0.8904</td><td>2.3304</td><td>0.9498</td><td>2.5459</td>
+    <td>1.1192</td><td>2.8514</td><td>0.9614</td><td>2.5240</td></tr>
+<tr><td>dual_u55 제로샷 (−33%, 7.41B)</td><td>3.9275</td><td>—</td><td>4.2644</td><td>—</td>
+    <td>3.7835</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>dual_u55 회복 · 2,471 (peer)</td><td>0.9082</td><td>2.3986</td><td>0.9806</td><td>2.7127</td>
+    <td>1.0739</td><td>2.7061</td><td>0.9713</td><td>2.5869</td></tr>
+<tr><td><b>dual_u55 회복 · 9,021 (d5)</b></td>
+    <td class="win">0.8138</td><td class="win">2.1555</td>
+    <td class="win">0.9301</td><td class="win">2.5886</td>
+    <td class="win">1.0477</td><td class="win">2.6242</td>
+    <td class="win">0.9084</td><td class="win">2.4244</td></tr>
+</table>
+
+<h3>페어드 델타 <code>d(d5 − peer)</code></h3>
+
+<table>
+<tr><th>세트</th><th>델타</th><th>95% CI</th><th>p</th><th></th></tr>
+<tr><td>val_500 (n=500)</td><td>−0.0945</td><td>[−0.1391, −0.0519]</td><td>0.0000</td>
+    <td class="pass">유의</td></tr>
+<tr><td>test_500 (n=500)</td><td><b>−0.0505</b></td><td>[−0.0970, −0.0035]</td><td>0.0057</td>
+    <td class="pass">유의</td></tr>
+<tr><td>OOD-val (n=262)</td><td>−0.0262</td><td>[−0.0861, +0.0327]</td><td>0.64</td>
+    <td>n.s.</td></tr>
+<tr><td><b>풀링 (n=1,262)</b></td><td><b>−0.0629</b></td><td>[−0.0910, −0.0346]</td>
+    <td>0.0000</td><td class="pass">유의</td></tr>
+</table>
+
+<p>같은 표에서 <code>d(d5 − dual_u40_v2)</code>는 풀링 <b>−0.0530 [−0.0944, −0.0115]</b>,
+p=0.026이다. 지금까지 세 회복 arm(u55의 <code>dual</code>/<code>coc</code>/<code>traj</code>)이
+전부 <code>dual_u40</code>과 구분되지 않았는데(풀링 p=0.94) 데이터를 늘리자 처음으로
+넘어섰다. 무손상 baseline과는 test_500에서 여전히 +0.0884 [+0.0264, +0.1555] 뒤진다.</p>
+
+PLOT::d5eval::openloop_at6.png
+PLOT::d5eval::openloop_degen.png
+
+<h2>3. 기전 — 무엇이 좋아졌나</h2>
+
+<h3>3.1 행동 채널(expert)은 움직이지 않았다</h3>
+
+<p>held-out 고정격자 FM loss(<code>--val-fm-clips 100</code>). KI 절연 때문에 FM 그래디언트는
+expert LoRA에만 흐르므로 이 수치는 expert 용량의 함수다.</p>
+
+<table>
+<tr><th>peer step (에폭)</th><th>FM mean</th><th>d5 step (에폭)</th><th>FM mean</th></tr>
+<tr><td>0</td><td>0.3494</td><td>0</td><td>0.3493</td></tr>
+<tr><td>150 (1.0)</td><td>0.2715</td><td>563 (1.0)</td><td>0.2652</td></tr>
+<tr><td>1200 (7.8)</td><td>0.2630</td><td>1689 (3.0)</td><td><b>0.2621</b></td></tr>
+</table>
+
+<p>두 arm 모두 <b>1에폭에 수렴</b>하고 이후 3% 안에서 평평하다. 최종 차이 −0.0009는
+사전등록 임계 0.005의 5분의 1이다.</p>
+
+<h3>3.2 언어 채널(VLM)은 암기에서 풀렸다</h3>
+
+<p>양쪽 arm이 <b>완전히 동일하게 공유하는</b> 두 집합에서 CoC cross-entropy를 쟀다 —
+held-in은 OOD-train 150클립(둘 다 학습에 사용), held-out은 ood_val 150클립(둘 다 미학습),
+같은 <code>gt_coc</code> 타깃. 학습 로그의 <code>L_ce</code>를 그대로 쓰면 두 arm이 서로 다른
+데이터에서 잰 값이라 "덜 외움"과 "데이터가 더 어려움"을 구분할 수 없어 이 진단이 필요했다.</p>
+
+<table>
+<tr><th>arm</th><th>held-in CE</th><th>held-out CE</th><th>gap</th></tr>
+<tr><td>peer (2,471 × 7.8에폭)</td><td>0.0354</td><td>1.1548</td><td>+1.1193</td></tr>
+<tr><td><b>d5 (9,021 × 3.0에폭)</b></td><td>0.3970</td><td class="win">0.8506</td>
+    <td class="win">+0.4536</td></tr>
+<tr><td>차이</td><td>+0.3616</td><td><b>−0.3042</b></td><td><b>−0.6657</b></td></tr>
+</table>
+
+<p>peer는 학습 클립을 사실상 재현한다(CE 0.035). d5는 그러지 못하는데(0.397)
+<b>처음 보는 클립은 26% 더 잘 예측한다</b>. 이 held-out CE는 개루프 평가의
+<code>nll_gtcoc</code>(peer 1.1389 / d5 0.8632)와 다른 코드 경로로 같은 것을 재며 1~2%
+안에서 일치한다.</p>
+
+<div class="callout">
+<b>연쇄.</b> 고유 장면 6.5배 → VLM이 CoC를 암기하지 못함(held-in CE 0.035 → 0.397) →
+언어 채널 일반화 개선(held-out CE 1.155 → 0.851) → expert가 읽는 KV 문맥 품질 개선
+(expert 자체는 불변) → 궤적 개선(test_500 −0.0505).
+</div>
+
+<h2>4. 대조군 — 반복을 줄인 것만으로는 안 된다</h2>
+
+<p>d5는 데이터(3.65배)와 에폭(7.8 → 3.0)이 <b>동시에</b> 변했다. <code>e3</code>는
+<b>peer와 완전히 같은 2,471 샘플</b>을 463스텝(3.0에폭)만 돌린 대조군이다. peer와 같은
+Blackwell 4장에서 학습해 하드웨어 교락도 없다.</p>
+
+<table>
+<tr><th>arm</th><th>고유 장면</th><th>샘플</th><th>에폭</th><th>스텝</th>
+    <th>train L_ce</th><th>probe best</th></tr>
+<tr><td>peer</td><td>1,200</td><td>2,471</td><td>7.8</td><td>1,200</td><td>0.019</td>
+    <td>1.1745</td></tr>
+<tr><td><b>e3 (에폭 대조군)</b></td><td>1,200</td><td>2,471</td><td>3.0</td><td>463</td>
+    <td>0.28–0.41</td><td class="fail">1.2176</td></tr>
+<tr><td><b>d5 (데이터)</b></td><td>7,750</td><td>9,021</td><td>3.0</td><td>1,689</td>
+    <td>0.105</td><td class="win">1.1363</td></tr>
+</table>
+
+<p>e3는 암기를 푸는 데는 성공했지만(L_ce 0.019 → 0.28~0.41) probe가 peer보다
+<b>0.043 나빠졌다</b>. 같은 3에폭에서 데이터만 다른 e3와 d5의 차이는 <b>−0.081</b>이다.
+즉 <b>암기 완화는 개선의 필요조건이 아니라 부산물</b>이고, 레버는 고유 장면의 수다.</p>
+
+<p>peer의 probe 곡선이 이를 뒷받침한다 — step 450(2.91에폭)에서 1.2384였고, 에폭을 더
+돌릴수록(3 → 7.8) 1.1802까지 <b>좋아졌다</b>. 에폭 축소가 이득이었다면 반대 방향이어야 한다.</p>
+
+PLOT::e3train::training.png
+
+<div class="warn">
+<b>미완.</b> e3의 판정 세트(test_500) 평가는 Ada 가용성 때문에 아직 돌리지 못했다. 위
+비교는 <b>probe 기준</b>이며 probe의 ood_val 262는 체크포인트 선택에 쓰여 선택-오염돼
+있다. 확정은 <code>slim_recover_dual_u55_e3</code>의 개루프 3세트로 닫아야 한다.
+</div>
+
+<h2>5. 확장 여지</h2>
+
+<table>
+<tr><th>레버</th><th>고유 장면</th><th>샘플</th><th>캐시 비용</th><th>평가</th></tr>
+<tr><td>현재 (클립당 1윈도우, 버킷 균등)</td><td>7,750</td><td>7,750</td><td>44 GB (완료)</td>
+    <td>상한 도달</td></tr>
+<tr><td>클립당 2윈도우 허용</td><td>9,874 (+27%)</td><td>14,500</td><td>68 GB / 7h</td>
+    <td>샘플 1.87배지만 장면은 1.27배</td></tr>
+<tr><td>버킷 균형 포기</td><td>9,874</td><td>9,874</td><td>56 GB / 6h</td>
+    <td>증가분이 전부 cruise</td></tr>
+<tr><td><code>--max-ade</code> 완화 (3.0 → ∞)</td><td>+43개</td><td>+33% 행</td><td>—</td>
+    <td>사실상 무의미</td></tr>
+<tr><td><b>CoC 추가 생성</b></td><td><b>최대 152,175</b></td><td>제한 없음</td>
+    <td>생성 + 캐시</td><td><b>유일하게 장면을 늘림</b></td></tr>
+</table>
+
+<p>결정적 사실: <code>coc_train.parquet</code>이 덮는 것은 <b>10,040 클립</b>인데 공식
+train split은 <b>153,625 클립</b>(OOD 제외 152,175)이다. 지금까지 쓴 것은 공식 train의
+<b>5.1%</b>이고 나머지는 풀모델 CoC가 없어서 못 쓰고 있을 뿐이다. 풀모델 롤아웃이 클립당
+약 8초이므로 4 GPU 기준 +10,000 장면에 5.5시간, 캐시 빌드 10시간, 100 GB가 든다.</p>
+
+<h2>6. 유보</h2>
+
+<ul>
+<li><b>하드웨어 교락.</b> d5는 NEURON A100, peer는 Blackwell 학습이다. 다만 이번 효과
+(풀링 −0.063, CI가 0에서 멀다)는 앞선 criterion 실험의 잡음 규모(±0.02)보다 크다. e3는
+peer와 같은 Blackwell이라 그 비교에는 교락이 없다.</li>
+<li><b>OOD 희석.</b> OOD-train이 1,271 상한이라 official만 늘리면 비중이 51% → 14%로
+떨어진다. 개선 폭이 OOD-val에서 가장 작았고(−0.026, n.s.) 계획서에 감시 지표로 등록해
+둔 항목이다.</li>
+<li><b>스텝 동반 변경.</b> 에폭을 3.0으로 고정한 결과 스텝이 1,200 → 1,689로 늘었다.
+계산량 고정 arm(9,021 샘플 × 1,200스텝)은 아직 없다.</li>
+<li><b>warmup 비율.</b> 세 arm 모두 <code>--warmup 50</code>(절대값)을 썼다. 스케줄 대비
+비율은 peer 4.2% / d5 3.0% / e3 <b>10.8%</b>로 e3가 크게 다르다.</li>
+<li><b>degeneracy는 판별력이 없다.</b> 세 arm 모두 세 세트에서 0.000이다. 지표가 바닥에
+붙으면 그 축이 닫힌 것이 아니라 안 보이는 것뿐이다.</li>
+<li><b>폐루프 미확인.</b> 이 저장소에는 개루프 개선이 폐루프에서 뒤집힌 전례가 있다.
+d5의 alpasim 150씬은 아직 돌리지 않았다.</li>
+</ul>
+
+<h2>7. 재현</h2>
+
+<pre>
+# 학습셋 (7,750 = 버킷당 1,550, 클립당 1윈도우; balanced_draw의 균등 상한)
+python experiments/recovery/make_train_set.py --n-train 7750 --n-val 238 --max-ade 3.0
+#   주의: rng가 한 번만 시드되고 train 추출이 먼저 소비하므로 val_official_238이
+#   다시 뽑혀 덮어써진다. probe는 arm 간 고정축이므로 백업본으로 복원할 것.
+
+# 캐시 (7,333개 신규, 4h18m, 42.9 GB)
+python experiments/evaluation/build_cache.py \
+    --manifest outputs/recovery_sets/train_official_7750.parquet --cache train
+
+# 학습 (NEURON A100 4장, 4h11m)
+sbatch experiments/transfer/train_recover.sbatch \
+    --ckpt outputs/slim_dual_u55_v2 --exp-id recover_dual_u55_d5 \
+    --steps 1689 --lr 1.4e-4 --warmup 50 --val-every 563 \
+    --lambda-traj 0.5 --val-fm-clips 100
+
+# 에폭 대조군 (Blackwell 0-3; train_official_7750을 하위 디렉터리로 옮겨
+# max(glob)이 1200을 고르게 한 뒤. --accum 4 를 반드시 명시할 것 -- 기본값 8이면
+# global batch 가 32가 되어 레시피가 깨진다)
+bash experiments/recovery/run_ddp_retry.sh 600 "0 1 2 3" \
+    experiments/recovery/train_recover.py --ckpt outputs/slim_dual_u55_v2 \
+    --exp-id recover_dual_u55_e3 --steps 463 --accum 4 --lr 1.4e-4 --warmup 50 \
+    --val-every 155 --lambda-traj 0.5 --val-fm-clips 100
+
+# 평가 · 분석
+python experiments/recovery/rebuild_merged.py \
+    --adapter outputs/recover_dual_u55_d5/adapter_best.pt \
+    --out outputs/slim_recover_dual_u55_d5 --gpu &lt;ada&gt;
+python experiments/evaluation/run_baseline.py --model outputs/slim_recover_dual_u55_d5 \
+    --set test --k 8 --gpu &lt;ada&gt;
+python experiments/recovery/analyze_recovery.py --rec slim_recover_dual_u55_d5 \
+    --zs dual_u55 --peer slim_recover_dual_u55_v2 --out outputs/recovery_eval_dualD5
+</pre>
+
+<p class="muted">CE gap 진단은 <code>outputs/ce_gap_diag/metrics.json</code>. 저장된 병합
+체크포인트로 forward만 돌리므로 재학습이 필요 없고, 보고 수치가 아니라 진단이므로
+Blackwell에서 측정했다.</p>
