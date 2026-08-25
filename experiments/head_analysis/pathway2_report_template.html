@@ -199,10 +199,22 @@ Spearman(Δ행동, Δ언어) = +0.350.</p>
 <p>등록된 H3는 대칭적 해리를 예상했다. 데이터는 <strong>한 방향으로만</strong> 해리된다 —
 추론을 완전히 망가뜨려도 궤적이 무사한 경로는 있고, 궤적을 망가뜨리면서 추론이 무사한 경로는 없다.</p>
 
-<p>가장 선명한 사례가 <code>CoC ← vision</code>이다. 이 경로를 끊으면 CoC의 NLL이
-<strong>+155%</strong> 오르는데 궤적은 <strong>−0.5%</strong>(CI [−0.066, +0.040])다. 즉
-<strong>추론이 시각에 접근하는 경로는 궤적과 무관하다.</strong>
+<p>가장 큰 사례가 <code>CoC ← vision</code>이다. 이 경로를 전 layer에서 끊으면 CoC의 NLL이
+<strong>+155%</strong> 오르는데 궤적 점추정치는 <strong>−0.5%</strong>다.
 <code>CoC ← instruction</code>은 더 극단적이다 — 언어 +582%, 궤적 −0.1%.</p>
+
+<div class="note">
+  <strong>다만 이 두 @all 셀은 등가 입증에 실패한다.</strong> 궤적 CI가 각각
+  [−0.066, +0.040]과 [−0.036, +0.018]로, 실질적 null 밴드(±5% = ±0.0234)보다 넓다.
+  전 layer를 한꺼번에 막으면 클립 간 분산이 커져 CI가 벌어지기 때문이다. 점추정치가 0에 붙어
+  있다는 것과 0임이 입증됐다는 것은 다르므로, 이 두 셀은 <em>“언어만 유의하게 손상”</em>까지가
+  정확한 진술이고 <em>“궤적이 무사함이 입증됨”</em>은 아니다.
+  등가까지 통과한 4개는 전부 <strong>대역 단위</strong> 셀이다 — CI가 좁기 때문이다:
+  <code>CoC←vision@L27-35</code> [−0.016, −0.001],
+  <code>CoC←instruction@L0-8</code> [−0.004, +0.014],
+  <code>CoC←instruction@L27-35</code>, <code>instr←vision@L27-35</code> [−0.014, +0.000].
+  <strong>해리의 확증은 이 대역 셀들에 있고, @all 셀은 같은 방향의 더 큰 언어 손상을 보여줄 뿐이다.</strong>
+</div>
 
 <h3>4.2 Stage 1과 합치면: 궤적은 CoC의 <em>존재</em>를 쓰고 <em>내용</em>은 덜 쓴다</h3>
 
