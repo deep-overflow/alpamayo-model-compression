@@ -428,7 +428,14 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-09_criterion-oneshot.html` | `arms_report_template.html` | CoC Taylor vs J-lens, one-factor, 7,599 clips |
 | `2026-08-11_baseline-anchor.html` | `baseline_anchor_report_template.html` | unpruned baseline in both modes + the paper table |
 | `2026-08-11_criterion-closedloop.html` | `closedloop_report_template.html` | the same one-factor pair in alpasim, 150 scenes × 3 arms |
+| `2026-08-21_denoise-step-importance.html` | `head_analysis/stepimp_report_template.html` | the diffusion-step axis of expert Taylor importance -- summing over steps was the real defect, znorm takes r25 dminADE from +0.0977 to +0.0003 |
+| `2026-08-23_tyr-closedloop.html` | `head_analysis/tyr_closedloop_report_template.html` | Tyr in alpasim, 150 scenes: trajectory near baseline (0.786 vs 0.750) but dual wins, and Tyr's CoC collapse is entirely empty output |
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
+| `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
+| `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
+
+This table is not exhaustive -- it covers the reports whose provenance is documented here.
+`ls reports/evaluation/` is the full set (23 files as of 2026-08-25).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
