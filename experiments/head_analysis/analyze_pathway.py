@@ -38,6 +38,10 @@ plt.rcParams.update({
 BASE = "X0_none"
 SPAN_OF = {"X1_vision": "vision", "X2_hist": "traj_history", "X3_coc": "generated_coc",
            "X4_text": "prompt_text", "X5_sink": "sink_pos0"}
+# load_physical_aiavdataset sorts cameras by index, and the default feature set is
+# indices {0,1,2,6}, so prompt order is fixed.
+CAM_REAL = {"X1c0_cam0": "cross_left_120", "X1c1_cam1": "front_wide_120",
+            "X1c2_cam2": "cross_right_120", "X1c3_cam3": "front_tele_30"}
 
 
 def merge(shard_dirs):
@@ -172,15 +176,34 @@ def main():
         L.append("       updated by the CoC, so this is the whole channel: no detectable causal")
         L.append("       contribution of the reasoning text to the trajectory at this power.")
 
+    # ---- per-token damage ------------------------------------------------------
+    # The spans differ in size by two orders of magnitude, so the raw delta conflates
+    # "this span matters" with "this span is big". n_tok is taken from the first clip
+    # of the first shard; only the CoC span varies clip to clip (9-19 tokens observed).
+    L.append("")
+    L.append(f"per-token damage   ({'span':16s} {'n_tok':>6s} {'median d':>10s} "
+             f"{'per token':>11s} {'mass':>7s} {'mass/token':>11s})")
+    for k in keys:
+        r, sp = rows[k], SPAN_OF[k]
+        L.append(f"                   {sp:16s} {r['n_tok']:6d} {r['med']:+10.4f} "
+                 f"{r['med'] / r['n_tok']:11.3e} {mass[sp]:7.4f} "
+                 f"{mass[sp] / r['n_tok']:11.3e}")
+    pt = {k: rows[k]["med"] / rows[k]["n_tok"] for k in keys}
+    L.append(f"    per-token damage ratio  CoC/prompt_text = "
+             f"{pt['X3_coc'] / pt['X4_text']:.1f}x   CoC/vision = "
+             f"{pt['X3_coc'] / pt['X1_vision']:.1f}x   CoC/traj_history = "
+             f"{pt['X3_coc'] / pt['X2_hist']:.1f}x")
+
     # ---- per-camera ------------------------------------------------------------
     cams = sorted([c for c in cfgs if c.startswith("X1c")])
     if cams:
         L.append("")
-        L.append("per-camera vision blocks")
+        L.append("per-camera vision blocks (prompt order = camera index ascending)")
         for c in cams:
             r = rows[c]
-            L.append(f"  {c:22s} n={r['n_tok']:5d} {r['med']:+9.4f} "
-                     f"[{r['lo']:+8.4f},{r['hi']:+8.4f}] p={r['p']:.2e}")
+            L.append(f"  {CAM_REAL.get(c, c):18s} n={r['n_tok']:5d} {r['med']:+9.4f} "
+                     f"[{r['lo']:+8.4f},{r['hi']:+8.4f}] p={r['p']:.2e}"
+                     f"{'  *' if r['sig'] else ''}")
 
     # ---- plots -----------------------------------------------------------------
     main_cfgs = [c for c in cfgs if c in SPAN_OF or c == "X6_all_but_vision"]
