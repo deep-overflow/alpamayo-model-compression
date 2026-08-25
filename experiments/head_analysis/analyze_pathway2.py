@@ -42,6 +42,7 @@ plt.rcParams.update({
 
 BASE, INTEG = "E0_none", "E0_causalonly"
 NOISE_FLOOR = 0.01          # bf16 noise floor for |dNLL|, from the 2026-07-23 slim verify
+MEANINGFUL_REL = 0.05       # a channel effect inside +-5% of its baseline median is practically null
 EDGES = ["E1_crossframe", "E2_crosscam", "E3_hist_vision", "E4_instr_vision",
          "E5_coc_vision", "E6_coc_hist", "E7_coc_instr", "E8_all_sink"]
 BANDS = ["L0-8", "L9-17", "L18-26", "L27-35", "all"]
@@ -155,13 +156,39 @@ def main():
         rows[c]["ade"]["fdr"] = bool(rej_a[i])
         rows[c]["nll"]["fdr"] = bool(rej_n[i])
 
+    # The two channels are in different units (metres vs nats) and, more importantly,
+    # have very different clip-to-clip spread, so a raw side-by-side is not a fair
+    # comparison of "which channel got hit harder". Normalise each delta by its own
+    # channel's unblocked median, and record each channel's resolution -- the typical
+    # bootstrap CI half-width across cells, i.e. the smallest effect this n can resolve.
+    m_ade, m_nll = float(np.median(b_ade)), float(np.median(b_nll))
+    for c in keys:
+        rows[c]["ade"]["rel"] = rows[c]["ade"]["med"] / m_ade
+        rows[c]["nll"]["rel"] = rows[c]["nll"]["med"] / m_nll
+    res = {ch: float(np.median([(rows[c][ch]["hi"] - rows[c][ch]["lo"]) / 2 for c in keys]))
+           for ch in ("ade", "nll")}
+    # Per-cell equivalence, not a global floor: CI half-widths vary ~10x across cells, so
+    # a single "resolution" number would flatter the cells that actually matter. A cell is
+    # called practically null on a channel only if its whole CI sits inside +-5% of that
+    # channel's unblocked median.
+    for c in keys:
+        for ch, base_m in (("ade", m_ade), ("nll", m_nll)):
+            band = MEANINGFUL_REL * abs(base_m)
+            r = rows[c][ch]
+            r["null_eq"] = bool(r["lo"] > -band and r["hi"] < band)
+    L.append(f"channel spread (median CI half-width over {len(keys)} cells): "
+             f"action {res['ade']:.4f} m = {res['ade'] / m_ade:.1%} of baseline; "
+             f"language {res['nll']:.4f} = {res['nll'] / m_nll:.1%} of baseline. "
+             f"Practical-null band = +-{MEANINGFUL_REL:.0%} of baseline per channel.")
+    L.append("")
+
     def chan(r):
         a, nl = r["ade"]["sig"] and r["ade"]["fdr"], r["nll"]["sig"] and r["nll"]["fdr"]
         return "both" if (a and nl) else "action" if a else "language" if nl else "-"
 
     L.append("edge x band grid   (paired median delta; * = significant after BH-FDR q=0.05)")
-    L.append(f"{'edge':32s} {'band':8s} {'dminADE':>9s} {'':1s} {'dCoC NLL':>10s} {'':1s} "
-             f"{'channel':>9s}")
+    L.append(f"{'edge':32s} {'band':8s} {'dminADE':>9s} {'rel':>7s} {'':1s} "
+             f"{'dCoC NLL':>10s} {'rel':>7s} {'':1s} {'channel':>9s}")
     for e in EDGES:
         for bn in BANDS:
             c = f"{e}@{bn}"
@@ -169,8 +196,9 @@ def main():
                 continue
             r = rows[c]
             L.append(f"{PRETTY[e]:32s} {bn:8s} {r['ade']['med']:+9.4f} "
+                     f"{r['ade']['rel']:+6.1%} "
                      f"{'*' if r['ade']['sig'] and r['ade']['fdr'] else ' '} "
-                     f"{r['nll']['med']:+10.4f} "
+                     f"{r['nll']['med']:+10.4f} {r['nll']['rel']:+6.1%} "
                      f"{'*' if r['nll']['sig'] and r['nll']['fdr'] else ' '} "
                      f"{chan(r):>9s}")
         L.append("")
@@ -194,6 +222,17 @@ def main():
               "are dissociable at the pathway level" if h3 else
               "not supported -- no edge damages exactly one channel")
     L.append(f"    H3 {h3_msg}")
+    # A single-channel cell is evidence of dissociation only if the *other* channel is
+    # positively shown to be small, not merely non-significant.
+    lang_eq = [c for c in cls["language"] if rows[c]["ade"]["null_eq"]]
+    act_eq = [c for c in cls["action"] if rows[c]["nll"]["null_eq"]]
+    L.append(f"    of {len(cls['language'])} language-only cells, {len(lang_eq)} are also "
+             f"practically null on the action channel (CI inside +-{MEANINGFUL_REL:.0%}) "
+             f"-> genuine dissociation; the rest are merely undetermined.")
+    L.append(f"    of {len(cls['action']):2d} action-only cells, {len(act_eq)} are also "
+             f"practically null on the language channel.")
+    if lang_eq:
+        L.append(f"      e.g. {', '.join(lang_eq[:5])}")
 
     # ---- plots -------------------------------------------------------------------
     A = np.array([[rows[f"{e}@{b}"]["ade"]["med"] if f"{e}@{b}" in rows else np.nan
@@ -235,8 +274,10 @@ def main():
         "baseline": {"minADE_median": float(np.median(b_ade)),
                      "coc_nll_median": float(np.median(b_nll))},
         "integrity": {"ade": i_ade, "nll": i_nll, "pass": ok, "noise_floor": NOISE_FLOOR},
-        "rows": rows, "h3": {"spearman": rho, "classes": {k: v for k, v in cls.items()},
-                             "accept": h3},
+        "resolution": res,
+        "rows": rows, "h3": {"spearman": rho, "classes": dict(cls), "accept": h3,
+                             "language_only_action_equivalent": lang_eq,
+                             "action_only_language_equivalent": act_eq},
     }, indent=2))
     print("\n".join(L))
     print("\nsaved ->", out_dir)
