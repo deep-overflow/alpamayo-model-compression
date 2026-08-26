@@ -106,6 +106,25 @@ Taylor를 다시 재면(조건부 중요도) 이를 직접 검증할 수 있다.
   재보정이 회복할 수 있는 상한은 mean의 꼬리 성분(~+0.04)이다. C1에서 겹침이 1에
   가까우면 그조차 선택 문제가 아니라는 뜻이다.
 
+## Addendum 2 (2026-08-26): 조건부 중요도로 e10/e15 sweep — 공짜 상한
+
+C2 REJECT 이후 사용자 지시로 재개. importance는 **조건부** `importance_stepexp_dv_znorm`
+(C3에서 stale보다 유의하게 나음이 확인된 선택), 절차·프로토콜·대조군은 본문과 동일.
+
+- 빌드: `dualexp_u40_e10` / `dualexp_u40_e15` + `--importance importance_stepexp_dv_znorm`
+  → `outputs/slim_dualexp_u40_e{10,15}_cond`, `--no-state`.
+- 그리드 주의: `select_mask`는 레이어당 round(16×r)개 Q head를 제거하므로 e10·e15 모두
+  **Q 2개/레이어(12.5%)로 동일**하고 MLP(826 vs 1238/레이어)만 다르다. 예상 제거:
+  e10 220,446,720 / e15 311,574,528 (빌드 후 slim_meta로 확정).
+- 무결성: VLM은 셋 다 slim_dual_u40_v2와 bit-identical; expert kept 중첩
+  kept(e10) ⊇ kept(e15) ⊇ kept(e25_cond) (동일 argsort의 접두사 구조).
+- **게이트 (S-series, G2와 동형)**: 문턱_eN = 0.0668 × removed_eN / 2,657,452,032
+  → e10 ≈ +0.0055, e15 ≈ +0.0078. mean Δ(combined_eN − dual) CI [lo,hi]:
+  FREE hi < 문턱 / REJECT lo ≥ 문턱 / 그 외 INCONCLUSIVE.
+- **검정력 한계를 사전에 인정**: mean CI 반폭이 ~0.03이라 e10 문턱(+0.0055)의 FREE는
+  증명 불가능에 가깝다. median CI(반폭 ~0.015)를 부차 판독으로 함께 보고하고,
+  INCONCLUSIVE는 "회귀 미검출"로만 서술한다 (공짜 단정 금지).
+
 **판정 (2026-08-26 실측)**: C1 GO (kept-overlap Q 0.9444 / MLP 0.9784, 문턱 0.98 미달).
 C2 **REJECT** — cond-combined − dual = +0.0544 [+0.0283, +0.0808] (median +0.0250),
 CI 하한이 문턱 +0.013 초과. C3 **ACCEPT** — cond − stale = **−0.0144 [−0.0287, −0.0003]**
