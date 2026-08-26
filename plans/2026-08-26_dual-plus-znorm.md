@@ -105,3 +105,11 @@ Taylor를 다시 재면(조건부 중요도) 이를 직접 검증할 수 있다.
 - 기대 관리: median 가산성(+0.0248 ≈ +0.0228)은 상호작용이 작다고 시사하므로,
   재보정이 회복할 수 있는 상한은 mean의 꼬리 성분(~+0.04)이다. C1에서 겹침이 1에
   가까우면 그조차 선택 문제가 아니라는 뜻이다.
+
+**판정 (2026-08-26 실측)**: C1 GO (kept-overlap Q 0.9444 / MLP 0.9784, 문턱 0.98 미달).
+C2 **REJECT** — cond-combined − dual = +0.0544 [+0.0283, +0.0808] (median +0.0250),
+CI 하한이 문턱 +0.013 초과. C3 **ACCEPT** — cond − stale = **−0.0144 [−0.0287, −0.0003]**
+(median −0.0066 [−0.0127, −0.0011]): 재보정은 실재하는 개선이지만 격차의 ~21%만 회복.
+나머지 ~+0.054는 expert r25 절단의 고유 비용. 산출물: `stepimp_fm_perstep_dualvlm`,
+`importance_stepexp_dv_znorm`, `slim_dualexp_u40_e25_cond`, `dualexp_cond_ps_indist`,
+분석 `dualexp_cond_arms_val` / `dualexp_cond_vs_stale`.
