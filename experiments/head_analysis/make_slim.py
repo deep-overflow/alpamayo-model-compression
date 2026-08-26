@@ -23,6 +23,13 @@ Configs:
   dualscope_u40    -- dual's ranking and dual_u40_v2's exact budget, but confined to
                       LLM-Pruner's layer scope (4..34); only WHERE the cut lands
                       differs. Expected -2.66B.
+  expert_u<N>      -- expert tower only, uniform N%, VLM and KV untouched; the
+                      within-layer score is the importance file's traj_exp_* (so the
+                      step aggregation is chosen by --importance). Expected -0.53B at
+                      N=25.
+  dualexp_u40_e<N> -- dual_u40_v2's VLM half + expert_u<N>'s expert half in one
+                      checkpoint (first config pruning both towers). Expected -3.19B
+                      at N=25.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -100,6 +107,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
+    dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     if exp_only:
         # Expert tower only, uniform ratio, VLM and KV untouched -- the shape the D-stage
         # aggregation arms were measured in (run_expert_agg.py evaluated exactly this as a
@@ -115,6 +123,26 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)
         vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))
         vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
+        kvonly = ()
+    elif dualexp:
+        # dual_u40_v2's VLM half + expert_u<N>'s expert half, verbatim: the first config
+        # that prunes both towers with their individually-validated recipes. Gate G0
+        # requires the VLM kept sets bit-identical to slim_dual_u40_v2 (so --importance
+        # must carry importance_v2's VLM keys, i.e. the Blackwell-anchored drop-in) and
+        # the expert kept sets bit-identical to slim_expert_znorm_r25.
+        # plans/2026-08-26_dual-plus-znorm.md.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq, rm = allocs["uniform"]  # the matched 0.3985632694, never 0.40
+        sq, sm = tyr.dual_scores(imp)
+        vq = ml.select_mask_ratios(sq, rq)  # (36, 32)
+        vm = ml.select_mask_ratios(sm, rm)  # (36, 12288)
+        ratio = int(dualexp.group(1)) / 100
+        all_e = list(range(ec.num_hidden_layers))
+        eq = ml.select_mask(imp["traj_exp_q"], ratio, all_e)  # (36, 16)
+        em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)  # (36, 8256)
         kvonly = ()
     elif it:
         # Staged re-calibration masks from run_iter_prune.py: same budget, allocation
@@ -393,7 +421,8 @@ def main():
     ap.add_argument("--config", required=True,
                     help="a named config, or <criterion>_u<pct>_v2 for the uniform family "
                          "(criterion in traj|coc|j|dual|j_traj; pct 40 means the matched "
-                         "0.3985632694, any other pct means exactly pct/100)")
+                         "0.3985632694, any other pct means exactly pct/100), or "
+                         "expert_u<N> / dualexp_u40_e<N> for the expert-tower cuts")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",

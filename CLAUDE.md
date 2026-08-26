@@ -258,6 +258,8 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `j_traj_full_r20` / `_r30` | `max(rank I_traj, rank J)` — **rollout-free** | uniform | VLM + expert + KV1 |
 | `dual_u40_v2` / `j_traj_u40_v2` | dual / `max(rank I_traj, rank J)` | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `traj_u40_v2` / `coc_u40_v2` / `j_u40_v2` | `I_traj` / `I_CoC` / `J`, single criterion | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `expert_u25` | expert `traj_exp_*` (step agg chosen by `--importance`) | uniform 25% | **expert only** (−0.53B, 4.8%) |
+| `dualexp_u40_e25` | dual (VLM) + znorm `I_traj` (expert) | uniform 0.398563 / 25% | **VLM + expert** (−3.19B, 28.8%) |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
