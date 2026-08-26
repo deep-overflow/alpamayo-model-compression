@@ -74,6 +74,15 @@ def main():
     lines.append("     degen rate  " + "  ".join(f"{n} {v:.4f}" for n, v in degen.items()))
     lines.append(f"     -> {g1}")
 
+    # caveat for G3: expert-only runs the slim attention path (gathered K/V) while the
+    # baseline run used the stock path, so their CoC can drift on a few clips even though
+    # expert weights cannot causally touch CoC -- same scale as the cross-arch flips.
+    # combined-vs-dual is immune (both slim path, G1 checks it is exactly 0).
+    pdrift = [c for c in ids if runs["expert"][c]["gen_coc"] != runs["baseline"][c]["gen_coc"]]
+    res["expert_vs_baseline_coc_drift"] = len(pdrift)
+    lines.append(f"  path drift: expert vs baseline gen_coc differs {len(pdrift)}/{len(ids)} "
+                 f"(slim vs stock attention kernel, caveat on G3)")
+
     # G2 -- primary: combined - dual
     d = ade["combined"] - ade["dual"]
     m, lo, hi = boot_ci(d)
