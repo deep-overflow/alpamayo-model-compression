@@ -99,7 +99,24 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
-    if it:
+    exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
+    if exp_only:
+        # Expert tower only, uniform ratio, VLM and KV untouched -- the shape the D-stage
+        # aggregation arms were measured in (run_expert_agg.py evaluated exactly this as a
+        # runtime mask). The within-layer score is whatever `traj_exp_*` the importance file
+        # carries, so the aggregation is selected by --importance rather than by a new stem:
+        #   --importance importance_v2_ada        the shipped |sum_s| rule
+        #   --importance importance_stepexp_znorm the step-normalised one
+        # This exists so a mask-level open-loop result can be carried into alpasim, which
+        # needs a real slim_state.pt and cannot take runtime masks.
+        ratio = int(exp_only.group(1)) / 100
+        all_e = list(range(ec.num_hidden_layers))
+        eq = ml.select_mask(imp["traj_exp_q"], ratio, all_e)
+        em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)
+        vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))
+        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
+        kvonly = ()
+    elif it:
         # Staged re-calibration masks from run_iter_prune.py: same budget, allocation
         # and axes as the *_u40_v2 family (verified by its R0 gate), only the score
         # measurement schedule differs. The masks are precomputed, so this branch just
