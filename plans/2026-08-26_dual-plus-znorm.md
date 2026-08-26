@@ -70,3 +70,38 @@ OOD-val 262 (`dual_u40_v2_ps_ood` 클립 교집합, hi < +0.024 = 0.1197×0.200)
 
 빌드 ~0.5 GPU-h + 평가 2 × ~1.1 GPU-h (Ada 4·5 병렬) + stage 2 ~1.7 GPU-h.
 디스크 < 100 MB (state 없음).
+
+## Addendum (2026-08-26): 조건부 expert 중요도 — pruned VLM 위에서 다시 재기
+
+(e10/e15 비율 sweep은 사용자 지시로 보류; 대신 아래를 먼저 검증한다.)
+
+**가설.** expert znorm의 kept set은 dense VLM의 캐시를 읽는 상태에서 잰 기울기로 골랐다.
+결합 config에서 expert는 **프루닝된 VLM의 캐시**를 읽으므로 입력 분포가 달라졌고, e25
+REJECT(+0.0688)의 일부는 이 낡은 선택 때문일 수 있다. `slim_dual_u40_v2` 위에서 expert
+Taylor를 다시 재면(조건부 중요도) 이를 직접 검증할 수 있다.
+
+**절차.**
+1. 측정: `run_step_importance.py --mode fm --noise-mode per_step
+   --model outputs/slim_dual_u40_v2 --exp-id stepimp_fm_perstep_dualvlm`
+   (calib_100, seed 42 — 원본 `stepimp_fm_perstep_v2`와 동일 클립·시드라 paired).
+   `--model` 플래그는 이번에 추가 (`load_slim` 경유; 게이트는 o_proj/down_proj
+   forward-pre-hook이라 slim 바인딩과 무관하게 작동).
+2. 집계: `make_stepexp_importance.py --stepimp stepimp_fm_perstep_dualvlm
+   --ref importance_v2 --aggs znorm --prefix importance_stepexp_dv`
+   → VLM 절반은 여전히 Blackwell `importance_v2` (G0의 VLM bit-identity 유지).
+3. **C1 (무료 go/no-go)**: r25에서 조건부 vs 기존 znorm 선택의 kept-overlap.
+   **≥ 0.98 (Q·MLP 모두) → 조건화는 no-op, 빌드·평가 생략** 하고 종료.
+   (스케일 참조: sum vs znorm 겹침이 0.889/0.945였다.)
+4. 빌드: `--config dualexp_u40_e25 --importance importance_stepexp_dv_znorm
+   --out outputs/slim_dualexp_u40_e25_cond --no-state`.
+   G0': vlm == slim_dual_u40_v2 bit-identical, removed == 3,189,473,280
+   (expert kept가 기존과 다른 것이 요점).
+5. 평가: val500, 4-way 샤드 GPU 4–7, exp-id `dualexp_cond_ps_indist`.
+
+**게이트.**
+- **C2 (주)**: cond-combined − dual, mean Δ CI vs **+0.013** (G2와 동일 문턱·동형).
+- **C3**: cond-combined − stale-combined (`dualexp_u40_e25_ps_indist`) paired —
+  재보정 효과 그 자체. hi < 0이면 재보정이 유의하게 회복.
+- 기대 관리: median 가산성(+0.0248 ≈ +0.0228)은 상호작용이 작다고 시사하므로,
+  재보정이 회복할 수 있는 상한은 mean의 꼬리 성분(~+0.04)이다. C1에서 겹침이 1에
+  가까우면 그조차 선택 문제가 아니라는 뜻이다.
