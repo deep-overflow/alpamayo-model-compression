@@ -20,7 +20,7 @@ ssh <USER>@neuron.ksc.re.kr
 cd /scratch/$USER/project/alpamayo-model-compression
 /bin/bash experiments/transfer/bootstrap_neuron.sh    # /bin/bash, not bash -- caveat 8
 # build the venv as bootstrap prints, then
-source env.sh
+source env.sh                            # not optional -- caveat 11
 .venv/bin/python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2
 sinfo                                    # pick a partition with >=40 GB per GPU
 sbatch experiments/transfer/train_recover.sbatch --ckpt outputs/slim_coc_u55_v2 \
@@ -158,6 +158,33 @@ train; use rsync instead if you want the working tree mirrored for other reasons
    which is what a shared interactive box needs and a scheduler does not. Use
    `train_recover.sbatch`.
 
+10. **The login node enforces a 2-hour CPU limit, and preflight scales with set size.**
+    `ulimit -t` on glogin is 7200 s, and the site guidance is that heavy work belongs on
+    a compute node — GPU work always, and anything sustained. Measured for the
+    50,000-sample manifest: **22.5 s CPU (15.1 user + 7.3 sys) against 465 s wall**, so
+    it is I/O-bound, not CPU-bound, and sits at 0.3% of the cap. The cost that does
+    scale is Lustre metadata: one `.exists()` per sample, 51,771 stats for that run,
+    against a metadata server the whole machine shares. At 50k it is a few minutes of
+    stat traffic; ten times that would not be a neighbourly thing to do on a login node.
+    So: `--load` **must** go in an allocation (it builds the 11B model on a GPU), and the
+    plain check is fine on the login node at this size but belongs in `srun` as sets grow:
+
+    ```bash
+    srun -p amd_a100nv_8 --gres=gpu:1 -t 0:10:00 \
+         --comment="field=efficientai;appl=pytorch" \
+         .venv/bin/python experiments/transfer/preflight.py --ckpt <ckpt> [--load]
+    ```
+
+    The Datamover has no CPU limit and works for the non-`--load` check, but the site
+    reserves it for transfers, so prefer `srun` over moving the load there.
+
+11. **A non-interactive `ssh` does not source `env.sh`.** `ssh <USER>@neuron "cd repo &&
+    .venv/bin/python experiments/transfer/preflight.py ..."` runs with `AD_VLA_DATA`
+    unset, which falls back to this box's `/mnt/nvme1n1/ad_vla/data` — a path that does
+    not exist there — so every cache check misses and preflight reports the entire set
+    as missing. The header prints what it resolved; read those three lines before
+    believing a "50000 missing". Prefix the command with `. ./env.sh &&`.
+
 ## Files
 
 | file | side | what it does |
@@ -165,6 +192,6 @@ train; use rsync instead if you want the working tree mirrored for other reasons
 | `push_neuron.sh` | source | tiered rsync into `/scratch/$USER`, over one multiplexed OTP session |
 | `bootstrap_neuron.sh` | NEURON login | layout check, `outputs` symlink, env build guidance, writes `env.sh` |
 | `train_recover.sbatch` | NEURON login | the SLURM job; derives `--accum`, forces `WANDB_MODE=offline` |
-| `preflight.py` | either | verifies manifests, all 3,271 sample npz, the pinned snapshot, the recipe; `--load` rebuilds the model |
+| `preflight.py` | NEURON, `srun` for `--load` | verifies manifests, every sample npz the manifest names, the pinned snapshot, the recipe; `--load` rebuilds the model on a GPU. Needs `env.sh` sourced — caveats 10 and 11 |
 | `push.sh` | source | generic variant for a target that mirrors this box's layout |
 | `lists.sh` | — | shared file-list generators, sourced by both push scripts |
