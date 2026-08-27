@@ -54,7 +54,7 @@ export HF_HOME=\${HF_HOME:-\$HOME/.cache/huggingface}
 export HF_HUB_ENABLE_HF_TRANSFER=0
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-export ALPAMAYO_MC_REPO=$REPO
+export ALPAMAYO_REPO=$REPO
 ENVEOF
 cat "$REPO/env.sh"
 

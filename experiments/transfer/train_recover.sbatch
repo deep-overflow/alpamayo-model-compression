@@ -56,7 +56,7 @@ cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
 
 # env.sh is written by bootstrap_neuron.sh and carries AD_VLA_DATA / HF_HUB_CACHE /
-# HF_HOME / ALPAMAYO_MC_REPO for this box's layout.
+# HF_HOME / ALPAMAYO_REPO for this box's layout.
 # shellcheck disable=SC1091
 source env.sh
 
@@ -105,7 +105,7 @@ GPUS=$(seq -s' ' 0 $((NP - 1)))
 echo "node $(hostname)  gpus $NP  accum $ACCUM  global_batch 16  omp $OMP_NUM_THREADS  mem ${SLURM_MEM_PER_NODE:-?}M"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
-srun --unbuffered "$ALPAMAYO_MC_REPO/.venv/bin/torchrun" \
+srun --unbuffered "$ALPAMAYO_REPO/.venv/bin/torchrun" \
     --standalone --nproc_per_node="$NP" \
     experiments/recovery/train_recover.py \
     --accum "$ACCUM" \

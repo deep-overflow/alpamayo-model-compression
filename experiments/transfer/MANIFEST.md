@@ -134,8 +134,12 @@ train; use rsync instead if you want the working tree mirrored for other reasons
    Pull adapters back here as they are produced rather than leaving them as the only copy.
 
 6. **Paths that are now overridable, and paths that still are not.** `sample_cache.AV`
-   reads `$AD_VLA_DATA`, and both retry launchers read `$ALPAMAYO_MC_REPO`; defaults are
-   unchanged, so nothing on this box moved. Still hardcoded to `/mnt/nvme1n1/ad_vla` and
+   reads `$AD_VLA_DATA`, and both retry launchers read `$ALPAMAYO_REPO`; defaults are
+   unchanged, so nothing on this box moved. (This branch first called the variable
+   `ALPAMAYO_MC_REPO` while `main` had independently introduced `ALPAMAYO_REPO` for the
+   same purpose; it now uses main's name everywhere. An `env.sh` written by an older
+   `bootstrap_neuron.sh` still exports the old name — re-run bootstrap, or rename the
+   export, before the next `sbatch`.) Still hardcoded to `/mnt/nvme1n1/ad_vla` and
    irrelevant to training, but they will break if NEURON ever runs them:
    `build_cache.py`, `build_ood_cache.py`, `make_eval_sets.py`, `eval_ood.py`,
    `make_train_set.py`, `lingo_lib.py`, `run_vqa_importance.py`, `test_quant_lib.py`,
