@@ -1,0 +1,202 @@
+"""Verify a transferred box can actually run recovery training, before it burns a GPU.
+
+Checks in order of cost, stopping at the first failure:
+
+1. manifests    outputs/{eval_sets,recovery_sets} parquets read, and the row counts
+                match what train_recover.load_samples expects (1200 + 1271 train,
+                238 + 262 probe).
+2. samples      every npz those manifests name resolves under AD_VLA_DATA. A missing
+                clip is silent in training until that step comes up hours in, so this
+                is the check that matters most after an interrupted rsync.
+3. weights      the pinned Alpamayo revision resolves from the local hub cache, the
+                slim recipe (slim_meta.json) is present for --ckpt, and the `.no_exist`
+                markers offline mode needs are there.
+4. config       the config chain actually resolves under HF_HUB_OFFLINE -- no weights,
+                no GPU, seconds. Alpamayo's config builds a Cosmos-Reason2-8B processor
+                which chains to Qwen3-VL-8B, so three repos must be cached, not one.
+5. --load       (opt-in, needs a GPU and ~24 GB VRAM) reconstruct the slim model from
+                slim_meta.json alone -- no slim_state.pt on the target -- and attach
+                LoRA to it. That exercises the whole load path the trainer uses; the
+                numerical KI insulation gate stays where it is, in train_recover's
+                own --ki-check at startup.
+
+Usage:
+  python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2
+  python experiments/transfer/preflight.py --ckpt outputs/slim_coc_u55_v2 --load --gpu 0
+"""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
+sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
+sys.path.insert(0, str(REPO / "experiments" / "recovery"))
+
+FAILED = []
+
+
+def check(label, ok, detail=""):
+    print(f"[{'ok ' if ok else 'FAIL'}] {label}{'  ' + detail if detail else ''}")
+    if not ok:
+        FAILED.append(label)
+    return ok
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ckpt", default="outputs/slim_coc_u55_v2")
+    ap.add_argument("--train-manifest", default=None,
+                    help="train_official_*.parquet to check. Default: the one the "
+                         "trainer will pick, i.e. max() over the glob -- checking any "
+                         "other file verifies a set the run will not use.")
+    ap.add_argument("--load", action="store_true", help="also build the model and step once")
+    ap.add_argument("--gpu", type=int, default=None)
+    args = ap.parse_args()
+
+    print(f"repo         {REPO}")
+    print(f"AD_VLA_DATA  {os.environ.get('AD_VLA_DATA', '(unset -> /mnt/nvme1n1/ad_vla/data)')}")
+    print(f"HF_HUB_CACHE {os.environ.get('HF_HUB_CACHE', '(unset)')}")
+    print()
+
+    import sample_cache as sc
+
+    # 1. manifests
+    #
+    # Resolve the train manifest the way load_samples does -- max() over the glob, a
+    # STRING compare. That is not the largest set: "train_official_12000" sorts below
+    # "train_official_1200". Checking a hardcoded name instead let a 7,750-sample run
+    # pass preflight on the strength of the old 1,200-sample manifest (2026-08-24).
+    sets = REPO / "outputs" / "recovery_sets"
+    esets = REPO / "outputs" / "eval_sets"
+    if args.train_manifest:
+        train_mf = Path(args.train_manifest)
+        if not train_mf.is_absolute():
+            train_mf = REPO / train_mf
+    else:
+        cands = sorted(sets.glob("train_official_*.parquet"))
+        if not cands:
+            check("train manifest present", False, f"no train_official_*.parquet in {sets}")
+            return report()
+        train_mf = max(cands)
+        others = [c.name for c in cands if c != train_mf]
+        if others:
+            print(f"  note: glob picks {train_mf.name}; also present: {', '.join(others)}")
+
+    for p in (train_mf, sets / "val_official_238.parquet",
+              esets / "ood.parquet", esets / "ood_val.parquet"):
+        if not check(f"manifest {p.name}", p.exists(), str(p)):
+            return report()
+
+    off = pd.read_parquet(train_mf)
+    voff = pd.read_parquet(sets / "val_official_238.parquet")
+    ood = pd.read_parquet(esets / "ood.parquet")
+    oodv = pd.read_parquet(esets / "ood_val.parquet")
+    ood_tr = ood[ood.split == "train"]
+    # The official half is whatever the manifest holds; only the OOD half and the probe
+    # are fixed, because they define the comparison across arms.
+    check(f"train rows  {len(off)} official + 1271 ood",
+          len(ood_tr) == 1271, f"{len(off)} + {len(ood_tr)} = {len(off) + len(ood_tr)}")
+    check("probe rows   238 official +  262 ood",
+          len(voff) == 238 and len(oodv) == 262, f"{len(voff)} + {len(oodv)}")
+
+    # 2. samples -- the check an interrupted rsync fails
+    groups = [("train", off), ("ood", ood_tr), ("eval", voff), ("ood", oodv)]
+    for ns, df in groups:
+        missing = [r.clip_id for r in df.itertuples()
+                   if not sc.path_for(ns, r.clip_id, int(r.t0_us)).exists()]
+        check(f"{ns} cache ({len(df)} clips)", not missing,
+              "all present" if not missing else f"{len(missing)} missing, e.g. {missing[:2]}")
+    if FAILED:
+        return report()
+
+    # 3. weights + recipe
+    ckpt = REPO / args.ckpt if not Path(args.ckpt).is_absolute() else Path(args.ckpt)
+    check(f"slim recipe {ckpt.name}/slim_meta.json", (ckpt / "slim_meta.json").exists(),
+          str(ckpt))
+
+    import slim_lib as sl
+    from huggingface_hub import constants as hfc
+    hub = Path(hfc.HF_HUB_CACHE)
+    snap = hub / "models--nvidia--Alpamayo-1.5-10B" / "snapshots" / sl.MODEL_REV
+    shards = sorted(snap.glob("*.safetensors")) if snap.is_dir() else []
+    check(f"base weights rev {sl.MODEL_REV[:8]}", len(shards) == 5,
+          f"{len(shards)} shards in {snap}")
+    cos = hub / "models--nvidia--Cosmos-Reason2-8B"
+    check("Cosmos tokenizer/config", any(cos.rglob("tokenizer_config.json")), str(cos))
+
+    # The `.no_exist` markers are what make HF_HUB_OFFLINE usable: they record that an
+    # optional file is genuinely absent upstream. Without them huggingface_hub cannot
+    # tell "not cached" from "does not exist" and raises LocalEntryNotFoundError, which
+    # is how NEURON jobs 890894/890895 died -- the loader probes for adapter_config.json
+    # and model.safetensors, neither of which the Alpamayo repo has.
+    marks = hub / "models--nvidia--Alpamayo-1.5-10B" / ".no_exist" / sl.MODEL_REV
+    have = sorted(p.name for p in marks.iterdir()) if marks.is_dir() else []
+    check("offline markers for the pinned rev", "model.safetensors" in have,
+          ", ".join(have) if have else f"missing {marks}")
+    if FAILED:
+        return report()
+
+    # 4. resolve the config chain for real, under whatever HF_HUB_OFFLINE is set to.
+    # No weights and no GPU, so it costs seconds -- and it is the exact step that failed
+    # three times on NEURON. Loading Alpamayo's config builds a processor from
+    # `vlm_name_or_path` (Cosmos-Reason2-8B), whose processor chains to Qwen3-VL-8B;
+    # a file-presence check cannot see that, because the files it wants belong to repos
+    # the manifest never mentions.
+    import expert_per_clip  # noqa: F401  -- installs the gated-hub patch first
+    from alpamayo1_5 import helper
+    from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
+    from transformers import AutoProcessor
+    try:
+        cfg = Alpamayo1_5.config_class.from_pretrained("nvidia/Alpamayo-1.5-10B",
+                                                       revision=sl.MODEL_REV)
+        check("config chain resolves offline", True, type(cfg).__name__)
+    except Exception as e:  # noqa: BLE001  the message names the repo that is missing
+        check("config chain resolves offline", False, f"{type(e).__name__}: {e}"[:300])
+
+    # train_recover calls helper.get_processor() *after* the model loads, and that
+    # reaches a fourth repo the config chain never touches -- BASE_PROCESSOR_NAME is
+    # Qwen3-VL-2B, not the 8B the Cosmos processor chains to. Job 890912 got all the
+    # way through loading five shards on four ranks before dying here.
+    try:
+        AutoProcessor.from_pretrained(helper.BASE_PROCESSOR_NAME)
+        check(f"processor {helper.BASE_PROCESSOR_NAME}", True, "resolves offline")
+    except Exception as e:  # noqa: BLE001
+        check(f"processor {helper.BASE_PROCESSOR_NAME}", False,
+              f"{type(e).__name__}: {e}"[:300])
+    if FAILED:
+        return report()
+
+    # 5. the expensive one
+    if args.load:
+        import recover_lib as rl
+        import torch
+
+        dev = f"cuda:{args.gpu}" if args.gpu is not None else "cuda"
+        print(f"\nloading {ckpt.name} on {dev} from slim_meta.json (no slim_state.pt needed) ...")
+        peft_model, base, _ = rl.load_slim_lora(ckpt, device=dev)
+        n_lora = sum(p.numel() for p in peft_model.parameters() if p.requires_grad)
+        check("LoRA attached", n_lora > 0, f"{n_lora/1e6:.1f}M trainable")
+        check("model on device", next(base.parameters()).is_cuda,
+              str(next(base.parameters()).device))
+        del peft_model, base
+        torch.cuda.empty_cache()
+
+    return report()
+
+
+def report():
+    print()
+    if FAILED:
+        print(f"PREFLIGHT FAILED: {len(FAILED)} check(s) -- {', '.join(FAILED)}")
+        return 1
+    print("PREFLIGHT OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

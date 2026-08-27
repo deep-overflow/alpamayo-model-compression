@@ -9,7 +9,7 @@
 MAX=${1:-60}
 GPUS=$2
 shift 2
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/alpamayo-model-compression}
 cd "$REPO" || exit 1
 NP=$(wc -w <<< "$GPUS")
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
