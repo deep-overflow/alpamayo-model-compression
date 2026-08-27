@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dual + znorm — 두 타워의 검증된 절단은 합쳐지는가</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem;
+    overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.92rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 실험 결과</div>
+  <h1>dual + znorm &mdash; 두 타워의 검증된 절단은 합쳐지는가</h1>
+  <div class="meta">
+    2026-08-26 &middot; 모델 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>)
+    &middot; 평가 <code>indist_500</code> (val500), rollout-only, K=8 &rarr; minADE@6, 전부 Ada
+    &middot; 선택 신호 <code>calib_100</code>만
+    &middot; 코드 <code>make_slim.py</code>(dualexp 분기) / <code>run_step_importance.py --model</code> / <code>analyze_dualexp.py</code>
+    &middot; 계획 <code>plans/2026-08-26_dual-plus-znorm.md</code> &middot; 브랜치 <code>dual-plus-znorm</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>요약</h2>
+
+<div class="callout">
+  <p><strong>결론.</strong> 개별 검증된 두 절단 &mdash; VLM <code>dual_u40_v2</code>(&minus;24.0%)와
+  expert znorm r25(&minus;4.8%, 개루프 "무압축 동률") &mdash; 를 한 체크포인트로 합치면 expert 몫은
+  공짜가 아니다. dual 대비 <strong>+0.0688 [+0.0404, +0.0981]</strong>로 비례-비용 문턱(+0.013)을
+  CI 하한이 넘는다 (G2 REJECT). 원인은 두 겹이다: (1) "무압축 동률(+0.0003)"이라던 expert znorm
+  r25는 200클립 낙관치였고 val500 물리 체크포인트에서는 단독으로도 median +0.023의 유의한 비용을
+  낸다. (2) 프루닝된 VLM 위에서 중요도를 다시 재면(조건부) &minus;0.0144만큼 유의하게 회복되지만
+  (C3 ACCEPT) 격차의 ~21%에 그친다 (C2 여전히 REJECT).</p>
+  <p style="margin-bottom:0"><strong>sweep의 진짜 발견은 축 분해다.</strong> e10&rarr;e15에서
+  MLP 채널 412개/층을 더 잘라도 비용이 정확히 0인데 (+0.0000 [&minus;0.0002, +0.0002]),
+  Q head를 2개/층 자르는 스텝마다 +0.025&ndash;0.029씩 든다. expert의 공짜 여유는
+  <em>비율 축이 아니라 MLP 축</em>에 있다 &mdash; 이 그리드(round(16r)이 Q를 강제 포함)에서는
+  공짜 상한이 존재하지 않는다 (S-e10/S-e15 모두 REJECT).</p>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">+0.0688</div><div class="l">e25 stale &minus; dual (문턱 +0.013, REJECT)</div></div>
+  <div class="kpi"><div class="v">&minus;0.0144</div><div class="l">조건부 재보정 회복량 (유의, ~21%)</div></div>
+  <div class="kpi"><div class="v">+0.0000</div><div class="l">e10&rarr;e15, MLP 412ch/층 추가의 비용</div></div>
+  <div class="kpi"><div class="v">+0.025<span style="font-size:0.8em">/스텝</span></div><div class="l">Q head 2개/층 스텝당 비용</div></div>
+</div>
+
+<h2><span class="num">2.</span>왜 이걸 쟀나</h2>
+
+<p>출발점은 "공짜 적층" 가설이다. <code>dual_u40_v2</code>는 최고 폐루프 config이고
+(VLM만 &minus;2,657,452,032), expert znorm r25는 2026-08-21 리포트에서 ΔminADE@6 +0.0003으로
+"무압축과 구별 불가"였다 (&minus;532,021,248). 합치면 &minus;3,189,473,280 (28.8%)에 expert 몫이
+공짜여야 한다. 진짜 미지수는 상호작용이었다 &mdash; <strong>프루닝된 VLM의 KV 캐시를 프루닝된
+expert가 읽는 첫 config</strong>로, expert znorm의 kept set은 dense VLM의 캐시 분포에서 잰
+기울기로 골라진 것이었다.</p>
+
+<h2><span class="num">3.</span>설계 &mdash; one-factor 합성</h2>
+
+<ul>
+  <li>새 config <code>dualexp_u40_e&lt;N&gt;</code>: <code>dual_u40_v2</code>의 VLM 절반과
+    <code>expert_u&lt;N&gt;</code>의 expert 절반을 글자 그대로 합침. KV 무접촉.</li>
+  <li>importance는 Blackwell-anchored drop-in (<code>make_stepexp_importance --ref importance_v2</code>):
+    출시 <code>slim_dual_u40_v2</code>가 Blackwell 측정본으로 빌드됐고 Ada본과의 VLM kept 겹침이
+    0.965/0.972라, Ada본을 쓰면 기존 dual arm과의 비교가 이중 요인이 된다.</li>
+  <li><strong>G0 (무결성)</strong>: 모든 결합 체크포인트에서 VLM kept set이
+    <code>slim_dual_u40_v2</code>와 bit-identical, e25의 expert kept set이
+    <code>slim_expert_znorm_r25</code>와 bit-identical &mdash; 전부 PASS. 따라서 dual 대비
+    차이는 전부 denoiser 경로다 (G1: CoC 텍스트·NLL이 dual과 500/500 동일).</li>
+  <li>평가는 고정 프로토콜 (val500, rollout-only, K=8 &rarr; minADE@6, 클립 유도 시드, Ada).
+    대조군 <code>dual_u40_v2_ps_indist</code>, <code>baseline_ada_ps_indist</code>는 기존 run 재사용.</li>
+</ul>
+
+<h2><span class="num">4.</span>e25 &mdash; 공짜가 아니다, 그리고 절반은 원래 그랬다</h2>
+
+<table>
+  <thead><tr><th>arm (val500)</th><th class="r">압축</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th class="r">paired Δ vs dual [95% CI]</th></tr></thead>
+  <tbody>
+    <tr><td>baseline (무압축)</td><td class="r">&mdash;</td><td class="r">0.8236 (0.5241)</td><td class="r">2.2050</td><td class="r">&mdash;</td></tr>
+    <tr><td>expert znorm r25 단독</td><td class="r">&minus;4.8%</td><td class="r">0.8499 (0.5709)</td><td class="r">2.2892</td><td class="r">vs baseline +0.0263 [&minus;0.042, +0.072]</td></tr>
+    <tr><td>dual_u40_v2 (VLM만)</td><td class="r">&minus;24.0%</td><td class="r">0.8904 (0.6391)</td><td class="r">2.3304</td><td class="r">&mdash; (대조군)</td></tr>
+    <tr><td><strong>dualexp_u40_e25 (stale)</strong></td><td class="r">&minus;28.8%</td><td class="r">0.9592 (0.6900)</td><td class="r">2.5048</td><td class="r"><strong>+0.0688 [+0.0404, +0.0981]</strong></td></tr>
+  </tbody>
+</table>
+
+<p>사전 등록 문턱은 +0.013 &mdash; dual의 VLM 비용 0.0668을 파라미터 비율(532/2657)로 스케일한
+비례-비용 예측이다. CI 하한 +0.0404가 이를 넘으므로 <strong>G2 REJECT</strong>: expert 절단은
+비례 예측의 5배를 문다.</p>
+
+<h3>4.1 "무압축 동률"은 낙관치였다</h3>
+
+<p>expert znorm r25 단독을 고정 프로토콜로 처음 측정했다 (D-stage는 런타임 마스크로
+indist_500[60:260] 200클립만). mean +0.0263 [&minus;0.0418, +0.0721]은 유의하지 않지만
+<strong>median +0.0228 [+0.0100, +0.0374], p&lt;10<sup>&minus;4</sup></strong>은 뚜렷하다.
+D-stage의 +0.0003은 CI가 [&minus;0.159, +0.099]로 넓은 낙관치였던 것. median 기준으로는
+combined&minus;dual(+0.0248)과 expert 단독(+0.0228)이 거의 같아 <strong>가산적</strong>이고,
+mean의 +0.0688은 꼬리 클립이 부풀린다 (상호작용 I<sub>c</sub> = +0.0425 [&minus;0.0040, +0.1069],
+플래그 미달).</p>
+
+<div class="note">
+  <strong>경로 주의.</strong> expert 단독 vs baseline 비교는 slim attention 경로(kept Q head별
+  K/V gather) vs 표준 경로의 커널 드리프트를 물고 있다 &mdash; expert 가중치는 CoC 생성에 인과적으로
+  관여할 수 없는데도 <code>gen_coc</code>이 12/500 클립에서 다르다 (아키텍처 간 3&ndash;4% 플립과 같은
+  규모). slim끼리의 비교(combined vs dual)만 완전히 깨끗하며, 본 리포트의 게이트는 전부 그 대비다.
+</div>
+
+<h2><span class="num">5.</span>조건부 중요도 &mdash; 유의한 회복, 그러나 ~21%</h2>
+
+<p>expert 중요도를 <code>slim_dual_u40_v2</code> 위에서 재측정했다
+(<code>run_step_importance.py --model</code>, calib_100 동일 클립&middot;시드, 8분). znorm 집계 후
+r25 선택이 Q 5.6% / MLP 2.2% 바뀐다 (C1 GO; 참고로 집계 교체 sum&rarr;znorm은 11.1%/5.5%를 바꿨다).</p>
+
+<table>
+  <thead><tr><th>게이트</th><th>대비</th><th class="r">mean Δ [95% CI]</th><th class="r">median Δ</th><th>판정</th></tr></thead>
+  <tbody>
+    <tr><td><strong>C2</strong> (주, 문턱 +0.013)</td><td>cond &minus; dual</td><td class="r">+0.0544 [+0.0283, +0.0808]</td><td class="r">+0.0250</td><td><strong>REJECT</strong></td></tr>
+    <tr><td><strong>C3</strong> (재보정 효과)</td><td>cond &minus; stale</td><td class="r">&minus;0.0144 [&minus;0.0287, &minus;0.0003]</td><td class="r">&minus;0.0066 [&minus;0.0127, &minus;0.0011]</td><td><strong>ACCEPT</strong></td></tr>
+  </tbody>
+</table>
+
+<p>재보정은 실재한다 &mdash; 상호작용이 0이 아니라는 직접 증거다. 그러나 +0.0688 격차의 ~21%만
+회복하고, 남는 +0.0544는 선택을 어떻게 해도 남는 r25 절단의 고유 비용이다.</p>
+
+<h2><span class="num">6.</span>sweep e10/e15 &mdash; 공짜 상한 대신 축 분해</h2>
+
+<p>조건부 중요도로 비율을 낮췄다. <code>select_mask</code>는 층당 round(16r)개 Q head를 제거하므로
+e10과 e15는 <strong>Q 선택이 동일</strong>하고 (2개/층) MLP만 다르다 (826 vs 1238개/층) &mdash;
+그리드가 거칠어서 생긴 우연이, 축을 분리하는 자연 실험이 됐다.</p>
+
+<figure>
+  <img src="PLOT::sw::sweep_curve.png" alt="expert budget vs paired delta minADE, mean and median">
+  <figcaption>expert 제거 예산 vs dual 대비 paired ΔminADE@6 (왼쪽 mean, 오른쪽 median; 파랑 = 조건부
+  중요도, 주황 = stale e25, 점선 = 비례-비용 예측). e10&rarr;e15가 평평하고 (MLP만 추가),
+  Q head가 늘어나는 스텝에서만 오른다. 곡선 전체가 비례 예측 위에 있다.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>arm</th><th class="r">expert 제거 (층당)</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th class="r">Δ vs dual [95% CI]</th><th class="r">median Δ</th><th class="r">문턱</th><th>판정</th></tr></thead>
+  <tbody>
+    <tr><td>e10</td><td class="r">2 Q + 826 MLP (220M)</td><td class="r">0.9158 (0.6459)</td><td class="r">2.3860</td><td class="r">+0.0253 [+0.0092, +0.0411]</td><td class="r">+0.0089</td><td class="r">+0.0055</td><td><strong>REJECT</strong></td></tr>
+    <tr><td>e15</td><td class="r">2 Q + 1238 MLP (312M)</td><td class="r">0.9158 (0.6463)</td><td class="r">2.3862</td><td class="r">+0.0253 [+0.0091, +0.0412]</td><td class="r">+0.0083</td><td class="r">+0.0078</td><td><strong>REJECT</strong></td></tr>
+    <tr><td>e25 (조건부)</td><td class="r">4 Q + 2064 MLP (532M)</td><td class="r">0.9448 (0.6888)</td><td class="r">2.4708</td><td class="r">+0.0544 [+0.0283, +0.0808]</td><td class="r">+0.0250</td><td class="r">+0.0134</td><td><strong>REJECT</strong></td></tr>
+  </tbody>
+</table>
+
+<p>minFDE@6도 같은 그림이다 (dual 2.3304 대비 paired Δ): e10 +0.0556 [&minus;0.0157, +0.1206],
+e15 +0.0557 [&minus;0.0157, +0.1208], e25 조건부 +0.1404 [+0.0499, +0.2344] &mdash; e10과 e15가
+동일하고 Q head 스텝에서만 오른다.</p>
+
+<figure>
+  <img src="PLOT::sw::decomposition.png" alt="incremental cost per step, colored by axis">
+  <figcaption>증분 분해 (전부 500클립 paired). MLP-only 스텝(초록)은 정확히 0, Q head 스텝(파랑)은
+  각각 +0.025 / +0.029. 두 Q 스텝의 합 0.0543이 e25의 전체 격차 0.0544와 일치한다 &mdash;
+  Q head 축 안에서는 손상이 가산적이다.</figcaption>
+</figure>
+
+<div class="callout">
+  <p style="margin-bottom:0"><strong>축 분해.</strong> e10&rarr;e15 (+412 MLP ch/층, 91M)는
+  <strong>+0.0000 [&minus;0.0002, +0.0002]</strong> (p=0.71) &mdash; 배정도까지 공짜다.
+  e15&rarr;e25 (+2 Q head + 826 MLP ch/층)는 +0.0290 [+0.0075, +0.0516] (p=0.010).
+  즉 이 범위에서 expert의 손상은 <em>전부 Q head에서</em> 나온다. znorm이 고른 하위 1238개
+  MLP 채널(15%)은 실제로 불필요하고, Q head는 16개 중 2개만 잘라도 유의한 비용이 든다.</p>
+</div>
+
+<h2><span class="num">7.</span>게이트 일람</h2>
+
+<table>
+  <thead><tr><th>게이트</th><th>내용</th><th>판정</th><th class="r">수치</th></tr></thead>
+  <tbody>
+    <tr><td>G0</td><td>마스크 무결성 (VLM/expert kept bit-identity, 4개 빌드)</td><td>PASS</td><td class="r">전부 일치</td></tr>
+    <tr><td>G1</td><td>CoC 동일성 (combined vs dual)</td><td>PASS</td><td class="r">0/500 상이, degen 0.014 동일</td></tr>
+    <tr><td>G2</td><td>stale e25 &minus; dual &lt; +0.013</td><td><strong>REJECT</strong></td><td class="r">+0.0688 [+0.0404, +0.0981]</td></tr>
+    <tr><td>G3</td><td>가산성 (상호작용 I<sub>c</sub>)</td><td>플래그 미달</td><td class="r">+0.0425 [&minus;0.0040, +0.1069]</td></tr>
+    <tr><td>G4</td><td>combined &minus; baseline (기록용)</td><td>&mdash;</td><td class="r">+0.1357 [+0.0390, +0.2234]</td></tr>
+    <tr><td>C1</td><td>조건화가 선택을 바꾸는가 (무료 go/no-go)</td><td>GO</td><td class="r">kept-overlap Q 0.9444 / MLP 0.9784</td></tr>
+    <tr><td>C2</td><td>cond e25 &minus; dual &lt; +0.013</td><td><strong>REJECT</strong></td><td class="r">+0.0544 [+0.0283, +0.0808]</td></tr>
+    <tr><td>C3</td><td>재보정이 stale을 이기는가</td><td><strong>ACCEPT</strong></td><td class="r">&minus;0.0144 [&minus;0.0287, &minus;0.0003]</td></tr>
+    <tr><td>S-e10</td><td>e10 &minus; dual &lt; +0.0055</td><td><strong>REJECT</strong></td><td class="r">+0.0253, lo +0.0092</td></tr>
+    <tr><td>S-e15</td><td>e15 &minus; dual &lt; +0.0078</td><td><strong>REJECT</strong></td><td class="r">+0.0253, lo +0.0091</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">8.</span>한계, 그리고 다음 단계</h2>
+
+<ul>
+  <li><strong>MLP-only expert 절단은 미검증이지만 이 데이터가 강하게 시사한다.</strong> 826&rarr;1238
+    구간이 공짜였으므로, Q head를 하나도 건드리지 않는 "expert MLP 15&ndash;25%" config가 진짜 공짜
+    후보다 (25% MLP-only면 &minus;457M, 층당 Q는 그대로 16). <code>dualexp</code> 분기에 MLP-only
+    변형을 추가하면 빌드&middot;평가 ~1.5 GPU-h로 판정 가능하다. 단 0&rarr;826 구간은 외삽이다.</li>
+  <li><strong>비율 그리드가 Q head를 강제 포함한다.</strong> round(16r)는 r&ge;0.032부터 Q를 1개
+    이상 자르므로, 비율 축 sweep으로는 Q=0 지점을 볼 수 없다 &mdash; 축을 분리한 config가 필요한 이유다.</li>
+  <li><strong>폐루프는 범위 밖.</strong> N=150의 해상도(0.080)가 관측된 개루프 격차(0.025&ndash;0.069)와
+    비슷한 크기라 판정을 못 내리고, 21 GB state가 99% 디스크에 필요하다. expert znorm 단독의 폐루프도
+    이미 판정 불가(&minus;0.0297 [&minus;0.065, +0.005])였다.</li>
+  <li><strong>D-stage 200클립 판정의 교훈.</strong> "무압축 동률"은 CI 반폭 0.13짜리 측정의 점추정이었다.
+    작은 효과의 무효과 주장은 val500 median CI(반폭 ~0.015) 수준의 검정력으로만 할 것.</li>
+</ul>
+
+<h2><span class="num">9.</span>재현</h2>
+
+<pre><code># 결합 config 빌드 (선택-only, --no-state)
+make_stepexp_importance.py --stepimp stepimp_fm_perstep_v2 --ref importance_v2 \
+    --aggs znorm --prefix importance_stepexp_bw
+make_slim.py --config dualexp_u40_e25 --importance importance_stepexp_bw_znorm \
+    --out outputs/slim_dualexp_u40_e25 --no-state
+
+# 조건부 중요도 (프루닝된 VLM 위에서 재측정)
+run_step_importance.py --mode fm --noise-mode per_step \
+    --model outputs/slim_dual_u40_v2 --exp-id stepimp_fm_perstep_dualvlm
+make_stepexp_importance.py --stepimp stepimp_fm_perstep_dualvlm --ref importance_v2 \
+    --aggs znorm --prefix importance_stepexp_dv
+
+# 평가 (모든 arm 동일; 샤딩은 자유 -- 시드가 클립 유도)
+run_baseline.py --set indist --model outputs/&lt;slim dir&gt; --exp-id &lt;id&gt; --k 8 --seed 42
+
+# 게이트
+analyze_stepvlm_arms.py --control dual_u40_v2_ps_indist --arm &lt;id&gt; --out &lt;dir&gt;
+analyze_dualexp.py    # G1-G4
+plot_dualexp_sweep.py # 본 리포트의 두 그림
+</code></pre>
+
+<p class="note">산출물: <code>outputs/dualexp_{stale,cond,e10,e15}_arms_val</code>,
+<code>outputs/dualexp_e15_vs_e10</code>, <code>outputs/dualexp_e25_vs_e15</code>,
+<code>outputs/dualexp_sweep/plots</code>. 체크포인트는 전부 meta-only (4 MB, <code>load_slim</code>이
+base 가중치에서 bit-identical 복원).</p>
+
+</div>
+</body>
+</html>

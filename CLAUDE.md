@@ -258,6 +258,8 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `j_traj_full_r20` / `_r30` | `max(rank I_traj, rank J)` — **rollout-free** | uniform | VLM + expert + KV1 |
 | `dual_u40_v2` / `j_traj_u40_v2` | dual / `max(rank I_traj, rank J)` | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `traj_u40_v2` / `coc_u40_v2` / `j_u40_v2` | `I_traj` / `I_CoC` / `J`, single criterion | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `expert_u25` | expert `traj_exp_*` (step agg chosen by `--importance`) | uniform 25% | **expert only** (−0.53B, 4.8%) |
+| `dualexp_u40_e25` | dual (VLM) + znorm `I_traj` (expert) | uniform 0.398563 / 25% | **VLM + expert** (−3.19B, 28.8%) |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -433,6 +435,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 | `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
+| `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
 `ls reports/evaluation/` is the full set (23 files as of 2026-08-25).

@@ -141,6 +141,10 @@ def run_infer(model, inputs, cache, rope_deltas, data, args, seed):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["fm", "infer"], default="fm")
+    ap.add_argument("--model", default=None,
+                    help="slim ckpt dir (e.g. outputs/slim_dual_u40_v2) to measure the "
+                         "expert importance conditioned on a pruned VLM's cache; "
+                         "default = the dense base model")
     ap.add_argument("--noise-mode", choices=["per_step", "shared"], default="shared",
                     help="fm only; per_step reproduces the shipped construction (gate G0)")
     ap.add_argument("--num-clips", type=int, default=100)
@@ -165,8 +169,12 @@ def main():
     device = reserve_gpu(args.reserve_gb, devices=devices)
     print(f"using {device}", flush=True)
 
-    model = Alpamayo1_5.from_pretrained(
-        "nvidia/Alpamayo-1.5-10B", revision=MODEL_REV, dtype=torch.bfloat16).to("cuda")
+    if args.model:
+        import slim_lib as sl
+        model = sl.load_slim(REPO / args.model, device="cuda")
+    else:
+        model = Alpamayo1_5.from_pretrained(
+            "nvidia/Alpamayo-1.5-10B", revision=MODEL_REV, dtype=torch.bfloat16).to("cuda")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -192,7 +200,7 @@ def main():
                 "kv_k_abs_step": []}
 
     (out_dir / "config.json").write_text(json.dumps({
-        "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
+        "model": args.model or "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
         "purpose": "per-denoising-step decomposition of the expert trajectory importance",
         "mode": args.mode, "noise_mode": args.noise_mode if args.mode == "fm" else None,
         "objective": ("flow-matching MSE vs GT action, per t" if args.mode == "fm"
