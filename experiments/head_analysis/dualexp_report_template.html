@@ -227,13 +227,17 @@ e10과 e15는 <strong>Q 선택이 동일</strong>하고 (2개/층) MLP만 다르
 </figure>
 
 <table>
-  <thead><tr><th>arm</th><th class="r">expert 제거 (층당)</th><th class="r">minADE@6</th><th class="r">Δ vs dual [95% CI]</th><th class="r">median Δ</th><th class="r">문턱</th><th>판정</th></tr></thead>
+  <thead><tr><th>arm</th><th class="r">expert 제거 (층당)</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th class="r">Δ vs dual [95% CI]</th><th class="r">median Δ</th><th class="r">문턱</th><th>판정</th></tr></thead>
   <tbody>
-    <tr><td>e10</td><td class="r">2 Q + 826 MLP (220M)</td><td class="r">0.9158 (0.6459)</td><td class="r">+0.0253 [+0.0092, +0.0411]</td><td class="r">+0.0089</td><td class="r">+0.0055</td><td><strong>REJECT</strong></td></tr>
-    <tr><td>e15</td><td class="r">2 Q + 1238 MLP (312M)</td><td class="r">0.9158 (0.6463)</td><td class="r">+0.0253 [+0.0091, +0.0412]</td><td class="r">+0.0083</td><td class="r">+0.0078</td><td><strong>REJECT</strong></td></tr>
-    <tr><td>e25 (조건부)</td><td class="r">4 Q + 2064 MLP (532M)</td><td class="r">0.9448 (0.6888)</td><td class="r">+0.0544 [+0.0283, +0.0808]</td><td class="r">+0.0250</td><td class="r">+0.0134</td><td><strong>REJECT</strong></td></tr>
+    <tr><td>e10</td><td class="r">2 Q + 826 MLP (220M)</td><td class="r">0.9158 (0.6459)</td><td class="r">2.3860</td><td class="r">+0.0253 [+0.0092, +0.0411]</td><td class="r">+0.0089</td><td class="r">+0.0055</td><td><strong>REJECT</strong></td></tr>
+    <tr><td>e15</td><td class="r">2 Q + 1238 MLP (312M)</td><td class="r">0.9158 (0.6463)</td><td class="r">2.3862</td><td class="r">+0.0253 [+0.0091, +0.0412]</td><td class="r">+0.0083</td><td class="r">+0.0078</td><td><strong>REJECT</strong></td></tr>
+    <tr><td>e25 (조건부)</td><td class="r">4 Q + 2064 MLP (532M)</td><td class="r">0.9448 (0.6888)</td><td class="r">2.4708</td><td class="r">+0.0544 [+0.0283, +0.0808]</td><td class="r">+0.0250</td><td class="r">+0.0134</td><td><strong>REJECT</strong></td></tr>
   </tbody>
 </table>
+
+<p>minFDE@6도 같은 그림이다 (dual 2.3304 대비 paired Δ): e10 +0.0556 [&minus;0.0157, +0.1206],
+e15 +0.0557 [&minus;0.0157, +0.1208], e25 조건부 +0.1404 [+0.0499, +0.2344] &mdash; e10과 e15가
+동일하고 Q head 스텝에서만 오른다.</p>
 
 <figure>
   <img src="PLOT::sw::decomposition.png" alt="incremental cost per step, colored by axis">
