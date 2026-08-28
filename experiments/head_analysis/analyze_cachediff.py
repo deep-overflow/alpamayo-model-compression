@@ -18,12 +18,12 @@ import json
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
+import eval_lib as el  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from scipy.stats import spearmanr, wilcoxon  # noqa: E402
-
-import eval_lib as el  # noqa: E402
 
 BG, INK, MUTED, GRID = "#FAF9F5", "#29261B", "#6B6555", "#E8E6DC"
 C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"
@@ -230,15 +230,15 @@ def main():
 
     lines = [f"cache-diff diagnostic -- {n} clips, {len(args.shards)} shard(s)", "",
              f"A0  layer-0 cache identical: {a0i} (max |dK| = {l0:.3e})",
-             f"    A00 {A00.mean():.4f}  A10 {A10.mean():.4f}  "
-             f"A01 {A01.mean():.4f}  A11 {A11.mean():.4f}   (minADE@6 mean)", "",
+             (f"    A00 {A00.mean():.4f}  A10 {A10.mean():.4f}  "
+              f"A01 {A01.mean():.4f}  A11 {A11.mean():.4f}   (minADE@6 mean)"), "",
              "A1  paired medians [95% CI]",
-             f"    expert cut | dense cache   {simple_dense['med']:+.4f} "
-             f"[{simple_dense['lo']:+.4f},{simple_dense['hi']:+.4f}]",
-             f"    expert cut | pruned cache  {simple_prun['med']:+.4f} "
-             f"[{simple_prun['lo']:+.4f},{simple_prun['hi']:+.4f}]",
-             f"    interaction I              {inter['med']:+.4f} "
-             f"[{inter['lo']:+.4f},{inter['hi']:+.4f}]  sig={inter['sig']}",
+             (f"    expert cut | dense cache   {simple_dense['med']:+.4f} "
+              f"[{simple_dense['lo']:+.4f},{simple_dense['hi']:+.4f}]"),
+             (f"    expert cut | pruned cache  {simple_prun['med']:+.4f} "
+              f"[{simple_prun['lo']:+.4f},{simple_prun['hi']:+.4f}]"),
+             (f"    interaction I              {inter['med']:+.4f} "
+              f"[{inter['lo']:+.4f},{inter['hi']:+.4f}]  sig={inter['sig']}"),
              f"    VLM cut alone (A10-A00)    {cache_only['med']:+.4f}", "",
              "C   residual after the best linear cache map (fit/score on disjoint folds)"]
     for k, v in corr.items():
@@ -246,8 +246,8 @@ def main():
                      f"(raw {v['raw_rel_mean']:.3f} -> {v['resid_rel_mean']:.3f} of |K_D|; "
                      f"{v['n_valid_cells']}/{v['n_cells']} cells)")
     if b2 and "spearman_keeprank_vs_move" in b2:
-        lines += ["", f"B2  Spearman(expert keep-rank, group cache move) = "
-                      f"{b2['spearman_keeprank_vs_move']:+.3f} (p={b2['p']:.3f})"]
+        lines += ["", (f"B2  Spearman(expert keep-rank, group cache move) = "
+                       f"{b2['spearman_keeprank_vs_move']:+.3f} (p={b2['p']:.3f})")]
     (out_dir / "cachediff_summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("saved ->", out_dir)

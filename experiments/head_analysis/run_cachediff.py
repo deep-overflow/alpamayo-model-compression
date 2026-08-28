@@ -62,12 +62,11 @@ import analysis_lib as lib  # noqa: E402
 import eval_lib as el  # noqa: E402
 import mask_lib as ml  # noqa: E402
 import sample_cache as sc  # noqa: E402
+from alpamayo1_5 import helper  # noqa: E402
+from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 from make_slim import build_masks  # noqa: E402
 from slim_lib import MODEL_REV  # noqa: E402
-
-from alpamayo1_5 import helper  # noqa: E402
-from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 CELLS = ["A00_denseC_denseE", "A01_denseC_prunE", "A10_prunC_denseE", "A11_prunC_prunE"]
