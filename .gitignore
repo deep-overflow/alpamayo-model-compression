@@ -232,3 +232,4 @@ wandb/
 # `git add -A` from the main checkout sweeps them into the commit. Only the
 # worktrees are ignored, not all of .claude/, so a settings file can still be tracked.
 .claude/worktrees/
+experiments/head_analysis/*_report_template_filled.html
