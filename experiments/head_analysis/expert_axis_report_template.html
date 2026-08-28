@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV 캐시 이동 — 프루닝된 VLM은 expert에게 다른 캐시를 주는가, 그것이 비용인가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Expert axis decomposition</div>
+  <h1>expert 축 분해 — 비용은 전부 Q head에서 나오고, MLP 폭은 절반까지 공짜다</h1>
+  <div class="meta">
+    2026-08-28 · 모델 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>) ·
+    고정 개루프 프로토콜: val500 / test500 / OOD-val 262, rollout-only, minADE@6·minFDE@6, 클립 유도 시드<br>
+    코드 <code>experiments/head_analysis/make_slim.py</code> (<code>expert{q,m}_{u,c}&lt;N&gt;</code>),
+    <code>experiments/evaluation/analyze_expert_axis.py</code> ·
+    산출물 <code>outputs/expert_axis_analysis/</code>, <code>outputs/expert{q,m}_u*_{indist,test,oodval}/</code> ·
+    기록 <code>plans/2026-08-28_expert-axis-ablation.md</code> · 브랜치 <code>expert-axis-ablation</code><br>
+    선행: <code>2026-08-21_denoise-step-importance.html</code> (스텝-특화), <code>2026-08-26_dual-plus-znorm.html</code> (e10/e15: MLP 폭은 공짜)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{indist.C.G1.med}}</div><div class="l">G1 · q25 − m25 (같은 비율 25%, MLP가 6배 많이 제거)</div></div>
+  <div class="kpi"><div class="v">{{indist.C.G4.med}}</div><div class="l">G4 · q25 − m_pm (같은 75.5M 파라미터, 축만 다름)</div></div>
+  <div class="kpi"><div class="v">{{indist.expert_m50.med}}</div><div class="l">MLP 50% 단독 (−913M, 전체의 8.2%) vs 무압축</div></div>
+  <div class="kpi"><div class="v">{{indist.expert_q50.med}}</div><div class="l">Q head 50% 단독 (−151M) vs 무압축</div></div>
+  <div class="kpi"><div class="v">{{mass.mlp.50}} / {{mass.q.50}}</div><div class="l">하위 50% 유닛이 든 1차 중요도 질량 — MLP / Q</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> action expert를 같은 비율로 자르면 <strong>Q head만 자른 쪽이 MLP만 자른 쪽보다 확실히 비싸다</strong> —
+MLP가 6.05배 많은 파라미터를 지우는데도 그렇고(G1), 파라미터 수를 똑같이 맞춰도 그렇다(G4). MLP-only 절단은 25%든 50%든
+paired 중앙값 0.0000으로 <strong>무압축과 구별되지 않고</strong>, 기존 <code>expert_u25</code>(양쪽 25%)의 비용은
+<strong>정확히 Q head 몫과 같다</strong>(G2 가산성). 세 세트(val500 / test500 / OOD-val) 모두 같은 부호다.
+</div>
+
+<p>기전은 중요도 분포에 있다. 1차 Taylor 질량에서 MLP 채널 하위 절반은 레이어 질량의 {{mass.mlp.50}}만 들고 있고,
+Q head 하위 절반은 {{mass.q.50}}를 든다. MLP 중요도는 소수 채널에 극단적으로 몰려 있어 하위권은 사실상 불활성이고,
+Q head는 디노이징 스텝마다 다른 헤드를 쓰기 때문에(step 0 vs 9 랭킹 상관 0.14) 어느 헤드를 잘라도 어떤 스텝은 자기 헤드를 잃는다.</p>
+
+<h2><span class="num">1.</span>왜 쟀나</h2>
+
+<p>스텝별 중요도 분석(<code>2026-08-21</code>)에서 expert <strong>Q head의 중요도 랭킹은 디노이징 스텝에 강하게 의존</strong>했다
+(스텝 간 Spearman 0.717, 잡음 바닥 0.929; step 0 vs step 9 = 0.14). <strong>MLP 채널은 약하게만</strong> 의존했다
+(0.877, 바닥 0.945; step 0 vs 9 = 0.74). 그리고 <code>dualexp</code>의 e10/e15 스윕에서 expert 손상은 전부 Q head 축에서
+나왔고 MLP 폭(하위 15%)은 소수 4자리까지 공짜였다 — 단 그 스윕은 dual VLM 위에서 MLP 축만 움직인 것이라, 두 축을
+<em>같은 조건에서 나란히</em> 잰 적은 없었다.</p>
+
+<p>질문은 단순하다: <strong>같은 비율로 자를 때 Q head만 자른 것과 MLP 채널만 자른 것 중 어느 쪽이 비싼가?</strong>
+파라미터 수는 별도로 센다(헤드 1개 = 524,288, 채널 1개 = 6,144 — 85배 차이).</p>
+
+<ul>
+  <li><strong>H1</strong>: 헤드는 스텝-특화라 어느 헤드를 잘라도 어떤 스텝은 자기 헤드를 잃는다 → Q-only가 더 비싸다, 6배 적게 지우고도.</li>
+  <li><strong>H0</strong>: 비용은 축이 아니라 파라미터 수에 비례한다 → MLP-only가 더 비싸고, e10/e15의 "MLP 공짜"는 절단량이 작아서 생긴 바닥 효과다.</li>
+</ul>
+
+<h2><span class="num">2.</span>설계</h2>
+
+<p>expert 타워만 자르고 VLM·KV 캐시는 무접촉. 기준은 znorm <code>traj_exp_q</code> / <code>traj_exp_mlp</code>
+(<code>importance_stepexp_znorm</code> — 출시 <code>slim_expert_znorm_r25</code>와 같은 파일), 레이어당 균일 비율,
+<code>mask_lib.select_mask</code>(k = round(n·r)). 순수 선택 config라 <code>--no-state</code>로 빌드한다
+(<code>slim_meta.json</code>의 kept 인덱스로 로드 시점에 bit-identical 복원).</p>
+
+<table>
+<thead><tr><th>arm</th><th>config</th><th>층당 제거</th><th class="r">제거 파라미터</th><th class="r">전체 대비</th><th class="r">expert 대비</th><th>평가 카드</th></tr></thead>
+<tbody>
+<tr><td><strong>q25</strong></td><td><code>expertq_u25</code></td><td>Q head 4 / 16</td><td class="r">75,497,472</td><td class="r">0.68%</td><td class="r">3.3%</td><td>Ada</td></tr>
+<tr><td><strong>m_pm</strong></td><td><code>expertm_c341</code></td><td>MLP 341 ch (r = 0.0413)</td><td class="r">75,423,744</td><td class="r">0.68%</td><td class="r">3.3%</td><td>Ada</td></tr>
+<tr><td><strong>m25</strong></td><td><code>expertm_u25</code></td><td>MLP 2064 / 8256</td><td class="r">456,523,776</td><td class="r">4.12%</td><td class="r">20.0%</td><td>Ada</td></tr>
+<tr><td>both25 (기존)</td><td><code>expert_u25</code></td><td>Q 4 + MLP 2064</td><td class="r">532,021,248</td><td class="r">4.80%</td><td class="r">23.3%</td><td>Ada</td></tr>
+<tr><td><strong>q50</strong></td><td><code>expertq_u50</code></td><td>Q head 8 / 16</td><td class="r">150,994,944</td><td class="r">1.36%</td><td class="r">6.6%</td><td>Blackwell</td></tr>
+<tr><td><strong>m50</strong></td><td><code>expertm_u50</code></td><td>MLP 4128 / 8256</td><td class="r">913,047,552</td><td class="r">8.24%</td><td class="r">40.1%</td><td>Blackwell</td></tr>
+</tbody>
+</table>
+
+<p>expert 타워는 ≈2.28B(전체 11.08B의 20.6%): Q(q_proj+o_proj) 302M(13.2%), MLP 1.83B(80.1%). 같은 비율에서 MLP-only는 Q-only의
+<strong>6.05배</strong> 파라미터를 지운다. <strong>m_pm</strong>은 q25와 파라미터 수를 맞춘 MLP-only 대조군(차이 −73,728, 0.1%)으로,
+"축 효과"와 "파라미터 수 효과"를 분리한다. both25 = q25 ∪ m25가 정확히 성립하므로(같은 importance, 같은 select_mask) 기존
+<code>expert_znorm_r25_ps_indist</code>로 가산성을 공짜로 얻는다.</p>
+
+<div class="note">
+<strong>Blackwell 다리.</strong> Ada 4장으로는 완료가 21:15 KST라 사용자 결정으로 q50·m50을 Blackwell 0–3에서 돌렸다.
+결정성은 아키텍처 안에서만 bitwise이므로(같은 클립·시드 Ada 0.286 / Blackwell 0.291) Blackwell에는 per-sample 배열이 있는
+baseline이 없어 <code>baseline_bw_ps_*</code>를 새로 쟀고, q50·m50의 Δ는 이 baseline 대비다. 따라서 G3(q50 vs q25)는
+클립별 <em>(q50 − base_bw) − (q25 − base_ada)</em>의 Δ-대-Δ 비교다. 두 baseline의 paired 중앙값 차이는 val500에서 +0.0001 —
+아키텍처 편향은 없고 잡음만 조금 늘어난다. 주 판정(G1·G2·G4)에 걸린 arm은 전부 Ada다.
+</div>
+
+<h3>사전 등록 게이트</h3>
+<ul>
+  <li><strong>G0</strong> 빌드 무결성: 제거 파라미터 정확 일치, 반대 축·VLM·KV kept = 전부, q25 ∪ m25 == both25 bit-identical, 50% ⊃ 25% nesting, 같은 아키텍처의 expert arm 간 gen_coc 동일.</li>
+  <li><strong>G1</strong> q25 − m25 (paired 중앙값 CI, 평균 병기, Wilcoxon). CI &gt; 0 → H1.</li>
+  <li><strong>G2</strong> 가산성: both25 − (q25 + m25).</li>
+  <li><strong>G3</strong> 스케일링: Δ(q50) − Δ(q25), Δ(m50) − Δ(m25); G3x q50 − m50 직접.</li>
+  <li><strong>G4</strong> 파라미터 매칭: q25 − m_pm. CI &gt; 0 → 축 효과가 본질적.</li>
+</ul>
+
+<h2><span class="num">3.</span>G0 — 무결성</h2>
+
+<table>
+<thead><tr><th>검사</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>제거 파라미터 (6 arm)</td><td>전부 설계값과 정확 일치 (<code>expected_removed</code> == 실측 파라미터 차)</td></tr>
+<tr><td>VLM / KV / 반대 축</td><td>6 arm 모두 무접촉 (VLM 32 head·12288 ch 전 층, kv-only 층 없음; q-arm은 MLP 8256, m-arm은 Q 16 유지)</td></tr>
+<tr><td>q25 ∪ m25 == both25</td><td>36층 전부 kept 인덱스 bit-identical → both25의 비용을 두 축으로 분해할 수 있다</td></tr>
+<tr><td>nesting</td><td>q50 ⊂ q25, m50 ⊂ m25, m25 ⊂ m_pm (같은 점수의 argsort 접두사)</td></tr>
+<tr><td>gen_coc 동일 (같은 아키텍처의 expert arm 간)</td><td>q25 = m25 = m_pm: 1.000, q50 = m50: 1.000, 세 세트 전부 — expert는 CoC를 건드릴 수 없다</td></tr>
+<tr><td>MLP 절단이 실제로 적용됐는가</td><td>m25는 baseline과 val500 중 455클립에서 궤적이 다르다(CoC 드리프트 12클립만이 아님). 잘렸으나 거의 아무 일도 안 일어난 것이다</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">4.</span>val500 — 주 판정</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">제거</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th>ΔminADE@6 중앙값 [95% CI]</th><th>평균 [95% CI]</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>baseline (Ada)</td><td class="r">0</td><td class="r">{{indist.base.ade}}</td><td class="r">{{indist.base.fde}}</td><td>—</td><td>—</td><td></td></tr>
+<tr><td><strong>q25</strong> Q 4/16</td><td class="r">75.5M</td><td class="r">{{indist.expert_q25.ade}}</td><td class="r">{{indist.expert_q25.fde}}</td><td class="bad">{{indist.expert_q25.med}}</td><td>{{indist.expert_q25.mean}}</td><td class="r">{{indist.expert_q25.p}}</td></tr>
+<tr><td><strong>m_pm</strong> MLP 341</td><td class="r">75.4M</td><td class="r">{{indist.expert_m_pm.ade}}</td><td class="r">{{indist.expert_m_pm.fde}}</td><td class="good">{{indist.expert_m_pm.med}}</td><td>{{indist.expert_m_pm.mean}}</td><td class="r">{{indist.expert_m_pm.p}}</td></tr>
+<tr><td><strong>m25</strong> MLP 2064</td><td class="r">456.5M</td><td class="r">{{indist.expert_m25.ade}}</td><td class="r">{{indist.expert_m25.fde}}</td><td class="good">{{indist.expert_m25.med}}</td><td>{{indist.expert_m25.mean}}</td><td class="r">{{indist.expert_m25.p}}</td></tr>
+<tr><td>both25 (expert_u25)</td><td class="r">532.0M</td><td class="r">{{indist.expert_both25.ade}}</td><td class="r">{{indist.expert_both25.fde}}</td><td>{{indist.expert_both25.med}}</td><td>{{indist.expert_both25.mean}}</td><td class="r">{{indist.expert_both25.p}}</td></tr>
+<tr><td>baseline (Blackwell)</td><td class="r">0</td><td class="r">{{indist.basebw.ade}}</td><td class="r">{{indist.basebw.fde}}</td><td>—</td><td>—</td><td></td></tr>
+<tr><td><strong>q50</strong> Q 8/16 [BW]</td><td class="r">151.0M</td><td class="r">{{indist.expert_q50.ade}}</td><td class="r">{{indist.expert_q50.fde}}</td><td class="bad">{{indist.expert_q50.med}}</td><td>{{indist.expert_q50.mean}}</td><td class="r">{{indist.expert_q50.p}}</td></tr>
+<tr><td><strong>m50</strong> MLP 4128 [BW]</td><td class="r">913.0M</td><td class="r">{{indist.expert_m50.ade}}</td><td class="r">{{indist.expert_m50.fde}}</td><td class="good">{{indist.expert_m50.med}}</td><td>{{indist.expert_m50.mean}}</td><td class="r">{{indist.expert_m50.p}}</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>게이트</th><th>대비</th><th>중앙값 [95% CI]</th><th>평균 [95% CI]</th><th class="r">p</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><strong>G1</strong> 비율 매칭</td><td>q25 − m25</td><td class="bad">{{indist.C.G1.med}}</td><td>{{indist.C.G1.mean}}</td><td class="r">{{indist.C.G1.p}}</td><td><strong>H1 채택</strong> — 6배 적게 지운 Q-only가 더 비싸다</td></tr>
+<tr><td><strong>G4</strong> 파라미터 매칭</td><td>q25 − m_pm</td><td class="bad">{{indist.C.G4.med}}</td><td>{{indist.C.G4.mean}}</td><td class="r">{{indist.C.G4.p}}</td><td><strong>축 효과가 본질적</strong> — 같은 파라미터에서도 Q가 비싸다</td></tr>
+<tr><td><strong>G2</strong> 가산성</td><td>both25 − (q25 + m25)</td><td>{{indist.C.G2.med}}</td><td>{{indist.C.G2.mean}}</td><td class="r">{{indist.C.G2.p}}</td><td>완전 가산 — both25의 비용은 전부 Q head 몫</td></tr>
+<tr><td><strong>G3</strong> 스케일링</td><td>Δ(q50) − Δ(q25)</td><td class="bad">{{indist.C.G3q.med}}</td><td>{{indist.C.G3q.mean}}</td><td class="r">{{indist.C.G3q.p}}</td><td>Q 비용은 헤드 수에 <strong>초선형</strong> (2배 헤드 → 5배 비용)</td></tr>
+<tr><td></td><td>Δ(m50) − Δ(m25)</td><td>{{indist.C.G3m.med}}</td><td>{{indist.C.G3m.mean}}</td><td class="r">{{indist.C.G3m.p}}</td><td>MLP는 50%(−913M)에서도 공짜</td></tr>
+<tr><td><strong>G3x</strong></td><td>q50 − m50 (둘 다 BW)</td><td class="bad">{{indist.C.G3x.med}}</td><td>{{indist.C.G3x.mean}}</td><td class="r">{{indist.C.G3x.p}}</td><td>같은 방향, 6배 크기</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::ea::expert_axis_deltas.png" alt="paired deltas per arm and set">
+  <figcaption>arm별 paired ΔminADE@6(중앙값, 95% 부트스트랩 CI; × = 평균), 세 세트. 파랑 = Q head, 초록 = MLP, 주황 = 양쪽.
+  MLP 세 arm은 세 세트 모두 0에 붙어 있고, Q head 두 arm은 세트를 가리지 않고 양수다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::ea::expert_axis_params.png" alt="cost vs parameters removed">
+  <figcaption>val500, 제거 파라미터(로그) 대 paired ΔminADE@6 중앙값. 같은 75M(q25 vs m_pm)에서 축만 바꿔도 비용이 갈리고,
+  MLP는 913M까지 0에 붙어 있다. 비용을 정하는 것은 파라미터 수가 아니라 축이다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::ea::expert_axis_perclip.png" alt="per-clip q25 - m25 and q25 - m_pm">
+  <figcaption>val500 클립별 q25 − m25(왼쪽)와 q25 − m_pm(오른쪽). 두 분포가 사실상 같다 — m25와 m_pm이 둘 다 baseline과
+  구별되지 않기 때문에, 이 히스토그램은 사실상 "q25 − baseline"의 모양이다. 58–59% 클립에서 Q-only가 나쁘고 꼬리는 +0.6 이상까지 뻗는다.</figcaption>
+</figure>
+
+<h2><span class="num">5.</span>test500 · OOD-val — 세트 간 일관성</h2>
+
+<table>
+<thead><tr><th>대비</th><th>val500</th><th>test500</th><th>OOD-val 262</th></tr></thead>
+<tbody>
+<tr><td>q25 vs baseline</td><td class="bad">{{indist.expert_q25.med}}</td><td class="bad">{{test.expert_q25.med}}</td><td class="bad">{{oodval.expert_q25.med}}</td></tr>
+<tr><td>m_pm vs baseline</td><td>{{indist.expert_m_pm.med}}</td><td>{{test.expert_m_pm.med}}</td><td>{{oodval.expert_m_pm.med}}</td></tr>
+<tr><td>m25 vs baseline</td><td>{{indist.expert_m25.med}}</td><td>{{test.expert_m25.med}}</td><td>{{oodval.expert_m25.med}}</td></tr>
+<tr><td>q50 vs baseline_bw</td><td class="bad">{{indist.expert_q50.med}}</td><td class="bad">{{test.expert_q50.med}}</td><td class="bad">{{oodval.expert_q50.med}}</td></tr>
+<tr><td>m50 vs baseline_bw</td><td>{{indist.expert_m50.med}}</td><td>{{test.expert_m50.med}}</td><td>{{oodval.expert_m50.med}}</td></tr>
+<tr><td><strong>G1</strong> q25 − m25</td><td class="bad">{{indist.C.G1.med}}</td><td class="bad">{{test.C.G1.med}}</td><td class="bad">{{oodval.C.G1.med}}</td></tr>
+<tr><td><strong>G4</strong> q25 − m_pm</td><td class="bad">{{indist.C.G4.med}}</td><td class="bad">{{test.C.G4.med}}</td><td class="bad">{{oodval.C.G4.med}}</td></tr>
+<tr><td><strong>G3</strong> Δ(q50) − Δ(q25)</td><td class="bad">{{indist.C.G3q.med}}</td><td class="bad">{{test.C.G3q.med}}</td><td class="bad">{{oodval.C.G3q.med}}</td></tr>
+<tr><td><strong>G3</strong> Δ(m50) − Δ(m25)</td><td>{{indist.C.G3m.med}}</td><td>{{test.C.G3m.med}}</td><td>{{oodval.C.G3m.med}}</td></tr>
+<tr><td><strong>G3x</strong> q50 − m50</td><td class="bad">{{indist.C.G3x.med}}</td><td class="bad">{{test.C.G3x.med}}</td><td class="bad">{{oodval.C.G3x.med}}</td></tr>
+</tbody>
+</table>
+
+<p>baseline: val500 Ada {{indist.base.ade}} / Blackwell {{indist.basebw.ade}}, test500 Ada {{test.base.ade}} / Blackwell {{test.basebw.ade}},
+OOD-val Ada {{oodval.base.ade}} / Blackwell {{oodval.basebw.ade}} (minADE@6 평균). 세 세트에서 부호가 하나도 뒤집히지 않는다.
+OOD-val의 q25는 중앙값은 유의하게 양수지만 평균은 {{oodval.expert_q25.mean}}로 0을 포함한다 — 262클립의 꼬리가 무거워 평균이 흔들리는
+것이고, 중앙값·Wilcoxon 우선 규칙대로 읽는다. OOD-val의 Δ(m50) − Δ(m25)에는 별표가 붙지만 크기가 {{oodval.C.G3m.med}} — 0.2 mm다. 별표는 CI가 0을 1e-5 차이로 비껴갔다는 뜻일 뿐이고, 여기서는 크기를 읽어야 한다.</p>
+
+<h2><span class="num">6.</span>기전 — 왜 MLP는 공짜이고 Q head는 비싼가</h2>
+
+<figure>
+  <img src="PLOT::ea::expert_axis_mass.png" alt="importance mass by unit rank">
+  <figcaption>레이어 안에서 점수 낮은 순으로 유닛을 지울 때 함께 사라지는 1차 중요도 질량(|Σ<sub>s</sub> ∂L/∂g|, 클립 평균, 36층 평균).
+  MLP(초록)는 하위 90%가 질량의 몇 %도 안 되고, Q head(파랑)는 거의 선형이다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>축</th><th class="r">하위 25%가 든 질량</th><th class="r">하위 50%가 든 질량</th><th>스텝 간 랭킹 상관 (2026-08-21)</th></tr></thead>
+<tbody>
+<tr><td>Q head (16/층)</td><td class="r">{{mass.q.25}}</td><td class="r">{{mass.q.50}}</td><td>0.717 (step 0 vs 9: 0.14) — 스텝마다 다른 헤드</td></tr>
+<tr><td>MLP 채널 (8256/층)</td><td class="r">{{mass.mlp.25}}</td><td class="r">{{mass.mlp.50}}</td><td>0.877 (step 0 vs 9: 0.74) — 모든 스텝이 같은 하위권에 동의</td></tr>
+</tbody>
+</table>
+
+<ul>
+  <li><strong>MLP</strong>: 중요도가 소수 채널에 극단적으로 몰려 있어 하위 절반은 사실상 불활성이다. 어떤 스텝도 그 채널들을 쓰지 않으니
+  스텝 축을 어떻게 집계해도 같은 채널이 잘리고, 잘려도 아무 일이 없다. e10/e15의 "MLP 공짜"는 바닥 효과가 아니라 이 구조의 결과였다.</li>
+  <li><strong>Q head</strong>: 질량이 넓게 퍼져 있고(하위 절반이 {{mass.q.50}}), 게다가 스텝마다 쓰는 헤드가 다르다. 한 헤드를 잘라내면
+  그 헤드가 담당하던 스텝의 벡터장 예측이 통째로 흔들리고, Euler 체인이 그 오차를 뒤 스텝으로 넘긴다. 그래서 4 → 8 헤드에서 비용이
+  5배로 뛴다(초선형): 남은 헤드가 대신할 수 있는 여유가 빨리 바닥난다.</li>
+</ul>
+
+<h2><span class="num">7.</span>해석과 함의</h2>
+
+<div class="callout">
+<strong>expert의 프루닝 예산은 MLP에 써야 한다.</strong> 지금 출시 config(<code>expert_u25</code>, <code>dualexp_u40_e25</code>)는
+expert의 Q head와 MLP를 같은 비율로 자르는데, 그 비용(+0.023)은 전부 Q head 몫이고 MLP 몫은 0이다. Q를 건드리지 않고 MLP만
+50% 자르면 <strong>−913M(전체 8.2%)</strong>을 지우면서 개루프 비용이 0에 붙는다 — both25(−532M, +0.023)보다 더 많이 지우고 더 싸다.
+</div>
+
+<ul>
+  <li><code>dualexp_u40_e25</code>의 expert 절반을 m50으로 바꾼 <strong>dual + expert-MLP-only</strong> config가 자연스러운 다음 후보다
+  (예상 −2.66B −0.91B = −3.57B, 32.2%). dual VLM의 프루닝된 캐시 위에서도 MLP가 공짜인지는 별도 확인이 필요하다 — 다만
+  <code>2026-08-28_cache-shift.html</code>에서 캐시 이동은 expert 어텐션을 거의 안 바꿨고, MLP는 캐시를 직접 읽지 않는다.</li>
+  <li>MLP를 50% 넘게 자를 수 있는지(하위 90%가 질량 몇 %라는 곡선이 시사하는 바)는 이 실험 밖이다. 곡선이 무릎을 꺾는 지점(상위 ~10%)
+  근처까지가 후보이고, 거기부터는 폭이 아니라 개별 채널의 문제가 된다.</li>
+  <li>Q head는 4개(25%)도 유의한 비용이다. expert 헤드를 자르려면 스텝-특화를 존중하는 설계(스텝별 다른 헤드 세트, 또는 헤드 축은 두고
+  다른 축으로 예산 이동)가 필요하다.</li>
+</ul>
+
+<h2><span class="num">8.</span>한계</h2>
+<ul>
+  <li><strong>개루프뿐이다.</strong> "공짜"는 minADE@6·minFDE@6 기준이고, 폐루프(alpasim)는 아무것도 재지 않았다. 개루프 동률이 폐루프를 배신한
+  사례(<code>dualr</code>)가 이 저장소에 있다.</li>
+  <li>50% arm은 Blackwell에서 쟀다. 자기 아키텍처 baseline 대비이고 편향은 없지만, q50/m50 행은 다른 행과 커널이 다르다.</li>
+  <li>기준은 znorm 1차 Taylor 하나다. MLP 질량이 이렇게 몰려 있으면 어떤 합리적 기준도 비슷한 하위권을 고르겠지만, magnitude 등 다른 기준의
+  kept-set 겹침은 재지 않았다.</li>
+  <li>calib_100 100클립으로 잰 중요도다. Q head 선택의 클립 잡음(split-half 0.929)은 결론을 바꿀 크기가 아니다.</li>
+</ul>
+
+<h2><span class="num">9.</span>재현</h2>
+
+<pre>for c in expertq_u25 expertm_u25 expertm_c341 expertq_u50 expertm_u50; do
+  bash experiments/head_analysis/run_retry_host.sh 120 experiments/head_analysis/make_slim.py \
+       --config $c --importance importance_stepexp_znorm --no-state --gpu 4 --out outputs/slim_$c
+done
+# Ada 4-7: q25 / m25 / m_pm, three sets (launch_arms.sh queue, RESERVE=30)
+SETS="indist test oodval" bash experiments/evaluation/launch_arms.sh init 2 \
+     expertq_u25=outputs/slim_expertq_u25 expertm_u25=outputs/slim_expertm_u25 expertm_c341=outputs/slim_expertm_c341
+for g in 4 5 6 7; do RESERVE=30 bash experiments/evaluation/launch_arms.sh worker $g & done
+# Blackwell 0-3: q50 / m50 and the per-sample Blackwell baseline (same run_baseline.py flags,
+# --exp-id {expertq_u50,expertm_u50,baseline_bw_ps}_{indist,test,oodval}, --shard i --n-shards 2)
+
+.venv/bin/python experiments/evaluation/analyze_expert_axis.py --out expert_axis_analysis \
+     --template experiments/head_analysis/expert_axis_report_template.html
+python experiments/head_analysis/build_report.py \
+     experiments/head_analysis/expert_axis_report_template_filled.html \
+     reports/evaluation/2026-08-28_expert-axis.html ea=$PWD/outputs/expert_axis_analysis/plots</pre>
+
+<p class="meta">시드 42(클립 유도), K=8 저장 중 앞 6개로 minADE@6, 고정 프로토콜(2026-08-19). 게이트 정의는
+<code>plans/2026-08-28_expert-axis-ablation.md</code>. 표의 모든 숫자는 <code>outputs/expert_axis_analysis/metrics.json</code>에서
+<code>&#123;&#123;...&#125;&#125;</code> 토큰으로 채워진다(손으로 옮긴 숫자 없음).</p>
+
+</div>
+</body>
+</html>

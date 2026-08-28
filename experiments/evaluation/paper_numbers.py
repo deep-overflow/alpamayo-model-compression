@@ -87,6 +87,30 @@ ARMS = {
     "dualg_tyralloc": {"indist": ("dualg_tyralloc_u40_indist", False),
                        "test": ("dualg_tyralloc_u40_test", False),
                        "oodval": ("dualg_tyralloc_u40_oodval", False)},
+    # expert axis decomposition (plans/2026-08-28_expert-axis-ablation.md): one expert
+    # axis at a time, znorm traj_exp_*; q25/m25 ratio-matched, m_pm = expertm_c341
+    # parameter-matched to q25 (75.4M vs 75.5M)
+    "expert_q25": {"indist": ("expertq_u25_indist", False),
+                   "test": ("expertq_u25_test", False),
+                   "oodval": ("expertq_u25_oodval", False)},
+    "expert_m25": {"indist": ("expertm_u25_indist", False),
+                   "test": ("expertm_u25_test", False),
+                   "oodval": ("expertm_u25_oodval", False)},
+    "expert_m_pm": {"indist": ("expertm_c341_indist", False),
+                    "test": ("expertm_c341_test", False),
+                    "oodval": ("expertm_c341_oodval", False)},
+    "expert_q50": {"indist": ("expertq_u50_indist", False),
+                   "test": ("expertq_u50_test", False),
+                   "oodval": ("expertq_u50_oodval", False)},
+    "expert_m50": {"indist": ("expertm_u50_indist", False),
+                   "test": ("expertm_u50_test", False),
+                   "oodval": ("expertm_u50_oodval", False)},
+    "expert_both25": {"indist": ("expert_znorm_r25_ps_indist", False)},
+    # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
+    # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
+    "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),
+                    "test": ("baseline_bw_ps_test", False),
+                    "oodval": ("baseline_bw_ps_oodval", False)},
     "it3": {"indist": ("iter_dual_indist", False),
             "test": ("iter_dual_test", False),
             "oodval": ("iter_dual_ood", True)},

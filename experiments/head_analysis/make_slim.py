@@ -30,6 +30,12 @@ Configs:
   dualexp_u40_e<N> -- dual_u40_v2's VLM half + expert_u<N>'s expert half in one
                       checkpoint (first config pruning both towers). Expected -3.19B
                       at N=25.
+  expert{q,m}_u<N> -- ONE expert axis only: q = Q heads, m = MLP channels, N% of that
+  expert{q,m}_c<N>    axis per layer (u) or exactly N units per layer (c, the
+                      parameter-matched control); VLM, KV and the other axis untouched.
+                      Same score and selection as expert_u<N>, so
+                      expertq_u25 | expertm_u25 == expert_u25 unit for unit.
+                      plans/2026-08-28_expert-axis-ablation.md.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -108,7 +114,26 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
-    if exp_only:
+    axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
+    if axis:
+        # One expert axis at a time (plans/2026-08-28_expert-axis-ablation.md): does the
+        # expert's cost come from the step-specialised Q heads or from the parameter
+        # mass in the MLP? `u<N>` cuts N% of the chosen axis per layer, `c<N>` exactly N
+        # units per layer (expertm_c341 removes what expertq_u25 removes, to 0.1%).
+        which, mode, n = axis.group(1), axis.group(2), int(axis.group(3))
+        all_e = list(range(ec.num_hidden_layers))
+        n_units = ec.num_attention_heads if which == "q" else ec.intermediate_size
+        ratio = n / 100 if mode == "u" else n / n_units  # select_mask rounds n_units*ratio
+        eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads))  # (36, 16)
+        em = np.ones((ec.num_hidden_layers, ec.intermediate_size))  # (36, 8256)
+        if which == "q":
+            eq = ml.select_mask(imp["traj_exp_q"], ratio, all_e)
+        else:
+            em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)
+        vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))
+        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))
+        kvonly = ()
+    elif exp_only:
         # Expert tower only, uniform ratio, VLM and KV untouched -- the shape the D-stage
         # aggregation arms were measured in (run_expert_agg.py evaluated exactly this as a
         # runtime mask). The within-layer score is whatever `traj_exp_*` the importance file
@@ -422,7 +447,7 @@ def main():
                     help="a named config, or <criterion>_u<pct>_v2 for the uniform family "
                          "(criterion in traj|coc|j|dual|j_traj; pct 40 means the matched "
                          "0.3985632694, any other pct means exactly pct/100), or "
-                         "expert_u<N> / dualexp_u40_e<N> for the expert-tower cuts")
+                         "expert_u<N> / expert{q,m}_{u,c}<N> / dualexp_u40_e<N> for the expert-tower cuts")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
