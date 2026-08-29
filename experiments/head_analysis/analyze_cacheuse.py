@@ -287,7 +287,7 @@ def main():
             def band(x):
                 return [float(np.nansum(x[a:b]) / np.nansum(x)) for a, b in bands]
 
-            kv_v = imp["traj_kv_v"] if "traj_kv_v" in imp else None
+            kv_v = imp.get("traj_kv_v")
             swapc["depth_bands"] = {"bands": [list(b) for b in bands],
                                     "block_reliance_R": band(R), "sensitivity": band(sens),
                                     "dual_shift": band(shift), "swap_damage": band(sw)}
