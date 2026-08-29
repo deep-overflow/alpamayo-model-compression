@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>캐시 표적 재구성 — 캐시 보존은 refit을 얼마나 상류에서 시작하느냐에 비례한다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Cache-targeted reconstruction</div>
+  <h1>캐시 표적 재구성 — 캐시 보존은 refit을 얼마나 상류에서 시작하느냐에 비례한다</h1>
+  <div class="meta">
+    2026-08-29 · <code>dualrc_u40_s16</code> / <code>s24</code> (dual 선택 + 층 ≥16 / ≥24 OSSCAR refit, expert 가중 prefill + own-CoC Hessian) ·
+    대조 <code>dual_u40_v2</code>, <code>dualr_u40</code>(전 층 refit) · G1 캐시 프록시 val500 앞 200클립 × K=6, G2 val500<br>
+    코드 <code>experiments/head_analysis/run_cache_recon.py</code>, <code>run_cacheproxy.py</code>, <code>analyze_cacheproxy.py</code>, <code>make_slim.py --config dualrc_u40_s&lt;N&gt;</code> ·
+    산출물 <code>outputs/dualrc_supernet_u40_s{16,24}/</code>, <code>outputs/cacheproxy_*/</code>, <code>outputs/cacheproxy_analysis/</code> ·
+    기록 <code>plans/2026-08-29_cache-targeted-reconstruction.md</code> · 브랜치 <code>cache-targeted-recon</code><br>
+    선행: <code>2026-08-29_cache-use-map.html</code> (민감도는 층 20–35), <code>2026-08-28_cache-shift.html</code>, <code>2026-08-25_cot-reconstruction.html</code> (racfit d10)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{arms.dual.A10_minus_A00.0|+.3f}}</div><div class="l">dual: 프루닝 캐시 + dense expert의 비용 (A10−A00, 중앙값)</div></div>
+  <div class="kpi"><div class="v">{{arms.dualr.A10_minus_A00.0|+.3f}}</div><div class="l">dualr(전 층 refit): 같은 비용 — 캐시 이동 {{arms.dualr.wshift_ratio_vs_ref.0|.0%}}</div></div>
+  <div class="kpi"><div class="v">{{arms.dualrc_s16.A10_minus_A00.0|+.3f}}</div><div class="l">dualrc_s16(층 16–35 refit): 캐시 이동 {{arms.dualrc_s16.wshift_ratio_vs_ref.0|.0%}}</div></div>
+  <div class="kpi"><div class="v">{{arms.dualrc_s24.A10_minus_A00.0|+.3f}}</div><div class="l">dualrc_s24(층 24–35 refit): 캐시 이동 {{arms.dualrc_s24.wshift_ratio_vs_ref.0|.0%}}</div></div>
+  <div class="kpi"><div class="v">{{val500.dualrc_s16.d_ade.0|+.4f}}</div><div class="l">dualrc_s16 val500 ΔminADE@6 vs 무압축 (dual {{val500.dual.d_ade.0|+.4f}}, dualr {{val500.dualr.d_ade.0|+.4f}})</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> 캐시 참조 지도가 가리킨 곳(층 20–35의 민감한 그룹)만 refit하는 것은 <strong>용량-반응</strong>으로 실패한다: refit 시작 층이 24면 민감도 가중 캐시 이동이
+dual의 {{arms.dualrc_s24.wshift_ratio_vs_ref.0|.0%}}, 16이면 {{arms.dualrc_s16.wshift_ratio_vs_ref.0|.0%}}, 0(dualr)이면 {{arms.dualr.wshift_ratio_vs_ref.0|.0%}}이고, 캐시만의 비용은
+{{arms.dualrc_s24.A10_minus_A00.0|+.3f}} → {{arms.dualrc_s16.A10_minus_A00.0|+.3f}} → {{arms.dualr.A10_minus_A00.0|+.3f}}로 같은 순서로 내려간다. 사전 등록 문턱(이동 −50%, 비용 CI가 0 포함)은
+두 dualrc 모두 <strong>미달</strong>. 이유는 구조적이다: <strong>깊은 층의 캐시 이동은 상류 절단이 누적된 <em>입력</em> 이동</strong>이고, 층별 OSSCAR refit은 이미 옮겨진 자기 입력 위에서 자기 출력만
+맞추므로 그 층 <em>아래</em>에서 온 이동은 되돌릴 수 없다. 민감도 지도는 <em>무엇을</em> 지킬지 말해 주지만, 지키려면 <em>그 캐시를 흔드는 절단이 있는 층 전부</em>(= 첫 절단 층부터) refit해야 한다.
+</div>
+
+<h2><span class="num">1.</span>가설과 설계</h2>
+
+<p>캐시 참조 지도(<code>2026-08-29_cache-use-map.html</code>)는 expert가 조금 달라진 캐시에 반응하는 민감도가 층 20–35에 몰려 있고(Σ 민감도×이동²의 92%), dual의 캐시 이동도 그곳에서 크다고
+했다. 그래서 <strong>H1</strong>: 재구성을 층 20–35 부근에만 두고(층 0–15는 dual 선택만), prefill 위치를 expert 어텐션으로 가중하고 own-CoC를 decode 몫 0.16(racfit d10)으로 섞은 Hessian으로
+refit하면, val500 궤적은 dualr 수준(≈ 무압축)으로 회복되면서 CoC는 dual 수준을 유지한다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>선택</th><th>refit 층</th><th>Hessian</th><th>비고</th></tr></thead>
+<tbody>
+<tr><td><code>dual_u40_v2</code></td><td>dual</td><td>없음</td><td>—</td><td>기준</td></tr>
+<tr><td><code>dualr_u40</code></td><td>dual</td><td>0–35 전부</td><td>prefill 전체, 균등</td><td>기존 (val500 +0.003, 폐루프 역전)</td></tr>
+<tr><td><code>dualrc_u40_s16</code></td><td>dual (bit-identical)</td><td>16–35</td><td>expert 가중 prefill + own-CoC 0.16</td><td>신규, 블록 순차</td></tr>
+<tr><td><code>dualrc_u40_s24</code></td><td>dual (bit-identical)</td><td>24–35</td><td>같음</td><td>신규, 하한</td></tr>
+</tbody>
+</table>
+
+<p>refit은 Tyr/dualr과 같은 블록 순차 OSSCAR(<code>reconstruct_levels</code>, damp 1e-2): 층 l을 풀 때 층 &lt; l에는 dual 마스크와 이미 refit된 가중치가 들어가 있고, 층 l 자신의 입력은 마스크를
+풀어 제거 열이 H에 남게 한다. calib_100 × own-CoC K=2, 100클립 × 2 forward 91 s/블록.</p>
+
+<div class="note">
+<strong>첫 빌드의 결함 (기록).</strong> 처음에는 전 층에 마스크를 건 채 Hessian을 모았다. 그러면 대상 층의 제거 열이 이미 0이라 최소제곱 해가 <em>항등</em>이 되고(W_kept = H_kk⁻¹ H_kk W_k),
+G1 프록시가 dualrc를 dual과 소수 4자리까지 동일하게 잡아냈다(이동 비 1.000). 그 supernet은 <code>outputs/dualrc_supernet_u40_identitybug/</code>에 남겨 두었다.
+</div>
+
+<h2><span class="num">2.</span>G1 — 캐시는 보존됐나 (프록시, 200클립)</h2>
+
+<p>같은 rollout·같은 teacher-forced 텍스트에서 dense VLM과 slim VLM의 캐시를 만들어 (층, KV 그룹)별 ‖ΔV‖/‖V‖를 재고, 민감도 s[l,g](cache-use map Stage C)로 가중한 Σ s·rel_v²를 클립별로 구한다.
+그 두 캐시를 <em>같은 dense expert</em>로 denoise한 minADE@6 차이(A10−A00)가 "캐시만의 비용"이다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>A10−A00 중앙값 [95% CI]</th><th class="r">평균</th><th class="r">p</th><th>민감도 가중 이동 (dual 대비 비)</th><th>‖ΔV‖/‖V‖ 층 띠 1–7 / 8–15 / 16–23 / 24–35</th><th>G1</th></tr></thead>
+<tbody>
+<tr><td>dual</td><td>{{arms.dual.A10_minus_A00.0|+.4f}} [{{arms.dual.A10_minus_A00.1|+.4f}}, {{arms.dual.A10_minus_A00.2|+.4f}}]</td><td class="r">{{arms.dual.A10_minus_A00_mean|+.4f}}</td><td class="r">{{arms.dual.wilcoxon_p|.1e}}</td><td>{{arms.dual.wshift_v.0|.3f}} (1.00)</td><td>{{arms.dual.rel_v_by_band.0|.3f}} / {{arms.dual.rel_v_by_band.1|.3f}} / {{arms.dual.rel_v_by_band.2|.3f}} / {{arms.dual.rel_v_by_band.3|.3f}}</td><td>기준</td></tr>
+<tr><td>dualr</td><td class="good">{{arms.dualr.A10_minus_A00.0|+.4f}} [{{arms.dualr.A10_minus_A00.1|+.4f}}, {{arms.dualr.A10_minus_A00.2|+.4f}}]</td><td class="r">{{arms.dualr.A10_minus_A00_mean|+.4f}}</td><td class="r">{{arms.dualr.wilcoxon_p|.2f}}</td><td>{{arms.dualr.wshift_v.0|.3f}} ({{arms.dualr.wshift_ratio_vs_ref.0|.3f}})</td><td>{{arms.dualr.rel_v_by_band.0|.3f}} / {{arms.dualr.rel_v_by_band.1|.3f}} / {{arms.dualr.rel_v_by_band.2|.3f}} / {{arms.dualr.rel_v_by_band.3|.3f}}</td><td>비용 PASS · 이동 −46% (문턱 50% 근접)</td></tr>
+<tr><td><strong>dualrc_s16</strong></td><td class="bad">{{arms.dualrc_s16.A10_minus_A00.0|+.4f}} [{{arms.dualrc_s16.A10_minus_A00.1|+.4f}}, {{arms.dualrc_s16.A10_minus_A00.2|+.4f}}]</td><td class="r">{{arms.dualrc_s16.A10_minus_A00_mean|+.4f}}</td><td class="r">{{arms.dualrc_s16.wilcoxon_p|.1e}}</td><td>{{arms.dualrc_s16.wshift_v.0|.3f}} ({{arms.dualrc_s16.wshift_ratio_vs_ref.0|.3f}})</td><td>{{arms.dualrc_s16.rel_v_by_band.0|.3f}} / {{arms.dualrc_s16.rel_v_by_band.1|.3f}} / {{arms.dualrc_s16.rel_v_by_band.2|.3f}} / {{arms.dualrc_s16.rel_v_by_band.3|.3f}}</td><td><strong>FAIL</strong> — 이동 −24%, 비용은 dual보다 유의하게 작지만 0이 아님</td></tr>
+<tr><td><strong>dualrc_s24</strong></td><td class="bad">{{arms.dualrc_s24.A10_minus_A00.0|+.4f}} [{{arms.dualrc_s24.A10_minus_A00.1|+.4f}}, {{arms.dualrc_s24.A10_minus_A00.2|+.4f}}]</td><td class="r">{{arms.dualrc_s24.A10_minus_A00_mean|+.4f}}</td><td class="r">{{arms.dualrc_s24.wilcoxon_p|.1e}}</td><td>{{arms.dualrc_s24.wshift_v.0|.3f}} ({{arms.dualrc_s24.wshift_ratio_vs_ref.0|.3f}})</td><td>{{arms.dualrc_s24.rel_v_by_band.0|.3f}} / {{arms.dualrc_s24.rel_v_by_band.1|.3f}} / {{arms.dualrc_s24.rel_v_by_band.2|.3f}} / {{arms.dualrc_s24.rel_v_by_band.3|.3f}}</td><td><strong>FAIL</strong> — 이동 −4%, 비용 그대로</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::rc::cacheproxy_shift_by_layer.png" alt="cache shift by layer per arm">
+  <figcaption>층별 캐시 이동 ‖ΔV‖/‖V‖(그룹 평균), arm별. dualrc 곡선은 refit이 시작되는 층에서 dual에서 갈라져 그 아래로 내려가지만, 시작 층까지 쌓인 이동은 그대로 안고 간다; dualr은 층 1부터 전 구간이 아래에 있다. 시작 층이 이를수록 도착 이동이 작다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::rc::cacheproxy_arms.png" alt="cache-only cost and weighted shift per arm">
+  <figcaption>왼쪽: 캐시만의 비용 A10−A00(중앙값·CI). 오른쪽: 민감도 가중 이동. 두 축 모두 dual → s24 → s16 → dualr 순으로 단조다.</figcaption>
+</figure>
+
+<h2><span class="num">3.</span>G2 — val500 궤적</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">n</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th>ΔminADE@6 vs 무압축 (중앙값 [CI])</th><th class="r">평균</th><th class="r">CoC 붕괴율</th></tr></thead>
+<tbody>
+<tr><td>dual</td><td class="r">{{val500.dual.n}}</td><td class="r">{{val500.dual.minADE6|.4f}}</td><td class="r">{{val500.dual.minFDE6|.4f}}</td><td>{{val500.dual.d_ade.0|+.4f}} [{{val500.dual.d_ade.1|+.4f}}, {{val500.dual.d_ade.2|+.4f}}]</td><td class="r">{{val500.dual.d_ade_mean|+.4f}}</td><td class="r">{{val500.dual.degen|.3f}}</td></tr>
+<tr><td>dualr</td><td class="r">{{val500.dualr.n}}</td><td class="r">{{val500.dualr.minADE6|.4f}}</td><td class="r">{{val500.dualr.minFDE6|.4f}}</td><td class="good">{{val500.dualr.d_ade.0|+.4f}} [{{val500.dualr.d_ade.1|+.4f}}, {{val500.dualr.d_ade.2|+.4f}}]</td><td class="r">{{val500.dualr.d_ade_mean|+.4f}}</td><td class="r">{{val500.dualr.degen|.3f}}</td></tr>
+<tr><td>dualrc_s16</td><td class="r">{{val500.dualrc_s16.n}}</td><td class="r">{{val500.dualrc_s16.minADE6|.4f}}</td><td class="r">{{val500.dualrc_s16.minFDE6|.4f}}</td><td class="bad">{{val500.dualrc_s16.d_ade.0|+.4f}} [{{val500.dualrc_s16.d_ade.1|+.4f}}, {{val500.dualrc_s16.d_ade.2|+.4f}}]</td><td class="r">{{val500.dualrc_s16.d_ade_mean|+.4f}}</td><td class="r">{{val500.dualrc_s16.degen|.3f}}</td></tr>
+<tr><td>dualrc_s24</td><td class="r">{{val500.dualrc_s24.n}}</td><td class="r">{{val500.dualrc_s24.minADE6|.4f}}</td><td class="r">{{val500.dualrc_s24.minFDE6|.4f}}</td><td class="bad">{{val500.dualrc_s24.d_ade.0|+.4f}} [{{val500.dualrc_s24.d_ade.1|+.4f}}, {{val500.dualrc_s24.d_ade.2|+.4f}}]</td><td class="r">{{val500.dualrc_s24.d_ade_mean|+.4f}}</td><td class="r">{{val500.dualrc_s24.degen|.3f}}</td></tr>
+</tbody>
+</table>
+
+<p>G2(궤적이 dualr 수준으로 회복)는 <strong>기각</strong> — s24는 dual과 같고, s16은 그 사이에 놓인다. G1이 예고한 용량-반응 그대로다. test500·OOD-val은 G1·G2 기각 후 돌리지 않았다(계획의 순서).</p>
+
+<h2><span class="num">4.</span>왜 — 이동은 누적이고 refit은 국소다</h2>
+
+<ul>
+  <li>층 l의 캐시는 그 층 입력 h_l의 선형 사영이다. h_l의 이동은 층 0..l−1이 각각 더한 오차의 <strong>합</strong>이다. dual은 36층 전부를 자르므로 층 20 이상의 h_l 이동은 대부분 층 0–15가 만든 것이다.</li>
+  <li>OSSCAR refit은 "이 층의 (옮겨진) 입력 위에서 이 층의 출력을 dense의 <em>같은 입력에 대한</em> 출력에 맞추는" 최소제곱이다. 자기 층이 <em>더하는</em> 오차는 줄이지만, 입력으로 <em>들어온</em> 오차는 손대지 않는다.
+  그래서 층 24–35 띠의 이동은 refit 시작 층에 따라 {{arms.dual.rel_v_by_band.3|.3f}}(없음) → {{arms.dualrc_s24.rel_v_by_band.3|.3f}}(24) → {{arms.dualrc_s16.rel_v_by_band.3|.3f}}(16) → {{arms.dualr.rel_v_by_band.3|.3f}}(0)로 단조 감소한다 — 이동의 대부분이 시작 층 <em>아래</em>에서 온다는 뜻이다.</li>
+  <li>dualr이 캐시를 지키는 이유는 "깊은 층을 refit해서"가 아니라 <strong>첫 절단 층부터 매 층 자기 몫의 오차를 지워 누적을 막아서</strong>다. 층 1–7 띠에서 이미 {{arms.dual.rel_v_by_band.0|.3f}} → {{arms.dualr.rel_v_by_band.0|.3f}}.</li>
+  <li>따라서 "expert가 민감한 캐시를 보존"하려면 refit 대상은 <em>민감한 캐시가 있는 층</em>이 아니라 <em>그 캐시를 흔드는 절단이 있는 층</em>, 즉 상류 전부다. 민감도 지도는 <em>무엇을</em> 지킬지 말해 주지만 <em>어디서</em> 고칠지는 말해 주지 않는다.</li>
+</ul>
+
+<h2><span class="num">5.</span>남는 길</h2>
+<ul>
+  <li><strong>dense-target refit</strong>: 층 l의 목표를 "dense 입력에 대한 dense 출력"이 아니라 <em>"프루닝된 입력 → dense 출력"</em>으로 바꾸면(교차 모멘트 Σ x_p x_dᵀ 필요) 층 l이 상류 오차까지 보정한다. 층 16–35만으로 상류 이동을 얼마나 되돌릴 수 있는지는 입력 span에 달렸고, 캘리브레이션 과적합 위험이 dualr보다 크다.</li>
+  <li><strong>dualr의 Hessian만 바꾸기</strong>: 전 층 refit은 유지하고 prefill을 expert 어텐션으로 가중 + own-CoC 0.16을 섞는 one-factor(`dualr_w`). dualr의 문제는 캐시가 아니라 CoC/폐루프였으므로, 그쪽을 겨냥하는 것이 이 재료의 올바른 쓰임일 수 있다.</li>
+  <li><strong>선택 쪽</strong>: 상류 층(0–15)의 절단을 "깊은 캐시를 얼마나 흔드는가"로 고르는 기준(층별 기여 진단 A가 선행).</li>
+</ul>
+
+<h2><span class="num">6.</span>재현</h2>
+<pre>for s in 16 24; do
+  bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_cache_recon.py \
+       --gpu 0 --start $s --k-seeds 2 --exp-id dualrc_supernet_u40_s$s
+  bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/make_slim.py \
+       --config dualrc_u40_s$s --tyr-supernet dualrc_supernet_u40_s$s --importance importance_v2 --gpu 0 \
+       --out outputs/slim_dualrc_u40_s$s
+done
+for a in dual_u40_v2 dualr_u40 dualrc_u40_s16 dualrc_u40_s24; do
+  bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cacheproxy.py \
+       --gpu 0 --slim outputs/slim_$a --num-clips 200 --exp-id cacheproxy_${a%_u40*}
+done
+.venv/bin/python experiments/head_analysis/analyze_cacheproxy.py --arms dual=cacheproxy_dual dualr=cacheproxy_dualr \
+       dualrc_s16=cacheproxy_dualrc_s16 dualrc_s24=cacheproxy_dualrc_s24 --ref dual \
+       --val-arms dual dualr dualrc_s16 dualrc_s24 --out cacheproxy_analysis</pre>
+
+<p class="meta">숫자는 전부 <code>outputs/cacheproxy_analysis/metrics_analysis.json</code>에서 <code>&#123;&#123;경로|서식&#125;&#125;</code> 토큰으로 채워진다.</p>
+
+</div>
+</body>
+</html>

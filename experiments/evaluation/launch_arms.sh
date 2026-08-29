@@ -33,7 +33,9 @@ init | append)
       done
     done
   done
-  echo 0 >"$CUR"
+  # only `init` rewinds the cursor: `append` on a live queue must not hand the running
+  # workers' shards out a second time (two processes writing one rows file)
+  [ "$1" = init ] && echo 0 >"$CUR"
   echo "queued $(wc -l <"$Q") jobs"
   ;;
 

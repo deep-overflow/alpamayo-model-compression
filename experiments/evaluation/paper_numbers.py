@@ -106,6 +106,14 @@ ARMS = {
                    "test": ("expertm_u50_test", False),
                    "oodval": ("expertm_u50_oodval", False)},
     "expert_both25": {"indist": ("expert_znorm_r25_ps_indist", False)},
+    # cache-targeted reconstruction (plans/2026-08-29_cache-targeted-reconstruction.md):
+    # dual selection + expert-weighted OSSCAR refit of layers >= 16 / >= 24 only
+    "dualrc_s16": {"indist": ("dualrc_u40_s16_indist", False),
+                   "test": ("dualrc_u40_s16_test", False),
+                   "oodval": ("dualrc_u40_s16_oodval", False)},
+    "dualrc_s24": {"indist": ("dualrc_u40_s24_indist", False),
+                   "test": ("dualrc_u40_s24_test", False),
+                   "oodval": ("dualrc_u40_s24_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),
