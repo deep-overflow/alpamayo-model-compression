@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV 캐시 이동 — 프루닝된 VLM은 expert에게 다른 캐시를 주는가, 그것이 비용인가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Cache-use map</div>
+  <h1>expert의 VLM 캐시 참조 지도 — 어느 층·헤드·스텝이 캐시를 읽고, 프루닝은 어디를 흔드는가</h1>
+  <div class="meta">
+    2026-08-29 · 모델 <code>nvidia/Alpamayo-1.5-10B</code> (무압축, rev <code>7aba829</code>) ·
+    <code>calib_100</code> {{n_clips}}클립 · Blackwell 0–3, 4-way 샤딩 · 클립 유도 시드 (셀 K=1, 마진 K=4)<br>
+    코드 <code>experiments/head_analysis/run_cacheuse.py</code>, <code>analyze_cacheuse.py</code> ·
+    산출물 <code>outputs/cacheuse_v1_s{0,25,50,75}/</code>, <code>outputs/cacheuse_v1/</code> ·
+    기록 <code>plans/2026-08-28_cache-use-map.md</code> · 브랜치 <code>cache-use-map</code><br>
+    선행: <code>2026-08-25_pathway-map.html</code> (구간별 차단, 층·스텝 합산), <code>2026-08-28_cache-shift.html</code> (dual 캐시 이동), <code>2026-08-28_expert-axis.html</code> (expert 비용은 Q head)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{g0.all_block_exploded_share|.0%}}</div><div class="l">캐시를 전혀 못 읽으면 궤적이 발산(>10 m)하는 클립 비율</div></div>
+  <div class="kpi"><div class="v">{{g2.step_marginal_move.0|.2f}} → {{g2.step_marginal_move.9|.2f}} m</div><div class="l">한 스텝의 캐시 읽기를 전 층 차단했을 때 이동, s0 → s9 (중앙값)</div></div>
+  <div class="kpi"><div class="v">L11·13·15</div><div class="l">차단이 가장 아픈 층 띠 — 마지막 스텝에서 {{g3.top10_cells.0.2|.1f}} m</div></div>
+  <div class="kpi"><div class="v">{{swap.spearman_swap_vs_shift_v.0|+.2f}} / {{swap.spearman_swap_vs_reliance_R.0|+.2f}}</div><div class="l">dual 캐시 스왑 손상의 Spearman: 이동 크기 / expert 의존도</div></div>
+  <div class="kpi"><div class="v">{{g3.skippable_share|.1%}}</div><div class="l">무해하게 건너뛸 수 있는 (층, 스텝) 셀</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> expert는 36층 × 10스텝 어디서나 캐시를 읽고(어텐션 질량 {{g2.mass_step_profile.0|.3f}}–{{g2.mass_step_profile.9|.3f}}), 어느 한 셀의 읽기를 막아도
+궤적은 움직인다(건너뛸 수 있는 셀 {{g3.skippable_cells}}/{{g3.n_cells}}). 차단이 가장 아픈 곳은 <strong>층 11–15의 마지막 두 스텝</strong>이고, 스텝 축에서는
+<strong>후기 스텝이 더 비싸다</strong>(교정 기회가 없어서). 그런데 dual 프루닝이 실제로 흔드는 캐시(깊은 층, ‖ΔV‖/‖V‖ 0.5)를 셀 단위로 넣어 보면
+손상은 <strong>이동 크기</strong>를 따르고({{swap.spearman_swap_vs_shift_v.0|+.2f}}) expert의 <strong>의존도와는 무관</strong>하다({{swap.spearman_swap_vs_reliance_R.0|+.2f}}):
+expert가 가장 기대는 캐시(층 0–15)는 dual이 거의 안 흔들고, dual이 흔드는 캐시(층 20–35)는 expert가 덜 기댄다. 이것이 캐시 이동이 비용의 몸통이 아니었던 이유이고,
+"의존하는 캐시를 보존하는 VLM 프루닝"이 겨냥해야 할 곳은 <strong>중간층 캐시의 이동을 지금보다 더 작게 유지하는 것</strong>이지 깊은 층의 큰 이동을 줄이는 것이 아니다.
+</div>
+
+<h2><span class="num">1.</span>왜 쟀나</h2>
+
+<p>expert가 VLM 캐시를 읽는 방식에 대해 지금까지 안 것은 전부 <strong>층·스텝을 합친 집계</strong>였다: 어텐션 질량은 vision 72.6% / text 16.7% / hist 3.9% /
+CoC 2.3% / sink 1.1% / own 3.6%, CoC 구간 차단은 +0.134, vision 차단은 파국(pathway 보고서). 목적은 두 가지다. (1) <strong>어느 층·헤드·스텝이 캐시를
+실제로 쓰는가</strong>의 지도 — 그 자체로 expert가 캐시를 어떻게 소비하는지 말해 준다. (2) 그 지도를 <strong>dual 프루닝이 실제로 만든 캐시 이동</strong>과
+맞대어, "expert가 의존하는 캐시를 보존하는 VLM structured pruning"이 성립하는 문제인지 — 즉 의존도가 높은 셀과 프루닝이 흔드는 셀이 겹치는지 — 를 보는 것이다.
+GQA 결합(expert head h ← 같은 층의 KV 그룹 h//2) 때문에 헤드 단위 의존도는 곧 (층, KV 그룹) 단위 캐시 중요도가 된다.</p>
+
+<h2><span class="num">2.</span>계측 — 캐시 하나, 마스크 편집, 스텝 카운터</h2>
+
+<p>클립당 rollout 1회 → teacher-forced VLM forward 1회 → 캐시 1개. 이후의 모든 측정은 그 캐시를 재사용하므로 VLM 쪽은 bit-identical이고 모든 비교는
+클립·시드 페어드다. 스텝 인덱스는 <code>action_in_proj</code> 훅 카운터로 안다(<code>step_fn</code>이 스텝마다 한 번 호출; 10을 세는지 G0에서 확인).</p>
+
+<ul>
+  <li><strong>Stage A 관찰</strong> (eager, 시드 1개): 셀 (스텝, 층, 헤드)별 어텐션 질량 캐시 vs own(64 토큰), 캐시 구간별(vision/text/hist/sink/CoC), 엔트로피,
+  그리고 <strong>readout 몫</strong> ‖Σ<sub>cache</sub> a·v‖ / (‖Σ<sub>cache</sub>‖ + ‖Σ<sub>own</sub>‖). 질량은 V의 크기를 무시하고, readout은 무시하지 않는다.</li>
+  <li><strong>Stage B 인과 차단</strong> (sdpa): 층 <code>l</code>의 <code>self_attn</code>에 pre-hook을 걸어 그 층·그 스텝에서만 4D 마스크의 캐시 열을 <code>finfo.min</code>으로
+  바꾼 사본을 넘긴다(헤드 차단은 마스크를 (1, 16, 64, T)로 확장). 척도는 <strong>이동</strong> = 같은 시드의 무차단 궤적 대비 64 waypoint 평균 거리(m, GT 무관)와
+  paired ΔminADE@1. 셀: (층, 스텝) 360, (층, 헤드; 전 스텝) 576, 고정 무작위 (층, 헤드, 스텝) 119, 층·스텝 마진(K=4), 전 차단·무차단.</li>
+  <li><strong>Stage C 스왑</strong>: 같은 텍스트에 dual_u40_v2의 VLM 마스크를 켜고 한 번 더 forward해 <em>프루닝된 캐시</em>를 얻고, dense 캐시의 (층, KV 그룹) 한 칸만
+  그것으로 바꿔 넣어 denoise한다 — "이 그룹의 실제 이동이 궤적을 얼마나 움직이나". 288 칸 + 층 36 + 전체 1.</li>
+</ul>
+
+<div class="note">
+<strong>통계.</strong> 캐시 차단은 일부 클립에서 궤적을 발산시키므로(이동 50–130 m) 모든 지도·마진은 <strong>클립 중앙값</strong>이 주 읽기이고 평균과 발산 비율(>10 m)을
+병기한다. 전 차단은 양성 대조(pathway의 <code>prefix_mask</code> 경로와 같은 마스크).
+</div>
+
+<h2><span class="num">3.</span>G0 — 무결성</h2>
+
+<table>
+<thead><tr><th>검사</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>스텝 카운터</td><td>모든 클립·모든 denoise에서 정확히 {{g0.steps_seen.0}}스텝</td></tr>
+<tr><td>무차단 = 기준</td><td>이동 최대 {{g0.none_block_move_max|.1e}} m (bit-identical)</td></tr>
+<tr><td>헤드 마스크</td><td>한 층의 16헤드 전부 차단 = 층 차단, 세 층에서 소수 4자리 일치 (smoke)</td></tr>
+<tr><td>전 차단 (양성 대조)</td><td>이동 중앙값 {{g0.all_block_move.0|.2f}} [{{g0.all_block_move.1|.2f}}, {{g0.all_block_move.2|.2f}}] m, 평균 {{g0.all_block_move_mean.0|.1f}} m,
+클립 {{g0.all_block_exploded_share|.0%}}가 발산; ΔminADE 중앙값 {{g0.all_block_dade.0|+.2f}} m — 캐시 없는 expert는 운전하지 못한다</td></tr>
+<tr><td>시드 간 산포 (맥락)</td><td>같은 캐시·다른 시드 두 기준 궤적의 거리 중앙값 {{g0.noise_floor.0|.2f}} m — 같은 시드 섭동의 바닥이 아니므로 판정에는 쓰지 않는다</td></tr>
+<tr><td>층 0 스왑</td><td>이동 정확히 0 — 마스크는 층 0의 K/V를 바꿀 수 없다 (cache-shift A0과 일치)</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">4.</span>Stage A — expert는 무엇을, 얼마나 읽는가</h2>
+
+<figure>
+  <img src="PLOT::cu::cacheuse_maps.png" alt="layer x step maps">
+  <figcaption>층(세로) × 스텝(가로). 왼쪽부터: 캐시에 실리는 어텐션 질량, readout 몫, 셀 차단 시 이동(중앙값, m), 셀 차단 시 paired ΔminADE@1(중앙값, m).
+  질량은 어디서나 0.88–0.99, readout 몫은 스텝이 갈수록 내려간다. 인과 지도는 층 11–15의 마지막 두 스텝에 몰려 있다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>스텝</th><th class="r">s0</th><th class="r">s2</th><th class="r">s4</th><th class="r">s6</th><th class="r">s8</th><th class="r">s9</th></tr></thead>
+<tbody>
+<tr><td>캐시 어텐션 질량 (층·헤드 평균)</td><td class="r">{{g2.mass_step_profile.0|.3f}}</td><td class="r">{{g2.mass_step_profile.2|.3f}}</td><td class="r">{{g2.mass_step_profile.4|.3f}}</td><td class="r">{{g2.mass_step_profile.6|.3f}}</td><td class="r">{{g2.mass_step_profile.8|.3f}}</td><td class="r">{{g2.mass_step_profile.9|.3f}}</td></tr>
+<tr><td>readout 몫</td><td class="r">{{g2.share_step_profile.0|.3f}}</td><td class="r">{{g2.share_step_profile.2|.3f}}</td><td class="r">{{g2.share_step_profile.4|.3f}}</td><td class="r">{{g2.share_step_profile.6|.3f}}</td><td class="r">{{g2.share_step_profile.8|.3f}}</td><td class="r">{{g2.share_step_profile.9|.3f}}</td></tr>
+<tr><td>vision 질량</td><td class="r">{{span_mass_step_profile.vision.0|.3f}}</td><td class="r">{{span_mass_step_profile.vision.2|.3f}}</td><td class="r">{{span_mass_step_profile.vision.4|.3f}}</td><td class="r">{{span_mass_step_profile.vision.6|.3f}}</td><td class="r">{{span_mass_step_profile.vision.8|.3f}}</td><td class="r">{{span_mass_step_profile.vision.9|.3f}}</td></tr>
+<tr><td>text 질량</td><td class="r">{{span_mass_step_profile.text.0|.3f}}</td><td class="r">{{span_mass_step_profile.text.2|.3f}}</td><td class="r">{{span_mass_step_profile.text.4|.3f}}</td><td class="r">{{span_mass_step_profile.text.6|.3f}}</td><td class="r">{{span_mass_step_profile.text.8|.3f}}</td><td class="r">{{span_mass_step_profile.text.9|.3f}}</td></tr>
+<tr><td>CoC 질량</td><td class="r">{{span_mass_step_profile.coc.0|.3f}}</td><td class="r">{{span_mass_step_profile.coc.2|.3f}}</td><td class="r">{{span_mass_step_profile.coc.4|.3f}}</td><td class="r">{{span_mass_step_profile.coc.6|.3f}}</td><td class="r">{{span_mass_step_profile.coc.8|.3f}}</td><td class="r">{{span_mass_step_profile.coc.9|.3f}}</td></tr>
+</tbody>
+</table>
+
+<p>어텐션 질량으로 보면 expert는 <strong>거의 전부를 캐시에서 읽는다</strong>(own 토큰 ≈ 4%), 그리고 그 비율은 스텝이 가도 거의 안 변한다. readout 몫은
+{{g2.share_step_profile.0|.2f}}에서 {{g2.share_step_profile.9|.2f}}로 내려간다 — 후기 스텝일수록 own 토큰(거의 완성된 궤적)의 V가 커져서 캐시의 기여 비중이 줄어드는
+것인데, 인과 지도(§5)는 정확히 그 반대를 보여 준다. 구간 구성(vision {{span_mass_step_profile.vision.0|.2f}}, text {{span_mass_step_profile.text.0|.2f}})은
+스텝과 무관하게 pathway 보고서의 집계와 같다.</p>
+
+<h2><span class="num">5.</span>Stage B — 어느 셀의 읽기를 막으면 궤적이 움직이나</h2>
+
+<figure>
+  <img src="PLOT::cu::cacheuse_profiles.png" alt="step and layer marginals">
+  <figcaption>왼쪽: 한 스텝의 캐시 읽기를 전 층에서 차단(파랑, 중앙값·95% CI)과 그 스텝의 단일 셀 이동 합(분홍). 가운데: 한 층을 전 스텝 차단(파랑)과 그 층의 셀 합(분홍).
+  오른쪽: 스텝별 어텐션 질량의 구간 구성.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>게이트</th><th>결과</th><th>읽기</th></tr></thead>
+<tbody>
+<tr><td><strong>G1</strong> 질량은 참조의 대리인가</td><td>360셀 Spearman: 질량~이동 {{g1.spearman_mass_move.0|+.3f}}, readout~이동 {{g1.spearman_share_move.0|+.3f}}</td><td>둘 다 0.9에 한참 못 미침 — <strong>어텐션 통계는 인과적 참조의 대리가 아니다</strong> (pathway G1의 층×스텝 판)</td></tr>
+<tr><td><strong>G2</strong> 스텝 추세</td><td>스텝 마진 중앙값 s0 {{g2.step_marginal_move.0|.2f}} · s3 {{g2.step_marginal_move.3|.2f}} · s6 {{g2.step_marginal_move.6|.2f}} · s8 {{g2.step_marginal_move.8|.2f}} · s9 {{g2.step_marginal_move.9|.2f}} m; Spearman(스텝, 이동) {{g2.spearman_step_vs_move.0|+.2f}}</td><td>가설(초기 스텝이 캐시에 기댄다)은 <strong>기각</strong>. 후기 스텝 차단이 더 크게 움직인다 — 마지막 스텝의 오류는 뒤에서 교정될 기회가 없다</td></tr>
+<tr><td><strong>G3</strong> 집중도</td><td>{{g3.cells_for_80pct_move}}/{{g3.n_cells}}셀이 이동 80%; 해로운 셀(ΔminADE CI&gt;0) {{g3.harmful_cells}}, 그중 스텝 9에 {{g3.harmful_by_step.9}}; 무해한 셀 {{g3.skippable_cells}} ({{g3.skippable_share|.1%}})</td><td>이동은 넓게 퍼져 있고 해로움은 마지막 스텝에 몰린다. 건너뛸 셀은 사실상 없다</td></tr>
+<tr><td><strong>G4</strong> 중복성</td><td>층: 셀 합 / 층 마진 중앙값 {{g4.median_ratio|.2f}}; 스텝 9: 셀 합 / 스텝 마진 {{g4.ratio_cellsum_over_step_marginal.9|.1f}}</td><td>스텝 축으로는 <strong>초가산</strong>(한 층을 10스텝 내내 막으면 셀 합의 3배) — 오류가 스텝을 타고 복리로 쌓인다. 층 축으로는 <strong>강한 부분가산</strong>(한 스텝의 36셀 합이 마진의 {{g4.ratio_cellsum_over_step_marginal.9|.0f}}배) — 한 층만 막힌 <em>불일치</em> 상태가 전 층이 막힌 <em>일관된</em> 상태보다 훨씬 나쁘다</td></tr>
+</tbody>
+</table>
+
+<p>가장 아픈 셀: {{g3.top10_cells.0.0}}층 s{{g3.top10_cells.0.1}} {{g3.top10_cells.0.2|.2f}} m, {{g3.top10_cells.1.0}}층 s{{g3.top10_cells.1.1}} {{g3.top10_cells.1.2|.2f}} m,
+{{g3.top10_cells.2.0}}층 s{{g3.top10_cells.2.1}} {{g3.top10_cells.2.2|.2f}} m — 층 11·13·15가 마지막 두 스텝에 읽는 캐시다. 층 마진으로 보면 층 0–15가 {{g2.layer_marginal_move.0|.1f}}–{{g2.layer_marginal_move.15|.1f}} m로
+층 16–35({{g2.layer_marginal_move.20|.1f}}–{{g2.layer_marginal_move.35|.1f}} m)보다 훨씬 크다: <strong>expert의 캐시 읽기는 앞쪽 절반에 집중</strong>돼 있다.</p>
+
+<div class="note">
+<strong>차단이라는 반사실의 성격.</strong> 셀 차단은 softmax를 own 토큰으로 재정규화하므로 "그 정보가 없다"가 아니라 "그 헤드가 자기 토큰만 본다"는 분포 밖 상태를 만든다.
+G4의 층 축 부분가산(단일 층 차단 &gt; 전 층 차단)이 그 증거다. 따라서 Stage B의 큰 숫자는 <em>정보의 양</em>이 아니라 <em>그 읽기를 뺐을 때의 취약성</em>이고,
+"캐시가 조금 달라지면"의 답은 Stage C가 준다.
+</div>
+
+<h2><span class="num">6.</span>헤드와 KV 그룹 — expert 쪽 캐시 의존도 R</h2>
+
+<figure>
+  <img src="PLOT::cu::cacheuse_heads.png" alt="head maps">
+  <figcaption>층(가로) × 헤드(세로). 왼쪽: 한 헤드의 캐시 읽기를 전 스텝 차단했을 때 이동(중앙값). 가운데: 헤드별 readout 몫. 오른쪽: (층, KV 그룹) 의존도 R = 그룹을 읽는 두 헤드의 이동 합.</figcaption>
+</figure>
+
+<ul>
+  <li>헤드 차단 이동은 층 0 전 헤드와 층 9–15의 특정 헤드에 몰린다: ({{heads.top10_heads.0.0}},{{heads.top10_heads.0.1}}) {{heads.top10_heads.0.2|.1f}} m,
+  ({{heads.top10_heads.1.0}},{{heads.top10_heads.1.1}}) {{heads.top10_heads.1.2|.1f}} m, ({{heads.top10_heads.2.0}},{{heads.top10_heads.2.1}}) {{heads.top10_heads.2.2|.1f}} m.
+  헤드별 readout 몫과의 Spearman은 {{heads.spearman_share_move_heads.0|+.2f}} — 여기서도 관찰 통계는 인과를 못 맞힌다.</li>
+  <li>3D 표본 {{factorisation.n_cells}}셀에서 (층, 헤드) 지도 × 스텝 프로파일의 곱이 실측 이동과 Spearman {{factorisation.spearman_vs_headmap_x_stepprofile.0|+.2f}} —
+  3D 지도는 대체로 <strong>인수분해</strong>된다(어느 헤드가 아픈지와 어느 스텝이 아픈지는 독립).</li>
+  <li>R과 VLM 기준의 KV 그룹 점수(<code>importance_v2</code>): traj_kv_v {{heads.external.spearman_R_vs_traj_kv_v.0|+.2f}}, traj_kv_k {{heads.external.spearman_R_vs_traj_kv_k.0|+.2f}},
+  coc_kv_v {{heads.external.spearman_R_vs_coc_kv_v.0|+.2f}} — 약한 양의 상관. VLM 기준이 캐시 텐서에서 잰 Taylor 중요도는 expert의 차단 의존도와 조금만 겹친다.</li>
+  <li>R과 dual의 캐시 이동 ‖ΔV‖/‖V‖(<code>cachediff_v1</code>): {{heads.external.spearman_R_vs_dual_cache_shift_v.0|+.2f}}, 층 안에서 {{heads.external.spearman_R_vs_dual_cache_shift_v_within_layer.0|+.2f}} —
+  <strong>expert가 기대는 그룹과 dual이 흔드는 그룹은 겹치지 않는다.</strong></li>
+</ul>
+
+<h2><span class="num">7.</span>Stage C — dual이 실제로 흔든 캐시를 넣으면 어디가 아픈가</h2>
+
+<figure>
+  <img src="PLOT::cu::cacheuse_swap.png" alt="swap maps">
+  <figcaption>왼쪽: (층, KV 그룹) 한 칸을 dual_u40_v2의 캐시로 바꿔 넣었을 때 이동(중앙값, m). 가운데: 그 칸의 실제 캐시 이동 ‖ΔV‖/‖V‖ (cache-shift 보고서). 오른쪽: 스왑 손상 대 expert 의존도 R.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>양</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>전 층·전 그룹 스왑 (= cache-shift의 A10 셀)</td><td>이동 중앙값 {{swap.swap_all_move.0|.2f}} [{{swap.swap_all_move.1|.2f}}, {{swap.swap_all_move.2|.2f}}] m, ΔminADE {{swap.swap_all_dade.0|+.3f}} — 전 차단({{g0.all_block_move.0|.1f}} m)의 수십분의 1</td></tr>
+<tr><td>스왑 손상 ~ 캐시 이동 크기</td><td>Spearman <strong>{{swap.spearman_swap_vs_shift_v.0|+.2f}}</strong> (층 안에서 {{swap.spearman_swap_vs_shift_within_layer.0|+.2f}})</td></tr>
+<tr><td>스왑 손상 ~ expert 의존도 R</td><td>Spearman <strong>{{swap.spearman_swap_vs_reliance_R.0|+.2f}}</strong> (층 안에서 {{swap.spearman_swap_vs_reliance_within_layer.0|+.2f}})</td></tr>
+<tr><td>스왑 손상 ~ R × 이동</td><td>{{swap.spearman_swap_vs_R_times_shift.0|+.2f}}</td></tr>
+<tr><td>가장 아픈 칸</td><td>({{swap.top10_swap_cells.0.0}}, g{{swap.top10_swap_cells.0.1}}) {{swap.top10_swap_cells.0.2|.3f}} m, ({{swap.top10_swap_cells.1.0}}, g{{swap.top10_swap_cells.1.1}}) {{swap.top10_swap_cells.1.2|.3f}} m, ({{swap.top10_swap_cells.2.0}}, g{{swap.top10_swap_cells.2.1}}) {{swap.top10_swap_cells.2.2|.3f}} m</td></tr>
+</tbody>
+</table>
+
+<p>스왑 손상의 지도는 <strong>깊이</strong>를 따른다: 층 20 앞은 거의 0, 층 20–35에서 커지고, 특정 칸이 튄다. 이건 이동 크기의 지도(가운데)와 같은 모양이고,
+expert 의존도 R의 지도(§6, 층 0–15)와는 반대 방향이다. 산점도(오른쪽)가 그 갈림을 그대로 보여 준다 — R이 큰 칸(층 0, 9–13)은 스왑 손상이 0에 붙어 있고(그 캐시는 애초에 거의 안 움직였다),
+스왑 손상이 큰 칸은 R이 작다.</p>
+
+<h2><span class="num">8.</span>해석 — 방법론에 주는 것</h2>
+
+<ul>
+  <li><strong>지도.</strong> expert는 전 층·전 스텝에서 캐시를 읽지만, 읽기의 <em>취약성</em>은 앞쪽 절반 층(0–15)과 마지막 두 스텝에 몰려 있다. 후기 스텝이 비싼 것은
+  "더 많이 읽어서"가 아니라(readout 몫은 오히려 줄어든다) <strong>교정 기회가 없어서</strong>다. 어텐션 질량·readout 몫은 이 지도를 예측하지 못한다 — 캐시 중요도를 어텐션으로
+  대신 재려는 시도는 이 저장소에서 두 번째로 기각됐다.</li>
+  <li><strong>왜 캐시 이동이 비용이 아니었나.</strong> cache-shift 보고서는 "캐시는 크게 다르지만 expert는 따라가지 않는다"였다. 여기서 그 기전이 보인다: dual이 흔드는 캐시는 깊은 층이고,
+  expert가 기대는 캐시는 얕은·중간 층이다. 둘은 <strong>공간적으로 분리</strong>돼 있다(R ~ 이동 {{heads.external.spearman_R_vs_dual_cache_shift_v.0|+.2f}}).</li>
+  <li><strong>"의존하는 캐시를 보존하는 VLM 프루닝"의 형태.</strong> 손상은 이동 크기를 따르므로(Stage C {{swap.spearman_swap_vs_shift_v.0|+.2f}}) 캐시 보존은 곧 <em>이동을 줄이는 것</em>이고,
+  줄여야 할 곳은 R이 큰 층 0–15의 그룹이다. 지금 그 층들의 이동은 이미 작다(‖ΔV‖/‖V‖ 0.1–0.2) — 그래서 dual은 운이 좋았다. 더 깊은 절단(u55 이상)이나 다른 할당(late-heavy)에서
+  중간층 캐시가 움직이기 시작하면 이 지도가 어디를 지켜야 하는지 말해 준다. 구체적 후보: (a) 층 0–15의 K/V 재구성(Tyr류 Hessian 목표를 캐시 셀에, R로 가중), (b) VLM 기준에
+  "R 가중 캐시 이동" 항을 더한 선택, (c) expert 의존 스팬(vision·text 위치)만 남기는 캐시 절단은 <em>불가</em>(전 구간 읽음).</li>
+  <li><strong>스킵 스케줄은 없다.</strong> 무해하게 건너뛸 셀이 {{g3.skippable_share|.1%}}뿐이라 expert 지연 시간을 cross-attention 스킵으로 줄이는 길은 닫혔다.</li>
+</ul>
+
+<h2><span class="num">9.</span>한계</h2>
+<ul>
+  <li>차단은 재정규화된 분포 밖 상태를 만든다(§5 note). 헤드 단위 숫자는 특히 그 증폭을 물고 있어 R의 절대값보다 순위가 의미 있다.</li>
+  <li>셀 측정은 시드 1개다(페어드라 부호와 순위는 안정적, 크기의 CI는 마진에서만). calib_100 100클립, Blackwell(아키텍처 내 페어드).</li>
+  <li>Stage C는 dual_u40_v2 한 config의 이동이다. 다른 config의 이동 지도는 다를 수 있지만, 깊이에 따라 커지는 모양은 cache-shift 보고서의 일반 관찰이다.</li>
+  <li>개루프 궤적 이동·minADE 기준이며 폐루프는 재지 않았다.</li>
+</ul>
+
+<h2><span class="num">10.</span>재현</h2>
+
+<pre>for g in 0 1 2 3; do off=$((g*25))
+  bash experiments/head_analysis/run_retry_host.sh 120 experiments/head_analysis/run_cacheuse.py \
+       --gpu $g --manifest calib_100 --cache calib --num-clips 25 --clip-offset $off --exp-id cacheuse_v1_s$off &
+done; wait
+.venv/bin/python experiments/head_analysis/analyze_cacheuse.py \
+       --shards cacheuse_v1_s0 cacheuse_v1_s25 cacheuse_v1_s50 cacheuse_v1_s75 --out cacheuse_v1
+.venv/bin/python experiments/evaluation/fill_template.py outputs/cacheuse_v1/metrics_analysis.json \
+       experiments/head_analysis/cacheuse_report_template.html experiments/head_analysis/cacheuse_report_template_filled.html
+python experiments/head_analysis/build_report.py experiments/head_analysis/cacheuse_report_template_filled.html \
+       reports/evaluation/2026-08-29_cache-use-map.html cu=$PWD/outputs/cacheuse_v1/plots</pre>
+
+<p class="meta">시드 42(클립 유도), 셀 K=1 / 마진 K=4. 게이트 정의는 <code>plans/2026-08-28_cache-use-map.md</code>. 표의 숫자는 전부
+<code>outputs/cacheuse_v1/metrics_analysis.json</code>에서 <code>&#123;&#123;경로|서식&#125;&#125;</code> 토큰으로 채워진다.</p>
+
+</div>
+</body>
+</html>
