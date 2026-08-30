@@ -56,6 +56,35 @@ REPO = Path(__file__).resolve().parents[2]
 SPAN_SHARE = {"vision": 0.7223, "text": 0.1656, "hist": 0.0418, "sink": 0.0110}
 
 
+def fit_objective(W, W_hat, H):
+    """sqrt(tr(D H D^T) / tr(W H W^T)), D = W - W_hat: the least-squares objective itself,
+    relative, on the (weighted) fit Hessian."""
+    D = (W - W_hat).double()
+    Hd = H.double()
+    return float(torch.sqrt(torch.trace(D @ Hd @ D.t()) / torch.trace(W.double() @ Hd @ W.double().t())))
+
+
+def safe_refit(mod, H, keep, kept_cols, damp, ladder=(10.0, 100.0)):
+    """OSSCAR refit with a numerical-failure guard. A damped least-squares solution can
+    never have a higher fit objective than the mask-only weight (that weight is feasible);
+    when it does, the fp32 solve of a near-singular H_kk has failed (dualr_rep layer 1 and
+    dualr_w layer 7 came out with 10-60x weight norms and refit error 1.3 vs mask-only
+    0.15). Escalate the damping (x10, x100) until the objective is below mask-only, and
+    fall back to the mask-only weight if it never is. Returns (W', damp used, (obj_refit,
+    obj_mask))."""
+    W = mod.weight.data.float()
+    w_mask = W.clone()
+    removed = [c for c in range(W.shape[1]) if c not in set(kept_cols)]
+    w_mask[:, removed] = 0
+    obj_mask = fit_objective(W, w_mask, H)
+    for mult in (1.0,) + tuple(ladder):
+        w = tyr.reconstruct_levels(mod, H, {keep: kept_cols}, damp=damp * mult)[keep]
+        obj = fit_objective(W, w, H)
+        if obj <= obj_mask:
+            return w, damp * mult, (obj, obj_mask)
+    return w_mask, float("inf"), (obj_mask, obj_mask)
+
+
 class WeightedHessianHook:
     """H = sum_t w_t x_t x_t^T at a linear module's input; `weights` (T,) is set by the
     caller before each forward (zero drops a token)."""
@@ -80,19 +109,23 @@ class WeightedHessianHook:
         self.handle.remove()
 
 
-def token_weights(spans, prompt_len, n_coc, decode_share, first_pass, k_seeds):
+def token_weights(spans, prompt_len, n_coc, decode_share, first_pass, k_seeds, mode="expert"):
     """Per-token weights for one [prompt; CoC] forward. Prefill spans get their expert
-    attention share (only on the first of the K passes -- prefill activations are causal
-    and identical across them), the CoC gets decode_share / K; each stream is
-    token-mean normalised within the clip."""
+    attention share (mode "expert") or one equal weight per token (mode "uniform"), only
+    on the first of the K passes -- prefill activations are causal and identical across
+    them; the CoC gets decode_share / K; each stream is token-mean normalised within the
+    clip."""
     T = prompt_len + n_coc
     w = torch.zeros(T, dtype=torch.float32)
     if first_pass:
-        for name, share in SPAN_SHARE.items():
-            m = spans[name].cpu()
-            n = int(m.sum())
-            if n:
-                w[:prompt_len][m] = (1.0 - decode_share) * share / n
+        if mode == "uniform":
+            w[:prompt_len] = (1.0 - decode_share) / prompt_len
+        else:
+            for name, share in SPAN_SHARE.items():
+                m = spans[name].cpu()
+                n = int(m.sum())
+                if n:
+                    w[:prompt_len][m] = (1.0 - decode_share) * share / n
     if n_coc:
         w[prompt_len:] = decode_share / (k_seeds * n_coc)
     return w
@@ -110,6 +143,14 @@ def main():
                     help="exp-id holding rollouts.json (K on-policy CoCs per calib clip)")
     ap.add_argument("--k-seeds", type=int, default=4)
     ap.add_argument("--decode-share", type=float, default=0.16)
+    ap.add_argument("--prompt-only", action="store_true",
+                    help="do not append the own-CoC (diagnostic: dualr builder parity)")
+    ap.add_argument("--no-masks", action="store_true",
+                    help="rely on the written-back zero-column weights alone for the "
+                         "pruned upstream (diagnostic: dualr builder parity)")
+    ap.add_argument("--prefill-weights", choices=["expert", "uniform"], default="expert",
+                    help="expert: spans weighted by the expert's attention share (SPAN_SHARE); "
+                         "uniform: every prefill token equal (Tyr / dualr's Hessian up to scale)")
     ap.add_argument("--damp", type=float, default=1e-2)
     ap.add_argument("--importance", default="importance_v2")
     ap.add_argument("--reserve-gb", type=float, default=40.0)
@@ -155,23 +196,28 @@ def main():
         prompt_len = inp["input_ids"].shape[1]
         rec = rolls["clips"][clip_id]
         assert rec["prompt_len"] == prompt_len, (clip_id, rec["prompt_len"], prompt_len)
-        cocs = rec["coc"][: args.k_seeds]
+        cocs = [[]] if args.prompt_only else rec["coc"][: args.k_seeds]
         passes = []
         for j, coc in enumerate(cocs):
             ids = torch.cat([inp["input_ids"].cpu(),
                              torch.tensor(coc, dtype=inp["input_ids"].dtype)[None, :]], dim=1)
-            w = token_weights(spans, prompt_len, len(coc), args.decode_share, j == 0, len(cocs))
-            passes.append((ids, w))
+            w = token_weights(spans, prompt_len, len(coc), args.decode_share, j == 0, len(cocs),
+                              args.prefill_weights)
+            # stream masks for the in-sample prefill / decode error accumulators
+            sm = torch.zeros(ids.shape[1], dtype=torch.bool)
+            sm[prompt_len:] = True
+            passes.append((ids, w, sm))
         store.append({"clip_id": clip_id, "passes": passes, "prompt_len": prompt_len,
                       "pixel_values": inp["tokenized_data"]["pixel_values"].cpu(),
                       "image_grid_thw": inp["tokenized_data"]["image_grid_thw"].cpu()})
         del inp, data
     n_tok = {"prefill": sum(it["prompt_len"] for it in store),
              "decode": sum(ids.shape[1] - it["prompt_len"] for it in store
-                           for ids, _ in it["passes"])}
+                           for ids, _, _ in it["passes"])}
 
     nh, hd = tc.num_attention_heads, tc.head_dim
     layer_names = []
+    recon_errors = {}
     t_all = time.time()
     for i in range(args.start, args.end):
         t0 = time.time()
@@ -180,15 +226,26 @@ def main():
         q_i, m_i = vq.copy(), vm.copy()
         q_i[i:] = 1.0
         m_i[i:] = 1.0
-        vmasks.set(q=q_i, mlp=m_i)
+        if args.no_masks:
+            vmasks.reset()
+        else:
+            vmasks.set(q=q_i, mlp=m_i)
         o_proj, down = layers[i].self_attn.o_proj, layers[i].mlp.down_proj
         hooks = {"self_attn.o_proj": WeightedHessianHook(o_proj),
                  "mlp.down_proj": WeightedHessianHook(down)}
+        # in-sample stream Hessians (unweighted) for the reconstruction error readout:
+        # P = prefill tokens (first pass only), D = own-CoC tokens (every pass)
+        ev = {k: {"P": WeightedHessianHook(m), "D": WeightedHessianHook(m)}
+              for k, m in (("self_attn.o_proj", o_proj), ("mlp.down_proj", down))}
         for item in store:
-            for ids, w in item["passes"]:
+            for pi, (ids, w, sm) in enumerate(item["passes"]):
                 wc = w.to("cuda")
+                smc = sm.to("cuda")
                 for h in hooks.values():
                     h.weights = wc
+                for k in ev:
+                    ev[k]["P"].weights = (~smc).float() if pi == 0 else torch.zeros_like(wc)
+                    ev[k]["D"].weights = smc.float()
                 ids = ids.cuda()
                 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
                     model.vlm.model(
@@ -197,6 +254,9 @@ def main():
                         image_grid_thw=item["image_grid_thw"].cuda(), use_cache=False)
         for h in hooks.values():
             h.remove()
+        for hooks_k in ev.values():
+            for h in hooks_k.values():
+                h.remove()
         t_fwd = time.time() - t0
         for suffix, mod, keep, n_groups, gs, mask_row in (
             ("self_attn.o_proj", o_proj, keep_q, nh, hd, vq[i]),
@@ -206,11 +266,22 @@ def main():
             hook = hooks[suffix]
             kept_g = [g for g in range(n_groups) if mask_row[g] > 0]
             kept_cols = [g * gs + d for g in kept_g for d in range(gs)]
-            sols = tyr.reconstruct_levels(mod, hook.H, {keep: kept_cols}, damp=args.damp)
-            w = sols[keep]
+            w, damp_used, obj = safe_refit(mod, hook.H, keep, kept_cols, args.damp)
             n_zero = int((w.abs().sum(0).reshape(n_groups, gs).sum(1) == 0).sum())
             assert n_zero == n_groups - keep, (name, n_zero, keep)
-            rel = float((w - mod.weight.data.float()).norm() / mod.weight.data.float().norm())
+            W0 = mod.weight.data.float()
+            rel = float((w - W0).norm() / W0.norm())
+            # reconstruction error per stream, refit vs mask-only (racfit's recon_error;
+            # in-sample: the fit clips, but D is outside dualr_rep's fit by construction)
+            w_mask = W0.clone()
+            w_mask[:, [c for c in range(W0.shape[1]) if c not in set(kept_cols)]] = 0
+            errs = {}
+            for st in ("P", "D"):
+                He = ev[suffix][st].H
+                if float(torch.diag(He).sum()) > 0:
+                    errs[f"err_{st}_refit"] = float(tyr.recon_error(W0, w, He))
+                    errs[f"err_{st}_mask"] = float(tyr.recon_error(W0, w_mask, He))
+            recon_errors[name] = errs
             d = out_dir / name
             d.mkdir(parents=True, exist_ok=True)
             torch.save(w.to(torch.bfloat16).cpu(), d / "0.pth")
@@ -218,8 +289,11 @@ def main():
             # error accumulation: the refitted weight (zero columns included) goes into
             # the model, so the next block sees the pruned-and-refitted upstream
             mod.weight.data.copy_(w.to(mod.weight.dtype))
-            print(f"  {name}: refit rel change {rel:.4f}", flush=True)
-        del hooks
+            errs["damp"] = damp_used
+            errs["fit_obj_refit"], errs["fit_obj_mask"] = obj
+            print(f"  {name}: refit rel change {rel:.4f} damp {damp_used:g} | "
+                  + " ".join(f"{k}={v:.4f}" for k, v in errs.items() if k != "damp"), flush=True)
+        del hooks, ev
         torch.cuda.empty_cache()
         print(f"[block {i - args.start + 1}/{args.end - args.start}] layer {i} fwd {t_fwd:.0f}s "
               f"total {time.time() - t0:.0f}s", flush=True)
@@ -231,6 +305,8 @@ def main():
         "clip_ids": [c for c, _ in calib], "selection": "dual",
         "importance": args.importance, "damp": args.damp,
         "start": args.start, "end": args.end, "layer_names": layer_names,
+        "prefill_weights": args.prefill_weights, "decode_share": args.decode_share,
+        "k_seeds": args.k_seeds, "recon_errors": recon_errors,
         "levels_q": {"0": keep_q}, "levels_mlp": {"0": keep_m}, "num_levels": 1,
         "hessian_tokens": ("per-token weighted: prefill spans by expert attention share "
                            f"{SPAN_SHARE}, own CoC (K={args.k_seeds}, {args.rollouts_from}) "
