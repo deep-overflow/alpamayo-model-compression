@@ -108,7 +108,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
                 tyr_supernet="tyr_supernet_u40",
                 tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
-                imp_run="importance_v2"):
+                imp_run="importance_v2", cache_imp="cachejlens_v1"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -371,13 +371,21 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 pre = name[:-1]
                 return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
                         (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
+            if name == "cache":
+                # cache-Jacobian importance (plans/2026-08-30_cache-jlens-criterion.md):
+                # E ||d cache / d g||^2 weighted by the expert's per-(layer, group)
+                # sensitivity, from run_cache_jlens.py. Label-free and second-order, so it
+                # is not an |dL/dg| Taylor score; it enters through rank_norm like the rest.
+                z = dict(np.load(REPO / "outputs" / cache_imp / "importance.npz"))
+                return z["cache_vlm_q"], z["cache_vlm_mlp"]
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
         parts = {"dual": ("traj", "coc"), "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
-                 "dualprod": ("traj", "coc")}.get(stem, (stem,))
+                 "dualprod": ("traj", "coc"),
+                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
         op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
@@ -494,6 +502,9 @@ def main():
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
                     help="J-lens run supplying q_j/mlp_j for the j_traj configs")
+    ap.add_argument("--cache-importance", type=str, default="cachejlens_v1",
+                    help="run_cache_jlens.py run supplying cache_vlm_* for the cachedual / "
+                         "cacheonly configs")
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
                     help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
                          "trajvqa configs (measured on LingoQA train)")
@@ -548,7 +559,7 @@ def main():
                                          args.wanda_txt,
                                          args.tyr_supernet, args.tyr_config,
                                          (args.scope_start, args.scope_end),
-                                         args.importance)
+                                         args.importance, args.cache_importance)
 
     full_total = sl.n_params(model)
     t0 = time.time()

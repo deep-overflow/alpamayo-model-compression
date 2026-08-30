@@ -119,6 +119,14 @@ ARMS = {
     "dualr_rep": {"indist": ("dualr_rep_u40_indist", False),
                   "test": ("dualr_rep_u40_test", False),
                   "oodval": ("dualr_rep_u40_oodval", False)},
+    # cache-Jacobian criterion (plans/2026-08-30_cache-jlens-criterion.md): dual with
+    # I_traj replaced by I_cache (max(rank I_cache, rank I_CoC)), and I_cache alone
+    "cachedual": {"indist": ("cachedual_u40_v2_indist", False),
+                  "test": ("cachedual_u40_v2_test", False),
+                  "oodval": ("cachedual_u40_v2_oodval", False)},
+    "cacheonly": {"indist": ("cacheonly_u40_v2_indist", False),
+                  "test": ("cacheonly_u40_v2_test", False),
+                  "oodval": ("cacheonly_u40_v2_oodval", False)},
     "dualr_d": {"indist": ("dualr_d_u40_indist", False),
                 "test": ("dualr_d_u40_test", False),
                 "oodval": ("dualr_d_u40_oodval", False)},

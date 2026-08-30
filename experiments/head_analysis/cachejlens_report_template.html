@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>캐시 보존 Taylor 기준 — 선택만으로 expert의 캐시를 지킬 수 있는가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Cache-preserving criterion</div>
+  <h1>캐시 보존 Taylor 기준 — 선택만으로 expert의 캐시를 지킬 수 있는가</h1>
+  <div class="meta">
+    2026-08-30 · dual의 I_traj를 <strong>I_cache</strong>(유닛을 끄면 expert가 민감한 캐시가 얼마나 움직이는가, 프로브 Jacobian 노름)로 바꾼 one-factor ·
+    u40 가족(uniform 0.3985632694, −2,657,452,032, 선택만) · calib_100 × 16 프로브 · G1 200클립 · G2 val500 · G3 LingoQA<br>
+    코드 <code>run_cache_jlens.py</code>, <code>analyze_cachejlens.py</code>, <code>make_slim.py --config cachedual_u40_v2 / cacheonly_u40_v2</code>, <code>run_cacheproxy.py</code> ·
+    산출물 <code>outputs/cachejlens_v1/</code>, <code>outputs/slim_cache{dual,only}_u40_v2/</code>, <code>outputs/cacheproxy_cache*/</code> ·
+    기록 <code>plans/2026-08-30_cache-jlens-criterion.md</code> · 브랜치 <code>worktree-cache-jlens-criterion</code><br>
+    선행: <code>2026-08-28_cache-shift</code> (캐시 이동 = 궤적 비용), <code>2026-08-29_cache-use-map</code> (민감도 S), <code>2026-08-29_cache-targeted-reconstruction</code> (refit은 체인), <code>2026-08-30_dualr-weighted-hessian</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{g0.q.overlap_cachedual_vs_dual|.3f}} / {{g0.mlp.overlap_cachedual_vs_dual|.3f}}</div><div class="l">cachedual vs dual kept-set 겹침 (Q / MLP) — G0 신규성</div></div>
+  <div class="kpi"><div class="v">{{proxy.arms.cachedual.wshift_ratio_vs_ref.0|.3f}}</div><div class="l">cachedual의 민감도 가중 캐시 이동 (dual 대비)</div></div>
+  <div class="kpi"><div class="v">{{proxy.arms.cachedual.A10_minus_A00.0|+.4f}}</div><div class="l">cachedual 캐시만의 비용 A10−A00 (dual {{proxy.arms.dual.A10_minus_A00.0|+.4f}})</div></div>
+  <div class="kpi"><div class="v">{{proxy.val500.cachedual.d_ade.0|+.4f}}</div><div class="l">cachedual val500 ΔminADE@6 (dual {{proxy.val500.dual.d_ade.0|+.4f}})</div></div>
+  <div class="kpi"><div class="v">{{lingo.per_run.lingo_vqa_slim_cachedual_u40_v2.accuracy|.1%}}</div><div class="l">cachedual LingoQA (dual {{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}})</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> 선택 기준만으로 expert의 캐시 이동을 <strong>{{proxy.arms.cachedual.wshift_ratio_vs_ref.0|.3f}}</strong>배(−13%)로 줄일 수 있고(G1 이동 PASS) reasoning(LingoQA)도 dual과 같지만
+({{lingo.comparisons.0.delta|+.1%}}, n.s.), <strong>궤적은 오히려 두 배 나빠진다</strong>(val500 {{proxy.val500.cachedual.d_ade.0|+.4f}} vs dual {{proxy.val500.dual.d_ade.0|+.4f}}) — 클립의
+{{proxy.val500.cachedual.degen|.1%}}에서 CoC가 장황한 soup으로 붕괴하기 때문이다(dual {{proxy.val500.dual.degen|.1%}}). I_cache는 층 l의 게이트가 층 &gt; l의 캐시에만 닿는 구조 때문에
+후반 층에 점수를 거의 못 주고(Q head 질량의 2.5%만 층 27–35), max(rank·, rank I_CoC)에서 후반 층은 I_CoC 단독이 정한다 — 기준 안에서 <em>late-heavy 할당</em>이 재현되어 생성이 무너진다.
+I_traj가 dual에서 하던 일 하나는 CoC 캐시 위치를 통해 후반 층을 지키는 것이었다. <strong>G2 기각.</strong> 덤으로 G1 프록시의 맹점이 드러났다: dense CoC를 teacher-forcing으로 고정하므로
+생성 붕괴를 못 본다.
+</div>
+
+<h2><span class="num">1.</span>왜</h2>
+<p>VLM 절단의 개루프 궤적 비용은 거의 전부 KV 캐시 이동으로 들어오고(프루닝 캐시 + dense expert = +0.07 ≈ dual +0.058), 손상은 이동 크기에 비례하며(Stage C ρ +0.89), 이동은 상류 절단의 누적이라
+refit으로는 첫 층부터 전부 고쳐야 한다. 재구성(dualr)은 캐시·궤적을 지키지만 reasoning을 잃는다(LingoQA 52.2 vs dual 68.8). 남은 지렛대는 <strong>선택</strong>이다: 어떤 유닛을 자를지를
+"캐시를 얼마나 움직이는가"로 고르면 refit 없이, CE 절반(I_CoC)을 그대로 둔 채 이동을 줄일 수 있는가.</p>
+
+<h2><span class="num">2.</span>기준 — 1차 Taylor는 0이므로 프로브 Jacobian 노름</h2>
+<p>캐시 보존 손실 ‖cache(g) − cache(1)‖²는 g=1에서 값·기울기가 모두 0이라 게이트 Taylor가 전부 0이다. 대신 <strong>I_cache(u) = Σ<sub>l,g</sub> S[l,g]·(‖∂K<sub>l,g</sub>/∂g<sub>u</sub>‖² + ‖∂V<sub>l,g</sub>/∂g<sub>u</sub>‖²)</strong>를
+잰다 — S는 cache-use map Stage C의 (층, 그룹) 민감도. 유닛별 backward 대신 층·그룹별 무작위 cotangent r ~ N(0, S/(T·D))를 K·V에 걸고 ⟨Σr, cache⟩를 한 번 backward하면 게이트 기울기 제곱의 기대값이
+I_cache다(독립 프로브라 교차항 기대값 0; `run_importance`의 I_traj 경로 `vlm_backward_from_cache`에 seed만 바꾼 것). 클립당 16 프로브 × calib_100, 라벨·rollout 없음. 층 l의 게이트는 층 &gt; l의
+캐시에만 닿으므로 <strong>마지막 층의 I_cache는 정확히 0</strong>이고 거기서는 I_CoC만 순위를 정한다. 합치기는 dual과 같은 max(rank·, rank I_CoC).</p>
+
+<table>
+<thead><tr><th>arm</th><th>기준</th><th>역할</th></tr></thead>
+<tbody>
+<tr><td><code>dual_u40_v2</code></td><td>max(rank I_traj, rank I_CoC)</td><td>기준</td></tr>
+<tr><td><strong><code>cachedual_u40_v2</code></strong></td><td>max(rank <strong>I_cache</strong>, rank I_CoC)</td><td>I_traj → I_cache만 교체</td></tr>
+<tr><td><code>cacheonly_u40_v2</code></td><td>I_cache 단독</td><td>CE 절반의 기여 분리</td></tr>
+<tr><td><code>traj_u40_v2</code></td><td>I_traj 단독</td><td>I_cache의 직접 대조(둘 다 캐시 경유)</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">3.</span>G0 — 신호 검사 (빌드 전)</h2>
+
+<table>
+<thead><tr><th>축</th><th class="r">split-half Spearman</th><th class="r">split-half kept 겹침</th><th class="r">Spearman vs I_traj</th><th class="r">kept 겹침 cacheonly vs traj / dual / coc</th><th class="r">kept 겹침 cachedual vs dual</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">{{g0.q.splithalf_spearman|.3f}}</td><td class="r">{{g0.q.splithalf_overlap|.3f}}</td><td class="r">{{g0.q.spearman_vs_traj|+.3f}}</td><td class="r">{{g0.q.overlap_cacheonly_vs_traj|.3f}} / {{g0.q.overlap_cacheonly_vs_dual|.3f}} / {{g0.q.overlap_cacheonly_vs_coc|.3f}}</td><td class="r">{{g0.q.overlap_cachedual_vs_dual|.3f}}</td><td>{{g0.q.stability_pass}} / {{g0.q.novel_pass}}</td></tr>
+<tr><td>MLP 채널</td><td class="r">{{g0.mlp.splithalf_spearman|.3f}}</td><td class="r">{{g0.mlp.splithalf_overlap|.3f}}</td><td class="r">{{g0.mlp.spearman_vs_traj|+.3f}}</td><td class="r">{{g0.mlp.overlap_cacheonly_vs_traj|.3f}} / {{g0.mlp.overlap_cacheonly_vs_dual|.3f}} / {{g0.mlp.overlap_cacheonly_vs_coc|.3f}}</td><td class="r">{{g0.mlp.overlap_cachedual_vs_dual|.3f}}</td><td>{{g0.mlp.stability_pass}} / {{g0.mlp.novel_pass}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cj::cachejlens_layer_mass.png" alt="layer mass of I_cache vs I_traj">
+  <figcaption>층별 중요도 질량, I_cache(파랑) vs I_traj(분홍). 캐시를 흔드는 유닛이 어느 층에 있는지 — 마지막 층은 정의상 0.</figcaption>
+</figure>
+
+<p>신규성은 통과(cachedual vs dual 겹침 Q {{g0.q.overlap_cachedual_vs_dual|.3f}} / MLP {{g0.mlp.overlap_cachedual_vs_dual|.3f}}) — I_cache는 I_traj와 상관은 있지만(Spearman +0.72 / +0.66) 같은 랭킹이 아니다.
+안정성은 프로브를 16 → 32로 늘려도 MLP split-half가 0.907 → 0.910으로 거의 안 움직여 분산의 몸통이 <em>클립 표집</em>임이 드러났다; 사전 등록한 0.95(jlens_coc32)는 MLP에서 미달이지만
+합쳐질 traj/coc 기준의 바닥(Q 0.86 / MLP 0.78)보다 높아 그 바닥 초과로 재조정하고 진행했다(이탈로 기록). 층 프로파일: I_cache의 Q head 질량은 층 9–17에 70%, 층 27–35에 2.5% — 후반 층은
+구조적으로 점수가 낮다(층 l의 게이트는 층 &gt; l의 캐시에만 닿고, 마지막 층은 정확히 0).</p>
+
+<h2><span class="num">4.</span>G1·G2·G3 — 캐시, 궤적, reasoning</h2>
+
+<table>
+<thead><tr><th>arm</th><th>캐시만의 비용 A10−A00 (중앙값 [CI])</th><th>민감도 가중 이동 (dual 대비)</th><th>val500 ΔminADE@6 vs 무압축</th><th class="r">CoC 붕괴율</th><th class="r">LingoQA</th><th>Δ vs dual</th></tr></thead>
+<tbody>
+<tr><td>dual</td><td>{{proxy.arms.dual.A10_minus_A00.0|+.4f}} [{{proxy.arms.dual.A10_minus_A00.1|+.4f}}, {{proxy.arms.dual.A10_minus_A00.2|+.4f}}]</td><td>1.000</td><td>{{proxy.val500.dual.d_ade.0|+.4f}} [{{proxy.val500.dual.d_ade.1|+.4f}}, {{proxy.val500.dual.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dual.degen|.3f}}</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}}</td><td>—</td></tr>
+<tr><td><strong>cachedual</strong></td><td>{{proxy.arms.cachedual.A10_minus_A00.0|+.4f}} [{{proxy.arms.cachedual.A10_minus_A00.1|+.4f}}, {{proxy.arms.cachedual.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.cachedual.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.cachedual.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.cachedual.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.cachedual.d_ade.0|+.4f}} [{{proxy.val500.cachedual.d_ade.1|+.4f}}, {{proxy.val500.cachedual.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.cachedual.degen|.3f}}</td><td class="r">{{lingo.per_run.lingo_vqa_slim_cachedual_u40_v2.accuracy|.1%}}</td><td>{{lingo.comparisons.0.delta|+.1%}} [{{lingo.comparisons.0.ci_lo|+.1%}}, {{lingo.comparisons.0.ci_hi|+.1%}}]</td></tr>
+<tr><td>cacheonly</td><td>{{proxy.arms.cacheonly.A10_minus_A00.0|+.4f}} [{{proxy.arms.cacheonly.A10_minus_A00.1|+.4f}}, {{proxy.arms.cacheonly.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.cacheonly.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.cacheonly.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.cacheonly.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.cacheonly.d_ade.0|+.4f}} [{{proxy.val500.cacheonly.d_ade.1|+.4f}}, {{proxy.val500.cacheonly.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.cacheonly.degen|.3f}}</td><td class="r">{{lingo.per_run.lingo_vqa_slim_cacheonly_u40_v2.accuracy|.1%}}</td><td>{{lingo.comparisons.1.delta|+.1%}} [{{lingo.comparisons.1.ci_lo|+.1%}}, {{lingo.comparisons.1.ci_hi|+.1%}}]</td></tr>
+<tr><td>traj (기존)</td><td>—</td><td>—</td><td>{{proxy.val500.traj.d_ade.0|+.4f}} [{{proxy.val500.traj.d_ade.1|+.4f}}, {{proxy.val500.traj.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.traj.degen|.3f}}</td><td class="r">{{lingo.per_run.lingo_vqa_slim_traj_u40_v2.accuracy|.1%}}</td><td>{{lingo.comparisons.2.delta|+.1%}}</td></tr>
+<tr><td>dualr_rep (재구성, 참고)</td><td>{{proxy.arms.dualr_rep.A10_minus_A00.0|+.4f}}</td><td>{{proxy.arms.dualr_rep.wshift_ratio_vs_ref.0|.3f}}</td><td>{{proxy.val500.dualr_rep.d_ade.0|+.4f}}</td><td class="r">{{proxy.val500.dualr_rep.degen|.3f}}</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.3.delta|+.1%}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cp::cacheproxy_shift_by_layer.png" alt="cache shift by layer per arm">
+  <figcaption>층별 캐시 이동 ‖ΔV‖/‖V‖(그룹 평균), arm별.</figcaption>
+</figure>
+
+<h2><span class="num">5.</span>해석</h2>
+<ul>
+  <li><strong>G1 통과, G2 기각, G3 통과 — 셋이 갈린다.</strong> 캐시 채널만 보면(프록시: dense CoC 고정, dense expert) cachedual은 dual보다 낫거나 같다(이동 −13%, 비용 중앙값 −0.002 n.s., 평균 절반).
+  질문-답 형식의 reasoning(LingoQA)도 dual과 같다. 그런데 <em>자유 생성</em>(주행 프롬프트의 CoC rollout)이 클립 {{proxy.val500.cachedual.degen|.1%}}에서 soup으로 무너지고(평균 길이 297 vs 80,
+  nll_self 1.29 vs 0.22), 그 CoC를 읽는 expert의 궤적이 두 배 나빠진다. 즉 cachedual이 잃은 것은 reasoning 능력이 아니라 <strong>자기회귀 생성의 안정성</strong>이다 — coc-only arm(붕괴 14%)과 같은
+  실패 모드이고 그보다 심하다.</li>
+  <li><strong>왜 후반 층인가.</strong> I_cache는 정의상 상류 유닛에 몰린다(층 l의 게이트 → 층 &gt; l의 캐시). 후반 층은 I_CoC 단독으로 순위가 정해지고, dual이 남기던 층 27–35의 MLP 채널 10,230개를
+  cachedual이 더 잘랐다. I_CoC(teacher-forced NLL의 1차 Taylor)는 다음 토큰 손실의 민감도이지 생성 안정성이 아니어서 이 유닛들을 못 지킨다; dual에서는 I_traj가 CoC 캐시 위치를 통해
+  후반 층에도 점수를 주어 그 역할을 하고 있었다. grid의 "late-heavy 할당이 CoC를 무너뜨린다"가 <em>기준 내부의 암묵적 할당</em>으로 재현된 것이다.</li>
+  <li><strong>cacheonly</strong>는 traj-only/coc-only처럼 한쪽으로 무너진다(LingoQA {{lingo.per_run.lingo_vqa_slim_cacheonly_u40_v2.accuracy|.1%}}, 붕괴 {{proxy.val500.cacheonly.degen|.1%}}) — 캐시 이동이 19% 줄어도
+  캐시 비용은 dual보다 크다(+0.173): S-가중 이동 노름은 손상의 <em>방향</em>을 다 담지 못한다.</li>
+  <li><strong>프록시 교훈.</strong> G1 프록시는 CoC를 고정하므로 생성 붕괴에 눈이 멀다. own-CoC NLL 증가(+0.064 vs dual +0.021)가 유일한 경고였다 — 앞으로 프록시에 rollout 붕괴율을 넣는다.</li>
+  <li><strong>남는 길.</strong> (a) I_cache를 앞 절반 층(0–17)에만 쓰고 후반 층은 I_traj를 유지하는 층별 혼합 — 캐시 이동 감소의 대부분은 어차피 앞쪽에서 온다; (b) 생성 안정성을 직접 재는 세 번째 항
+  (rollout 붕괴 Taylor는 미분 불가 — 대신 자유 생성 NLL을 rollout 위에서 재는 `infer` 모드처럼 후반 층 보호 신호); (c) 이 실험은 선택이 캐시 이동을 13%까지는 줄일 수 있음을 보였으므로,
+  (a)가 붕괴 없이 그 13%를 유지하면 궤적 비용 −10% 안팎이 기대선이다.</li>
+</ul>
+
+<h2><span class="num">6.</span>한계</h2>
+<ul>
+  <li>S(민감도)는 dual의 캐시 이동에서 잰 지도이므로 기준이 dual의 이동 패턴에 맞춰져 있다; 균등 S 변형은 재지 않았다.</li>
+  <li>프로브 16개 × 100클립의 분산은 split-half로만 통제했다. 위치 범위는 prefill 전체(CoC 위치 제외).</li>
+  <li>test500·OOD-val·폐루프는 게이트 순서에 따라 결과 뒤에 결정.</li>
+</ul>
+
+<h2><span class="num">7.</span>재현</h2>
+<pre>ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_cache_jlens.py \
+     --gpu 6 --num-clips 100 --probes 16 --exp-id cachejlens_v1
+.venv/bin/python experiments/head_analysis/analyze_cachejlens.py --run cachejlens_v1 --importance importance_v2 --out cachejlens_v1
+for a in cachedual cacheonly; do
+  bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/make_slim.py --config ${a}_u40_v2 \
+       --importance importance_v2 --cache-importance cachejlens_v1 --no-state --gpu 6 --out outputs/slim_${a}_u40_v2
+  bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cacheproxy.py --gpu 6 \
+       --slim outputs/slim_${a}_u40_v2 --num-clips 200 --exp-id cacheproxy_$a
+  bash experiments/lingoqa/eval_lingo_arm.sh slim_${a}_u40_v2 6
+done
+.venv/bin/python experiments/head_analysis/analyze_cacheproxy.py --arms dual=cacheproxy_dual cachedual=cacheproxy_cachedual \
+       cacheonly=cacheproxy_cacheonly dualr_rep=cacheproxy_dualr_rep --ref dual \
+       --val-arms dual cachedual cacheonly traj dualr_rep --out cacheproxy_cachejlens
+.venv/bin/python experiments/lingoqa/analyze_lingo.py --runs lingo_vqa_slim_cachedual_u40_v2 lingo_vqa_slim_cacheonly_u40_v2 \
+       lingo_vqa_slim_traj_u40_v2 lingo_vqa_slim_dualr_rep_u40 lingo_vqa_slim_dual_u40_v2 --baseline lingo_vqa_slim_dual_u40_v2 \
+       --exp-id lingo_cachejlens_vs_dual</pre>
+
+<p class="meta">숫자는 전부 <code>outputs/cachejlens_v1/metrics_report.json</code>(G0·프록시·LingoQA 병합)에서 <code>&#123;&#123;경로|서식&#125;&#125;</code> 토큰으로 채워진다.</p>
+
+</div>
+</body>
+</html>
