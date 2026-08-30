@@ -114,6 +114,20 @@ ARMS = {
     "dualrc_s24": {"indist": ("dualrc_u40_s24_indist", False),
                    "test": ("dualrc_u40_s24_test", False),
                    "oodval": ("dualrc_u40_s24_oodval", False)},
+    # dualr with a different Hessian only (plans/2026-08-30_dualr-weighted-hessian.md):
+    # d = own-CoC at decode share 0.16, e = expert-attention-weighted prefill, w = both
+    "dualr_rep": {"indist": ("dualr_rep_u40_indist", False),
+                  "test": ("dualr_rep_u40_test", False),
+                  "oodval": ("dualr_rep_u40_oodval", False)},
+    "dualr_d": {"indist": ("dualr_d_u40_indist", False),
+                "test": ("dualr_d_u40_test", False),
+                "oodval": ("dualr_d_u40_oodval", False)},
+    "dualr_e": {"indist": ("dualr_e_u40_indist", False),
+                "test": ("dualr_e_u40_test", False),
+                "oodval": ("dualr_e_u40_oodval", False)},
+    "dualr_w": {"indist": ("dualr_w_u40_indist", False),
+                "test": ("dualr_w_u40_test", False),
+                "oodval": ("dualr_w_u40_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),

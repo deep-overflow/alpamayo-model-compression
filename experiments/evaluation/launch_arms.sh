@@ -23,7 +23,8 @@ mkdir -p logs
 
 case ${1-} in
 init | append)
-  [ "$1" = init ] && : >"$Q"
+  mode=$1
+  [ "$mode" = init ] && : >"$Q"
   NSH=$2
   shift 2
   for spec in "$@"; do
@@ -35,7 +36,7 @@ init | append)
   done
   # only `init` rewinds the cursor: `append` on a live queue must not hand the running
   # workers' shards out a second time (two processes writing one rows file)
-  [ "$1" = init ] && echo 0 >"$CUR"
+  [ "$mode" = init ] && echo 0 >"$CUR"
   echo "queued $(wc -l <"$Q") jobs"
   ;;
 
