@@ -81,8 +81,10 @@
 궤적은 움직인다(건너뛸 수 있는 셀 {{g3.skippable_cells}}/{{g3.n_cells}}). 차단이 가장 아픈 곳은 <strong>층 11–15의 마지막 두 스텝</strong>이고, 스텝 축에서는
 <strong>후기 스텝이 더 비싸다</strong>(교정 기회가 없어서). 그런데 dual 프루닝이 실제로 흔드는 캐시(깊은 층, ‖ΔV‖/‖V‖ 0.5)를 셀 단위로 넣어 보면
 손상은 <strong>이동 크기</strong>를 따르고({{swap.spearman_swap_vs_shift_v.0|+.2f}}) expert의 <strong>의존도와는 무관</strong>하다({{swap.spearman_swap_vs_reliance_R.0|+.2f}}):
-expert가 가장 기대는 캐시(층 0–15)는 dual이 거의 안 흔들고, dual이 흔드는 캐시(층 20–35)는 expert가 덜 기댄다. 이것이 캐시 이동이 비용의 몸통이 아니었던 이유이고,
-"의존하는 캐시를 보존하는 VLM 프루닝"이 겨냥해야 할 곳은 <strong>중간층 캐시의 이동을 지금보다 더 작게 유지하는 것</strong>이지 깊은 층의 큰 이동을 줄이는 것이 아니다.
+차단 의존도 R이 큰 캐시(층 0–15)는 dual이 거의 안 흔들고, dual이 흔드는 캐시(층 20–35)는 R이 작다. 그러나 <strong>단위 이동당 손상(민감도 = 스왑 손상 / 이동)은
+깊은 층이 더 크다</strong>(층 24–35에 민감도 질량의 {{swap.depth_bands.sensitivity.3|.0%}}, 층 0–15에 {{swap.depth_bands.sensitivity.0|.0%}}+{{swap.depth_bands.sensitivity.1|.0%}}) —
+차단 의존도 R은 "그 층이 상류에 있다"를 재는 것이지 "그 캐시가 중요하다"를 재는 것이 아니다. 그래서 "expert가 중요하게 쓰는 캐시를 보존하는 VLM 프루닝"은
+<strong>민감도가 큰 깊은 층(20–35)의 특정 그룹</strong>을 겨냥해야 하고, 그 곳은 dual이 이미 가장 크게 흔드는 곳이기도 하다.
 </div>
 
 <h2><span class="num">1.</span>왜 쟀나</h2>
@@ -221,6 +223,28 @@ G4의 층 축 부분가산(단일 층 차단 &gt; 전 층 차단)이 그 증거�
 expert 의존도 R의 지도(§6, 층 0–15)와는 반대 방향이다. 산점도(오른쪽)가 그 갈림을 그대로 보여 준다 — R이 큰 칸(층 0, 9–13)은 스왑 손상이 0에 붙어 있고(그 캐시는 애초에 거의 안 움직였다),
 스왑 손상이 큰 칸은 R이 작다.</p>
 
+<h3>어느 "중요도"가 맞나 — 단위 이동당 민감도</h3>
+
+<p>"expert가 중요하게 쓰는 캐시"를 정의하는 후보는 셋이다: 차단 의존도 R(§6), VLM 기준이 캐시 텐서에서 잰 Taylor 점수 <code>traj_kv_v</code>, 그리고
+<strong>민감도 = 스왑 손상 / 실제 이동 크기</strong>(같은 크기로 움직였을 때 궤적이 얼마나 반응하나). 깊이 띠별 몫:</p>
+
+<table>
+<thead><tr><th>층 띠</th><th class="r">0–7</th><th class="r">8–15</th><th class="r">16–23</th><th class="r">24–35</th></tr></thead>
+<tbody>
+<tr><td>차단 의존도 R</td><td class="r">{{swap.depth_bands.block_reliance_R.0|.0%}}</td><td class="r">{{swap.depth_bands.block_reliance_R.1|.0%}}</td><td class="r">{{swap.depth_bands.block_reliance_R.2|.0%}}</td><td class="r">{{swap.depth_bands.block_reliance_R.3|.0%}}</td></tr>
+<tr><td>gradient <code>traj_kv_v</code> (VLM 기준)</td><td class="r">{{swap.depth_bands.gradient_traj_kv_v.0|.0%}}</td><td class="r">{{swap.depth_bands.gradient_traj_kv_v.1|.0%}}</td><td class="r">{{swap.depth_bands.gradient_traj_kv_v.2|.0%}}</td><td class="r">{{swap.depth_bands.gradient_traj_kv_v.3|.0%}}</td></tr>
+<tr><td><strong>민감도</strong> (스왑 손상 / 이동)</td><td class="r">{{swap.depth_bands.sensitivity.0|.0%}}</td><td class="r">{{swap.depth_bands.sensitivity.1|.0%}}</td><td class="r">{{swap.depth_bands.sensitivity.2|.0%}}</td><td class="r"><strong>{{swap.depth_bands.sensitivity.3|.0%}}</strong></td></tr>
+<tr><td>dual의 이동 ‖ΔV‖/‖V‖</td><td class="r">{{swap.depth_bands.dual_shift.0|.0%}}</td><td class="r">{{swap.depth_bands.dual_shift.1|.0%}}</td><td class="r">{{swap.depth_bands.dual_shift.2|.0%}}</td><td class="r">{{swap.depth_bands.dual_shift.3|.0%}}</td></tr>
+<tr><td>스왑 손상</td><td class="r">{{swap.depth_bands.swap_damage.0|.0%}}</td><td class="r">{{swap.depth_bands.swap_damage.1|.0%}}</td><td class="r">{{swap.depth_bands.swap_damage.2|.0%}}</td><td class="r"><strong>{{swap.depth_bands.swap_damage.3|.0%}}</strong></td></tr>
+</tbody>
+</table>
+
+<p>세 "중요도"는 서로 다른 것을 잰다(민감도~R Spearman {{swap.spearman_sensitivity_vs_R.0|+.2f}}, 민감도~traj_kv_v {{swap.spearman_sensitivity_vs_traj_kv_v.0|+.2f}}).
+R은 앞쪽 절반에 몰리지만 이는 <em>상류 위치</em>의 효과다 — 얕은 셀을 막으면 뒤의 모든 층이 깨진 잔차를 읽는다. 같은 크기로 <em>조금</em> 움직였을 때 궤적이 실제로 반응하는 캐시는
+<strong>깊은 층</strong>이고, 가장 민감한 칸은 ({{swap.top10_sensitivity_cells.0.0}}, g{{swap.top10_sensitivity_cells.0.1}}), ({{swap.top10_sensitivity_cells.1.0}}, g{{swap.top10_sensitivity_cells.1.1}}),
+({{swap.top10_sensitivity_cells.2.0}}, g{{swap.top10_sensitivity_cells.2.1}}), ({{swap.top10_sensitivity_cells.3.0}}, g{{swap.top10_sensitivity_cells.3.1}})이다.
+프루닝이 줄일 수 있는 것은 이동뿐이므로 "중요한 캐시를 보존한다"는 목표 Σ 민감도 × 이동²의 {{swap.weighted_shift_objective.sensitivity.share_layers_20_35|.0%}}가 층 20–35에 있다(R로 가중하면 {{swap.weighted_shift_objective.R.share_layers_20_35|.0%}}).</p>
+
 <h2><span class="num">8.</span>해석 — 방법론에 주는 것</h2>
 
 <ul>
@@ -229,10 +253,11 @@ expert 의존도 R의 지도(§6, 층 0–15)와는 반대 방향이다. 산점�
   대신 재려는 시도는 이 저장소에서 두 번째로 기각됐다.</li>
   <li><strong>왜 캐시 이동이 비용이 아니었나.</strong> cache-shift 보고서는 "캐시는 크게 다르지만 expert는 따라가지 않는다"였다. 여기서 그 기전이 보인다: dual이 흔드는 캐시는 깊은 층이고,
   expert가 기대는 캐시는 얕은·중간 층이다. 둘은 <strong>공간적으로 분리</strong>돼 있다(R ~ 이동 {{heads.external.spearman_R_vs_dual_cache_shift_v.0|+.2f}}).</li>
-  <li><strong>"의존하는 캐시를 보존하는 VLM 프루닝"의 형태.</strong> 손상은 이동 크기를 따르므로(Stage C {{swap.spearman_swap_vs_shift_v.0|+.2f}}) 캐시 보존은 곧 <em>이동을 줄이는 것</em>이고,
-  줄여야 할 곳은 R이 큰 층 0–15의 그룹이다. 지금 그 층들의 이동은 이미 작다(‖ΔV‖/‖V‖ 0.1–0.2) — 그래서 dual은 운이 좋았다. 더 깊은 절단(u55 이상)이나 다른 할당(late-heavy)에서
-  중간층 캐시가 움직이기 시작하면 이 지도가 어디를 지켜야 하는지 말해 준다. 구체적 후보: (a) 층 0–15의 K/V 재구성(Tyr류 Hessian 목표를 캐시 셀에, R로 가중), (b) VLM 기준에
-  "R 가중 캐시 이동" 항을 더한 선택, (c) expert 의존 스팬(vision·text 위치)만 남기는 캐시 절단은 <em>불가</em>(전 구간 읽음).</li>
+  <li><strong>"중요한 캐시를 보존하는 VLM 프루닝"의 형태.</strong> 손상은 이동 크기를 따르고(Stage C {{swap.spearman_swap_vs_shift_v.0|+.2f}}) 단위 이동당 민감도는 깊은 층이 크므로,
+  보존해야 할 캐시는 <strong>층 20–35의 민감한 그룹</strong>이고 보존은 곧 그 곳의 <em>이동을 줄이는 것</em>이다. 이동은 상류 절단이 누적된 결과라 선택만으로는 줄이기 어렵고, 이미 이 저장소에서
+  "층 출력 재구성 = 캐시 보존"이 개루프 궤적 비용을 지운 전례(<code>dualr</code> +0.003)가 있다. 따라서 구체적 후보는 (a) <strong>민감도 가중·깊은 층 표적 재구성</strong>(Tyr/RAC를 층 20–35에만,
+  prefill 위치는 expert 어텐션으로 가중, decode 스트림은 혼합으로 유지 — Tyr의 CoC 붕괴를 피하는 조건), (b) VLM 기준에 "민감도 가중 캐시 이동" 항(밀집 신호)을 더한 선택,
+  (c) expert 의존 스팬만 남기는 캐시 절단은 <em>불가</em>(전 구간 읽음). 차단 의존도 R로 가중하는 것은 <em>틀린</em> 선택이다 — 그것은 상류 위치를 잰다.</li>
   <li><strong>스킵 스케줄은 없다.</strong> 무해하게 건너뛸 셀이 {{g3.skippable_share|.1%}}뿐이라 expert 지연 시간을 cross-attention 스킵으로 줄이는 길은 닫혔다.</li>
 </ul>
 

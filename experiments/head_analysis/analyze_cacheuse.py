@@ -205,6 +205,7 @@ def main():
     # against what the VLM criterion protects, and what dual's pruning actually moved
     ext = {}
     shift = Rr = sr = None
+    imp = {}
     try:
         imp = np.load(REPO / "outputs" / "importance_v2" / "importance.npz")
         for key in ("traj_kv_k", "traj_kv_v", "coc_kv_k", "coc_kv_v"):
@@ -275,7 +276,40 @@ def main():
             prod = (R * shift)
             swapc["spearman_swap_vs_R_times_shift"] = [float(x) for x in
                                                        spearmanr(sw[oks], prod[oks])]
-        np.savez(out / "maps_swap.npz", swap=sw, swap_layer=sw_layer)
+        # which "importance" is the one a cache-preserving criterion should weight by?
+        # per-unit-shift sensitivity = swap damage / dual's shift magnitude, versus the block
+        # reliance R and the VLM criterion's gradient score; all summarised by depth band
+        if shift is not None:
+            okd = shift > 1e-4
+            sens = np.where(okd, sw / np.maximum(shift, 1e-9), np.nan)
+            bands = ((0, 8), (8, 16), (16, 24), (24, 36))
+
+            def band(x):
+                return [float(np.nansum(x[a:b]) / np.nansum(x)) for a, b in bands]
+
+            kv_v = imp.get("traj_kv_v")
+            swapc["depth_bands"] = {"bands": [list(b) for b in bands],
+                                    "block_reliance_R": band(R), "sensitivity": band(sens),
+                                    "dual_shift": band(shift), "swap_damage": band(sw)}
+            if kv_v is not None:
+                swapc["depth_bands"]["gradient_traj_kv_v"] = band(kv_v)
+            m = okd & ~np.isnan(sens)
+            swapc["spearman_sensitivity_vs_R"] = [float(x) for x in spearmanr(sens[m], R[m])]
+            if kv_v is not None:
+                swapc["spearman_sensitivity_vs_traj_kv_v"] = [
+                    float(x) for x in spearmanr(sens[m], kv_v[m])]
+            swapc["sensitivity_by_layer"] = np.nanmean(sens, 1).tolist()
+            swapc["top10_sensitivity_cells"] = [[int(l), int(g), float(sens[l, g])] for l, g in
+                                                np.argwhere(m)[np.argsort(-sens[m])[:10]]]
+            obj = {}
+            for name, w in (("sensitivity", sens), ("R", R)) + (
+                    (("traj_kv_v", kv_v),) if kv_v is not None else ()):
+                o = np.where(okd, np.nan_to_num(w) * shift ** 2, 0)
+                obj[name] = {"share_layers_0_15": float(o[:16].sum() / o.sum()),
+                             "share_layers_20_35": float(o[20:].sum() / o.sum())}
+            swapc["weighted_shift_objective"] = obj
+        np.savez(out / "maps_swap.npz", swap=sw, swap_layer=sw_layer,
+                 **({"sensitivity": sens} if shift is not None else {}))
 
     # --- dADE reading (is the move harmful?)
     d_all = per["ade_all"] - per["ade_ref"]
@@ -352,6 +386,9 @@ def main():
          f"{fact['spearman_vs_readout_share'][0]:+.3f}, vs mass "
          f"{fact['spearman_vs_mass'][0]:+.3f}"),
         "stage C (swap a group's cache for its dual-pruned version): " + swap_txt,
+        ("    depth-band shares [0-7, 8-15, 16-23, 24-35]: "
+         + "; ".join(f"{k} {' '.join(f'{v:.2f}' for v in vals)}"
+                     for k, vals in swapc.get("depth_bands", {}).items() if k != "bands")),
         (f"harm: all-block dADE {harm['all_block_dade_mean_ci'][0]:+.3f} "
          f"[{harm['all_block_dade_mean_ci'][1]:+.3f},{harm['all_block_dade_mean_ci'][2]:+.3f}] "
          f"p={harm['all_block_wilcoxon_p']:.2g}; Spearman(move, dADE) over cells "
