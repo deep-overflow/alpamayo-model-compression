@@ -119,6 +119,10 @@ ARMS = {
     "vlm_m_pm": {"indist": ("dualm_c1109_indist", False),
                  "test": ("dualm_c1109_test", False),
                  "oodval": ("dualm_c1109_oodval", False)},
+    # the three axis arms ran on Blackwell (a parallel session held every Ada card on
+    # 2026-08-30), so dual_u40_v2 is re-measured there for a same-architecture additivity
+    # gate; val500 only, as expert_both25 is
+    "dual_bw": {"indist": ("dual_u40_v2_bw_indist", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),

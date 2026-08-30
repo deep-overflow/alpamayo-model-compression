@@ -57,12 +57,23 @@ plt.rcParams.update({
 REPO = Path(__file__).resolve().parents[2]
 SETS = ("indist", "test", "oodval")
 P_HEAD, P_MLPC = 2 * 4096 * 128, 3 * 4096
-# arm -> (recipe dir, axis, label, expected removed params)
+# arm -> (recipe dir, axis, label, expected removed params, same-architecture baseline)
+#
+# The three axis arms were evaluated on Blackwell: a parallel session took every Ada card
+# on 2026-08-30, and `baseline_bw_ps_*` already exists with per-sample arrays for all
+# three sets (it was measured for the expert-axis 50% arms). dual_u40_v2 is therefore
+# re-measured on Blackwell too (`dual_bw`), so V1/V2/V4 are all single-architecture; the
+# shipped Ada `dual` rows stay in as the architecture cross-check.
 ARMS = {
-    "vlm_q": ("slim_dualq_u40_v2", "q", "Q heads 13/32 (dualq)", 490_733_568),
-    "vlm_m_pm": ("slim_dualm_c1109", "m", "MLP 1109 ch (param-matched)", 490_586_112),
-    "vlm_m": ("slim_dualm_u40_v2", "m", "MLP 4898/12288 (dualm)", 2_166_718_464),
-    "dual": ("slim_dual_u40_v2", "both", "both axes (dual_u40_v2)", 2_657_452_032),
+    "vlm_q": ("slim_dualq_u40_v2", "q", "Q heads 13/32 (dualq)", 490_733_568, "baseline_bw"),
+    "vlm_m_pm": ("slim_dualm_c1109", "m", "MLP 1109 ch (param-matched)", 490_586_112,
+                 "baseline_bw"),
+    "vlm_m": ("slim_dualm_u40_v2", "m", "MLP 4898/12288 (dualm)", 2_166_718_464,
+              "baseline_bw"),
+    "dual_bw": ("slim_dual_u40_v2", "both", "both axes (dual_u40_v2) [BW]", 2_657_452_032,
+                "baseline_bw"),
+    "dual": ("slim_dual_u40_v2", "both", "both axes (dual_u40_v2) [Ada]", 2_657_452_032,
+             "baseline"),
 }
 CONTRASTS = (("V1 ratio-matched", "vlm_q", "vlm_m"),
              ("V4 param-matched", "vlm_q", "vlm_m_pm"))
@@ -157,7 +168,7 @@ def predicted_mass():
 
 def load_set(s):
     rows = {}
-    for arm in ("baseline", *ARMS):
+    for arm in ("baseline", "baseline_bw", *ARMS):
         spec = pn.ARMS.get(arm, {}).get(s)
         if spec is None:
             continue
@@ -168,22 +179,27 @@ def load_set(s):
 
 
 def analyse_set(rows):
-    out = {"arms": {}, "contrasts": {}, "coc": {}}
-    base = rows["baseline"]
-    out["baseline"] = {
-        "n": len(base),
-        "minADE6_mean": float(np.mean([pn.at6(r, "ade_rollout_k") for r in base.values()])),
-        "minFDE6_mean": float(np.mean([pn.at6(r, "fde_rollout_k") for r in base.values()])),
-        "degen": float(np.mean([r["coc_degenerate"] for r in base.values()]))}
+    out = {"arms": {}, "contrasts": {}, "coc": {}, "baselines": {}}
+    for b in ("baseline", "baseline_bw"):
+        if b in rows:
+            out["baselines"][b] = {
+                "n": len(rows[b]),
+                "minADE6_mean": float(np.mean([pn.at6(r, "ade_rollout_k")
+                                               for r in rows[b].values()])),
+                "minFDE6_mean": float(np.mean([pn.at6(r, "fde_rollout_k")
+                                               for r in rows[b].values()])),
+                "degen": float(np.mean([r["coc_degenerate"] for r in rows[b].values()]))}
+    out["baseline"] = out["baselines"].get("baseline_bw") or out["baselines"]["baseline"]
     ade, dade = {}, {}
     for arm in ARMS:
-        if arm not in rows:
+        if arm not in rows or ARMS[arm][4] not in rows:
             continue
+        base = rows[ARMS[arm][4]]
         ids = sorted(set(base) & set(rows[arm]))
         ade[arm] = {i: pn.at6(rows[arm][i], "ade_rollout_k") for i in ids}
         dade[arm] = {i: ade[arm][i] - pn.at6(base[i], "ade_rollout_k") for i in ids}
         out["arms"][arm] = {
-            "n": len(ids), "removed": ARMS[arm][3],
+            "n": len(ids), "removed": ARMS[arm][3], "baseline": ARMS[arm][4],
             "minADE6_mean": float(np.mean(list(ade[arm].values()))),
             "minFDE6_mean": float(np.mean([pn.at6(rows[arm][i], "fde_rollout_k")
                                            for i in ids])),
@@ -201,12 +217,19 @@ def analyse_set(rows):
                                                         [ade[b][i] for i in ids])
             out["coc"][f"{a}=={b}"] = float(np.mean([rows[a][i]["gen_coc"]
                                                      == rows[b][i]["gen_coc"] for i in ids]))
-    if {"vlm_q", "vlm_m", "dual"} <= set(dade):
-        ids = sorted(set(dade["vlm_q"]) & set(dade["vlm_m"]) & set(dade["dual"]))
-        dq = np.array([dade["vlm_q"][i] for i in ids])
-        dm = np.array([dade["vlm_m"][i] for i in ids])
-        db = np.array([dade["dual"][i] for i in ids])
-        out["contrasts"]["V2 dual-(vq+vm)"] = paired(db, dq + dm)
+    # V2 is read on deltas, so it works whichever baseline each arm carries; dual_bw keeps
+    # every term on one architecture, the Ada `dual` row is the cross-check
+    for which in ("dual_bw", "dual"):
+        if {"vlm_q", "vlm_m", which} <= set(dade):
+            ids = sorted(set(dade["vlm_q"]) & set(dade["vlm_m"]) & set(dade[which]))
+            dq = np.array([dade["vlm_q"][i] for i in ids])
+            dm = np.array([dade["vlm_m"][i] for i in ids])
+            db = np.array([dade[which][i] for i in ids])
+            out["contrasts"][f"V2 {which}-(vq+vm)"] = paired(db, dq + dm)
+    if {"dual", "dual_bw"} <= set(dade):
+        ids = sorted(set(dade["dual"]) & set(dade["dual_bw"]))
+        out["contrasts"]["arch check d(dual_bw)-d(dual_ada)"] = paired(
+            [dade["dual_bw"][i] for i in ids], [dade["dual"][i] for i in ids])
     out["_ade"] = ade
     return out
 
@@ -214,7 +237,7 @@ def analyse_set(rows):
 def plot_deltas(res, out):
     sets = [s for s in SETS if s in res]
     fig, axes = plt.subplots(1, len(sets), figsize=(4.6 * len(sets), 3.4), squeeze=False)
-    order = [a for a in ("vlm_q", "vlm_m_pm", "vlm_m", "dual")]
+    order = ["vlm_q", "vlm_m_pm", "vlm_m", "dual_bw", "dual"]
     for ax, s in zip(axes[0], sets):
         arms = [a for a in order if a in res[s]["arms"]]
         y = np.arange(len(arms))
@@ -312,15 +335,16 @@ def main():
         if s not in res:
             continue
         r = res[s]
-        lines += [(f"== {s}  baseline n={r['baseline']['n']} "
-                   f"minADE@6 {r['baseline']['minADE6_mean']:.4f} "
-                   f"minFDE@6 {r['baseline']['minFDE6_mean']:.4f} "
-                   f"degen {r['baseline']['degen']:.3f}")]
-        for a in ("vlm_q", "vlm_m_pm", "vlm_m", "dual"):
+        lines.append(f"== {s}")
+        for b, v in r["baselines"].items():
+            lines.append(f"  {b:12s} n={v['n']:3d} minADE@6 {v['minADE6_mean']:.4f} "
+                         f"minFDE@6 {v['minFDE6_mean']:.4f} degen {v['degen']:.3f}")
+        for a in ("vlm_q", "vlm_m_pm", "vlm_m", "dual_bw", "dual"):
             if a in r["arms"]:
                 d = r["arms"][a]
                 lines.append(f"  {a:9s} n={d['n']:3d} removed {d['removed']:>13,} "
-                             f"minADE@6 {d['minADE6_mean']:.4f}  d {fmt(d['d_ade'])}")
+                             f"minADE@6 {d['minADE6_mean']:.4f}  vs {d['baseline']}  "
+                             f"d {fmt(d['d_ade'])}")
                 lines.append(f"            degen {d['degen']:.3f}  "
                              f"gen_coc == baseline {d['coc_same_as_baseline']:.3f}")
         for k, v in r["contrasts"].items():
