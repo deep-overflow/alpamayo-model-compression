@@ -291,9 +291,98 @@ def plot_params(res, mass, out):
     plt.close(fig)
 
 
+def render_template(metrics, probe, template, out_path):
+    """Fill {{...}} tokens from the two metrics.json files, so no number is typed by hand.
+
+    Grammar (S = indist|test|oodval, A = arm key, T = contrast tag V1|V4|V2|arch):
+      {{S.A.med|mean|p|ade|fde|n|coc|degen}}      one arm on one set
+      {{S.base.ade|fde|n}} / {{S.basebw....}}     the two baselines
+      {{S.C.T.med|mean|p}}                        a contrast
+      {{mass.OBJ.A.sum_I|params|I_per_param}}     first-order mass an arm removes
+      {{massx.OBJ.per_param|per_unit|layer}}      the cross-axis ratios
+      {{raw.TOWER.OBJ.FIELD}}                     probe-side raw table (both towers)
+      {{s0.FIELD}} {{s1.TAG.beta|lo|hi|r|sign}} {{s1r.ratio|lo|hi}} {{s1b....}}
+      {{s2.NAME.FIELD}} {{s4.TAG.beta}}
+    A missing token raises rather than leaving a blank cell.
+    """
+    import re
+
+    def ci(d, key):
+        if key == "med":
+            return (f"{d['med']:+.4f} [{d['lo']:+.4f}, {d['hi']:+.4f}]"
+                    + ("*" if d["sig"] else ""))
+        if key == "mean":
+            return f"{d['mean']:+.4f} [{d['mlo']:+.4f}, {d['mhi']:+.4f}]"
+        if key == "p":
+            return f"{d['p']:.2g}"
+        raise KeyError(key)
+
+    def lookup(tok):
+        p = tok.split(".")
+        if p[0] == "mass":
+            v = metrics["mass"]["arm_mass"][p[1]][p[2]]
+            return ({"sum_I": f"{v['sum_I']:.4g}", "params": f"{v['params']:,}",
+                     "I_per_param": f"{v['I_per_param']:.3g}"})[p[3]]
+        if p[0] == "massx":
+            return {"per_param": f"{metrics['mass']['per_param_median'][p[1]]:.2f}",
+                    "per_unit": f"{metrics['mass']['per_unit_median'][p[1]]:.1f}",
+                    "layer": f"{metrics['mass']['layer_mass_ratio'][p[1]]:.3f}"}[p[2]]
+        if p[0] == "raw":
+            v = probe["raw_cross_axis"][p[1]]["obj"][p[2]]
+            return (f"{v[p[3]]:.2f}" if "ratio" in p[3] and "unit" not in p[3]
+                    else f"{v[p[3]]:.4g}" if p[3] not in ("bottom50_share_q",
+                                                          "bottom50_share_mlp")
+                    else f"{100 * v[p[3]]:.2f}%")
+        if p[0] == "s0":
+            return f"{probe['s0'][p[1]]:.2e}" if isinstance(probe["s0"][p[1]], float) \
+                else str(probe["s0"][p[1]])
+        if p[0] in ("s1", "s4"):
+            f = probe["s1_fits" if p[0] == "s1" else "s4_fits_sumabs"][p[1]]
+            return {"beta": f"{f['beta']:+.3f}", "lo": f"{f['lo']:+.3f}",
+                    "hi": f"{f['hi']:+.3f}", "r": f"{f['pearson']:+.3f}",
+                    "sign": f"{100 * f['sign_agree']:.0f}%", "n": f"{f['n']:,}",
+                    "ci": (f"{f['beta']:+.3f} [{f['lo']:+.3f}, {f['hi']:+.3f}]")}[p[2]]
+        if p[0] in ("s1r", "s1b"):
+            f = probe["s1_ratio_unit" if p[0] == "s1r" else "s1b_ratio_parammatched"]
+            return {"ratio": f"{f['ratio']:.3f}", "lo": f"{f['lo']:.3f}",
+                    "hi": f"{f['hi']:.3f}",
+                    "ci": f"{f['ratio']:.3f} [{f['lo']:.3f}, {f['hi']:.3f}]"}[p[1]]
+        if p[0] == "s2":
+            v = probe["s2"][p[1]]
+            return {"pred": f"{v['predicted']:+.3e}", "meas": f"{v['all_layers']:+.3e}",
+                    "ratio": f"{v['measured_over_predicted']:+.2f}",
+                    "sum": f"{v['sum_of_layers']:+.3e}",
+                    "add": f"{v['layer_additivity']:+.2f}",
+                    "ade": f"{v['dminADE']:+.4f}"}[p[2]]
+        S = metrics["sets"][p[0]]
+        if p[1] in ("base", "basebw"):
+            b = S["baselines"]["baseline" if p[1] == "base" else "baseline_bw"]
+            return (f"{b['minADE6_mean']:.4f}" if p[2] == "ade" else
+                    f"{b['minFDE6_mean']:.4f}" if p[2] == "fde" else str(b["n"]))
+        if p[1] == "C":
+            key = next(k for k in S["contrasts"] if k.split()[0] == p[2])
+            return ci(S["contrasts"][key], p[3])
+        a = S["arms"][p[1]]
+        if p[2] in ("med", "mean", "p"):
+            return ci(a["d_ade"], p[2])
+        return {"ade": f"{a['minADE6_mean']:.4f}", "fde": f"{a['minFDE6_mean']:.4f}",
+                "n": str(a["n"]), "coc": f"{a['coc_same_as_baseline']:.3f}",
+                "degen": f"{a['degen']:.3f}",
+                "removed": f"{a['removed']:,}"}[p[2]]
+
+    text = Path(template).read_text()
+    text = re.sub(r"\{\{([^}]+)\}\}", lambda m: lookup(m.group(1).strip()), text)
+    Path(out_path).write_text(text)
+    print(f"rendered {template} -> {out_path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="vlm_axis_analysis")
+    ap.add_argument("--probe-out", default="axis_taylor_analysis",
+                    help="analyze_taylor_probe.py's output, for the Stage 1 tokens")
+    ap.add_argument("--template", default=None,
+                    help="report template; writes <stem>_filled.html beside it")
     args = ap.parse_args()
     out = REPO / "outputs" / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
@@ -366,11 +455,17 @@ def main():
     plot_params(res, mass, out / "plots")
     for r in res.values():
         r.pop("_ade", None)
-    (out / "metrics.json").write_text(json.dumps(
-        {"v0": g0, "mass": mass, "sets": res}, indent=1, default=float))
+    metrics = {"v0": g0, "mass": mass, "sets": res}
+    (out / "metrics.json").write_text(json.dumps(metrics, indent=1, default=float))
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("saved ->", out)
+
+    if args.template:
+        probe = json.loads(
+            (REPO / "outputs" / args.probe_out / "metrics.json").read_text())
+        t = Path(args.template)
+        render_template(metrics, probe, t, t.with_name(t.stem + "_filled.html"))
 
 
 if __name__ == "__main__":
