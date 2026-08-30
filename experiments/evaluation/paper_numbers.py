@@ -106,6 +106,19 @@ ARMS = {
                    "test": ("expertm_u50_test", False),
                    "oodval": ("expertm_u50_oodval", False)},
     "expert_both25": {"indist": ("expert_znorm_r25_ps_indist", False)},
+    # VLM axis decomposition (plans/2026-08-30_axis-taylor-comparability.md): the same
+    # one-axis-at-a-time split on the VLM at dual_u40_v2's exact budget and score.
+    # dualq | dualm == dual_u40_v2, so the shipped `dual` rows are the additivity arm;
+    # dualm_pm = dualm_c1109 is parameter-matched to dualq (490.6M vs 490.7M)
+    "vlm_q": {"indist": ("dualq_u40_v2_indist", False),
+              "test": ("dualq_u40_v2_test", False),
+              "oodval": ("dualq_u40_v2_oodval", False)},
+    "vlm_m": {"indist": ("dualm_u40_v2_indist", False),
+              "test": ("dualm_u40_v2_test", False),
+              "oodval": ("dualm_u40_v2_oodval", False)},
+    "vlm_m_pm": {"indist": ("dualm_c1109_indist", False),
+                 "test": ("dualm_c1109_test", False),
+                 "oodval": ("dualm_c1109_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),
