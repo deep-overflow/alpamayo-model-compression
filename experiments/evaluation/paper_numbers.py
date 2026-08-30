@@ -128,6 +128,10 @@ ARMS = {
     "dualr_w": {"indist": ("dualr_w_u40_indist", False),
                 "test": ("dualr_w_u40_test", False),
                 "oodval": ("dualr_w_u40_oodval", False)},
+    # dualr_w + LingoQA-train samples in the refit Hessian (plans/2026-08-30_dualr-w-lingo.md)
+    "dualr_wl": {"indist": ("dualr_wl_u40_indist", False),
+                 "test": ("dualr_wl_u40_test", False),
+                 "oodval": ("dualr_wl_u40_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),

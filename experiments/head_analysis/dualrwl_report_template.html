@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dualr_w + LingoQA train — QA 텍스트를 refit Hessian에 넣으면 reasoning이 돌아오는가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · dualr_w + LingoQA-train Hessian</div>
+  <h1>dualr_w + LingoQA train — QA 텍스트를 refit Hessian에 넣으면 reasoning이 돌아오는가</h1>
+  <div class="meta">
+    2026-08-31 · <code>dualr_wl</code> = dual 선택 + 층 0–35 OSSCAR refit(safe_refit), Hessian = 주행 prefill(expert 가중) 0.68 + own-CoC 0.04 + LingoQA train VQA prefill 0.16 + 참조 답변 0.12 ·
+    LingoQA train 300 세그먼트 × 2문항(평가셋과 서로소) · 대조 <code>dualr_rep</code>, <code>dualr_w</code>, <code>dualr</code>, <code>dual</code>, 무압축<br>
+    평가: val500 · test500 · OOD-val 262 · LingoQA 500문항 · G1 캐시 프록시 200클립 ·
+    코드 <code>run_cache_recon.py --lingo-segments 300</code>, <code>analyze_cacheproxy.py --sets</code>, <code>analyze_dualrw.py --extra-arm</code> ·
+    기록 <code>plans/2026-08-30_dualr-w-lingo.md</code> · 브랜치 <code>dualr-lingo</code><br>
+    선행: <code>2026-08-30_dualr-weighted-hessian.html</code> (2×2: own-CoC 혼합은 암기, safe_refit +10pp)
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{lingo.per_run.lingo_vqa_slim_dualr_wl_u40.accuracy|.1%}}</div><div class="l">dualr_wl LingoQA (rep {{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}, w {{lingo.per_run.lingo_vqa_slim_dualr_w_u40.accuracy|.1%}}, dual {{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}})</div></div>
+  <div class="kpi"><div class="v">{{lingo.comparisons.0.delta|+.1%}}</div><div class="l">LingoQA Δ vs rep [{{lingo.comparisons.0.ci_lo|+.1%}}, {{lingo.comparisons.0.ci_hi|+.1%}}] · vs w {{wl_vs_w.delta|+.1%}}</div></div>
+  <div class="kpi"><div class="v">{{proxy.val500.dualr_wl.d_ade.0|+.4f}}</div><div class="l">val500 ΔminADE@6 vs 무압축 (rep {{proxy.val500.dualr_rep.d_ade.0|+.4f}})</div></div>
+  <div class="kpi"><div class="v">{{proxy.test.dualr_wl.d_ade.0|+.4f}} / {{proxy.oodval.dualr_wl.d_ade.0|+.4f}}</div><div class="l">test500 / OOD-val ΔminADE@6 (rep {{proxy.test.dualr_rep.d_ade.0|+.4f}} / {{proxy.oodval.dualr_rep.d_ade.0|+.4f}})</div></div>
+  <div class="kpi"><div class="v">{{proxy.arms.dualr_wl.wshift_ratio_vs_ref.0|.3f}}</div><div class="l">민감도 가중 캐시 이동 (rep 대비) · 캐시 비용 {{proxy.arms.dualr_wl.A10_minus_A00.0|+.4f}}</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> <strong>H1 채택 — 격차가 사실상 닫혔다.</strong> LingoQA train 600문항의 참조 답변(9.7k 토큰)을 decode 스트림으로 넣은 `dualr_wl`은 LingoQA
+<strong>{{lingo.per_run.lingo_vqa_slim_dualr_wl_u40.accuracy|.1%}}</strong> — w({{lingo.per_run.lingo_vqa_slim_dualr_w_u40.accuracy|.1%}}) 대비 {{wl_vs_w.delta|+.1%}}, rep({{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}) 대비 {{lingo.comparisons.0.delta|+.1%}}, dual({{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}})을 넘고
+<strong>무압축({{lingo.per_run.lingo_vqa_baseline.accuracy|.1%}})과 통계적으로 구별되지 않는다</strong>. 같은 16% decode 몫이 own-CoC 3k 토큰으로는 −18pp(암기), QA 답변 9.7k 토큰으로는 +20pp — 2×2가 남긴
+"rank와 분포" 진단이 그대로 확인됐다. 캐시·궤적은 세 세트 표(§3)로 판정한다: 캐시 비용 {{proxy.arms.dualr_wl.A10_minus_A00.0|+.4f}}(0 포함), 가중 이동은 rep의 {{proxy.arms.dualr_wl.wshift_ratio_vs_ref.0|.3f}}배(±10% 게이트는 미달).
+</div>
+
+<h2><span class="num">1.</span>왜</h2>
+<p>2×2에서 own-CoC 16% 혼합은 LingoQA를 52.2 → 34.0으로 무너뜨렸다. 기전은 (1) own-CoC가 ≈3k 토큰뿐이라 rank-deficient → 정확 보간(암기), (2) 주행 CoC 분포가 QA 텍스트로 옮겨가지 않음.
+LingoQA <strong>train</strong>(148,506 QA·3,508 세그먼트)의 답변 토큰을 decode 스트림으로 쓰면 둘 다 없어진다 — 이번 빌드는 600 QA에서 답변 {{recon.tokens.lingo_answer}}토큰(>12,288차원)을 넣었다.
+선택 기준 쪽에서는 LingoQA-train 문맥이 무효였지만(<code>vqa</code> 66.4 / <code>trajvqa</code> 71.2 vs dual 68.8, n.s.), refit에서는 Hessian의 토큰 구성이 결정적임을 2×2가 보였다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>주행 prefill</th><th>own-CoC</th><th>LingoQA prefill</th><th>LingoQA 답변</th><th>비고</th></tr></thead>
+<tbody>
+<tr><td>dualr (기존)</td><td>균등 1.0</td><td>0</td><td>—</td><td>—</td><td>층 35 o_proj 해가 터진 체크포인트</td></tr>
+<tr><td>dualr_rep</td><td>균등 1.0</td><td>0</td><td>—</td><td>—</td><td>safe_refit 재현판 (기준)</td></tr>
+<tr><td>dualr_w</td><td>expert 0.84</td><td>0.16</td><td>—</td><td>—</td><td>2×2의 w</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td>expert 0.68</td><td>0.04</td><td>0.16 (vision/text/sink)</td><td><strong>0.12</strong></td><td>이번 arm; decode 총 몫 0.16 유지</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">2.</span>빌드 진단 — 재구성 오차 (in-sample)</h2>
+<table>
+<thead><tr><th>arm</th><th class="r">o_proj P</th><th class="r">o_proj own-CoC (D)</th><th class="r">o_proj LingoQA 답변 (L)</th><th class="r">down_proj P</th><th class="r">down_proj D</th><th class="r">down_proj L</th></tr></thead>
+<tbody>
+<tr><td>rep</td><td class="r">{{recon.rep.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.rep.o_proj_D_refit_median|.3f}}</td><td class="r">—</td><td class="r">{{recon.rep.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.rep.down_proj_D_refit_median|.3f}}</td><td class="r">—</td></tr>
+<tr><td>w</td><td class="r">{{recon.w.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.w.o_proj_D_refit_median|.3f}}</td><td class="r">—</td><td class="r">{{recon.w.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.w.down_proj_D_refit_median|.3f}}</td><td class="r">—</td></tr>
+<tr><td><strong>wl</strong></td><td class="r">{{recon.wl.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.wl.o_proj_D_refit_median|.3f}}</td><td class="r">{{recon.wl.o_proj_L_refit_median|.3f}} (mask {{recon.wl.o_proj_L_mask_median|.3f}})</td><td class="r">{{recon.wl.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.wl.down_proj_D_refit_median|.3f}}</td><td class="r">{{recon.wl.down_proj_L_refit_median|.3f}} (mask {{recon.wl.down_proj_L_mask_median|.3f}})</td></tr>
+</tbody>
+</table>
+<p>P·D·L = 주행 prefill / own-CoC / LingoQA 답변 토큰 위의 ‖(W−Ŵ)X‖/‖WX‖(모듈 중앙값). 2×2의 교훈대로 이 표는 fit의 순위이지 일반화의 순위가 아니다 — 판정은 §4 LingoQA다.</p>
+
+<figure>
+  <img src="PLOT::wl::dualrw_decode_error.png" alt="decode error by layer">
+  <figcaption>층별 own-CoC 토큰 재구성 오차, arm별(rep·d·e·w·wl)과 mask-only.</figcaption>
+</figure>
+
+<h2><span class="num">3.</span>캐시와 궤적 — G1·G2 (세 세트)</h2>
+<table>
+<thead><tr><th>arm</th><th>캐시 비용 A10−A00</th><th>이동 비 (rep)</th><th>val500 Δ</th><th>test500 Δ</th><th>OOD-val Δ</th><th class="r">CoC 붕괴율 (val)</th></tr></thead>
+<tbody>
+<tr><td>dual</td><td>{{proxy.arms.dual.A10_minus_A00.0|+.4f}}</td><td>{{proxy.arms.dual.wshift_ratio_vs_ref.0|.2f}}</td><td>{{proxy.val500.dual.d_ade.0|+.4f}}</td><td>{{proxy.test.dual.d_ade.0|+.4f}}</td><td>{{proxy.oodval.dual.d_ade.0|+.4f}}</td><td class="r">{{proxy.val500.dual.degen|.3f}}</td></tr>
+<tr><td>dualr (기존)</td><td>{{proxy.arms.dualr.A10_minus_A00.0|+.4f}}</td><td>{{proxy.arms.dualr.wshift_ratio_vs_ref.0|.3f}}</td><td>{{proxy.val500.dualr.d_ade.0|+.4f}}</td><td>{{proxy.test.dualr.d_ade.0|+.4f}}</td><td>{{proxy.oodval.dualr.d_ade.0|+.4f}}</td><td class="r">{{proxy.val500.dualr.degen|.3f}}</td></tr>
+<tr><td>dualr_rep (기준)</td><td>{{proxy.arms.dualr_rep.A10_minus_A00.0|+.4f}}</td><td>1.000</td><td>{{proxy.val500.dualr_rep.d_ade.0|+.4f}} [{{proxy.val500.dualr_rep.d_ade.1|+.4f}}, {{proxy.val500.dualr_rep.d_ade.2|+.4f}}]</td><td>{{proxy.test.dualr_rep.d_ade.0|+.4f}} [{{proxy.test.dualr_rep.d_ade.1|+.4f}}, {{proxy.test.dualr_rep.d_ade.2|+.4f}}]</td><td>{{proxy.oodval.dualr_rep.d_ade.0|+.4f}} [{{proxy.oodval.dualr_rep.d_ade.1|+.4f}}, {{proxy.oodval.dualr_rep.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_rep.degen|.3f}}</td></tr>
+<tr><td>dualr_w</td><td>{{proxy.arms.dualr_w.A10_minus_A00.0|+.4f}}</td><td>{{proxy.arms.dualr_w.wshift_ratio_vs_ref.0|.3f}}</td><td>{{proxy.val500.dualr_w.d_ade.0|+.4f}} [{{proxy.val500.dualr_w.d_ade.1|+.4f}}, {{proxy.val500.dualr_w.d_ade.2|+.4f}}]</td><td>{{proxy.test.dualr_w.d_ade.0|+.4f}} [{{proxy.test.dualr_w.d_ade.1|+.4f}}, {{proxy.test.dualr_w.d_ade.2|+.4f}}]</td><td>{{proxy.oodval.dualr_w.d_ade.0|+.4f}} [{{proxy.oodval.dualr_w.d_ade.1|+.4f}}, {{proxy.oodval.dualr_w.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_w.degen|.3f}}</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td>{{proxy.arms.dualr_wl.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr_wl.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr_wl.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dualr_wl.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.dualr_wl.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.dualr_wl.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.dualr_wl.d_ade.0|+.4f}} [{{proxy.val500.dualr_wl.d_ade.1|+.4f}}, {{proxy.val500.dualr_wl.d_ade.2|+.4f}}]</td><td>{{proxy.test.dualr_wl.d_ade.0|+.4f}} [{{proxy.test.dualr_wl.d_ade.1|+.4f}}, {{proxy.test.dualr_wl.d_ade.2|+.4f}}]</td><td>{{proxy.oodval.dualr_wl.d_ade.0|+.4f}} [{{proxy.oodval.dualr_wl.d_ade.1|+.4f}}, {{proxy.oodval.dualr_wl.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_wl.degen|.3f}}</td></tr>
+</tbody>
+</table>
+<p>Δ = 무압축 대비 paired 중앙값 ΔminADE@6 [95% CI]; test500·OOD-val은 rep·w도 이번에 처음 잰 값이다.</p>
+
+<h2><span class="num">4.</span>LingoQA — 주 판정 (G3)</h2>
+<p>표준 프로토콜(프레임+질문 → 모델이 답, Lingo-Judge, 500문항·100 세그먼트, 세그먼트 부트스트랩·McNemar). LingoQA train은 캘리브레이션에만 쓰였고 평가셋 세그먼트와 서로소(다른 이미지 트리).</p>
+<table>
+<thead><tr><th>arm</th><th class="r">LingoQA</th><th>Δ vs rep [95% CI]</th><th class="r">McNemar p</th></tr></thead>
+<tbody>
+<tr><td>Alpamayo 1.5 무압축</td><td class="r">{{lingo.per_run.lingo_vqa_baseline.accuracy|.1%}}</td><td>{{lingo.comparisons.3.delta|+.1%}} [{{lingo.comparisons.3.ci_lo|+.1%}}, {{lingo.comparisons.3.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.3.mcnemar_p|.2g}}</td></tr>
+<tr><td>dual</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}}</td><td>{{lingo.comparisons.2.delta|+.1%}} [{{lingo.comparisons.2.ci_lo|+.1%}}, {{lingo.comparisons.2.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.2.mcnemar_p|.2g}}</td></tr>
+<tr><td>dualr (기존)</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.4.delta|+.1%}} [{{lingo.comparisons.4.ci_lo|+.1%}}, {{lingo.comparisons.4.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.4.mcnemar_p|.2g}}</td></tr>
+<tr><td>dualr_rep (기준)</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}</td><td>—</td><td></td></tr>
+<tr><td>dualr_w</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_w_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.1.delta|+.1%}} [{{lingo.comparisons.1.ci_lo|+.1%}}, {{lingo.comparisons.1.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.1.mcnemar_p|.2g}}</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_wl_u40.accuracy|.1%}}</td><td class="bad">{{lingo.comparisons.0.delta|+.1%}} [{{lingo.comparisons.0.ci_lo|+.1%}}, {{lingo.comparisons.0.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.0.mcnemar_p|.2g}}</td></tr>
+</tbody>
+</table>
+<p>H1의 직접 대비 <strong>wl − w</strong>: {{wl_vs_w.delta|+.1%}} [{{wl_vs_w.ci_lo|+.1%}}, {{wl_vs_w.ci_hi|+.1%}}], McNemar p={{wl_vs_w.mcnemar_p|.2g}}.</p>
+
+<h2><span class="num">5.</span>해석</h2>
+<ul>
+  <li><strong>왜 own-CoC는 해롭고 QA 답변은 이로운가.</strong> 같은 decode 몫 0.16에서 유일한 차이는 토큰이다: own-CoC ≈3k(4096·12288차원에서 정확 보간 → 암기) vs QA 답변 9.7k + 프롬프트 447k(보간 불가, 분포는 평가와 동일).
+  refit이 "decode 방향을 어디에 쓸지"를 데이터가 정하는 것이지, decode를 섞는 것 자체가 문제가 아니었다.</li>
+  <li><strong>reasoning 회복의 사다리.</strong> Tyr(빈 출력) → dualr 41.8 → rep(safe_refit) 52.2 → wl 72.6 ≈ 무압축 73.2. 첫 계단은 "최소제곱을 제대로 풀기", 둘째 계단은 "보존하고 싶은 능력의 데이터를 fit에 넣기"다.
+  재구성의 reasoning 비용은 고유한 것이 아니라 <em>Hessian이 그 능력을 본 적이 없어서</em>였다.</li>
+  <li><strong>대가.</strong> LingoQA 몫 28%가 주행 prefill을 0.84 → 0.68로 줄여 민감도 가중 캐시 이동이 rep의 {{proxy.arms.dualr_wl.wshift_ratio_vs_ref.0|.3f}}배가 됐다(±10% 게이트 미달). 그 이동이 궤적 비용으로
+  이어졌는지는 §3의 세 세트가 답한다 — 캐시 비용 자체는 {{proxy.arms.dualr_wl.A10_minus_A00.0|+.4f}}로 0을 포함한다.</li>
+  <li><strong>주의.</strong> LingoQA train은 평가셋과 같은 벤치마크의 다른 split이다(세그먼트 서로소). 이 회복은 "분포 내 reasoning"의 회복이고, 주행 CoC의 질(붕괴율·NLL)과 OOD reasoning은 별도 축이다 —
+  붕괴율은 §3에, own-CoC NLL 증가는 프록시에서 +0.006(w와 동일)로 기록됐다.</li>
+</ul>
+
+<h2><span class="num">6.</span>한계</h2>
+<ul>
+  <li>LingoQA train은 캘리브레이션 데이터이고 평가는 LingoQA 평가셋이다 — 같은 벤치마크의 두 split이므로 "분포 내" 회복이지 일반적 reasoning 회복의 증거는 아니다(주행 CoC·OOD reasoning은 별도).</li>
+  <li>대조 arm(`dualr_rl`, 균등 prefill + LingoQA)은 생략됐다 — 효과가 QA 데이터인지 expert 가중과의 결합인지는 분리되지 않았다.</li>
+  <li>혼합 몫은 한 점(0.68/0.04/0.16/0.12)만 시험했다. G4 폐루프는 미실행.</li>
+</ul>
+
+<h2><span class="num">7.</span>재현</h2>
+<pre>bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cache_recon.py --gpu 4 --start 0 --k-seeds 1 \
+     --prefill-weights expert --decode-share 0.04 --lingo-segments 300 --lingo-questions 2 \
+     --lingo-prefill-share 0.16 --lingo-answer-share 0.12 --exp-id dualr_wl_supernet_u40
+bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/make_slim.py --config dualrc_u40_s0 \
+     --tyr-supernet dualr_wl_supernet_u40 --importance importance_v2 --gpu 4 --out outputs/slim_dualr_wl_u40
+bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cacheproxy.py --gpu 4 \
+     --slim outputs/slim_dualr_wl_u40 --num-clips 200 --exp-id cacheproxy_dualr_wl
+SETS="indist test oodval" bash experiments/evaluation/launch_arms.sh init 2 dualr_wl_u40=outputs/slim_dualr_wl_u40   # + rep/w test,oodval
+bash experiments/lingoqa/eval_lingo_arm.sh slim_dualr_wl_u40 4
+.venv/bin/python experiments/lingoqa/analyze_lingo.py --runs lingo_vqa_slim_dualr_wl_u40 lingo_vqa_slim_dualr_w_u40 \
+     lingo_vqa_slim_dual_u40_v2 lingo_vqa_baseline lingo_vqa_slim_dualr_u40 lingo_vqa_slim_dualr_rep_u40 \
+     --baseline lingo_vqa_slim_dualr_rep_u40 --exp-id lingo_dualrwl_vs_rep
+.venv/bin/python experiments/head_analysis/analyze_cacheproxy.py --arms dual=cacheproxy_dual dualr=cacheproxy_dualr \
+     dualr_rep=cacheproxy_dualr_rep dualr_w=cacheproxy_dualr_w dualr_wl=cacheproxy_dualr_wl --ref dualr_rep \
+     --val-arms dual dualr dualr_rep dualr_w dualr_wl --sets indist test oodval --out cacheproxy_dualrwl
+.venv/bin/python experiments/head_analysis/analyze_dualrw.py --out dualrwl_analysis --proxy cacheproxy_dualrwl \
+     --lingo lingo_dualrwl_vs_rep --extra-arm wl=dualr_wl_supernet_u40</pre>
+<p class="meta">숫자는 전부 <code>outputs/dualrwl_analysis/metrics_analysis.json</code>에서 <code>&#123;&#123;경로|서식&#125;&#125;</code> 토큰으로 채워진다.</p>
+
+</div>
+</body>
+</html>

@@ -51,7 +51,16 @@ def main():
     ap.add_argument("--out", default="dualrw_analysis")
     ap.add_argument("--proxy", default="cacheproxy_dualrw")
     ap.add_argument("--lingo", default=None, help="analyze_lingo exp-id with dualr as baseline")
+    ap.add_argument("--extra-arm", nargs="*", default=[],
+                    help="name=supernet exp-id to add to the recon-error section (e.g. wl=...)")
+    ap.add_argument("--lingo-vs-w", default=None,
+                    help="analyze_lingo exp-id with dualr_w as baseline; the wl comparison "
+                         "is exported as `wl_vs_w`")
     args = ap.parse_args()
+    for spec in args.extra_arm:
+        name, sup = spec.split("=")
+        ARMS[name] = sup
+        LABEL[name] = name
     out = REPO / "outputs" / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
     res = {"recon": {}, "lingo": {}, "proxy": {}, "g0": {}}
@@ -95,13 +104,15 @@ def main():
         r = {}
         for kind in ("o_proj", "down_proj"):
             ms = [m for m in mods if kind in m]
-            for st in ("P", "D"):
+            for st in ("P", "D", "L"):
+                if not all(f"err_{st}_refit" in e[m] for m in ms):
+                    continue
                 refit = np.array([e[m][f"err_{st}_refit"] for m in ms])
                 mask = np.array([e[m][f"err_{st}_mask"] for m in ms])
                 r[f"{kind}_{st}_refit_median"] = float(np.median(refit))
                 r[f"{kind}_{st}_mask_median"] = float(np.median(mask))
                 r[f"{kind}_{st}_refit_minus_mask"] = med_ci(refit - mask)
-                if a != "rep" and "rep" in errs:
+                if a != "rep" and "rep" in errs and all(f"err_{st}_refit" in errs["rep"][m] for m in ms):
                     ref = np.array([errs["rep"][m][f"err_{st}_refit"] for m in ms])
                     r[f"{kind}_{st}_minus_rep"] = med_ci(refit - ref)
         res["recon"][a] = r
@@ -147,6 +158,27 @@ def main():
                 lines.append(f"  {c['a']} - {c['b']}: {100 * c['delta']:+.1f}pp "
                              f"[{100 * c['ci_lo']:+.1f}, {100 * c['ci_hi']:+.1f}] McNemar p={c['mcnemar_p']:.2g}")
 
+    for name, sup in ARMS.items():
+        mp = REPO / "outputs" / sup / "metadata.json"
+        if mp.exists() and name in res["recon"]:
+            md = json.loads(mp.read_text())
+            res["recon"][name]["tokens"] = md.get("tokens", {})
+            res["recon"][name]["lingo"] = md.get("lingo")
+            res["recon"][name]["damp_escalations"] = sum(
+                1 for v in md.get("recon_errors", {}).values() if v.get("damp", 0.01) > 0.01)
+    if res["recon"]:
+        # the template's {{recon.tokens.*}} read the last extra arm's token counts
+        last = list(ARMS)[-1]
+        res["recon"]["tokens"] = res["recon"].get(last, {}).get("tokens", {})
+    if args.lingo_vs_w:
+        lp = REPO / "outputs" / args.lingo_vs_w / "metrics.json"
+        if lp.exists():
+            m = json.loads(lp.read_text())
+            for c in m["comparisons"]:
+                if "dualr_wl" in c["a"]:
+                    res["wl_vs_w"] = c
+                    lines.append(f"wl - w (LingoQA, baseline w): {100 * c['delta']:+.1f}pp "
+                                 f"[{100 * c['ci_lo']:+.1f}, {100 * c['ci_hi']:+.1f}] p={c['mcnemar_p']:.2g}")
     text = "\n".join(lines)
     print(text)
     (out / "dualrw_summary.txt").write_text(text + "\n")
@@ -157,7 +189,7 @@ def main():
         for ax, kind in zip(axes, ("o_proj", "down_proj")):
             ms = [m for m in mods if kind in m]
             layers = [int(m.split(".")[1]) for m in ms]
-            for a, color in zip(("rep", "d", "e", "w"), (C1, C2, C3, C4)):
+            for a, color in zip(list(ARMS), (C1, C2, C3, C4, "#7b3fa0", MUTED)):
                 if a in errs:
                     ax.plot(layers, [errs[a][m]["err_D_refit"] for m in ms], "o-", ms=3,
                             color=color, label=f"{a} refit")
