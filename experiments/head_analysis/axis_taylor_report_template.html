@@ -163,6 +163,58 @@ Q {{raw.vlm.traj.bottom50_share_q}} / MLP {{raw.vlm.traj.bottom50_share_mlp}}로
   </tbody>
 </table>
 
+<h3>3.1 분포 — 왜 "몇 배"라는 말이 요약 방식에 흔들리는가</h3>
+
+<p>위 두 표는 같은 배열을 각각 <em>중앙값</em>과 <em>선택 집합의 합</em>으로 요약한다. 분포가
+대칭이라면 어느 쪽을 쓰든 같은 답이 나와야 하는데, 그렇지 않다:</p>
+
+<table>
+  <thead><tr><th>축</th><th class="r">유닛 수/층</th><th class="r">중앙값</th><th class="r">평균</th><th class="r">평균/중앙값</th><th class="r">Gini</th><th class="r">상위 1%가 든 질량</th><th class="r">하위 50%가 든 질량</th></tr></thead>
+  <tbody>
+    <tr><td>expert Q head</td><td class="r">16</td><td class="r">{{d.expert.traj.q.median}}</td><td class="r">{{d.expert.traj.q.mean}}</td><td class="r">×{{d.expert.traj.q.mean_over_median}}</td><td class="r">{{d.expert.traj.q.gini}}</td><td class="r">—</td><td class="r">{{d.expert.traj.q.b50}}</td></tr>
+    <tr><td><strong>expert MLP ch</strong></td><td class="r">8256</td><td class="r">{{d.expert.traj.mlp.median}}</td><td class="r">{{d.expert.traj.mlp.mean}}</td><td class="r"><strong>×{{d.expert.traj.mlp.mean_over_median}}</strong></td><td class="r"><strong>{{d.expert.traj.mlp.gini}}</strong></td><td class="r"><strong>{{d.expert.traj.mlp.top1}}</strong></td><td class="r">{{d.expert.traj.mlp.b50}}</td></tr>
+    <tr><td>VLM Q head</td><td class="r">32</td><td class="r">{{d.vlm.traj.q.median}}</td><td class="r">{{d.vlm.traj.q.mean}}</td><td class="r">×{{d.vlm.traj.q.mean_over_median}}</td><td class="r">{{d.vlm.traj.q.gini}}</td><td class="r">—</td><td class="r">{{d.vlm.traj.q.b50}}</td></tr>
+    <tr><td>VLM MLP ch</td><td class="r">12288</td><td class="r">{{d.vlm.traj.mlp.median}}</td><td class="r">{{d.vlm.traj.mlp.mean}}</td><td class="r">×{{d.vlm.traj.mlp.mean_over_median}}</td><td class="r">{{d.vlm.traj.mlp.gini}}</td><td class="r">{{d.vlm.traj.mlp.top1}}</td><td class="r">{{d.vlm.traj.mlp.b50}}</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>편중은 한 축에만 있다.</strong> expert MLP만 Gini {{d.expert.traj.mlp.gini}},
+  상위 1%(82개 채널)가 축 질량의 {{d.expert.traj.mlp.top1}}를 들고, 평균이 중앙값의
+  {{d.expert.traj.mlp.mean_over_median}}배다. 나머지 세 축은 Gini 0.34–0.44로 서로 비슷하다.
+  그래서 expert의 축 간 배수만 요약 방식에 크게 흔들린다 — 중앙값 기준
+  {{raw.expert.traj.param_ratio}}×, 평균 기준 {{raw.expert.traj.param_ratio_mean}}×.
+  VLM은 평균/중앙값이 {{d.vlm.traj.mlp.mean_over_median}}배뿐이라
+  {{raw.vlm.traj.param_ratio}}× / {{raw.vlm.traj.param_ratio_mean}}×로 큰 차이가 없다.
+  <strong>따라서 인용할 숫자는 셋 중 어느 것도 아니고, 실제로 잘라낼 집합의 부분합이다</strong>
+  (§3의 두 번째 표).
+</div>
+
+<figure>
+  <img src="PLOT::ax::axis_distribution.png" alt="axis importance distributions">
+  <figcaption>왼쪽: 층 안에서 점수 낮은 순으로 유닛을 지울 때 함께 사라지는 질량 비율.
+  expert MLP(진한 초록 실선)만 바닥에 붙어 있다 — 하위 90%를 지워도 질량이 거의 안 준다.
+  가운데: 같은 곡선을 <strong>파라미터 예산</strong> 위에 다시 그린 것으로, 같은 x에서 위에 있는
+  곡선이 그 예산에서 더 비싼 축이다. expert는 Q(파랑 실선)가 MLP(초록 실선) 위에, VLM은
+  <strong>MLP(초록 점선)가 Q(파랑 점선) 위에</strong> 있다 — 두 타워가 반대다. 점은 출시 arm.
+  오른쪽: 중앙값으로 나눠 스케일을 지운 분포. expert MLP만 오른쪽으로 10<sup>4</sup>배까지
+  꼬리가 뻗는다.</figcaption>
+</figure>
+
+<p><strong>같은 파라미터에서의 결론(선택 집합 기준).</strong> expert는 4 head(75.5M) 절단이
+341 channel(75.4M) 절단의 <strong>{{sel.expert.traj.ratio}}배</strong> 질량을 지우고, VLM은
+13 head(490.7M)가 1109 channel(490.6M)의 <strong>{{sel.vlm.traj.ratio}}배</strong>다 —
+1보다 작으므로 VLM에서는 MLP가 {{sel.vlm.traj.inv}}배 비싸다. 중앙값·평균 어느 기준으로 봐도
+부호는 같고, 크기만 이 값으로 확정된다.</p>
+
+<div class="note">
+  <strong>두 표의 선택 규칙이 다르다.</strong> §3의 두 번째 표는 <code>dual</code>이 고른 집합,
+  이 절의 부분합은 그 축에서 <code>I_traj</code>가 가장 싼 집합이다. dual은 CoC를 함께 지키느라
+  trajectory 질량을 더 버린다: vq {{sel.vlm.traj.dual_q}} vs 최저가 {{sel.vlm.traj.cheap_q}}
+  (+{{sel.vlm.traj.excess_q}}), vm_pm {{sel.vlm.traj.dual_m}} vs {{sel.vlm.traj.cheap_m}}
+  (+{{sel.vlm.traj.excess_m}}). 예상된 대가지만 수치화된 것은 이번이 처음이다.
+</div>
+
 <h2><span class="num">4.</span> Stage 1 — 그 저울은 정확한가 (expert probe)</h2>
 
 <p>클립마다 한 번의 backward로 모든 expert 유닛의 <em>signed</em> ∂L/∂g를 얻고, 같은 손실을
