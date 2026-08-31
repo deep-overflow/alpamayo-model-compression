@@ -80,3 +80,32 @@ baseline 8.04(−0.92\*). 정지 시간 비율도 wl +0.013\*, 이동 거리 dua
 
 코드 `experiments/head_analysis/analyze_offroad.py`, 산출물 `outputs/alpasim_offroad/`
 (`metrics.json`의 `decomposition`, `speed_tables.json`, `plots/offroad_margins.png`).
+
+## 후속 (같은 날): progress가 높은 모델이 d2gt도 낮은가 → **아니다, 반대다**
+
+`analyze_progress_d2gt.py`, 산출물 `outputs/alpasim_progress_d2gt/`. 세 수준 전부에서 **양의 상관**
+(progress ↑ = GT 경로에서 더 멀어짐):
+
+| arm | progress | d2gt | d2gt/100 m | 주행/GT 거리 | 종점 오차 | score |
+|---|---|---|---|---|---|---|
+| baseline | 0.747 | 2.886 | 2.324 | 0.724 | 17.09 | 0.750 |
+| wl | 0.794 | **2.824** | **2.066** | 0.797 | 13.68 | 0.783 |
+| tyr_r | 0.794 | 3.043 | 2.254 | 0.787 | **12.68** | 0.786 |
+| dualr | 0.799 | 2.974 | 2.162 | 0.802 | 13.27 | 0.792 |
+| dual | **0.828** | **3.318** | 2.356 | 0.821 | 14.40 | **0.828** |
+
+- **A (arm 5점)**: Spearman(progress, d2gt) **+0.80**. 거리로 정규화하면 +0.30으로 약해진다
+  (d2gt는 경로 적분량이라 멀리 간 차가 기계적으로 더 쌓는다) — 그러나 부호는 그대로 양수.
+- **B (씬 수준, arm 내부)**: raw +0.30~+0.43, dist_traveled를 편상관으로 제거해도 **+0.18~+0.39
+  (전부 유의)**. 즉 거리 인공물만으로 설명되지 않는다.
+- **C (dual 대비 씬 페어드)**: 어떤 arm도 dual보다 progress가 낮고 d2gt도 낮다(dualr −0.029/−0.34,
+  wl −0.033/−0.49, tyr_r −0.033/−0.28, baseline −0.081/−0.43), 그리고 Δprogress와 Δd2gt의 상관이
+  **+0.24~+0.44**로 씬 단위에서도 같이 움직인다.
+- 다만 **종점 오차(dist_to_gt_location)는 반대**: baseline 17.1 m로 가장 나쁘고 재구성 arm이 12.7–13.7,
+  dual 14.4. 즉 "멀리 간 차가 GT 종점에는 더 가깝다" — d2gt(경로 적분)와 종점 오차가 서로 다른 것을 잰다.
+
+**해석.** GT 궤적 추종은 폐루프 점수와 상충한다. 이 스코어(게이트 × progress)에서 이기는 방식은
+"GT 경로를 그대로 따라가기"가 아니라 "덜 주저하고 더 나아가기"이고, 재구성은 모델을 무압축의
+조심스러운 주행으로 되돌리면서 d2gt는 좋아지고 progress·score는 나빠진다. **개루프 minADE(=GT 추종)로
+폐루프 주행 품질을 예측할 수 없다**는 이 저장소의 기존 관찰([[tail-safety-independent-of-reasoning]],
+dualr 개루프-폐루프 역전)이 여기서 기전 수준으로 확인된다: 두 지표는 무상관이 아니라 **음의 관계**다.
