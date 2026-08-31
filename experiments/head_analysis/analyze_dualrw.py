@@ -141,6 +141,8 @@ def main():
                 s += f" ratio vs ref {r['wshift_ratio_vs_ref'][0]:.3f}"
             lines.append(s)
         for name, r in res["proxy"].get("val500", {}).items():
+            if "d_ade" not in r:      # the baseline row carries absolute means only
+                continue
             lines.append(f"  val500 {name:10s} dADE {r['d_ade'][0]:+.4f} [{r['d_ade'][1]:+.4f},"
                          f"{r['d_ade'][2]:+.4f}] degen {r['degen']:.3f}")
 

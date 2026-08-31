@@ -115,6 +115,21 @@ LingoQA <strong>train</strong>(148,506 QA·3,508 세그먼트)의 답변 토큰�
 </figure>
 
 <h2><span class="num">3.</span>캐시와 궤적 — G1·G2 (세 세트)</h2>
+
+<p>고정 프로토콜의 절대값(평균)부터:</p>
+<table>
+<thead><tr><th>arm</th><th class="r">val500 minADE@6</th><th class="r">minFDE@6</th><th class="r">test500 minADE@6</th><th class="r">minFDE@6</th><th class="r">OOD-val minADE@6</th><th class="r">minFDE@6</th></tr></thead>
+<tbody>
+<tr><td>무압축 baseline</td><td class="r">0.8236</td><td class="r">2.2050</td><td class="r">0.8417</td><td class="r">2.2673</td><td class="r">0.9995</td><td class="r">2.4959</td></tr>
+<tr><td>dual</td><td class="r">0.8904</td><td class="r">2.3304</td><td class="r">0.9498</td><td class="r">2.5459</td><td class="r">1.1192</td><td class="r">2.8514</td></tr>
+<tr><td>dualr (기존)</td><td class="r">0.8143</td><td class="r">2.1508</td><td class="r">0.8602</td><td class="r">2.3606</td><td class="r">1.1064</td><td class="r">2.8133</td></tr>
+<tr><td>dualr_rep</td><td class="r">0.8437</td><td class="r">2.2229</td><td class="r">0.8657</td><td class="r">2.3820</td><td class="r">1.0344</td><td class="r">2.6263</td></tr>
+<tr><td>dualr_w</td><td class="r">0.8702</td><td class="r">2.3240</td><td class="r">0.8730</td><td class="r">2.4026</td><td class="r">1.0321</td><td class="r">2.6075</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td class="r"><strong>0.8271</strong></td><td class="r"><strong>2.1806</strong></td><td class="r"><strong>0.8696</strong></td><td class="r"><strong>2.3659</strong></td><td class="r"><strong>1.0687</strong></td><td class="r"><strong>2.7371</strong></td></tr>
+</tbody>
+</table>
+
+<p>무압축 대비 paired ΔminADE@6(중앙값 [95% CI])와 캐시 진단:</p>
 <table>
 <thead><tr><th>arm</th><th>캐시 비용 A10−A00</th><th>이동 비 (rep)</th><th>val500 Δ</th><th>test500 Δ</th><th>OOD-val Δ</th><th class="r">CoC 붕괴율 (val)</th></tr></thead>
 <tbody>
