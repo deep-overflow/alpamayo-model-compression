@@ -333,6 +333,30 @@ def render_template(metrics, probe, template, out_path):
                     else f"{v[p[3]]:.4g}" if p[3] not in ("bottom50_share_q",
                                                           "bottom50_share_mlp")
                     else f"{100 * v[p[3]]:.2f}%")
+        if p[0] == "d":  # d.TOWER.OBJ.AXIS.FIELD -- distribution shape of one axis
+            dd = probe["raw_cross_axis"][p[1]]["obj"][p[2]]["dist"][p[3]]
+            return {"median": f"{dd['median']:.3e}", "mean": f"{dd['mean']:.3e}",
+                    "mean_over_median": f"{dd['mean_over_median']:.1f}",
+                    "gini": f"{dd['gini']:.3f}",
+                    "top1": f"{dd['top_share']['0.01']:.1%}",
+                    "b50": f"{dd['bottom_share']['0.5']:.2%}",
+                    "n": f"{dd['n_units']:,}"}[p[4]]
+        if p[0] == "sel":  # sel.TOWER.OBJ.FIELD -- the parameter-matched partial sums
+            dd = probe["raw_cross_axis"][p[1]]["obj"][p[2]]["dist"]
+            qc = next(iter(dd["q"]["cuts"].values()))
+            mc = min(dd["mlp"]["cuts"].values(),
+                     key=lambda c: abs(c["params"] - qc["params"]))
+            r = qc["mass_per_param"] / mc["mass_per_param"]
+            if p[3] in ("ratio", "inv"):
+                x = r if p[3] == "ratio" else 1 / r
+                return f"{x:,.0f}" if x >= 100 else f"{x:.2f}"
+            arm = metrics["mass"]["arm_mass"][p[2]]
+            return {"dual_q": f"{arm['vlm_q']['sum_I']:.3f}",
+                    "cheap_q": f"{qc['mass']:.3f}",
+                    "excess_q": f"{arm['vlm_q']['sum_I'] / qc['mass'] - 1:.1%}",
+                    "dual_m": f"{arm['vlm_m_pm']['sum_I']:.3f}",
+                    "cheap_m": f"{mc['mass']:.3f}",
+                    "excess_m": f"{arm['vlm_m_pm']['sum_I'] / mc['mass'] - 1:.1%}"}[p[3]]
         if p[0] == "s0":
             return f"{probe['s0'][p[1]]:.2e}" if isinstance(probe["s0"][p[1]], float) \
                 else str(probe["s0"][p[1]])

@@ -57,6 +57,10 @@ REPO = Path(__file__).resolve().parents[2]
 # per-unit parameter cost, from the shipped weight shapes (check_vlm_axis.py verifies)
 P = {"vlm": (2 * 4096 * 128, 3 * 4096), "expert": (2 * 2048 * 128, 3 * 2048)}
 AXIS_LABEL = {"q": "Q head", "mlp": "MLP channel"}
+# per-layer cut counts of the shipped arms, so the distribution table can report the
+# partial sum a real budget removes rather than only a median or a mean
+CUTS = {("expert", "q"): (4, 8), ("expert", "mlp"): (341, 2064, 4128),
+        ("vlm", "q"): (13,), ("vlm", "mlp"): (1109, 4898)}
 
 
 def load_rows(exp_id):
@@ -148,6 +152,56 @@ def bottom_share(a, frac=0.5):
     return float(np.mean(np.sort(a[keep], 1)[:, :k].sum(1) / tot[keep]))
 
 
+def axis_distribution(a, p_unit, cuts=()):
+    """Shape of one axis's importance distribution, and what a budget actually buys.
+
+    A single ratio between two axes is only as meaningful as the summary it is built on,
+    and these distributions are far from symmetric: on the expert's MLP axis the median
+    channel sits ~100x below the mean channel, so a median-based cross-axis ratio (555x)
+    and a mean-based one (7.4x) describe the same array. Rather than pick one, report the
+    distribution and the quantity the decision actually depends on -- the mass a given
+    PARAMETER budget removes when units are taken cheapest-first, which is neither a
+    median nor a mean but a partial sum.
+
+    `cuts` are per-layer unit counts to evaluate that partial sum at (the shipped arms).
+    """
+    n_layers, n_units = a.shape
+    tot = a.sum(1)  # (L,) layer mass
+    keep = tot > 0  # VLM layer 35 carries exactly no trajectory importance
+    srt = np.sort(a, axis=1)  # ascending within layer
+    cum = np.cumsum(srt, axis=1)
+    frac = cum[keep] / tot[keep, None]  # (L', U) share held by the cheapest k
+    qs = [1, 10, 25, 50, 75, 90, 99]
+    out = {
+        "n_units": n_units, "p_unit": p_unit, "median": float(np.median(a)),
+        "mean": float(a.mean()), "mean_over_median": float(a.mean() / np.median(a)),
+        "layer_mass": float(tot.mean()),
+        "quantiles": {str(q): float(np.percentile(a, q)) for q in qs},
+        # concentration: what the cheapest / most expensive slices hold
+        "bottom_share": {str(f): float(frac[:, max(int(n_units * f), 1) - 1].mean())
+                         for f in (0.10, 0.25, 0.50, 0.75, 0.90)},
+        "top_share": {str(f): float(1 - frac[:, n_units - max(int(n_units * f), 1)].mean())
+                      for f in (0.01, 0.10)},
+        # Gini over units within a layer, averaged over layers: 0 = flat, 1 = one unit
+        "gini": float(np.mean([
+            (2 * np.arange(1, n_units + 1) - n_units - 1) @ np.sort(a[i])
+            / (n_units * a[i].sum()) for i in range(n_layers) if tot[i] > 0])),
+        # the curve itself, thinned for plotting/storage
+        "curve_x": [float(x) for x in np.linspace(0, 1, 101)],
+        "curve_y": [float(y) for y in np.interp(
+            np.linspace(0, 1, 101), (np.arange(n_units) + 1) / n_units, frac.mean(0))],
+        "cuts": {},
+    }
+    for k in cuts:
+        if 0 < k <= n_units:
+            out["cuts"][str(k)] = {
+                "units_per_layer": k, "params": int(k * n_layers * p_unit),
+                "mass": float(srt[:, :k].sum()),
+                "mass_share": float(frac[:, k - 1].mean()),
+                "mass_per_param": float(srt[:, :k].sum() / (k * n_layers * p_unit))}
+    return out
+
+
 def raw_cross_axis(expert_run="importance_stepexp_sum", vlm_run="importance_v2"):
     """The comparison itself: raw first-order mass per unit and per parameter, both towers.
 
@@ -177,8 +231,85 @@ def raw_cross_axis(expert_run="importance_stepexp_sum", vlm_run="importance_v2")
                 # what the bottom half of each axis holds -- the expert-axis mechanism plot
                 "bottom50_share_q": bottom_share(q),
                 "bottom50_share_mlp": bottom_share(m),
+                # the same ratio read three ways. They disagree by up to 75x because the
+                # distributions are skewed, so the report must say which one it quotes;
+                # `selected` is the one the budget decision depends on.
+                "param_ratio_mean": float((q.mean() / p_head) / (m.mean() / p_chan)),
             }
+            cq, cm = CUTS.get((tower, "q"), ()), CUTS.get((tower, "mlp"), ())
+            out[tower]["obj"][obj]["dist"] = {
+                "q": axis_distribution(q, p_head, cq),
+                "mlp": axis_distribution(m, p_chan, cm)}
     return out
+
+
+def plot_distribution(raw, out):
+    """Three views of the same arrays: concentration, budget curve, and where the mass sits.
+
+    Left  -- Lorenz-style: share of a layer's mass held by its cheapest x fraction of units.
+             A curve hugging the bottom axis means the cheap half is inert.
+    Middle -- the decision curve: x is the fraction of THAT AXIS's parameters removed, so
+             the two axes of one tower are directly comparable at equal cost. Markers are
+             the shipped arms.
+    Right -- the distribution itself, log-scale, normalised per axis so the shapes (not the
+             scales) are compared.
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 3.9))
+    styles = {("expert", "q"): (C1, "-", "expert Q head"),
+              ("expert", "mlp"): (C2, "-", "expert MLP ch"),
+              ("vlm", "q"): (C1, "--", "VLM Q head"),
+              ("vlm", "mlp"): (C2, "--", "VLM MLP ch")}
+    for tower, d in raw.items():
+        obj = "traj"
+        if obj not in d["obj"]:
+            continue
+        for axis in ("q", "mlp"):
+            dd = d["obj"][obj]["dist"][axis]
+            col, ls, lbl = styles[(tower, axis)]
+            x = np.array(dd["curve_x"])
+            y = np.array(dd["curve_y"])
+            axes[0].plot(x, y, color=col, ls=ls, lw=2, label=lbl)
+            # x in parameters, y in ABSOLUTE mass: at a given x the higher curve is the
+            # axis that costs more for the same budget, which is the cross-axis question.
+            # Removing fraction f of the units removes fraction f of that axis's
+            # parameters, so the unit-fraction axis IS the parameter-fraction axis.
+            axes[1].plot(x * dd["n_units"] * dd["p_unit"] / 1e6,
+                         y * dd["layer_mass"] + 1e-12, color=col, ls=ls, lw=2, label=lbl)
+            for c in dd["cuts"].values():
+                axes[1].plot(c["params"] / 36 / 1e6, c["mass"] / 36 + 1e-12, "o",
+                             color=col, ms=5)
+    axes[0].set_xlabel("cheapest fraction of the layer's units, removed first")
+    axes[0].set_ylabel("share of the layer's first-order mass")
+    axes[0].set_title("concentration: is the cheap half inert?")
+    axes[0].legend(fontsize=7, loc="upper left")
+    axes[1].set_xscale("log")
+    axes[1].set_yscale("log")
+    axes[1].set_ylim(1e-6, None)
+    axes[1].set_xlabel("parameters removed per layer (M, log) -- equal cost across axes")
+    axes[1].set_ylabel("first-order mass removed per layer (log)")
+    axes[1].set_title("what a parameter budget buys (dots = shipped arms)")
+    axes[1].legend(fontsize=7, loc="upper left")
+
+    for tower, d in raw.items():
+        if "traj" not in d["obj"]:
+            continue
+        for axis, key in (("q", "traj_exp_q" if tower == "expert" else "traj_vlm_q"),
+                          ("mlp", "traj_exp_mlp" if tower == "expert" else "traj_vlm_mlp")):
+            z = np.load(REPO / "outputs" / d["run"] / "importance.npz")[key].astype(float)
+            col, ls, lbl = styles[(tower, axis)]
+            v = z[z > 0].ravel()
+            v = v / np.median(v)  # normalise so shapes, not scales, are compared
+            lo, hi = np.log10(max(v.min(), 1e-8)), np.log10(v.max())
+            axes[2].hist(np.log10(v), bins=np.linspace(lo, hi, 60), histtype="step",
+                         color=col, ls=ls, lw=1.6, density=True, label=lbl)
+    axes[2].axvline(0, color=MUTED, lw=0.8)
+    axes[2].set_xlabel(r"$\log_{10}(I_u\;/\;\mathrm{median}\,I)$")
+    axes[2].set_ylabel("density")
+    axes[2].set_title("shape, scale removed")
+    axes[2].legend(fontsize=7, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out / "axis_distribution.png", dpi=150)
+    plt.close(fig)
 
 
 def plot_slopes(t, out):
@@ -276,9 +407,21 @@ def main():
                      f"axes' parameters")
         for obj, v in d["obj"].items():
             lines.append(f"    {obj:5s} per-unit Q/MLP {v['unit_ratio']:9.1f}x | "
-                         f"PER PARAMETER {v['param_ratio']:7.2f}x | layer mass Q/MLP "
-                         f"{v['layer_mass_ratio']:.3f} | bottom-50% share "
-                         f"Q {v['bottom50_share_q']:.2%} MLP {v['bottom50_share_mlp']:.2%}")
+                         f"PER PARAMETER median {v['param_ratio']:7.2f}x "
+                         f"mean {v['param_ratio_mean']:6.2f}x | layer mass Q/MLP "
+                         f"{v['layer_mass_ratio']:.3f}")
+            for axis in ("q", "mlp"):
+                dd = v["dist"][axis]
+                lines.append(
+                    f"      {axis:3s} n={dd['n_units']:6d}  median {dd['median']:.3e}  "
+                    f"mean {dd['mean']:.3e} (x{dd['mean_over_median']:6.1f})  "
+                    f"gini {dd['gini']:.3f}  top1% holds {dd['top_share']['0.01']:.1%}  "
+                    f"bottom50% holds {dd['bottom_share']['0.5']:.2%}")
+                for k, c in dd["cuts"].items():
+                    lines.append(
+                        f"          cut {k:>5s}/layer = {c['params'] / 1e6:8.1f}M par -> "
+                        f"mass {c['mass']:.3e} ({c['mass_share']:.2%} of the axis), "
+                        f"{c['mass_per_param']:.3e} per param")
     lines.append("")
 
     rows = load_rows(args.probe)
@@ -410,6 +553,7 @@ def main():
         lines.append(f"  {tag:12s} beta {f['beta']:+8.3f} [{f['lo']:+.3f},{f['hi']:+.3f}]  "
                      f"r={f['pearson']:+.3f}")
 
+    plot_distribution(raw, out / "plots")
     plot_slopes(t, out / "plots")
     plot_magnitude(t, out / "plots")
     plot_arms(t, out / "plots")
