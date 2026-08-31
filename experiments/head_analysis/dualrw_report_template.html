@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dualr × Hessian 2×2 — decode 토큰을 섞으면 reasoning이 돌아오는가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · dualr × Hessian factorial</div>
+  <h1>dualr × Hessian 2×2 — decode 토큰을 섞으면 reasoning이 돌아오는가</h1>
+  <div class="meta">
+    2026-08-30 · dual 선택 + 층 0–35 OSSCAR refit 고정, Hessian만 2×2 (prefill 가중 균등/expert × own-CoC decode 몫 0/0.16) ·
+    calib_100 × K=2 own-CoC · G1 프록시 200클립 · G2 val500 · G3 LingoQA 500문항<br>
+    코드 <code>run_cache_recon.py --start 0 --prefill-weights … --decode-share …</code>, <code>check_dualr_rep.py</code>, <code>run_cacheproxy.py</code>,
+    <code>analyze_cacheproxy.py</code>, <code>analyze_dualrw.py</code>, <code>lingoqa/eval_lingo_arm.sh</code> ·
+    산출물 <code>outputs/dualr_{rep,d,e,w}_supernet_u40/</code>, <code>outputs/slim_dualr_{d,e,w}_u40/</code>, <code>outputs/dualrw_analysis/</code> ·
+    기록 <code>plans/2026-08-30_dualr-weighted-hessian.md</code> · 브랜치 <code>dualr-weighted</code><br>
+    선행: <code>2026-08-25_cot-reconstruction.html</code> (racfit d10), <code>2026-08-29_cache-targeted-reconstruction.html</code> (refit 범위), <code>2026-08-23_tyr-closedloop.html</code>
+  </div>
+</header>
+
+<h2><span class="num">0.</span>요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}</div><div class="l">dualr_rep LingoQA (기존 dualr {{lingo.per_run.lingo_vqa_slim_dualr_u40.accuracy|.1%}}, dual {{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}}, 바닥 37.0%)</div></div>
+  <div class="kpi"><div class="v">{{lingo.per_run.lingo_vqa_slim_dualr_d_u40.accuracy|.1%}}</div><div class="l">dualr_d (decode 0.16) LingoQA · Δ vs rep {{lingo.comparisons.0.delta|+.1%}} [{{lingo.comparisons.0.ci_lo|+.1%}}, {{lingo.comparisons.0.ci_hi|+.1%}}]</div></div>
+  <div class="kpi"><div class="v">{{lingo.per_run.lingo_vqa_slim_dualr_w_u40.accuracy|.1%}}</div><div class="l">dualr_w (expert + decode) LingoQA · Δ vs rep {{lingo.comparisons.2.delta|+.1%}}</div></div>
+  <div class="kpi"><div class="v">{{proxy.val500.dualr_d.d_ade.0|+.4f}}</div><div class="l">dualr_d val500 ΔminADE@6 (rep {{proxy.val500.dualr_rep.d_ade.0|+.4f}}, dualr {{proxy.val500.dualr.d_ade.0|+.4f}}, dual {{proxy.val500.dual.d_ade.0|+.4f}})</div></div>
+  <div class="kpi"><div class="v">{{recon.d.o_proj_D_minus_rep.0|+.3f}}</div><div class="l">dualr_d − rep, o_proj decode 재구성 오차 (모듈 중앙값)</div></div>
+</div>
+
+<div class="callout">
+<strong>한 줄 결론.</strong> <strong>H1 기각 — 반대 방향.</strong> own-CoC를 16% 섞은 Hessian(d)은 in-sample decode 재구성 오차를 절반으로 줄이지만 LingoQA를
+{{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}} → {{lingo.per_run.lingo_vqa_slim_dualr_d_u40.accuracy|.1%}}로 무너뜨리고({{lingo.comparisons.0.delta|+.1%}}, 바닥 37.0% 근처) val500도 나빠진다.
+expert 가중 prefill(e)은 캐시·궤적·reasoning 모두에서 중립이고, 둘을 합친 w는 e와 같다(decode의 해가 sink 토큰 가중치로 규제됨). 대신 예상 밖의 것이 나왔다:
+Hessian은 그대로 두고 <strong>수치 실패한 모듈만 고친 rep가 기존 dualr보다 LingoQA {{lingo.comparisons.5.delta|+.1%}}</strong>(41.8 → {{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}) — dualr의 reasoning 손실 중 열 포인트는 prefill-only Hessian이 아니라
+<em>터진 최소제곱</em>(층 35 o_proj, max|w| 46) 탓이었다. 남은 격차(dual까지 {{lingo.comparisons.3.delta|+.1%}})는 재구성 자체의 비용이다.
+</div>
+
+<h2><span class="num">1.</span>왜</h2>
+<p><code>dualr</code>(dual 선택 + 전 층 OSSCAR refit)은 캐시와 궤적은 지키지만 reasoning을 잃는다: val500 {{proxy.val500.dualr.d_ade.0|+.4f}}, 그런데 LingoQA {{lingo.per_run.lingo_vqa_slim_dualr_u40.accuracy|.1%}}
+(dual {{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}}). 의심은 Hessian이다 — dualr의 H는 prefill 토큰 균등, decode(own-CoC) 토큰 0이고, racfit은 그 설정이 decode 경로를
+mask-only보다 악화시키며 own-CoC 16% 혼합(d10)이 held-out decode 오차를 0.16–0.18 줄인다고 했다. 캐시 표적 재구성 실험은 refit <em>범위</em>가 문제였고 Hessian 가중은 분리 검증되지 않았다.
+이번엔 범위를 dualr과 똑같이(전 층) 고정하고 Hessian만 바꾼다.</p>
+
+<table>
+<thead><tr><th>arm</th><th>prefill 가중</th><th>decode 몫</th><th>역할</th></tr></thead>
+<tbody>
+<tr><td><code>dualr_rep</code></td><td>균등</td><td>0</td><td>dualr 재현(G0) — 새 파이프라인이 dualr의 supernet을 내는가</td></tr>
+<tr><td><code>dualr_d</code></td><td>균등</td><td>0.16</td><td>H1 단독</td></tr>
+<tr><td><code>dualr_e</code></td><td>expert 어텐션 (vision 0.722 / text 0.166 / hist 0.042 / sink 0.011)</td><td>0</td><td>H2 단독</td></tr>
+<tr><td><code>dualr_w</code></td><td>expert</td><td>0.16</td><td>둘 다</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">2.</span>G0 — dualr 재현</h2>
+<p>사전 등록한 가중치 공간 재현(모듈별 상대 Frobenius 차 &lt; 1e-2)은 <strong>FAIL</strong>: down_proj 중앙값 {{g0.weight.down_proj_median|.3f}}(최대 {{g0.weight.down_proj_max|.3f}}),
+o_proj 중앙값 {{g0.weight.o_proj_median|.3f}}, 최대 <strong>{{g0.weight.o_proj_max|.1f}}배</strong>(층 1). o_proj 입력은 헤드 간 공선성이 커서 최소제곱 해가 가중치 공간에서 식별되지 않는다 —
+같은 출력을 내는 W′가 여럿이고 fp32 누적 순서·K=2 pass·bf16 write-back 같은 미세 차이가 해를 크게 바꾼다. 그래서 함수 공간에서 본다: dense 입력의 H(10클립)로
+‖(W′_rep − W′_dualr)X‖/‖WX‖를 재면 중앙값 <strong>{{g0.fn_between_median|.4f}}</strong>, 최대 {{g0.fn_between_max|.4f}} (각 refit의 자기 오차는 §3 수준). 이어서 rep 체크포인트의 캐시 프록시·val500이
+dualr과 CI 안에서 겹치는지(§4)로 재현을 판정하고, <strong>rep를 파이프라인 내 기준 arm</strong>으로 삼아 d/e/w를 rep와 비교한다(dualr은 2차 기준).</p>
+
+<table>
+<thead><tr><th>모듈</th><th class="r">‖(W′_rep − W′_dualr)X‖/‖WX‖</th><th class="r">rep 자기 오차</th><th class="r">dualr 자기 오차</th><th class="r">가중치 상대 차</th></tr></thead>
+<tbody>
+<tr><td>L01 o_proj</td><td class="r">{{g0.fn.L01_o_proj.between|.4f}}</td><td class="r">{{g0.fn.L01_o_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L01_o_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L01_o_proj.weight_rel_diff|.1f}}</td></tr>
+<tr><td>L16 o_proj</td><td class="r">{{g0.fn.L16_o_proj.between|.4f}}</td><td class="r">{{g0.fn.L16_o_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L16_o_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L16_o_proj.weight_rel_diff|.3f}}</td></tr>
+<tr><td>L35 o_proj</td><td class="r">{{g0.fn.L35_o_proj.between|.4f}}</td><td class="r">{{g0.fn.L35_o_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L35_o_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L35_o_proj.weight_rel_diff|.3f}}</td></tr>
+<tr><td>L01 down_proj</td><td class="r">{{g0.fn.L01_down_proj.between|.4f}}</td><td class="r">{{g0.fn.L01_down_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L01_down_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L01_down_proj.weight_rel_diff|.3f}}</td></tr>
+<tr><td>L16 down_proj</td><td class="r">{{g0.fn.L16_down_proj.between|.4f}}</td><td class="r">{{g0.fn.L16_down_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L16_down_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L16_down_proj.weight_rel_diff|.3f}}</td></tr>
+<tr><td>L35 down_proj</td><td class="r">{{g0.fn.L35_down_proj.between|.4f}}</td><td class="r">{{g0.fn.L35_down_proj.rep_err|.4f}}</td><td class="r">{{g0.fn.L35_down_proj.dualr_err|.4f}}</td><td class="r">{{g0.fn.L35_down_proj.weight_rel_diff|.3f}}</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">3.</span>G3a — 재구성 오차 (빌드 중 계측, in-sample)</h2>
+<p>각 모듈에서 prefill(P)·own-CoC(D) 토큰의 재구성 오차 ‖(W−Ŵ)X‖/‖WX‖를 refit 가중치와 mask-only 가중치에 대해 잰다(racfit의 정의). 캘리브레이션 클립 위의 in-sample이지만,
+D는 rep의 fit에 들어 있지 않으므로 rep의 D 오차는 사실상 held-out이다.</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">o_proj P refit</th><th class="r">o_proj D refit</th><th>o_proj D − rep (중앙값 [CI])</th><th class="r">down_proj P refit</th><th class="r">down_proj D refit</th><th>down_proj D − rep</th></tr></thead>
+<tbody>
+<tr><td>rep (mask-only D: {{recon.rep.o_proj_D_mask_median|.3f}} / {{recon.rep.down_proj_D_mask_median|.3f}})</td><td class="r">{{recon.rep.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.rep.o_proj_D_refit_median|.3f}}</td><td>—</td><td class="r">{{recon.rep.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.rep.down_proj_D_refit_median|.3f}}</td><td>—</td></tr>
+<tr><td>d</td><td class="r">{{recon.d.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.d.o_proj_D_refit_median|.3f}}</td><td>{{recon.d.o_proj_D_minus_rep.0|+.3f}} [{{recon.d.o_proj_D_minus_rep.1|+.3f}}, {{recon.d.o_proj_D_minus_rep.2|+.3f}}]</td><td class="r">{{recon.d.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.d.down_proj_D_refit_median|.3f}}</td><td>{{recon.d.down_proj_D_minus_rep.0|+.3f}} [{{recon.d.down_proj_D_minus_rep.1|+.3f}}, {{recon.d.down_proj_D_minus_rep.2|+.3f}}]</td></tr>
+<tr><td>e</td><td class="r">{{recon.e.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.e.o_proj_D_refit_median|.3f}}</td><td>{{recon.e.o_proj_D_minus_rep.0|+.3f}} [{{recon.e.o_proj_D_minus_rep.1|+.3f}}, {{recon.e.o_proj_D_minus_rep.2|+.3f}}]</td><td class="r">{{recon.e.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.e.down_proj_D_refit_median|.3f}}</td><td>{{recon.e.down_proj_D_minus_rep.0|+.3f}} [{{recon.e.down_proj_D_minus_rep.1|+.3f}}, {{recon.e.down_proj_D_minus_rep.2|+.3f}}]</td></tr>
+<tr><td>w</td><td class="r">{{recon.w.o_proj_P_refit_median|.3f}}</td><td class="r">{{recon.w.o_proj_D_refit_median|.3f}}</td><td>{{recon.w.o_proj_D_minus_rep.0|+.3f}} [{{recon.w.o_proj_D_minus_rep.1|+.3f}}, {{recon.w.o_proj_D_minus_rep.2|+.3f}}]</td><td class="r">{{recon.w.down_proj_P_refit_median|.3f}}</td><td class="r">{{recon.w.down_proj_D_refit_median|.3f}}</td><td>{{recon.w.down_proj_D_minus_rep.0|+.3f}} [{{recon.w.down_proj_D_minus_rep.1|+.3f}}, {{recon.w.down_proj_D_minus_rep.2|+.3f}}]</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::rw::dualrw_decode_error.png" alt="decode reconstruction error by layer">
+  <figcaption>층별 own-CoC(decode) 토큰 재구성 오차, refit arm별과 mask-only. rep의 refit이 mask-only 위에 있으면 "prefill-only refit이 decode 경로를 악화시킨다"(racfit)가 이 모델에서도 재현된 것이다.</figcaption>
+</figure>
+
+<h2><span class="num">4.</span>G1·G2 — 캐시와 궤적은 지켰나</h2>
+
+<table>
+<thead><tr><th>arm</th><th>캐시만의 비용 A10−A00 (중앙값 [CI])</th><th>민감도 가중 이동 (rep 대비)</th><th>val500 ΔminADE@6 vs 무압축</th><th class="r">CoC 붕괴율</th></tr></thead>
+<tbody>
+<tr><td>dual</td><td>{{proxy.arms.dual.A10_minus_A00.0|+.4f}} [{{proxy.arms.dual.A10_minus_A00.1|+.4f}}, {{proxy.arms.dual.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dual.wshift_ratio_vs_ref.0|.3f}}</td><td>{{proxy.val500.dual.d_ade.0|+.4f}} [{{proxy.val500.dual.d_ade.1|+.4f}}, {{proxy.val500.dual.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dual.degen|.3f}}</td></tr>
+<tr><td>dualr (기존)</td><td>{{proxy.arms.dualr.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dualr.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.dualr.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.dualr.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.dualr.d_ade.0|+.4f}} [{{proxy.val500.dualr.d_ade.1|+.4f}}, {{proxy.val500.dualr.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr.degen|.3f}}</td></tr>
+<tr><td><strong>dualr_rep</strong> (기준)</td><td>{{proxy.arms.dualr_rep.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr_rep.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr_rep.A10_minus_A00.2|+.4f}}]</td><td>1.000</td><td>{{proxy.val500.dualr_rep.d_ade.0|+.4f}} [{{proxy.val500.dualr_rep.d_ade.1|+.4f}}, {{proxy.val500.dualr_rep.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_rep.degen|.3f}}</td></tr>
+<tr><td><strong>dualr_d</strong></td><td>{{proxy.arms.dualr_d.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr_d.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr_d.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dualr_d.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.dualr_d.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.dualr_d.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.dualr_d.d_ade.0|+.4f}} [{{proxy.val500.dualr_d.d_ade.1|+.4f}}, {{proxy.val500.dualr_d.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_d.degen|.3f}}</td></tr>
+<tr><td>dualr_e</td><td>{{proxy.arms.dualr_e.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr_e.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr_e.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dualr_e.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.dualr_e.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.dualr_e.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.dualr_e.d_ade.0|+.4f}} [{{proxy.val500.dualr_e.d_ade.1|+.4f}}, {{proxy.val500.dualr_e.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_e.degen|.3f}}</td></tr>
+<tr><td>dualr_w</td><td>{{proxy.arms.dualr_w.A10_minus_A00.0|+.4f}} [{{proxy.arms.dualr_w.A10_minus_A00.1|+.4f}}, {{proxy.arms.dualr_w.A10_minus_A00.2|+.4f}}]</td><td>{{proxy.arms.dualr_w.wshift_ratio_vs_ref.0|.3f}} [{{proxy.arms.dualr_w.wshift_ratio_vs_ref.1|.3f}}, {{proxy.arms.dualr_w.wshift_ratio_vs_ref.2|.3f}}]</td><td>{{proxy.val500.dualr_w.d_ade.0|+.4f}} [{{proxy.val500.dualr_w.d_ade.1|+.4f}}, {{proxy.val500.dualr_w.d_ade.2|+.4f}}]</td><td class="r">{{proxy.val500.dualr_w.degen|.3f}}</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">5.</span>G3b — LingoQA (주 판정)</h2>
+<p>표준 프로토콜(모델이 프레임+질문을 받아 직접 답, Lingo-Judge 채점, 500문항·100 세그먼트, 세그먼트 부트스트랩·McNemar). rep 대비 페어드.</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">LingoQA</th><th>Δ vs rep [95% CI]</th><th class="r">McNemar p</th></tr></thead>
+<tbody>
+<tr><td>Alpamayo 1.5 무압축</td><td class="r">{{lingo.per_run.lingo_vqa_baseline.accuracy|.1%}}</td><td>{{lingo.comparisons.4.delta|+.1%}} [{{lingo.comparisons.4.ci_lo|+.1%}}, {{lingo.comparisons.4.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.4.mcnemar_p|.2g}}</td></tr>
+<tr><td>dual</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dual_u40_v2.accuracy|.1%}}</td><td>{{lingo.comparisons.3.delta|+.1%}} [{{lingo.comparisons.3.ci_lo|+.1%}}, {{lingo.comparisons.3.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.3.mcnemar_p|.2g}}</td></tr>
+<tr><td>dualr (기존)</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.5.delta|+.1%}} [{{lingo.comparisons.5.ci_lo|+.1%}}, {{lingo.comparisons.5.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.5.mcnemar_p|.2g}}</td></tr>
+<tr><td><strong>dualr_rep</strong> (기준)</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_rep_u40.accuracy|.1%}}</td><td>—</td><td></td></tr>
+<tr><td><strong>dualr_d</strong></td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_d_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.0.delta|+.1%}} [{{lingo.comparisons.0.ci_lo|+.1%}}, {{lingo.comparisons.0.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.0.mcnemar_p|.2g}}</td></tr>
+<tr><td>dualr_e</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_e_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.1.delta|+.1%}} [{{lingo.comparisons.1.ci_lo|+.1%}}, {{lingo.comparisons.1.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.1.mcnemar_p|.2g}}</td></tr>
+<tr><td>dualr_w</td><td class="r">{{lingo.per_run.lingo_vqa_slim_dualr_w_u40.accuracy|.1%}}</td><td>{{lingo.comparisons.2.delta|+.1%}} [{{lingo.comparisons.2.ci_lo|+.1%}}, {{lingo.comparisons.2.ci_hi|+.1%}}]</td><td class="r">{{lingo.comparisons.2.mcnemar_p|.2g}}</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">6.</span>해석</h2>
+<ul>
+  <li><strong>decode 토큰은 왜 해로운가.</strong> own-CoC는 클립당 ≈15토큰 × K=2 × 100클립 ≈ 3k 토큰뿐이라 4096·12288차원 H에서 rank-deficient다. 그것을 전체의 16%로 올리면
+  작은 고유값 방향을 decode 토큰이 지배해 해가 그 토큰을 <em>정확히 보간</em>한다(d의 층 1 o_proj: in-sample prefill 오차 0.0000, 가중치 8.7배). in-sample decode 오차는 절반이 되지만
+  그것은 암기다 — racfit의 held-out 개선은 같은 주행 프롬프트의 own-CoC에 대한 것이었고, LingoQA의 질문·답 텍스트라는 다른 분포에는 옮겨지지 않았다. w에서 손상이 사라지는 것도 같은
+  기전이다: expert 가중은 sink 토큰(거대 활성)에 무게를 실어 mean-diag damping을 키우고, 그 규제가 decode 방향의 보간을 막는다.</li>
+  <li><strong>rep &gt; dualr의 뜻.</strong> 두 모델은 함수 공간에서 같은 refit이다(G0, 층 35 제외). 층 35 o_proj 하나에서 dualr의 해가 터져 있었고(kept 열 상대 변화 6.6, max|w| 46) rep는 safe_refit이 damp를 올려
+  정상 해를 냈다. 그 한 모듈이 LingoQA {{lingo.comparisons.5.delta|+.1%}}의 차이를 만든다 — 마지막 층의 어텐션 출력 투영이 언어 출력에 직결되기 때문이다. 캐시·궤적(G1·G2)에는 영향이 없었다
+  (expert는 층 35의 캐시를 거의 안 읽는다 — cache-use map).</li>
+  <li><strong>재구성의 진짜 비용.</strong> rep가 dual보다 여전히 {{lingo.comparisons.3.delta|+.1%}} 낮다. 재구성은 캐시·궤적을 무압축 수준으로 지키는 대신 reasoning을 잃고, 이 실험의 어떤 Hessian도
+  그 교환을 깨지 못했다. Tyr의 CoC 붕괴(빈 출력) → dualr의 41.8 → rep의 52.2 → dual의 68.8 순서는 "재구성을 얼마나 <em>정확하게</em> 푸느냐"의 순서이지 "무엇을 맞추느냐"의 순서가 아니다.</li>
+  <li><strong>H2.</strong> expert 어텐션 가중은 캐시 보존(이동 비 {{proxy.arms.dualr_e.wshift_ratio_vs_ref.0|.3f}})·val500({{proxy.val500.dualr_e.d_ade.0|+.4f}})·LingoQA({{lingo.comparisons.1.delta|+.1%}}, n.s.) 어디에도 효과가 없다 —
+  cache-use map의 "어텐션은 인과 참조의 대리가 아니다"와 일치한다.</li>
+</ul>
+
+<h2><span class="num">7.</span>한계·다음</h2>
+<ul>
+  <li>G3a는 in-sample(캘리브레이션 클립)이다; held-out은 racfit 보고서가 이미 보였고, 여기서의 held-out 검정은 LingoQA(다른 데이터셋)다.</li>
+  <li>폐루프(G4)는 돌리지 않았다 — G3를 통과한 arm이 없다(rep는 Hessian 변경이 아니라 수치 수정이라 G4 대상은 별도 판단).
+  <li>own-CoC K=2(racfit은 4). decode 몫 0.16은 racfit의 d10 하나만 시험했다 — 스윕은 별도.</li>
+</ul>
+
+<h2><span class="num">8.</span>재현</h2>
+<pre>for a in rep:uniform:0 d:uniform:0.16 e:expert:0 w:expert:0.16; do IFS=: read n pw ds <<< "$a"
+  bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_cache_recon.py \
+       --gpu 0 --start 0 --k-seeds 2 --prefill-weights $pw --decode-share $ds --exp-id dualr_${n}_supernet_u40
+done
+.venv/bin/python experiments/head_analysis/check_dualr_rep.py --supernet dualr_rep_supernet_u40
+for a in d e w; do
+  bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/make_slim.py --config dualrc_u40_s0 \
+       --tyr-supernet dualr_${a}_supernet_u40 --importance importance_v2 --gpu 0 --out outputs/slim_dualr_${a}_u40
+  bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cacheproxy.py --gpu 0 \
+       --slim outputs/slim_dualr_${a}_u40 --num-clips 200 --exp-id cacheproxy_dualr_$a
+  bash experiments/lingoqa/eval_lingo_arm.sh slim_dualr_${a}_u40 4
+done
+.venv/bin/python experiments/head_analysis/analyze_cacheproxy.py --arms dual=cacheproxy_dual dualr=cacheproxy_dualr \
+       dualr_rep=cacheproxy_dualr_rep dualr_d=cacheproxy_dualr_d dualr_e=cacheproxy_dualr_e \
+       dualr_w=cacheproxy_dualr_w --ref dualr_rep --val-arms dual dualr dualr_rep dualr_d dualr_e dualr_w \
+       --out cacheproxy_dualrw
+.venv/bin/python experiments/lingoqa/analyze_lingo.py --runs lingo_vqa_slim_dualr_d_u40 lingo_vqa_slim_dualr_e_u40 \
+       lingo_vqa_slim_dualr_w_u40 lingo_vqa_slim_dual_u40_v2 lingo_vqa_baseline lingo_vqa_slim_dualr_u40 \
+       lingo_vqa_slim_dualr_rep_u40 --baseline lingo_vqa_slim_dualr_rep_u40 --exp-id lingo_dualrw_vs_rep
+.venv/bin/python experiments/head_analysis/analyze_dualrw.py --out dualrw_analysis --proxy cacheproxy_dualrw --lingo lingo_dualrw_vs_rep</pre>
+
+<p class="meta">숫자는 전부 <code>outputs/dualrw_analysis/metrics_analysis.json</code>에서 <code>&#123;&#123;경로|서식&#125;&#125;</code> 토큰으로 채워진다.</p>
+
+</div>
+</body>
+</html>

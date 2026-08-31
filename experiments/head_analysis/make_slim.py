@@ -30,6 +30,10 @@ Configs:
   dualexp_u40_e<N> -- dual_u40_v2's VLM half + expert_u<N>'s expert half in one
                       checkpoint (first config pruning both towers). Expected -3.19B
                       at N=25.
+  dualrc_u40_s<N>  -- dual_u40_v2's selection everywhere + cache-targeted OSSCAR refit of
+                      o_proj / down_proj in layers >= N (run_cache_recon.py supernet via
+                      --tyr-supernet; expert-attention-weighted prefill + own-CoC Hessian).
+                      Needs slim_state.pt. plans/2026-08-29_cache-targeted-reconstruction.md.
   expert{q,m}_u<N> -- ONE expert axis only: q = Q heads, m = MLP channels, N% of that
   expert{q,m}_c<N>    axis per layer (u) or exactly N units per layer (c, the
                       parameter-matched control); VLM, KV and the other axis untouched.
@@ -121,6 +125,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
     vaxis = re.match(r"^dual([qm])_u40_v2$|^dualm_c(\d+)$", cfg_name)
+    dualrc = re.match(r"^dualrc_u40_s(\d+)$", cfg_name)
     if vaxis:
         # The VLM twin of the expert-axis decomposition
         # (plans/2026-08-30_axis-taylor-comparability.md). dual_u40_v2's own masks are
@@ -148,6 +153,43 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             n_ch = int(vaxis.group(2))
             vm = ml.select_mask_ratios(
                 sm, np.full(tc.num_hidden_layers, n_ch / tc.intermediate_size))
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif dualrc:
+        # Cache-targeted reconstruction (plans/2026-08-29_cache-targeted-reconstruction.md):
+        # dual_u40_v2's selection in every layer, and run_cache_recon.py's refitted
+        # o_proj / down_proj written into layers >= s<N> only. The refit supernet is read
+        # from --tyr-supernet; its masks derived from the exactly-zero columns must equal
+        # dual's, so the usual surgery slices the reconstructed values (state required).
+        start = int(dualrc.group(1))
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq, rm = allocs["uniform"]
+        sq, sm = tyr.dual_scores(imp)
+        vq = ml.select_mask_ratios(sq, rq)  # (36, 32)
+        vm = ml.select_mask_ratios(sm, rm)  # (36, 12288)
+        sup = REPO / "outputs" / tyr_supernet
+        smeta = json.loads((sup / "metadata.json").read_text())
+        assert smeta.get("selection") == "dual", smeta.get("selection")
+        vlayers = model.vlm.model.language_model.layers
+        nh, hd = tc.num_attention_heads, tc.head_dim
+        written = 0
+        for n in smeta["layer_names"]:
+            i = int(n.split(".")[1])
+            if i < start:
+                continue
+            mod = (vlayers[i].mlp.down_proj if "mlp" in n else vlayers[i].self_attn.o_proj)
+            w = torch.load(sup / n / "0.pth", map_location="cuda")
+            col = (w.abs().sum(0).float() > 0).cpu().numpy().astype(float)
+            derived = col.reshape(nh, hd).max(1) if "mlp" not in n else col
+            assert np.array_equal(derived, vm[i] if "mlp" in n else vq[i]), n
+            mod.weight.data.copy_(w.to(mod.weight.dtype))
+            written += 1
+        assert written == 2 * (tc.num_hidden_layers - start), (written, start)
+        print(f"dualrc: refitted weights written into layers {start}..{tc.num_hidden_layers - 1} "
+              f"({written} modules) from {tyr_supernet}", flush=True)
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
     elif axis:
@@ -517,7 +559,8 @@ def main():
     args = ap.parse_args()
 
     out_dir = REPO / args.out
-    if (args.config.startswith(("tyr_u40", "tyr_uniform_u40", "dualr_u40", "dualgr_u40"))
+    if (args.config.startswith(("tyr_u40", "tyr_uniform_u40", "dualr_u40", "dualgr_u40",
+                                "dualrc_u40"))
             and args.no_state):
         # the tyr configs REWRITE o_proj/down_proj (OSSCAR reconstruction); load_slim
         # rebuilds a --no-state recipe from the base weights, which would silently

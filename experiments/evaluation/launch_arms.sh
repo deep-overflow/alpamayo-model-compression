@@ -23,7 +23,8 @@ mkdir -p logs
 
 case ${1-} in
 init | append)
-  [ "$1" = init ] && : >"$Q"
+  mode=$1
+  [ "$mode" = init ] && : >"$Q"
   NSH=$2
   shift 2
   for spec in "$@"; do
@@ -33,7 +34,9 @@ init | append)
       done
     done
   done
-  echo 0 >"$CUR"
+  # only `init` rewinds the cursor: `append` on a live queue must not hand the running
+  # workers' shards out a second time (two processes writing one rows file)
+  [ "$mode" = init ] && echo 0 >"$CUR"
   echo "queued $(wc -l <"$Q") jobs"
   ;;
 
@@ -43,8 +46,11 @@ worker)
     # re-read the length every claim: `append` can grow the queue while workers run,
     # and a length captured once at start would make them quit at the old end
     n=$(wc -l <"$Q")
-    # claim one line; the lock covers read-modify-write of the cursor
-    idx=$(flock "$CUR" bash -c 'i=$(cat '"$CUR"'); echo $((i + 1)) > '"$CUR"'; echo $i')
+    # claim one line; the lock covers read-modify-write of the cursor. Do NOT advance the
+    # cursor when the queue is already drained -- an exiting worker used to consume a slot,
+    # so jobs appended after several workers had exited were silently skipped (three
+    # dualr_wl shards were lost to this on 2026-08-30).
+    idx=$(flock "$CUR" bash -c 'i=$(cat '"$CUR"'); n2=$(wc -l < '"$Q"');           [ "$i" -lt "$n2" ] && echo $((i + 1)) > '"$CUR"'; echo $i')
     [ "$idx" -ge "$n" ] && break
     read -r tag ckpt set_name shard nsh < <(sed -n "$((idx + 1))p" "$Q")
     echo "$(date '+%H:%M:%S') gpu$gpu -> $tag $set_name shard $shard/$nsh"
