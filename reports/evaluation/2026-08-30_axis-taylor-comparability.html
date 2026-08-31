@@ -379,6 +379,66 @@ vq 0.570 / vm 0.728 / vm_pm 0.876이고,
 CoC 퇴화율은 baseline 대비 vq 0.020 / vm 0.002 /
 vm_pm 0.006이다. 게이트가 아니라 관찰로 보고한다.</p>
 
+<h3>5.4 절대 평균 (참고표)</h3>
+
+<p>§5.1–5.3의 판정은 모두 클립별 paired 차이로 이루어진다. 아래는 그 짝을 풀어 놓은
+절대 평균으로, 다른 표와 대조하거나 논문 표로 옮길 때 쓰라고 한곳에 모은 것이다.
+세 축 arm은 Blackwell에서 쟀으므로 대조 기준은 <code>baseline (Blackwell)</code> 행이다.</p>
+
+<table>
+  <thead>
+    <tr><th rowspan="2">arm</th><th class="r" rowspan="2">제거</th>
+        <th class="r" colspan="2">val500</th><th class="r" colspan="2">test500</th>
+        <th class="r" colspan="2">OOD-val 262</th></tr>
+    <tr><th class="r">minADE@6</th><th class="r">minFDE@6</th>
+        <th class="r">minADE@6</th><th class="r">minFDE@6</th>
+        <th class="r">minADE@6</th><th class="r">minFDE@6</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>baseline (Ada)</td><td class="r">0</td>
+        <td class="r">0.8236</td><td class="r">2.2050</td>
+        <td class="r">0.8417</td><td class="r">2.2673</td>
+        <td class="r">0.9995</td><td class="r">2.4959</td></tr>
+    <tr><td><strong>baseline (Blackwell)</strong></td><td class="r">0</td>
+        <td class="r">0.8225</td><td class="r">2.2067</td>
+        <td class="r">0.8407</td><td class="r">2.2681</td>
+        <td class="r">0.9989</td><td class="r">2.4965</td></tr>
+    <tr><td>vq (Q 13/32)</td><td class="r">490,733,568</td>
+        <td class="r">0.8758</td><td class="r">2.2698</td>
+        <td class="r">0.9219</td><td class="r">2.4538</td>
+        <td class="r">1.0627</td><td class="r">2.6851</td></tr>
+    <tr><td>vm_pm (MLP 1109ch)</td><td class="r">490,586,112</td>
+        <td class="r">0.8001</td><td class="r">2.1184</td>
+        <td class="r">0.8351</td><td class="r">2.2585</td>
+        <td class="r">1.0212</td><td class="r">2.5523</td></tr>
+    <tr><td>vm (MLP 4898ch)</td><td class="r">2,166,718,464</td>
+        <td class="r">0.8642</td><td class="r">2.3146</td>
+        <td class="r">0.8785</td><td class="r">2.3999</td>
+        <td class="r">1.0389</td><td class="r">2.6034</td></tr>
+    <tr><td>dual (둘 다) [BW]</td><td class="r">2,657,452,032</td>
+        <td class="r">0.8937</td><td class="r">2.3321</td>
+        <td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>
+    <tr><td>dual (둘 다) [Ada]</td><td class="r">2,657,452,032</td>
+        <td class="r">0.8904</td><td class="r">2.3304</td>
+        <td class="r">0.9498</td><td class="r">2.5459</td>
+        <td class="r">1.1192</td><td class="r">2.8514</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>이 표로 순위를 매기지 말 것.</strong> vm_pm은 val500에서 0.8001로
+  무압축 0.8225보다 <em>낮게</em> 보이지만 개선이 아니다 — 같은 클립끼리 짝지은
+  중앙값은 -0.0006 [-0.0025, +0.0009]로 0과 구별되지 않는다. 절대 평균은 소수 클립의 큰 값에
+  끌려다니고(모든 arm에서 평균이 중앙값보다 오른쪽), 클립 난이도가 상쇄되지 않는다.
+  판정은 §5.1의 paired 표로 읽어야 한다. 이 표의 쓸모는 <em>다른 보고서의 절대값 행과
+  맞춰 보는 것</em>이다.
+</div>
+
+<p>minFDE@6도 minADE@6과 같은 순서를 준다: 세 세트 모두 vq(2.2698 /
+2.4538 / 2.6851)가 vm_pm(2.1184 /
+2.2585 / 2.5523)보다 높다 — 축 결론이 경로 전체 오차뿐 아니라
+<strong>종점 오차에서도 동일하게</strong> 나타난다.</p>
+
 <h2><span class="num">6.</span> 해석</h2>
 
 <p><strong>저울은 맞다.</strong> Stage 1이 두 축의 1차 항이 같은 비율로 실제 손실 변화로 환산됨을

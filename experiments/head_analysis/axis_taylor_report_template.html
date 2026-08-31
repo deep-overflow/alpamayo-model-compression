@@ -379,6 +379,66 @@ vq {{indist.vlm_q.coc}} / vm {{indist.vlm_m.coc}} / vm_pm {{indist.vlm_m_pm.coc}
 CoC 퇴화율은 baseline 대비 vq {{indist.vlm_q.degen}} / vm {{indist.vlm_m.degen}} /
 vm_pm {{indist.vlm_m_pm.degen}}이다. 게이트가 아니라 관찰로 보고한다.</p>
 
+<h3>5.4 절대 평균 (참고표)</h3>
+
+<p>§5.1–5.3의 판정은 모두 클립별 paired 차이로 이루어진다. 아래는 그 짝을 풀어 놓은
+절대 평균으로, 다른 표와 대조하거나 논문 표로 옮길 때 쓰라고 한곳에 모은 것이다.
+세 축 arm은 Blackwell에서 쟀으므로 대조 기준은 <code>baseline (Blackwell)</code> 행이다.</p>
+
+<table>
+  <thead>
+    <tr><th rowspan="2">arm</th><th class="r" rowspan="2">제거</th>
+        <th class="r" colspan="2">val500</th><th class="r" colspan="2">test500</th>
+        <th class="r" colspan="2">OOD-val 262</th></tr>
+    <tr><th class="r">minADE@6</th><th class="r">minFDE@6</th>
+        <th class="r">minADE@6</th><th class="r">minFDE@6</th>
+        <th class="r">minADE@6</th><th class="r">minFDE@6</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>baseline (Ada)</td><td class="r">0</td>
+        <td class="r">{{indist.base.ade}}</td><td class="r">{{indist.base.fde}}</td>
+        <td class="r">{{test.base.ade}}</td><td class="r">{{test.base.fde}}</td>
+        <td class="r">{{oodval.base.ade}}</td><td class="r">{{oodval.base.fde}}</td></tr>
+    <tr><td><strong>baseline (Blackwell)</strong></td><td class="r">0</td>
+        <td class="r">{{indist.basebw.ade}}</td><td class="r">{{indist.basebw.fde}}</td>
+        <td class="r">{{test.basebw.ade}}</td><td class="r">{{test.basebw.fde}}</td>
+        <td class="r">{{oodval.basebw.ade}}</td><td class="r">{{oodval.basebw.fde}}</td></tr>
+    <tr><td>vq (Q 13/32)</td><td class="r">{{indist.vlm_q.removed}}</td>
+        <td class="r">{{indist.vlm_q.ade}}</td><td class="r">{{indist.vlm_q.fde}}</td>
+        <td class="r">{{test.vlm_q.ade}}</td><td class="r">{{test.vlm_q.fde}}</td>
+        <td class="r">{{oodval.vlm_q.ade}}</td><td class="r">{{oodval.vlm_q.fde}}</td></tr>
+    <tr><td>vm_pm (MLP 1109ch)</td><td class="r">{{indist.vlm_m_pm.removed}}</td>
+        <td class="r">{{indist.vlm_m_pm.ade}}</td><td class="r">{{indist.vlm_m_pm.fde}}</td>
+        <td class="r">{{test.vlm_m_pm.ade}}</td><td class="r">{{test.vlm_m_pm.fde}}</td>
+        <td class="r">{{oodval.vlm_m_pm.ade}}</td><td class="r">{{oodval.vlm_m_pm.fde}}</td></tr>
+    <tr><td>vm (MLP 4898ch)</td><td class="r">{{indist.vlm_m.removed}}</td>
+        <td class="r">{{indist.vlm_m.ade}}</td><td class="r">{{indist.vlm_m.fde}}</td>
+        <td class="r">{{test.vlm_m.ade}}</td><td class="r">{{test.vlm_m.fde}}</td>
+        <td class="r">{{oodval.vlm_m.ade}}</td><td class="r">{{oodval.vlm_m.fde}}</td></tr>
+    <tr><td>dual (둘 다) [BW]</td><td class="r">{{indist.dual_bw.removed}}</td>
+        <td class="r">{{indist.dual_bw.ade}}</td><td class="r">{{indist.dual_bw.fde}}</td>
+        <td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>
+    <tr><td>dual (둘 다) [Ada]</td><td class="r">{{indist.dual.removed}}</td>
+        <td class="r">{{indist.dual.ade}}</td><td class="r">{{indist.dual.fde}}</td>
+        <td class="r">{{test.dual.ade}}</td><td class="r">{{test.dual.fde}}</td>
+        <td class="r">{{oodval.dual.ade}}</td><td class="r">{{oodval.dual.fde}}</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>이 표로 순위를 매기지 말 것.</strong> vm_pm은 val500에서 {{indist.vlm_m_pm.ade}}로
+  무압축 {{indist.basebw.ade}}보다 <em>낮게</em> 보이지만 개선이 아니다 — 같은 클립끼리 짝지은
+  중앙값은 {{indist.vlm_m_pm.med}}로 0과 구별되지 않는다. 절대 평균은 소수 클립의 큰 값에
+  끌려다니고(모든 arm에서 평균이 중앙값보다 오른쪽), 클립 난이도가 상쇄되지 않는다.
+  판정은 §5.1의 paired 표로 읽어야 한다. 이 표의 쓸모는 <em>다른 보고서의 절대값 행과
+  맞춰 보는 것</em>이다.
+</div>
+
+<p>minFDE@6도 minADE@6과 같은 순서를 준다: 세 세트 모두 vq({{indist.vlm_q.fde}} /
+{{test.vlm_q.fde}} / {{oodval.vlm_q.fde}})가 vm_pm({{indist.vlm_m_pm.fde}} /
+{{test.vlm_m_pm.fde}} / {{oodval.vlm_m_pm.fde}})보다 높다 — 축 결론이 경로 전체 오차뿐 아니라
+<strong>종점 오차에서도 동일하게</strong> 나타난다.</p>
+
 <h2><span class="num">6.</span> 해석</h2>
 
 <p><strong>저울은 맞다.</strong> Stage 1이 두 축의 1차 항이 같은 비율로 실제 손실 변화로 환산됨을
