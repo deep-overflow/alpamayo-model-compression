@@ -115,6 +115,21 @@ LingoQA <strong>train</strong>(148,506 QA·3,508 세그먼트)의 답변 토큰�
 </figure>
 
 <h2><span class="num">3.</span>캐시와 궤적 — G1·G2 (세 세트)</h2>
+
+<p>고정 프로토콜의 절대값(평균)부터:</p>
+<table>
+<thead><tr><th>arm</th><th class="r">val500 minADE@6</th><th class="r">minFDE@6</th><th class="r">test500 minADE@6</th><th class="r">minFDE@6</th><th class="r">OOD-val minADE@6</th><th class="r">minFDE@6</th></tr></thead>
+<tbody>
+<tr><td>무압축 baseline</td><td class="r">{{proxy.val500.baseline.minADE6|.4f}}</td><td class="r">{{proxy.val500.baseline.minFDE6|.4f}}</td><td class="r">{{proxy.test.baseline.minADE6|.4f}}</td><td class="r">{{proxy.test.baseline.minFDE6|.4f}}</td><td class="r">{{proxy.oodval.baseline.minADE6|.4f}}</td><td class="r">{{proxy.oodval.baseline.minFDE6|.4f}}</td></tr>
+<tr><td>dual</td><td class="r">{{proxy.val500.dual.minADE6|.4f}}</td><td class="r">{{proxy.val500.dual.minFDE6|.4f}}</td><td class="r">{{proxy.test.dual.minADE6|.4f}}</td><td class="r">{{proxy.test.dual.minFDE6|.4f}}</td><td class="r">{{proxy.oodval.dual.minADE6|.4f}}</td><td class="r">{{proxy.oodval.dual.minFDE6|.4f}}</td></tr>
+<tr><td>dualr (기존)</td><td class="r">{{proxy.val500.dualr.minADE6|.4f}}</td><td class="r">{{proxy.val500.dualr.minFDE6|.4f}}</td><td class="r">{{proxy.test.dualr.minADE6|.4f}}</td><td class="r">{{proxy.test.dualr.minFDE6|.4f}}</td><td class="r">{{proxy.oodval.dualr.minADE6|.4f}}</td><td class="r">{{proxy.oodval.dualr.minFDE6|.4f}}</td></tr>
+<tr><td>dualr_rep</td><td class="r">{{proxy.val500.dualr_rep.minADE6|.4f}}</td><td class="r">{{proxy.val500.dualr_rep.minFDE6|.4f}}</td><td class="r">{{proxy.test.dualr_rep.minADE6|.4f}}</td><td class="r">{{proxy.test.dualr_rep.minFDE6|.4f}}</td><td class="r">{{proxy.oodval.dualr_rep.minADE6|.4f}}</td><td class="r">{{proxy.oodval.dualr_rep.minFDE6|.4f}}</td></tr>
+<tr><td>dualr_w</td><td class="r">{{proxy.val500.dualr_w.minADE6|.4f}}</td><td class="r">{{proxy.val500.dualr_w.minFDE6|.4f}}</td><td class="r">{{proxy.test.dualr_w.minADE6|.4f}}</td><td class="r">{{proxy.test.dualr_w.minFDE6|.4f}}</td><td class="r">{{proxy.oodval.dualr_w.minADE6|.4f}}</td><td class="r">{{proxy.oodval.dualr_w.minFDE6|.4f}}</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td class="r"><strong>{{proxy.val500.dualr_wl.minADE6|.4f}}</strong></td><td class="r"><strong>{{proxy.val500.dualr_wl.minFDE6|.4f}}</strong></td><td class="r"><strong>{{proxy.test.dualr_wl.minADE6|.4f}}</strong></td><td class="r"><strong>{{proxy.test.dualr_wl.minFDE6|.4f}}</strong></td><td class="r"><strong>{{proxy.oodval.dualr_wl.minADE6|.4f}}</strong></td><td class="r"><strong>{{proxy.oodval.dualr_wl.minFDE6|.4f}}</strong></td></tr>
+</tbody>
+</table>
+
+<p>무압축 대비 paired ΔminADE@6(중앙값 [95% CI])와 캐시 진단:</p>
 <table>
 <thead><tr><th>arm</th><th>캐시 비용 A10−A00</th><th>이동 비 (rep)</th><th>val500 Δ</th><th>test500 Δ</th><th>OOD-val Δ</th><th class="r">CoC 붕괴율 (val)</th></tr></thead>
 <tbody>

@@ -111,8 +111,12 @@ def main():
         for s_name in args.sets:
           base = pn.load(*pn.ARMS["baseline"][s_name])
           key = "val500" if s_name == "indist" else s_name
-          res[key] = {}
+          ba = np.array([pn.at6(r, "ade_rollout_k") for r in base.values()])
+          bf = np.array([pn.at6(r, "fde_rollout_k") for r in base.values()])
+          res[key] = {"baseline": {"n": len(base), "minADE6": float(ba.mean()),
+                                    "minFDE6": float(bf.mean())}}
           lines.append("")
+          lines.append(f"{key} baseline     n={len(base)} ADE {ba.mean():.4f} FDE {bf.mean():.4f}")
           for arm in args.val_arms:
             spec = pn.ARMS.get(arm, {}).get(s_name)
             rows = pn.load(*spec) if spec else {}
