@@ -83,6 +83,26 @@ dual 68.8, n.s.), refit에서는 Hessian의 토큰 구성이 결정적임을 2×
 - 사다리: Tyr(붕괴) → dualr 41.8 → rep(safe_refit) 52.2 → **wl 72.6 ≈ 무압축 73.2**.
   재구성의 reasoning 비용은 고유한 것이 아니라 Hessian이 그 능력의 데이터를 본 적이 없어서였다.
 - 한계: LingoQA train↔평가셋은 같은 벤치마크의 다른 split(세그먼트 서로소) — 분포 내 회복.
-  G4 폐루프 미실행. 운영 사고 2건(공유 큐 phantom-increment race → claim 수정; 실행 중 스크립트
+  운영 사고 2건(공유 큐 phantom-increment race → claim 수정; 실행 중 스크립트
   편집으로 워커 bash 재파싱 사망)은 본문·메모리에 기록.
 보고서 `reports/evaluation/2026-08-31_dualr-lingo-hessian.html`.
+
+## G4 폐루프 (2026-08-31 17:46 KST 완료, alpasim 2601, 150씬 × 2) — reasoning 가설 기각
+
+| config | score | pass% | 충돌 | offroad | progress | d2gt | CoC 붕괴 |
+|---|---|---|---|---|---|---|---|
+| baseline | 0.750 | 89.0 | 0.040 | 0.070 | 0.747 | 2.89 | 0.006 |
+| dual | **0.828** | 91.0 | 0.023 | 0.067 | 0.828 | 3.32 | 0.027 |
+| dualr | 0.792 | 88.7 | 0.037 | 0.077 | 0.799 | 2.97 | 0.045 |
+| **dualr_wl** | 0.783 | 87.3 | 0.030 | **0.097** | 0.794 | **2.82** | 0.027 |
+
+baseline 대비: dual +0.079 [+0.036, +0.123], dualr +0.043 [+0.005, +0.080], wl +0.033 [−0.008, +0.076]
+(Wilcoxon p=0.020). 직접: **wl − dualr −0.009 [−0.038, +0.020]** (W/L/T 25/33/92), wl − dual −0.045
+[−0.088, −0.007].
+
+**LingoQA 41.8 → 72.6의 회복은 폐루프 점수를 전혀 움직이지 않았다.** dualr 계열의 폐루프 열세는
+reasoning 손상 탓이 아니다. wl은 dualr의 CoC 붕괴(0.045 → 0.027, 빈 출력 위주)·d2gt(2.97 → 2.82,
+전 arm 최고)·충돌(0.037 → 0.030)을 고쳤지만 offroad가 0.077 → 0.097로 악화돼 총점에서 상쇄됐다.
+재구성 계열이 dual보다 폐루프에서 낮은 패턴은 세 번째(dualr, tyr_r, wl). 귀속 주의: m2601의 dualr는
+층 35가 터진 옛 빌드라 wl−dualr에 safe_refit 효과가 섞여 있다 — 분리에는 dualr_rep arm 필요(미실행).
+분석 `outputs/alpasim_wl_2601`(+`pairs.json`), 보고서 §5.

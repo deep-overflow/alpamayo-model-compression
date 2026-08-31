@@ -157,7 +157,45 @@ LingoQA <strong>train</strong>(148,506 QA·3,508 세그먼트)의 답변 토큰�
 </table>
 <p>H1의 직접 대비 <strong>wl − w</strong>: {{wl_vs_w.delta|+.1%}} [{{wl_vs_w.ci_lo|+.1%}}, {{wl_vs_w.ci_hi|+.1%}}], McNemar p={{wl_vs_w.mcnemar_p|.2g}}.</p>
 
-<h2><span class="num">5.</span>해석</h2>
+<h2><span class="num">5.</span>폐루프 (alpasim 2601, 150씬 × 2 rollout)</h2>
+
+<p>개루프의 회복이 실제 주행으로 옮겨가는지 — 그리고 dualr 계열의 폐루프 열세가 reasoning 손상 탓이었는지 — 를 묻는다. driver는 Ada 4장, <code>DRIVER_OMP_THREADS=8</code>,
+저장된 상태를 하드링크한 드라이버(재빌드 없음). baseline·dual·dualr은 기존 m2601 결과와 같은 씬 집합이다.</p>
+
+<table>
+<thead><tr><th>config</th><th class="r">score</th><th class="r">pass%</th><th class="r">충돌(at-fault)</th><th class="r">offroad</th><th class="r">progress</th><th class="r">d2gt</th><th class="r">CoC 붕괴율</th></tr></thead>
+<tbody>
+<tr><td>무압축 baseline</td><td class="r">{{closed.configs.baseline.score|.3f}}</td><td class="r">{{closed.configs.baseline.passed|.1%}}</td><td class="r">{{closed.configs.baseline.collision_at_fault|.3f}}</td><td class="r">{{closed.configs.baseline.offroad|.3f}}</td><td class="r">{{closed.configs.baseline.progress_clipped_rel|.3f}}</td><td class="r">{{closed.configs.baseline.dist_to_gt_trajectory|.2f}}</td><td class="r">{{closed.coc.baseline.mean_degenerate_frac|.3f}}</td></tr>
+<tr><td>dual (선택만)</td><td class="r"><strong>{{closed.configs.slim_dual_u40_v2.score|.3f}}</strong></td><td class="r">{{closed.configs.slim_dual_u40_v2.passed|.1%}}</td><td class="r">{{closed.configs.slim_dual_u40_v2.collision_at_fault|.3f}}</td><td class="r">{{closed.configs.slim_dual_u40_v2.offroad|.3f}}</td><td class="r">{{closed.configs.slim_dual_u40_v2.progress_clipped_rel|.3f}}</td><td class="r">{{closed.configs.slim_dual_u40_v2.dist_to_gt_trajectory|.2f}}</td><td class="r">{{closed.coc.slim_dual_u40_v2.mean_degenerate_frac|.3f}}</td></tr>
+<tr><td>dualr (기존)</td><td class="r">{{closed.configs.slim_dualr_u40.score|.3f}}</td><td class="r">{{closed.configs.slim_dualr_u40.passed|.1%}}</td><td class="r">{{closed.configs.slim_dualr_u40.collision_at_fault|.3f}}</td><td class="r">{{closed.configs.slim_dualr_u40.offroad|.3f}}</td><td class="r">{{closed.configs.slim_dualr_u40.progress_clipped_rel|.3f}}</td><td class="r">{{closed.configs.slim_dualr_u40.dist_to_gt_trajectory|.2f}}</td><td class="r bad">{{closed.coc.slim_dualr_u40.mean_degenerate_frac|.3f}}</td></tr>
+<tr><td><strong>dualr_wl</strong></td><td class="r">{{closed.configs.slim_dualr_wl_u40.score|.3f}}</td><td class="r">{{closed.configs.slim_dualr_wl_u40.passed|.1%}}</td><td class="r">{{closed.configs.slim_dualr_wl_u40.collision_at_fault|.3f}}</td><td class="r bad">{{closed.configs.slim_dualr_wl_u40.offroad|.3f}}</td><td class="r">{{closed.configs.slim_dualr_wl_u40.progress_clipped_rel|.3f}}</td><td class="r good">{{closed.configs.slim_dualr_wl_u40.dist_to_gt_trajectory|.2f}}</td><td class="r good">{{closed.coc.slim_dualr_wl_u40.mean_degenerate_frac|.3f}}</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>대비</th><th>Δscore (씬 페어드 평균 [95% CI])</th><th class="r">W/L/T</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>dual − baseline</td><td>{{closed.paired_vs_baseline.slim_dual_u40_v2.d_score_mean|+.4f}} [{{closed.paired_vs_baseline.slim_dual_u40_v2.d_score_ci_lo|+.4f}}, {{closed.paired_vs_baseline.slim_dual_u40_v2.d_score_ci_hi|+.4f}}]</td><td class="r">—</td><td>무압축보다 유의하게 좋음(기존 결과 재확인)</td></tr>
+<tr><td>dualr − baseline</td><td>{{closed.paired_vs_baseline.slim_dualr_u40.d_score_mean|+.4f}} [{{closed.paired_vs_baseline.slim_dualr_u40.d_score_ci_lo|+.4f}}, {{closed.paired_vs_baseline.slim_dualr_u40.d_score_ci_hi|+.4f}}]</td><td class="r">—</td><td>유의</td></tr>
+<tr><td><strong>wl − baseline</strong></td><td>{{closed.paired_vs_baseline.slim_dualr_wl_u40.d_score_mean|+.4f}} [{{closed.paired_vs_baseline.slim_dualr_wl_u40.d_score_ci_lo|+.4f}}, {{closed.paired_vs_baseline.slim_dualr_wl_u40.d_score_ci_hi|+.4f}}]</td><td class="r">—</td><td>CI가 0을 포함(부트스트랩 평균 기준; Wilcoxon p=0.020)</td></tr>
+<tr><td><strong>wl − dualr</strong></td><td>{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.mean|+.4f}} [{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.lo|+.4f}}, {{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.hi|+.4f}}]</td><td class="r">{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.w}}/{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.l}}/{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.t}}</td><td><strong>차이 없음</strong> — 개루프 +20pp가 폐루프 점수로 옮겨가지 않았다</td></tr>
+<tr><td><strong>wl − dual</strong></td><td class="bad">{{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.mean|+.4f}} [{{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.lo|+.4f}}, {{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.hi|+.4f}}]</td><td class="r">{{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.w}}/{{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.l}}/{{closed.pairs.slim_dualr_wl_u40__slim_dual_u40_v2.t}}</td><td>여전히 dual보다 유의하게 낮음</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>G4 판정: reasoning 가설 기각.</strong> LingoQA 41.8 → 72.6의 회복은 폐루프 점수를 움직이지 않았다(wl − dualr {{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.mean|+.3f}}, W/L/T {{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.w}}/{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.l}}/{{closed.pairs.slim_dualr_wl_u40__slim_dualr_u40.t}}).
+dualr 계열이 dual보다 폐루프에서 낮은 이유는 <strong>reasoning 손상이 아니다</strong>. 지표를 쪼개 보면 wl은 dualr의 CoC 붕괴({{closed.coc.slim_dualr_u40.mean_degenerate_frac|.3f}} → {{closed.coc.slim_dualr_wl_u40.mean_degenerate_frac|.3f}}, 빈 출력이 대부분)와
+GT 경로 추종(d2gt {{closed.configs.slim_dualr_u40.dist_to_gt_trajectory|.2f}} → {{closed.configs.slim_dualr_wl_u40.dist_to_gt_trajectory|.2f}}, 전 arm 최고)·충돌({{closed.configs.slim_dualr_u40.collision_at_fault|.3f}} → {{closed.configs.slim_dualr_wl_u40.collision_at_fault|.3f}})을 개선했지만
+<strong>offroad가 {{closed.configs.slim_dualr_u40.offroad|.3f}} → {{closed.configs.slim_dualr_wl_u40.offroad|.3f}}로 악화</strong>되어 총점에서 상쇄됐다. 재구성 계열이 폐루프에서 손해라는 패턴은 이로써 세 번째다(dualr, tyr_r, wl).
+</div>
+
+<div class="note">
+<strong>귀속 주의.</strong> 기존 m2601의 <code>dualr</code>는 층 35 o_proj 해가 터진 옛 빌드다(2×2 보고서 참조). 따라서 wl − dualr에는 safe_refit 수정과 LingoQA 데이터 효과가 섞여 있다.
+깨끗한 분리는 <code>dualr_rep</code>(safe_refit만) 폐루프 arm이 필요하며 미실행이다(추가 8 h × 4 카드).
+</div>
+
+<h2><span class="num">6.</span>해석</h2>
 <ul>
   <li><strong>왜 own-CoC는 해롭고 QA 답변은 이로운가.</strong> 같은 decode 몫 0.16에서 유일한 차이는 토큰이다: own-CoC ≈3k(4096·12288차원에서 정확 보간 → 암기) vs QA 답변 9.7k + 프롬프트 447k(보간 불가, 분포는 평가와 동일).
   refit이 "decode 방향을 어디에 쓸지"를 데이터가 정하는 것이지, decode를 섞는 것 자체가 문제가 아니었다.</li>
@@ -167,16 +205,18 @@ LingoQA <strong>train</strong>(148,506 QA·3,508 세그먼트)의 답변 토큰�
   이어졌는지는 §3의 세 세트가 답한다 — 캐시 비용 자체는 {{proxy.arms.dualr_wl.A10_minus_A00.0|+.4f}}로 0을 포함한다.</li>
   <li><strong>주의.</strong> LingoQA train은 평가셋과 같은 벤치마크의 다른 split이다(세그먼트 서로소). 이 회복은 "분포 내 reasoning"의 회복이고, 주행 CoC의 질(붕괴율·NLL)과 OOD reasoning은 별도 축이다 —
   붕괴율은 §3에, own-CoC NLL 증가는 프록시에서 +0.006(w와 동일)로 기록됐다.</li>
+  <li><strong>그리고 그 회복은 주행으로 옮겨가지 않는다(§5).</strong> reasoning 지표를 무압축 수준으로 되돌려도 폐루프 점수는 dualr과 같다 — 개루프 reasoning은 이 저장소에서 다시 한 번 주행 품질의 대리 지표가 아님이 확인됐다
+  (앞선 사례: <code>tail-safety-independent-of-reasoning</code>). 재구성이 폐루프에서 지는 원인은 다른 곳에 있다.</li>
 </ul>
 
-<h2><span class="num">6.</span>한계</h2>
+<h2><span class="num">7.</span>한계</h2>
 <ul>
   <li>LingoQA train은 캘리브레이션 데이터이고 평가는 LingoQA 평가셋이다 — 같은 벤치마크의 두 split이므로 "분포 내" 회복이지 일반적 reasoning 회복의 증거는 아니다(주행 CoC·OOD reasoning은 별도).</li>
   <li>대조 arm(`dualr_rl`, 균등 prefill + LingoQA)은 생략됐다 — 효과가 QA 데이터인지 expert 가중과의 결합인지는 분리되지 않았다.</li>
-  <li>혼합 몫은 한 점(0.68/0.04/0.16/0.12)만 시험했다. G4 폐루프는 미실행.</li>
+  <li>혼합 몫은 한 점(0.68/0.04/0.16/0.12)만 시험했다. 폐루프는 §5에서 실행했고 reasoning 가설을 기각했다 — 남은 미지수는 offroad 악화의 원인과 dualr_rep 대조군이다.</li>
 </ul>
 
-<h2><span class="num">7.</span>재현</h2>
+<h2><span class="num">8.</span>재현</h2>
 <pre>bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_cache_recon.py --gpu 4 --start 0 --k-seeds 1 \
      --prefill-weights expert --decode-share 0.04 --lingo-segments 300 --lingo-questions 2 \
      --lingo-prefill-share 0.16 --lingo-answer-share 0.12 --exp-id dualr_wl_supernet_u40
