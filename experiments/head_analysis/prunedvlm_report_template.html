@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프루닝된 VLM의 안쪽 — attention 분포와 잔차 스트림</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Pruned VLM internals</div>
+  <h1>프루닝된 VLM의 안쪽 — 질량은 제자리인데 분포가 움직인다</h1>
+  <div class="meta">
+    2026-09-01 · 모델 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>) ·
+    <code>dual_u40_v2</code> vs dense, val500 앞 {{n}}클립, dense CoC로 teacher-forcing<br>
+    코드 <code>experiments/head_analysis/{run_prunedvlm,analyze_prunedvlm}.py</code> ·
+    산출물 <code>outputs/{prunedvlm_dual,prunedvlm_analysis}/</code> ·
+    기록 <code>plans/2026-09-01_pruned-vlm-internals.md</code> · 브랜치 <code>pruned-vlm-internals</code><br>
+    선행: <a href="2026-08-28_cache-shift.html">2026-08-28_cache-shift.html</a>(캐시 이동),
+    <a href="2026-08-29_cache-use-map.html">2026-08-29_cache-use-map.html</a>(참조 지도),
+    <a href="2026-08-30_axis-taylor-comparability.html">2026-08-30_axis-taylor-comparability.html</a>(축 비대칭)
+  </div>
+</header>
+
+<h2><span class="num">0.</span> 요약</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{tv_overall.med}}</div><div class="l">expert attention의 TV — 재배치된 확률질량 비율</div></div>
+  <div class="kpi"><div class="v">{{within_share}}</div><div class="l">그 재배치 중 <strong>span 안에서</strong> 일어난 몫</div></div>
+  <div class="kpi"><div class="v">{{dmass.vision.med}} pp</div><div class="l">vision span mass 변화 — 선행 보고서의 −0.6 pp를 재현</div></div>
+  <div class="kpi"><div class="v">{{rel_h_out.med}}</div><div class="l">층 출력 잔차 발산 <code>rel</code> (cos {{cos_h_out.med}})</div></div>
+</div>
+
+<p><strong>한 줄 결론.</strong> 프루닝된 VLM이 만든 캐시를 <em>같은</em> expert가 읽을 때, span별
+attention mass는 선행 보고서대로 1 pp 미만으로만 움직인다. 그런데 분포 전체로 보면
+<strong>{{tv_overall.med}}</strong>의 질량이 자리를 옮기고, 그 중 <strong>{{within_share}}</strong>가
+<em>span 안에서</em> 일어난다. 굵은 축(span mass)만 보던 지금까지의 계측은 이 움직임에
+구조적으로 눈이 멀어 있었다. 재실행 잡음 바닥은 {{g.G3_rerun_tv_max}}로, 신호가 그 50만 배다.</p>
+
+<h2><span class="num">1.</span> 계측</h2>
+
+<p>클립마다 dense가 한 번 rollout해 CoC를 고정하고, 그 <em>같은</em> 토큰 시퀀스를 두 번
+teacher-force한다 — 한 번은 그대로, 한 번은 <code>dual_u40_v2</code>의 마스크를 켜고.
+체크포인트를 두 개 올리는 대신 <strong>모델 하나에 <code>mask_lib.PruneMasks</code>를 껐다 켰다</strong>
+하는 방식이라(<code>run_cachediff.py</code>와 같은 계측) 가중치·커널·코드 경로가 완전히 고정되고,
+측정된 차이는 전부 프루닝 효과다. <code>dual_u40_v2</code>는 VLM만 자르므로 <strong>expert 가중치는
+동일</strong>하다 — 같은 expert가 두 캐시를 읽는 대비다.</p>
+
+<div class="note">
+  <strong>탭 위치.</strong> <code>output_hidden_states=True</code>는 쓸 수 없다. DeepStack이
+  텍스트 층 0·1·2 뒤에 vision feature를 <em>제자리 대입</em>해 기록된 텐서를 사후 변조하고
+  (실측 최대 26.1), 마지막 항목은 RMSNorm을 거친 값으로 교체돼 층 35의 raw 출력을 얻을 수 없다.
+  대신 36개 decoder layer에 forward hook을 걸어 <code>args[0]=h_in</code>,
+  <code>output=h_out</code>을 훅 안에서 clone하고, <code>h_mid</code>는
+  <code>post_attention_layernorm</code> pre-hook으로 얻는다. 배선은 G1이 검증한다.
+</div>
+
+<h3>1.1 게이트</h3>
+
+<table>
+  <thead><tr><th>게이트</th><th>측정</th><th class="r">값</th><th>판정</th></tr></thead>
+  <tbody>
+    <tr><td>G0 정렬</td><td>캐시 층0 <code>|ΔK|</code> / 층0 <code>h_in</code> rel</td><td class="r">{{g.G0_layer0_dk_max}} / {{g.G0_layer0_hin_rel_max}}</td><td>PASS — 두 모델이 같은 위치·같은 임베딩에서 출발</td></tr>
+    <tr><td>G1 잔차 분해</td><td><code>h_out == (h_in+a).add(m)</code>, 36층</td><td class="r">{{g.G1_bitwise_frac}}</td><td>PASS — bitwise, 탭 배선 확인</td></tr>
+    <tr><td>G2 정규화</td><td>bf16 확률 행합 편차 max</td><td class="r">{{g.G2_rowsum_dev_max}}</td><td>PASS</td></tr>
+    <tr><td>G3-1 재실행 바닥</td><td>마스크 off ×2에서의 TV max</td><td class="r">{{g.G3_rerun_tv_max}}</td><td>결정성 확인</td></tr>
+    <tr><td>G3-2 bf16 바닥</td><td>fp32 재구성 대비 잔차 rel</td><td class="r">{{g.G3_bf16_floor_rel}}</td><td>잔차 주장의 분모</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">2.</span> expert는 프루닝된 캐시를 다르게 읽는가</h2>
+
+<table>
+  <thead><tr><th>지표</th><th class="r">클립 중앙값 [95% CI]</th><th>읽는 법</th></tr></thead>
+  <tbody>
+    <tr><td><strong>TV</strong></td><td class="r"><strong>{{tv_overall.ci}}</strong></td><td>재배치된 확률질량의 비율</td></tr>
+    <tr><td>&nbsp;&nbsp;— span 사이</td><td class="r">{{tv_between.ci}}</td><td>굵은 축이 볼 수 있는 몫</td></tr>
+    <tr><td>&nbsp;&nbsp;— <strong>span 안</strong></td><td class="r"><strong>{{tv_within.ci}}</strong></td><td>선행 계측이 못 보던 몫 ({{within_share}})</td></tr>
+    <tr><td>JS</td><td class="r">{{js_overall.ci}}</td><td>유계 [0, ln2]</td></tr>
+    <tr><td>KL(dense‖pruned)</td><td class="r">{{kl_pq.ci}}</td><td>dense가 보던 키를 pruned가 버리는 정도</td></tr>
+    <tr><td>KL(pruned‖dense)</td><td class="r">{{kl_qp.ci}}</td><td>pruned가 새로 보는 키</td></tr>
+    <tr><td>KL 비대칭</td><td class="r">{{kl_asym.ci}}</td><td>양수 = <strong>버리는 쪽이 우세</strong></td></tr>
+    <tr><td>Δ 정규화 엔트로피</td><td class="r">{{dent.ci}}</td><td>양수 = 약간 더 퍼짐</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="PLOT::pv::attn_maps.png" alt="TV maps and span mass">
+  <figcaption>왼쪽: TV의 (expert 층 × 디노이징 스텝) 지도. <strong>층 축이 지배적</strong>이다 —
+  층 0–5에서 0.02, 층 20–35에서 0.17. 스텝 축의 변화는 그보다 작다.
+  가운데: 64개 action 토큰에 걸친 TV. 뒤쪽 waypoint일수록 재배치가 크다(0.083 → 0.090).
+  오른쪽: 층별 span mass 변화. 층 평균으로는 1 pp 미만이지만 <strong>층별로는 ±4 pp까지 흔들리고
+  서로 상쇄</strong>된다 — 집계가 숨긴 두 번째 층위.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>선행 결과의 재현과 확장.</strong> vision span mass 변화 <strong>{{dmass.vision.ci}} pp</strong>는
+  <a href="2026-08-28_cache-shift.html">cache-shift</a>가 보고한 −0.6 pp를 그대로 재현한다 —
+  독립 구현이 같은 수를 낸다는 뜻이다. 새로운 것은 <em>그 아래</em>다: 같은 조건에서 분포는
+  {{tv_overall.med}}만큼 움직였고, 그 중 {{within_share}}는 span 경계를 넘지 않았다.
+  "expert는 거의 같게 읽는다"는 결론은 <strong>span 해상도에서만 참</strong>이다.
+</div>
+
+<figure>
+  <img src="PLOT::pv::attn_judgement.png" alt="span mass change vs TV">
+  <figcaption>(층, head, 스텝) 셀마다 span 사이로 옮겨간 질량(x)과 전체 TV(y). 점들이 점선
+  (모든 이동이 span 사이에서 일어났을 경우) 위로 크게 떠 있고, 그 수직 간격이 span 안에서의
+  재배치다.</figcaption>
+</figure>
+
+<h2><span class="num">3.</span> VLM 안에서 임베딩이 변환되는 양상</h2>
+
+<table>
+  <thead><tr><th>지점</th><th class="r">rel = ‖h<sub>p</sub>−h<sub>d</sub>‖/‖h<sub>d</sub>‖</th><th class="r">cos</th></tr></thead>
+  <tbody>
+    <tr><td><code>h_in</code> (층 입력)</td><td class="r">{{rel_h_in.ci}}</td><td class="r">{{cos_h_in.ci}}</td></tr>
+    <tr><td><code>h_mid</code> (attention 직후)</td><td class="r">{{rel_h_mid.ci}}</td><td class="r">{{cos_h_mid.ci}}</td></tr>
+    <tr><td><code>h_out</code> (MLP 직후)</td><td class="r">{{rel_h_out.ci}}</td><td class="r">{{cos_h_out.ci}}</td></tr>
+    <tr><td>층 안에서 attention이 벌린 몫</td><td class="r">{{d_attn.ci}}</td><td class="r">—</td></tr>
+    <tr><td>층 안에서 MLP가 벌린 몫</td><td class="r">{{d_mlp.ci}}</td><td class="r">—</td></tr>
+  </tbody>
+</table>
+
+<p>스트림은 크기로는 {{rel_h_out.med}}만큼 벌어지지만 방향은 cos {{cos_h_out.med}}로 유지된다 —
+<strong>회전이 아니라 크기·세부의 어긋남</strong>이다. 층 안에서는 attention이 MLP보다
+{{d_attn.med}} 대 {{d_mlp.med}}로 더 벌린다. Q head를 자른 config이므로 방향은 예상대로지만,
+비율은 1.4배로 압도적이지는 않다.</p>
+
+<figure>
+  <img src="PLOT::pv::resid_layers.png" alt="residual divergence by layer">
+  <figcaption>왼쪽: 세 지점의 층별 발산. <strong>층 22에서 0.46으로 정점을 찍고 층 25 이후
+  0.37로 되돌아온다</strong> — 후반 층이 어긋남을 부분적으로 되감는다. 가운데: 층 안에서 각
+  서브블록이 더한 몫(층 16의 MLP, 층 34–35가 예외적으로 크다). 오른쪽: 각 블록이 스트림을
+  돌리는 정도 — dense(실선)와 pruned(점선)가 거의 겹친다.</figcaption>
+</figure>
+
+<h3>3.1 변환 양상 자체는 보존된다</h3>
+
+<table>
+  <thead><tr><th>전이</th><th class="r">dense</th><th class="r">pruned</th><th>변화</th></tr></thead>
+  <tbody>
+    <tr><td>cos(h_in, h_mid) — attention의 회전</td><td class="r">{{tcos_attn_d.med}}</td><td class="r">{{tcos_attn_p.med}}</td><td>거의 동일</td></tr>
+    <tr><td><strong>‖a‖/‖h_in‖ — attention의 쓰기 크기</strong></td><td class="r">{{tmag_attn_d.med}}</td><td class="r">{{tmag_attn_p.med}}</td><td><strong>−4.6%</strong></td></tr>
+    <tr><td>cos(h_mid, h_out) — MLP의 회전</td><td class="r">{{tcos_mlp_d.med}}</td><td class="r">{{tcos_mlp_p.med}}</td><td>거의 동일</td></tr>
+    <tr><td>‖m‖/‖h_mid‖ — MLP의 쓰기 크기</td><td class="r">{{tmag_mlp_d.med}}</td><td class="r">{{tmag_mlp_p.med}}</td><td>−0.7%</td></tr>
+  </tbody>
+</table>
+
+<p>두 축에서 각각 <strong>약 40%</strong>의 유닛을 지웠는데 블록의 쓰기 크기는 attention에서
+4.6%, MLP에서 0.7%만 줄었다. 남은 유닛이 대부분을 떠안는다는 뜻이고, <strong>MLP 쪽이 훨씬
+더 잘 흡수</strong>한다. 이것은
+<a href="2026-08-30_axis-taylor-comparability.html">축 비대칭 보고서</a>의 개루프 결과
+(같은 파라미터에서 Q 절단이 +0.030, MLP 절단이 0.000)와 같은 방향이며, 그 기전을 표현 수준에서
+보여준다.</p>
+
+<figure>
+  <img src="PLOT::pv::resid_spans.png" alt="per-token-type divergence">
+  <figcaption>토큰 종류별로 각 서브블록이 층 안에서 더한 발산. 층 0이 압도적이고(특히 sink),
+  그 뒤로는 종류 간 차이가 크지 않다. vision 토큰은 수가 압도적(2880/3086)이라 전체 평균을
+  지배하지만, 토큰 <em>하나당</em>으로는 다른 종류와 비슷하다.</figcaption>
+</figure>
+
+<h2><span class="num">4.</span> 해석</h2>
+
+<p><strong>손상은 "어디를 보느냐"가 아니라 "무엇을 읽느냐"에서 온다 — 단, 예상과 다른 해상도에서.</strong>
+span 수준에서 보면 expert는 프루닝 전후로 거의 같은 곳을 본다(vision {{dmass.vision.med}} pp).
+그러나 span 안에서는 {{tv_within.med}}의 질량이 다른 키로 옮겨간다. 즉 "vision을 72% 본다"는
+사실은 유지되지만 <em>어느 vision 토큰을</em> 보는지는 바뀐다.</p>
+
+<p><strong>KL 비대칭 {{kl_asym.med}}</strong>는 그 이동의 방향을 말한다 — 양수이므로
+dense가 보던 키를 pruned가 버리는 쪽이 우세하다. 동시에 엔트로피가 {{dent.med}}만큼 올라
+분포가 약간 더 평평해진다. 특정 키에 대한 날카로움을 잃고 넓게 퍼지는 그림이다.</p>
+
+<p><strong>잔차 스트림은 방향을 지킨다.</strong> cos {{cos_h_out.med}}는 프루닝된 VLM이 dense와
+거의 같은 방향의 표현을 만든다는 뜻이고, 어긋남은 주로 크기와 세부에 있다. 층 22에서 정점을
+찍고 되돌아오는 모양은 후반 층이 부분적인 자기 교정을 한다는 것을 시사한다 — 이는
+<a href="2026-08-29_cache-use-map.html">cache-use-map</a>이 후반 층·후반 스텝을 가장 민감하다고
+본 것과 함께 읽어야 한다.</p>
+
+<h2><span class="num">5.</span> 한계</h2>
+
+<ul>
+  <li>{{n}}클립이다. 층×head×스텝×query 셀당 표본이 {{n}}개뿐이라 <strong>셀 단위 주장은 하지
+      않았고</strong> 축을 접은 marginal에서만 판정했다.</li>
+  <li><code>dual_u40_v2</code> 하나만 봤다. Q 전용(<code>dualq</code>)·MLP 전용(<code>dualm</code>)
+      arm에 같은 계측을 걸면 축별 기여를 분리할 수 있으나 재지 않았다.</li>
+  <li>teacher-forcing 조건이다. pruned 모델이 <em>자기 CoC</em>를 쓸 때의 내부는 다를 수 있다.
+      위치 대응을 위해 감수한 설계다.</li>
+  <li>마스크 계측이라 물리적 slim 체크포인트의 gather 경로 차이는 포함되지 않는다.
+      의도적으로 배제한 항목이다.</li>
+  <li>개루프·표현 수준 분석이고 폐루프는 아무것도 재지 않았다.</li>
+</ul>
+
+<h2><span class="num">6.</span> 재현</h2>
+
+<pre># 배선 검사(G1) + 결정성(G3-1)
+ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 3 \
+    experiments/head_analysis/run_prunedvlm.py --gpu 5 --exp-id prunedvlm_smoke \
+    --num-clips 1 --verify-taps
+... --exp-id prunedvlm_nomask --num-clips 1 --no-mask
+
+# 본 실행
+ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 240 \
+    experiments/head_analysis/run_prunedvlm.py --gpu 5 --exp-id prunedvlm_dual --num-clips 32
+
+.venv/bin/python experiments/head_analysis/analyze_prunedvlm.py \
+    --template experiments/head_analysis/prunedvlm_report_template.html
+.venv/bin/python experiments/head_analysis/build_report.py \
+    experiments/head_analysis/prunedvlm_report_template_filled.html \
+    reports/evaluation/2026-09-01_pruned-vlm-internals.html \
+    pv=$PWD/outputs/prunedvlm_analysis/plots</pre>
+
+<p class="meta">시드 42(클립 유도), 결정성 <code>CUBLAS_WORKSPACE_CONFIG=:4096:8</code> +
+<code>use_deterministic_algorithms</code>, Ada 한 장 고정. 표의 모든 숫자는
+<code>outputs/prunedvlm_analysis/metrics.json</code>에서 토큰으로 채워진다(손으로 옮긴 숫자 없음).</p>
+
+</div>
+</body>
+</html>
