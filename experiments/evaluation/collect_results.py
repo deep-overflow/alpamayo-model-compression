@@ -344,11 +344,14 @@ def cell(e, key, fmt="{:.4f}"):
 
 
 def write_csv(path, cols, rows):
+    """Floats go out at 6 significant digits -- full float64 repr triples the file and
+    no cell here is meaningful past the 4th decimal."""
     with path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         for r in rows:
-            w.writerow({c: r.get(c, "") for c in cols})
+            w.writerow({c: f"{r[c]:.6g}" if isinstance(r.get(c), float) else r.get(c, "")
+                        for c in cols})
 
 
 def main():
