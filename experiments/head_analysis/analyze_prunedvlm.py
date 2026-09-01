@@ -326,7 +326,9 @@ def plot_attn(cfg, attn, out):
     axes[2].axhline(0, color=MUTED, lw=0.8)
     axes[2].set_xlabel("expert layer")
     axes[2].set_ylabel("Δ span mass (pp)")
-    axes[2].set_title("mass BETWEEN spans barely moves")
+    # "barely moves" is only true of the layer average: per layer vision swings -4.2/+3.6 pp
+    # and the layers cancel about 2.2x, so the title has to carry both halves
+    axes[2].set_title("span mass: ±4 pp per layer, <1 pp once averaged")
     axes[2].legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(out / "attn_maps.png", dpi=150)
@@ -334,20 +336,28 @@ def plot_attn(cfg, attn, out):
 
     # the judgement figure: coarse axis (span mass change) against fine axis (TV)
     fig, ax = plt.subplots(figsize=(5.8, 4.2))
-    # only the disjoint coarse spans: "all" is the total and the fine spans are subsets of
-    # "text", so summing every stored span would double-count the movement
+    # Both axes are TV, so the reference is the identity. x is the TV a span-level readout
+    # could account for -- 0.5 * sum |Δ mass| over the DISJOINT spans (the coarse five plus
+    # the expert's own 64 tokens; "all" is the total and the fine spans are subsets of
+    # "text", so including them would double-count). y is the TV over the full key axis.
+    # A cell whose attention only moved BETWEEN spans lands on y = x; everything above the
+    # line moved inside a span, where a span-level readout is blind.
     part = [order.index(s) for s in ("vision", "text", "hist", "sink", "coc") if s in order]
     dm_part = (attn["mass_p"] - attn["mass_d"])[..., part]
-    xs = np.abs(dm_part).sum(-1).mean(0).ravel() * 100
+    dwn = (attn["own_p"] - attn["own_d"])[..., None]
+    xs = (0.5 * (np.abs(dm_part).sum(-1) + np.abs(dwn).sum(-1))).mean(0).ravel()
     ys = tv.mean(-1).mean(0).ravel()
     ax.scatter(xs, ys, s=5, alpha=0.25, color=C1, edgecolors="none")
-    ax.set_xlabel("total |Δ span mass| per (layer, head, step)  (pp)")
-    ax.set_ylabel("TV (within-span relocation included)")
-    ax.set_title("span mass vs full distribution")
-    lim = max(xs.max(), 1e-9)
-    ax.plot([0, lim], [0, lim / 100], color=MUTED, lw=1, ls="--",
-            label="if all movement were between spans")
-    ax.legend(fontsize=7)
+    ax.set_xlabel("TV accounted for by span mass alone (between spans)")
+    ax.set_ylabel("TV over the full key axis")
+    ax.set_title("what a span-level readout can see, and what it misses")
+    lim = max(float(xs.max()), float(ys.max()), 1e-9)
+    ax.plot([0, lim], [0, lim], color=MUTED, lw=1, ls="--",
+            label="y = x: all movement between spans")
+    ax.set_xlim(0, lim * 1.02)
+    ax.set_ylim(0, lim * 1.02)
+    ax.set_aspect("equal")
+    ax.legend(fontsize=7, loc="upper left")
     fig.tight_layout()
     fig.savefig(out / "attn_judgement.png", dpi=150)
     plt.close(fig)
