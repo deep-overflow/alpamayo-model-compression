@@ -75,6 +75,7 @@
   <div class="kpi"><div class="v">{{within_share}}</div><div class="l">그 재배치 중 <strong>span 안에서</strong> 일어난 몫</div></div>
   <div class="kpi"><div class="v">{{dmass.vision.med}} pp</div><div class="l">vision span mass 변화 — 선행 보고서의 −0.6 pp를 재현</div></div>
   <div class="kpi"><div class="v">{{rel_h_out.med}}</div><div class="l">층 출력 잔차 발산 <code>rel</code> (cos {{cos_h_out.med}})</div></div>
+  <div class="kpi"><div class="v">{{xt_pearson}}</div><div class="l">층별 짝: VLM 잔차 발산 ↔ expert TV (Pearson)</div></div>
 </div>
 
 <p><strong>한 줄 결론.</strong> 프루닝된 VLM이 만든 캐시를 <em>같은</em> expert가 읽을 때, span별
@@ -154,6 +155,19 @@ teacher-force한다 — 한 번은 그대로, 한 번은 <code>dual_u40_v2</code
   재배치다.</figcaption>
 </figure>
 
+<h3>2.1 그 71%는 층마다 다르고, 헤드마다 다르고, 방향도 깊이를 탄다</h3>
+
+<figure>
+  <img src="PLOT::pv::attn_detail.png" alt="TV between/within by layer, per head, and KL asymmetry">
+  <figcaption>왼쪽: TV를 층별로 span 사이(주황)와 span 안(파랑)으로 쌓아 그린 것.
+  <strong>얕은 층에서는 재배치가 거의 전부 span 안에서 일어나고</strong>(층 0–15에서 주황 띠가
+  얇다), 깊은 층에서 비로소 span 경계를 넘는 몫이 1/3까지 자란다. 전체 71%는 이 깊이 의존을
+  평균낸 값이다. 가운데: (층 × expert Q head)의 TV. 흰 선은 KV 그룹 경계(head h는 그룹 h//2를
+  읽는다) — <strong>재배치는 헤드마다 크게 다르지만 그 패턴이 GQA 그룹을 따르지는 않는다</strong>.
+  오른쪽: KL 비대칭의 층별 프로파일. 층 0–20에서는 0이고 <strong>층 22 이후에야 양수로
+  솟는다(+0.07)</strong> — "pruned가 키를 버린다"는 것은 깊은 층 현상이다.</figcaption>
+</figure>
+
 <h2><span class="num">3.</span> VLM 안에서 임베딩이 변환되는 양상</h2>
 
 <table>
@@ -206,6 +220,31 @@ teacher-force한다 — 한 번은 그대로, 한 번은 <code>dual_u40_v2</code
   지배하지만, 토큰 <em>하나당</em>으로는 다른 종류와 비슷하다.</figcaption>
 </figure>
 
+<h3>3.2 두 타워를 같은 축에 놓으면</h3>
+
+<p>expert 층 <em>l</em>은 VLM 캐시 층 <em>l</em>을 읽는다. 두 타워가 층 인덱스를 공유하므로
+"어느 VLM 층이 가장 흔들렸나"와 "expert가 어느 층을 가장 다르게 읽나"를 같은 축에 놓을 수 있다.
+캐시는 그 층의 <code>k/v_proj</code>가 자기 입력에서 만들므로 짝은 <code>rel(h_in)</code> 대
+TV다.</p>
+
+<figure>
+  <img src="PLOT::pv::cross_tower.png" alt="drift by token type and the cross-tower link">
+  <figcaption>왼쪽: 토큰 종류별로 층 출력에서의 절대 발산. <strong>sink 토큰은 층 5부터 rel ≈ 1로
+  포화</strong>한다 — 프루닝된 모델에서 sink의 표현은 사실상 완전히 다른 벡터다. 나머지는
+  0.2–0.6 범위이고 CoC가 vision보다 더 밀린다. 오른쪽: 층별로 짝지은 VLM 잔차 발산과 expert TV.
+  <strong>Pearson {{xt_pearson}}, Spearman {{xt_spearman}}</strong> — 캐시가 크게 흔들린 층이
+  바로 expert가 다르게 읽는 층이다. 색은 층 인덱스이고, 깊은 층(노랑)이 오른쪽 위에 모인다.</figcaption>
+</figure>
+
+<div class="callout">
+  <strong>sink는 최대로 망가지고, 동시에 아무래도 좋다.</strong> sink 토큰의 표현은 층 5 이후
+  dense와 rel ≈ 1로 완전히 어긋난다. 그런데
+  <a href="2026-08-25_pathway-map.html">pathway-map</a>은 sink를 캐시에서 통째로 차단해도
+  ΔminADE가 <strong>−0.0001</strong>, 즉 정확히 0이라고 보고했다. 표현이 가장 크게 바뀐 토큰이
+  기능적으로는 전혀 쓰이지 않는다 — <strong>표현 발산의 크기는 손상의 크기가 아니다</strong>는
+  것을 한 토큰이 보여준다.
+</div>
+
 <h2><span class="num">4.</span> 해석</h2>
 
 <p><strong>손상은 "어디를 보느냐"가 아니라 "무엇을 읽느냐"에서 온다 — 단, 예상과 다른 해상도에서.</strong>
@@ -222,6 +261,12 @@ dense가 보던 키를 pruned가 버리는 쪽이 우세하다. 동시에 엔트
 찍고 되돌아오는 모양은 후반 층이 부분적인 자기 교정을 한다는 것을 시사한다 — 이는
 <a href="2026-08-29_cache-use-map.html">cache-use-map</a>이 후반 층·후반 스텝을 가장 민감하다고
 본 것과 함께 읽어야 한다.</p>
+
+<p><strong>두 타워는 층 단위로 이어져 있다.</strong> VLM 잔차 발산과 expert TV의 층별 상관이
+{{xt_pearson}}(Spearman {{xt_spearman}})라는 것은, 캐시 교란이 곧바로 읽기 변화로 번역된다는
+뜻이다. 그런데 §2.1은 그 번역이 <em>깊이에 따라 성질이 다르다</em>고 말한다 — 얕은 층에서는
+span 안 재배치로만 나타나고, 깊은 층에서 비로소 span 경계를 넘고 KL 비대칭이 생긴다.
+표현 발산이 기능적 손상으로 바뀌는 지점을 찾는다면 <strong>층 20 부근</strong>이 후보다.</p>
 
 <h2><span class="num">5.</span> 한계</h2>
 

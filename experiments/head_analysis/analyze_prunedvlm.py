@@ -30,6 +30,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from scipy.stats import spearmanr  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -208,6 +209,97 @@ def plot_residual(cfg, res, out):
     plt.close(fig)
 
 
+def plot_detail(cfg, attn, out):
+    """The three axes the headline figures fold away: depth, head, and direction.
+
+    Left   -- the between/within split resolved by layer. The 71% within-span share is a
+              global number; this asks whether shallow layers move mass between spans while
+              deep layers reshuffle inside them.
+    Middle -- TV per (layer, head). The expert's 16 Q heads read 8 KV groups two-to-one
+              (head h reads group h//2), so a head-resolved map also says whether the
+              relocation follows the GQA grouping.
+    Right  -- the KL asymmetry per layer. Positive means the pruned side drops keys the
+              dense side kept; the scalar hides where that happens.
+    """
+    order = cfg.get("_span_order") or cfg["spans"]
+    part = [order.index(n) for n in ("vision", "text", "hist", "sink", "coc") if n in order]
+    dm = attn["mass_p"][..., part] - attn["mass_d"][..., part]
+    dwn = (attn["own_p"] - attn["own_d"])[..., None]
+    between = 0.5 * (np.abs(dm).sum(-1) + np.abs(dwn).sum(-1))  # (n, L, H, S)
+    tv_q = attn["tv"].mean(-1)
+    L, H = tv_q.shape[1], tv_q.shape[2]
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 3.8))
+    b = between.mean((0, 2, 3))
+    t = tv_q.mean((0, 2, 3))
+    axes[0].fill_between(np.arange(L), 0, b, color=C4, alpha=0.55, label="between spans")
+    axes[0].fill_between(np.arange(L), b, t, color=C1, alpha=0.55, label="within spans")
+    axes[0].plot(np.arange(L), t, color=INK, lw=1.2)
+    axes[0].set_xlabel("expert layer")
+    axes[0].set_ylabel("TV")
+    axes[0].set_title("where the relocation is, and whether it crosses a span")
+    axes[0].legend(fontsize=8, loc="upper left")
+
+    m = tv_q.mean((0, 3))  # (L, H)
+    im = axes[1].imshow(m.T, aspect="auto", cmap="magma", origin="lower")
+    for g in range(1, H // 2):
+        axes[1].axhline(2 * g - 0.5, color="white", lw=0.4, alpha=0.5)
+    axes[1].set_xlabel("expert layer")
+    axes[1].set_ylabel("expert Q head")
+    axes[1].set_title("TV per head (white lines = KV groups)")
+    axes[1].grid(False)
+    fig.colorbar(im, ax=axes[1], fraction=0.046)
+
+    asym = (attn["kl_pq"] - attn["kl_qp"]).mean((0, 2, 3, 4))
+    axes[2].plot(np.arange(L), asym, color=C3, lw=2)
+    axes[2].axhline(0, color=MUTED, lw=0.8)
+    axes[2].set_xlabel("expert layer")
+    axes[2].set_ylabel(r"KL$(d\|p)$ − KL$(p\|d)$")
+    axes[2].set_title("positive = the pruned side drops keys")
+    fig.tight_layout()
+    fig.savefig(out / "attn_detail.png", dpi=150)
+    plt.close(fig)
+
+
+def plot_cross_tower(cfg, res, attn, out):
+    """The two towers share a layer index -- expert layer l reads VLM cache layer l.
+
+    So "which VLM layers were disturbed most" and "which expert layers read differently"
+    can be put on the same axis. The cache at layer l is built by that layer's k/v_proj
+    from its own input, so the natural pair is rel(h_in) against the expert's TV.
+    """
+    order = cfg.get("_span_order") or cfg["spans"]
+    ai = order.index("all")
+    L = res["cross_rel"].shape[1]
+    show = [s for s in ("vision", "instr", "cam_text", "sys_text", "special", "hist",
+                        "sink", "coc") if s in order]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12.6, 4.0))
+    m = np.stack([res["cross_rel"][:, :, 2, order.index(s)].mean(0) for s in show])
+    im = axes[0].imshow(m, aspect="auto", cmap="magma", origin="lower")
+    axes[0].set_yticks(range(len(show)))
+    axes[0].set_yticklabels(show, fontsize=8)
+    axes[0].set_xlabel("VLM text layer")
+    axes[0].set_title(r"how far each token type has drifted at $h_{out}$")
+    axes[0].grid(False)
+    fig.colorbar(im, ax=axes[0], fraction=0.046)
+
+    x = res["cross_rel"][:, :, 0, ai].mean(0)          # VLM residual divergence at h_in
+    y = attn["tv"].mean((0, 2, 3, 4))                   # expert TV, same layer index
+    sc = axes[1].scatter(x, y, c=np.arange(L), cmap="viridis", s=28)
+    r = float(np.corrcoef(x, y)[0, 1])
+    rho = float(spearmanr(x, y).statistic)
+    axes[1].set_xlabel(r"VLM residual divergence at $h_{in}$ (rel)")
+    axes[1].set_ylabel("expert TV at the same layer")
+    axes[1].set_title(f"cache disturbance vs how differently it is read\n"
+                      f"Pearson {r:+.2f}, Spearman {rho:+.2f}")
+    fig.colorbar(sc, ax=axes[1], fraction=0.046, label="layer")
+    fig.tight_layout()
+    fig.savefig(out / "cross_tower.png", dpi=150)
+    plt.close(fig)
+    return {"pearson": r, "spearman": rho}
+
+
 def plot_attn(cfg, attn, out):
     order = cfg.get("_span_order") or cfg["spans"]
     tv = attn["tv"]  # (n, L, H, S, Q)
@@ -285,6 +377,9 @@ def main():
     s = summarise(cfg, res, attn)
     plot_residual(cfg, res, out / "plots")
     plot_attn(cfg, attn, out / "plots")
+    plot_detail(cfg, attn, out / "plots")
+    xt = plot_cross_tower(cfg, res, attn, out / "plots")
+    s["xt_pearson"], s["xt_spearman"] = xt["pearson"], xt["spearman"]
 
     def f(d):
         return f"{d['med']:+.4f} [{d['lo']:+.4f}, {d['hi']:+.4f}]"
@@ -317,6 +412,8 @@ def main():
               f"    between spans       {f(s['tv_between'])}",
               f"    within spans        {f(s['tv_within'])}",
               f"    within share        {s['within_share']:.1%}", "",
+              ("  layer-matched link (VLM residual rel at h_in vs expert TV): "
+               f"Pearson {s['xt_pearson']:+.2f}, Spearman {s['xt_spearman']:+.2f}"), "",
               "  span mass change (pp):"]
     for n, v in s["dmass_pp"].items():
         lines.append(f"    {n:9s} {f(v)}")
@@ -359,6 +456,8 @@ def main():
                 return str(len(rows))
             d = s["dmass_pp"][p[1]] if p[0] == "dmass" else s[p[0]]
             if not isinstance(d, dict):
+                if p[0].startswith("xt_"):
+                    return f"{d:+.2f}"
                 return f"{d:.1%}" if abs(d) <= 1 else f"{d:.4f}"
             k = p[-1] if len(p) > 1 else "ci"
             return {"med": f"{d['med']:+.4f}", "abs": f"{abs(d['med']):.4f}",
