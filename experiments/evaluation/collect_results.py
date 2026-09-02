@@ -44,6 +44,14 @@ from paper_numbers import ARMS
 BOOT = 5000
 SET_SUFFIX = ("indist", "test", "oodval", "ood")
 ALPASIM_RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+# unpruned Alpamayo 1.5; every slim_meta agrees on this as params.full
+BASE_PARAMS = 11_078_526_194
+# checkpoints live under outputs/, but a config only ever run closed-loop may exist just
+# as an alpasim driver, which carries the same slim_meta / summary.txt
+SLIM_ROOTS = [Path("/mnt/nvme1n1/ad_vla/outputs/chan"),
+              Path("/mnt/nvme1n1/ad_vla/data/alpasim/drivers")]
+PARAMS_RE = re.compile(
+    r"params\s+([\d,]+)\s*->\s*([\d,]+)\s+removed\s+([\d,]+)\s*\(([\d.]+)%\)")
 CL_SCENES, CL_ROLLOUTS = 150, 300      # the only closed-loop shape that gets reported
 
 # horizons stored per sample: 16 steps = 1.6 s, 32 = 3.2 s, full = 6.4 s. The min is
@@ -69,16 +77,18 @@ CL_METRIC_KEYS = [
     "min_distance_to_lane_boundary_m", "dist_traveled_m", "open_loop_collision",
     "safety_monitor_triggered", "duration_frac_20s",
 ]
-CLOSED_COLS = (["run", "config", "n_scenes", "n_rollouts"]
+PARAM_COLS = ["params_full", "params_slim", "prune_pct"]
+CLOSED_COLS = (["run", "config", "n_scenes", "n_rollouts"] + PARAM_COLS
                + CL_ROLLOUT_KEYS + CL_METRIC_KEYS
                + ["score_ci_lo", "score_ci_hi",
                   "repeat_abs_diff_mean", "repeat_abs_diff_max", "n_failed_rollouts",
                   "coc_degen", "coc_empty", "coc_soup", "coc_len",
                   "d_score_mean", "d_ci_lo", "d_ci_hi", "wilcoxon_p",
                   "wins", "losses", "ties"])
-LINGO_COLS = ["exp_id", "arm", "protocol", "style", "n_questions", "n_matched",
-              "accuracy", "judge_pct", "mean_logit", "answer_words_median",
-              "answer_words_mean", "truncated_frac", "source_dir"]
+LINGO_COLS = (["exp_id", "arm", "protocol", "style"] + PARAM_COLS
+              + ["n_questions", "n_matched", "accuracy", "judge_pct", "mean_logit",
+                 "answer_words_median", "answer_words_mean", "truncated_frac",
+                 "source_dir"])
 
 # paper short name -> run dir, inverted from the registry so discovery can adopt it
 DIR2ARM = {d: arm for arm, sets in ARMS.items() for d, _ in sets.values()}
@@ -123,14 +133,45 @@ def merge_shards(exp_dir, tag):
 
 
 def slim_params(tag):
-    """params.full/slim/removed from the checkpoint that produced these rows, if any."""
-    meta = REPO / "outputs" / tag / "slim_meta.json"
-    if not meta.exists():
-        return None
-    try:
-        return json.loads(meta.read_text()).get("params")
-    except json.JSONDecodeError:
-        return None
+    """params.full/slim/removed for one checkpoint, or None when nothing on disk says.
+
+    Three sources, in order: the checkpoint's `slim_meta.json`; its `summary.txt`, which
+    the newer spec-driven builder writes instead of a `params` block; and the unpruned
+    anchor, which has no checkpoint of its own.
+
+    Quantization-only arms (uniform_w*, qvla_*, w*_all) deliberately return None. They
+    have no slim dir, and reporting a count for them would be misleading anyway --
+    quantization shrinks the model without removing a single parameter, so a "parameter
+    count" column would read identically to the baseline and invite the wrong comparison.
+    """
+    if tag == "baseline":
+        return {"full": BASE_PARAMS, "slim": BASE_PARAMS, "removed": 0}
+    for root in SLIM_ROOTS:
+        d = root / tag
+        meta = d / "slim_meta.json"
+        if meta.exists():
+            try:
+                p = json.loads(meta.read_text()).get("params")
+            except json.JSONDecodeError:
+                p = None
+            if p:
+                return p
+        s = d / "summary.txt"
+        if s.exists():
+            m = PARAMS_RE.search(s.read_text())
+            if m:
+                full, slim, removed = (int(x.replace(",", "")) for x in m.groups()[:3])
+                return {"full": full, "slim": slim, "removed": removed}
+    return None
+
+
+def param_cells(tag):
+    """The three parameter columns for one checkpoint; empty when nothing on disk says."""
+    p = slim_params(tag)
+    if not p or not p.get("full"):
+        return {}
+    return {"params_full": p["full"], "params_slim": p.get("slim", ""),
+            "prune_pct": round(p.get("removed", 0) / p["full"] * 100, 2)}
 
 
 def boot_ci(d, seed=0):
@@ -205,12 +246,7 @@ def collect_openloop(k, verbose):
                  "gpu": cfg.get("gpu", ""), "arch": arch_of(cfg.get("gpu")),
                  "dropped_ood_train": dropped, "rows": rows}
             e.update(describe(rows, k))
-            p = slim_params(tag)
-            if p:
-                e["params_full"] = p.get("full", "")
-                e["params_slim"] = p.get("slim", "")
-                if p.get("full"):
-                    e["prune_pct"] = round(p.get("removed", 0) / p["full"] * 100, 2)
+            e.update(param_cells(tag))
             entries.append(e)
             if verbose:
                 print(f"  [openloop] {exp_dir.name}/{tag} {which_label} n={len(rows)}",
@@ -370,6 +406,7 @@ def collect_closedloop(verbose):
         cfg = config_of(run)
         r = {"run": run, "config": cfg, "n_scenes": len({x["scene"] for x in rollouts}),
              "n_rollouts": len(rollouts)}
+        r.update(param_cells(cfg))
         for k in CL_ROLLOUT_KEYS + CL_METRIC_KEYS:
             sc = per_scene(rollouts, k)
             if sc:
@@ -453,6 +490,10 @@ def collect_lingoqa(verbose):
             "mean_logit": d.get("mean_score", ""), "answer_words_median": "",
             "answer_words_mean": "", "truncated_frac": "", "source_dir": exp_dir.name,
         })
+    # `arm` is either a checkpoint path ("outputs/slim_dual_u40_v2"), a bare checkpoint,
+    # or "baseline"/"blind"; only the first two name something with a parameter count
+    for r in rows:
+        r.update(param_cells(Path(r["arm"]).name if r["arm"] else ""))
     if verbose:
         print(f"  [lingoqa] {len(rows)} runs", flush=True)
     return rows
