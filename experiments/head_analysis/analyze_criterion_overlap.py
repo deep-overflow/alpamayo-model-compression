@@ -143,13 +143,13 @@ def main():
     res = {"ref": args.ref, "importance": args.importance, "stepvlm": args.stepvlm,
            "ratio": args.ratio, "keep_per_layer": {"q": keep_q, "mlp": keep_m},
            "constant_traj_layers": {"q": flat_q, "mlp": flat_m}, "pairs": {}}
-    lines = [f"criterion kept-set overlap vs {args.ref} "
-             f"(u{args.ratio:.4f}, keep {keep_q}/{NQ} heads, {keep_m}/{NM} channels per layer)",
+    lines = [(f"criterion kept-set overlap vs {args.ref} "
+              f"(u{args.ratio:.4f}, keep {keep_q}/{NQ} heads, {keep_m}/{NM} channels per layer)"),
              f"importance {args.importance}, per-step {args.stepvlm}",
              f"layers with structurally constant trajectory importance: Q {flat_q}, MLP {flat_m}",
              "",
-             f"{'criterion':11s} {'Q agree':>8s} {'MLP agree':>10s} {'Q jacc':>7s} {'MLP jacc':>9s} "
-             f"{'Q rho':>7s} {'MLP rho':>8s} {'param churn':>12s}"]
+             (f"{'criterion':11s} {'Q agree':>8s} {'MLP agree':>10s} {'Q jacc':>7s} "
+              f"{'MLP jacc':>9s} {'Q rho':>7s} {'MLP rho':>8s} {'param churn':>12s}")]
     for arm in args.arms:
         if arm == args.ref or arm not in masks:
             continue
@@ -187,10 +187,11 @@ def main():
             "kept_decided_by_index_half": int(((rt > rc) & (masks[args.ref][0][l] > 0)).sum()),
             "rank_norm_is_index_order": bool(np.allclose(rt, np.arange(NQ) / (NQ - 1)))}
         d = res["degenerate_layer"]
-        lines += ["", f"degenerate layer {l} under `{args.ref}`: rank_norm(traj) is the index "
-                      f"order ({d['rank_norm_is_index_order']}); {d['kept_decided_by_index_half']}"
-                      f"/{keep_q} kept heads were decided by that half; kept set overlaps the "
-                      f"top-{keep_q} indices by {d['ref_kept_overlap_with_top_indices']:.0%}"]
+        lines += ["", (f"degenerate layer {l} under `{args.ref}`: rank_norm(traj) is the index "
+                       f"order ({d['rank_norm_is_index_order']}); "
+                       f"{d['kept_decided_by_index_half']}/{keep_q} kept heads were decided by "
+                       f"that half; kept set overlaps the top-{keep_q} indices by "
+                       f"{d['ref_kept_overlap_with_top_indices']:.0%}")]
 
     text = "\n".join(lines)
     print(text)
