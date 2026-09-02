@@ -43,6 +43,12 @@ BAND = "FFF4F2ED"
 HEADER = "FF29261B"
 
 IDENT = ["track", "method", "ckpt", "role", "budget", "prune_pct", "arch", "vs"]
+# Columns the coloured view drops. They stay in master.csv -- this workbook has to be
+# carried to Drive as base64 through a model response, and that transport corrupts
+# silently somewhere above ~19.6k characters (measured: 19604 fine, 20140 mangled,
+# 22172 rejected). `ckpt` is ~90 long unique strings and the single cheapest thing to
+# cut; `method` plus `arch` still identify every row.
+DROP = ("openloop_dir", "prune_pct", "ckpt")
 NUM3 = {"val_ade6", "val_fde6", "val_degen", "val_d", "test_ade6", "test_fde6",
         "test_degen", "test_d", "ood_ade6", "ood_fde6", "ood_degen", "ood_d",
         "cl_score", "cl_dscore", "cl_collision", "cl_offroad", "cl_progress"}
@@ -254,7 +260,7 @@ def main():
     dicts = [dict(zip(full, r)) for r in reader if r]
     # provenance columns stay in the CSV; the coloured view keeps `ckpt` as the identity
     # and 4 significant digits, which is the precision the reports quote anyway
-    header = [c for c in full if c not in ("openloop_dir", "prune_pct")]
+    header = [c for c in full if c not in DROP]
     rows = [[short(d.get(c, "")) for c in header] for d in dicts]
 
     # a track's rows share a band, and the band flips when the track changes
