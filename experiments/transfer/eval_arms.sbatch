@@ -28,7 +28,8 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
 # shellcheck disable=SC1091
-source experiments/transfer/env.sh
+source env.sh
+PY=$ALPAMAYO_REPO/.venv/bin/python
 
 SETS=${*:-indist test oodval}
 declare -A MODEL=(

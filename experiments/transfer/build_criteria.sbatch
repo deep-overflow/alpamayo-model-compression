@@ -32,8 +32,12 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
+# env.sh (written by bootstrap_neuron.sh) carries AD_VLA_DATA / HF_HUB_CACHE /
+# HF_HOME / ALPAMAYO_REPO. It does NOT define PY -- the venv is addressed directly,
+# the same way train_recover.sbatch addresses torchrun.
 # shellcheck disable=SC1091
-source experiments/transfer/env.sh
+source env.sh
+PY=$ALPAMAYO_REPO/.venv/bin/python
 
 CONFIGS=${*:-znorm11_u40_v2 dualfix_u40_v2 dual_u40_v2}
 
