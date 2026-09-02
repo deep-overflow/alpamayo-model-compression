@@ -88,7 +88,19 @@ bash experiments/transfer/push_neuron.sh e1997a06 code evalsets                 
 | `experiments/transfer/build_criteria.sbatch` | 디버그/기본 파티션에서 3개 recipe 빌드, `--no-state` |
 | `experiments/transfer/eval_arms.sbatch` | 4 arm × 3 세트, 카드당 1 job, 아키텍처 혼합 금지 주석 |
 
-## 남은 미지수
+## 디버그 파티션 — 확인 결과 (2026-08-31, glogin03)
 
-디버그 파티션의 실제 이름과 시간 상한(위 1번). OTP 세션이 열리면 `sinfo` 한 번으로 확정하고 이
-계획의 해당 줄을 갱신한다.
+**이 계정이 쓸 수 있는 디버그/단시간 전용 파티션은 없다.** `sinfo`의 전체 목록에서 `debug`/`short`/
+`interactive` 이름은 하나도 없고, 일반 파티션(`amd_a100nv_8`, `amd_h200nv_8`, `amd_h100_2`,
+`amd_a100_4`, `cas_v100*`, `cpu`, `bigmem`)은 **전부 MaxTime 2-00:00:00**이다. 이름에 test가 들어간
+`gh200_test`는 AllowGroups=ALL·MaxTime=UNLIMITED이지만 GH200 1노드(aarch64)라 x86 venv가 안 맞고,
+나머지(`dicuon`, `koni`, `knpa`, `robot`, `nims`, `nmsc`, `maintenance`)는 다른 그룹 전용이다.
+
+계정 QoS는 `aanv8`(MaxWall 2-00:00:00, MaxTRESPU gres/gpu=112). 제출 상한이 걸리는 종류가 아니다.
+
+따라서 "디버깅 노드"에 해당하는 것은 **짧은 `--time`으로 같은 파티션에 넣는 것**이고, 두 가지가 있다:
+- 배치: `sbatch --time=01:00:00 --gres=gpu:1 ...` (백필이 잘 붙는다. 제출 시점 `amd_a100nv_8` 대기열은 비어 있었고 8노드 중 3노드가 여유)
+- 대화형: `salloc -p amd_a100nv_8 --gres=gpu:1 --time=01:00:00 --comment=field=efficientai\;appl=pytorch`
+  뒤 `srun --pty bash`
+
+`build_criteria.sbatch`의 기본값을 이에 맞춰 `--time=01:00:00 --gres=gpu:1`로 두었다.

@@ -15,12 +15,15 @@
 #   sbatch experiments/transfer/build_criteria.sbatch                 # all three
 #   sbatch experiments/transfer/build_criteria.sbatch dualfix_u40_v2  # one
 #
-# DEBUG PARTITION. NEURON's interactive/debug queue is short (check `sinfo -o "%P %l %D"`
-# and `scontrol show partition <name>` for MaxTime before relying on it). Each build is
-# one model load plus a few seconds of surgery -- 8-12 min wall clock on an A100 -- so
-# three builds fit a 1 h slot comfortably, but submit them as separate jobs if the debug
-# limit is 30 min. To run on the debug queue instead of the default:
-#     sbatch --partition=<debug-partition> --time=00:30:00 ... build_criteria.sbatch <cfg>
+# THERE IS NO DEBUG PARTITION on NEURON for this account (checked 2026-08-31 on
+# glogin03): no debug / short / interactive queue exists, and every partition this
+# account may use caps at MaxTime=2-00:00:00. `gh200_test` is open to all but is one
+# aarch64 GH200 node, which the x86 venv does not fit. The equivalent of a debug node is
+# therefore a SHORT REQUEST on the normal partition -- one GPU and an hour, which
+# backfills quickly -- which is what this script asks for. Interactive alternative:
+#   salloc -p amd_a100nv_8 --gres=gpu:1 --time=01:00:00 \
+#          --comment=field=efficientai\;appl=pytorch && srun --pty bash
+# Each build is one model load plus a few seconds of surgery: 8-12 min, three fit the hour.
 #
 # These configs are SELECTION-ONLY (no weight rewriting), so --no-state is correct and
 # each recipe is ~3 MB rather than 17 GB; slim_lib.load_slim reconstructs the weights
