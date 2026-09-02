@@ -30,6 +30,13 @@ Configs:
   dualexp_u40_e<N> -- dual_u40_v2's VLM half + expert_u<N>'s expert half in one
                       checkpoint (first config pruning both towers). Expected -3.19B
                       at N=25.
+  znorm11_u40_v2   -- one score from ELEVEN losses: CoC NLL + the ten flow-matching step
+                      losses, each z-scored within a layer and averaged (1/11 each). Needs
+                      --stepvlm (per-step VLM gradients). Kept set overlaps dual's by
+                      87-88%. plans/2026-08-31_znorm11-criterion.md.
+  dualfix_u40_v2   -- dual with the degenerate-layer guard: a layer whose half is constant
+                      (the last layer's trajectory importance is structurally zero) no
+                      longer contributes its INDEX ORDER to max(rank, rank).
   dualrc_u40_s<N>  -- dual_u40_v2's selection everywhere + cache-targeted OSSCAR refit of
                       o_proj / down_proj in layers >= N (run_cache_recon.py supernet via
                       --tyr-supernet; expert-attention-weighted prefill + own-CoC Hessian).
@@ -110,6 +117,7 @@ def scope_matched_counts(scope_len, target_removed, tc, ratio):
 
 
 def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa",
+                stepvlm="importance_stepvlm_v1",
                 wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
                 tyr_supernet="tyr_supernet_u40",
                 tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
@@ -406,10 +414,26 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 pre = name[:-1]
                 return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
                         (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
+            if name == "znorm11":
+                # CoC NLL + the ten flow-matching step losses, each z-scored WITHIN a layer
+                # and averaged with weight 1/11. The per-step VLM gradients come from
+                # run_step_importance_vlm (step_importance_vlm.npz); the CoC half is the
+                # reference file's, so both halves are the same clips and architecture.
+                # plans/2026-08-31_znorm11-criterion.md.
+                st = np.load(REPO / "outputs" / stepvlm / "step_importance_vlm.npz")
+
+                def zs(x):  # (L, U) -> within-layer z-score
+                    return (x - x.mean(1, keepdims=True)) / np.maximum(x.std(1, keepdims=True), 1e-12)
+
+                zq = sum(zs(st["q_abs_step"][i]) for i in range(st["q_abs_step"].shape[0]))
+                zm = sum(zs(st["mlp_abs_step"][i]) for i in range(st["mlp_abs_step"].shape[0]))
+                n = st["q_abs_step"].shape[0] + 1
+                return (zq + zs(imp["coc_vlm_q"])) / n, (zm + zs(imp["coc_vlm_mlp"])) / n
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
-        parts = {"dual": ("traj", "coc"), "dual2nd": ("traj2", "coc2"),
+        parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
+                 "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
                  "dualprod": ("traj", "coc")}.get(stem, (stem,))
@@ -418,11 +442,27 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
         # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
         # criterion -- it only matters when two scores have to share one scale
+        def rank_or_nan(x):
+            """rank_norm, except a layer whose scores are all equal contributes nothing.
+
+            The VLM's LAST layer has trajectory importance identically zero -- its o_proj /
+            down_proj outputs never reach the KV cache the expert reads -- and
+            rank_norm(zeros) is the INDEX ORDER, so `dualfix` avoids letting
+            max(rank traj, rank coc) keep the highest-numbered units there
+            (74% of dual's layer-35 Q keeps are just high indices).
+            plans/2026-08-31_znorm11-criterion.md.
+            """
+            r = rank_norm(x)
+            flat = np.ptp(x, axis=1) == 0
+            r[flat] = -np.inf
+            return r
+
+        rank = rank_or_nan if stem.startswith("dualfix") else rank_norm
         sq, sm = half(parts[0])
         for p in parts[1:]:
             oq, om = half(p)
-            sq = op(rank_norm(sq), rank_norm(oq))
-            sm = op(rank_norm(sm), rank_norm(om))
+            sq = op(rank(sq), rank(oq))
+            sm = op(rank(sm), rank(om))
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)
@@ -528,6 +568,8 @@ def main():
                          "dual{q,m}_u40_v2 / dualm_c<N> for the VLM axis split")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
+    ap.add_argument("--stepvlm", type=str, default="importance_stepvlm_v1",
+                    help="per-step VLM importance run for the znorm11 criterion")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
                     help="J-lens run supplying q_j/mlp_j for the j_traj configs")
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
@@ -580,7 +622,7 @@ def main():
 
     imp = dict(np.load(REPO / "outputs" / args.importance / "importance.npz"))
     vq, vm, eq, em, kvonly = build_masks(args.config, imp, model, args.jlens,
-                                         args.vqa_importance, args.wanda,
+                                         args.vqa_importance, args.stepvlm, args.wanda,
                                          args.wanda_txt,
                                          args.tyr_supernet, args.tyr_config,
                                          (args.scope_start, args.scope_end),
