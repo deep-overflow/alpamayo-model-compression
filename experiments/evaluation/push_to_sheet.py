@@ -123,7 +123,9 @@ def get_token(args):
     return token_from_store()
 
 
-def api(token, url, payload=None, method=None):
+def api(token, url, payload=None, method=None, soft=False):
+    """One REST call. `soft` returns (None, code) instead of exiting, so a caller can
+    fall back when only part of the token's scope is honoured."""
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(
         url, data=data, method=method or ("POST" if data else "GET"),
@@ -131,13 +133,22 @@ def api(token, url, payload=None, method=None):
                  "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read() or b"{}")
+            out = json.loads(r.read() or b"{}")
+            return (out, 200) if soft else out
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")[:600]
-        if e.code in (401, 403):
+        if soft:
+            return None, e.code
+        if e.code == 401:
             raise SystemExit(
-                f"{e.code} from Google. If 401 the token expired -- reconnect via /mcp "
-                f"and re-run. If 403 the account cannot write there.\n{body}") from e
+                "401 from Google: the cached token is not accepted.\nReconnect the "
+                "connector (/mcp -> sheets) ONCE and re-run straight away. Two "
+                "authorisations in a row invalidate the first token, which is how this "
+                f"state is usually reached.\n{body}") from e
+        if e.code == 403:
+            raise SystemExit(
+                f"403 from Google: authenticated, but not allowed to write there.\n{body}"
+            ) from e
         raise SystemExit(f"{e.code} {url}\n{body}") from e
 
 
@@ -271,11 +282,30 @@ def main():
         meta = api(token, f"{SHEETS}/{sid}?fields=properties.title,sheets.properties")
         print(f"rewriting '{meta['properties']['title']}'", flush=True)
     else:
+        # Drive first: it is the only call that can create straight into a folder. The
+        # cached MCP token does not always carry usable Drive access even though its
+        # stored scope says `drive`, so fall back to a Sheets-side create (which lands
+        # in My Drive root) and try to move it afterwards.
         body = {"name": args.title, "parents": [args.folder],
                 "mimeType": "application/vnd.google-apps.spreadsheet"}
-        f = api(token, f"{DRIVE}?fields=id&supportsAllDrives=true", body)
-        sid = f["id"]
-        print(f"created {sid} in folder {args.folder}", flush=True)
+        f, code = api(token, f"{DRIVE}?fields=id&supportsAllDrives=true", body, soft=True)
+        if f:
+            sid = f["id"]
+            print(f"created {sid} in folder {args.folder}", flush=True)
+        else:
+            print(f"Drive create refused ({code}); falling back to Sheets create",
+                  flush=True)
+            res = api(token, SHEETS, {"properties": {"title": args.title}})
+            sid = res["spreadsheetId"]
+            moved, mcode = api(
+                token,
+                f"{DRIVE}/{sid}?addParents={args.folder}&removeParents=root&fields=id",
+                {}, method="PATCH", soft=True)
+            if moved:
+                print(f"created {sid} and moved it into {args.folder}", flush=True)
+            else:
+                print(f"created {sid} in My Drive root; the move also failed ({mcode}) "
+                      f"-- drag it into the folder by hand", flush=True)
         meta = api(token, f"{SHEETS}/{sid}?fields=properties.title,sheets.properties")
 
     have = {s["properties"]["title"]: s["properties"]["sheetId"]
