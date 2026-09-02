@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
@@ -42,22 +43,37 @@ from paper_numbers import ARMS
 
 BOOT = 5000
 SET_SUFFIX = ("indist", "test", "oodval", "ood")
-OPENLOOP_COLS = [
-    "arm", "set", "tag", "dir", "n_clips", "arch", "gpu", "k_stored",
-    "params_full", "params_slim", "prune_pct",
-    "minADE6_mean", "minADE6_median", "minFDE6_mean", "minFDE6_median",
-    "minADE8_mean", "minADE8_median", "minFDE8_mean", "minFDE8_median",
-    "nll_self_mean", "coc_degen", "coc_empty", "coc_soup",
-    "baseline_ref", "d_minADE6_median", "d_ci_lo", "d_ci_hi", "d_sig", "d_n",
+ALPASIM_RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+CL_SCENES, CL_ROLLOUTS = 150, 300      # the only closed-loop shape that gets reported
+
+# horizons stored per sample: 16 steps = 1.6 s, 32 = 3.2 s, full = 6.4 s. The min is
+# taken independently at each horizon, so `minADE6_h16` is the best-of-6 over the 1.6 s
+# window, NOT the 1.6 s prefix of whichever sample won at 6.4 s.
+HORIZONS = [("", ""), ("_h16", "_h16"), ("_h32", "_h32")]
+OPENLOOP_COLS = (
+    ["arm", "set", "tag", "dir", "n_clips", "arch", "gpu", "k_stored",
+     "params_full", "params_slim", "prune_pct"]
+    + [f"min{m}6{sfx}_{stat}" for _, sfx in HORIZONS for m in ("ADE", "FDE")
+       for stat in ("mean", "median")]
+    + ["minADE8_mean", "minADE8_median", "minFDE8_mean", "minFDE8_median",
+       "nll_self_mean", "coc_degen", "coc_empty", "coc_soup",
+       "baseline_ref", "d_minADE6_median", "d_ci_lo", "d_ci_hi", "d_sig", "d_n"]
+)
+# the 18 per-rollout metrics to report, in the order the spec asks for them. `score` and
+# `passed` live on the rollout itself; the rest are under rollout["metrics"].
+CL_ROLLOUT_KEYS = ["score", "passed"]
+CL_METRIC_KEYS = [
+    "collision_at_fault", "offroad", "progress_clipped_rel", "progress_rel",
+    "wrong_lane", "dist_to_gt_trajectory", "collision_front", "collision_lateral",
+    "collision_rear", "plan_deviation", "min_distance_to_obstacle_m",
+    "min_distance_to_lane_boundary_m", "dist_traveled_m", "open_loop_collision",
+    "safety_monitor_triggered", "duration_frac_20s",
 ]
-CLOSED_METRICS = [
-    "score", "passed", "collision_at_fault", "collision_any", "offroad", "wrong_lane",
-    "progress_clipped_rel", "progress_rel", "dist_to_gt_trajectory", "score_scene_mean",
-    "score_ci_lo", "score_ci_hi", "repeat_abs_diff_mean", "repeat_abs_diff_max",
-    "n_rollouts", "n_failed_rollouts",
-]
-CLOSED_COLS = (["run", "n_scenes", "config"] + CLOSED_METRICS
-               + ["coc_degen", "coc_empty", "coc_soup", "coc_len",
+CLOSED_COLS = (["run", "config", "n_scenes", "n_rollouts"]
+               + CL_ROLLOUT_KEYS + CL_METRIC_KEYS
+               + ["score_ci_lo", "score_ci_hi",
+                  "repeat_abs_diff_mean", "repeat_abs_diff_max", "n_failed_rollouts",
+                  "coc_degen", "coc_empty", "coc_soup", "coc_len",
                   "d_score_mean", "d_ci_lo", "d_ci_hi", "wilcoxon_p",
                   "wins", "losses", "ties"])
 LINGO_COLS = ["exp_id", "arm", "protocol", "style", "n_questions", "n_matched",
@@ -132,12 +148,14 @@ def describe(rows, k):
     has_ps = bool(vals) and "ade_rollout_k" in vals[0]
     out["k_stored"] = len(vals[0]["ade_rollout_k"]) if has_ps else ""
     if has_ps:
-        a = np.array([at_k(r, "ade_rollout_k", k) for r in vals])
-        f = np.array([at_k(r, "fde_rollout_k", k) for r in vals])
-        out["minADE6_mean"] = float(a.mean())
-        out["minADE6_median"] = float(np.median(a))
-        out["minFDE6_mean"] = float(f.mean())
-        out["minFDE6_median"] = float(np.median(f))
+        for _, sfx in HORIZONS:
+            src = f"ade_rollout_k{sfx}", f"fde_rollout_k{sfx}"
+            if src[0] not in vals[0]:
+                continue                  # older runs stored the full horizon only
+            for key, m in zip(src, ("ADE", "FDE")):
+                v = np.array([at_k(r, key, k) for r in vals])
+                out[f"min{m}6{sfx}_mean"] = float(v.mean())
+                out[f"min{m}6{sfx}_median"] = float(np.median(v))
     for src, dst in (("minADE_rollout", "minADE8"), ("minFDE_rollout", "minFDE8")):
         v = np.array([r[src] for r in vals if src in r], dtype=float)
         if len(v):
@@ -252,9 +270,46 @@ def add_paired(entries, k):
         e["d_n"] = len(ids)
 
 
-def collect_closedloop(verbose):
-    """One row per (alpasim run, driver config), scores copied verbatim."""
-    rows = []
+def mean_boot_ci(x, seed=0):
+    """Mean and its bootstrap CI -- the closed-loop convention (half the scenes sit at
+    the 1.0 ceiling, so the mean CI is the primary reading and Wilcoxon is secondary)."""
+    x = np.asarray([v for v in x if v is not None], dtype=float)
+    x = x[~np.isnan(x)]
+    if len(x) == 0:
+        return None, None, None
+    rng = np.random.default_rng(seed)
+    means = x[rng.integers(0, len(x), size=(BOOT, len(x)))].mean(axis=1)
+    return float(x.mean()), float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))
+
+
+def per_scene(rollouts, key):
+    """scene -> mean of key over that scene's rollouts (mirrors analyze_alpasim)."""
+    by = {}
+    for r in rollouts:
+        v = r.get(key)
+        if v is not None:
+            by.setdefault(r["scene"], []).append(float(v))
+    return {s: float(np.mean(v)) for s, v in by.items() if v}
+
+
+def load_alpasim_run(path):
+    """One run's rollouts, flattened. Plain JSON -- no alpasim venv needed (only the CoC
+    text lives in the ASL protobuf logs, and that is read from the analysed dirs)."""
+    d = json.loads(path.read_text())
+    out = []
+    for r in d["rollouts"]:
+        m = r.get("metrics", {})
+        row = {"scene": r["clipgt_id"], "status": r.get("status"),
+               "score": r.get("score"), "passed": float(bool(r.get("passed")))}
+        row.update({k: m.get(k) for k in CL_METRIC_KEYS})
+        out.append(row)
+    return out
+
+
+def collect_coc_stats():
+    """checkpoint -> CoC degeneracy, from whichever analysed dir carries it. Closed-loop
+    CoC text comes from the ASL logs, so it only exists where analyze_alpasim has run."""
+    out = {}
     for exp_dir in sorted((REPO / "outputs").glob("alpasim_*")):
         m = exp_dir / "metrics.json"
         if not m.exists():
@@ -263,27 +318,93 @@ def collect_closedloop(verbose):
             d = json.loads(m.read_text())
         except json.JSONDecodeError:
             continue
-        if not isinstance(d, dict) or "configs" not in d:
-            continue               # forensics dirs (collisions, longitudinal) differ
-        paired = d.get("paired_vs_baseline", {})
-        coc = d.get("coc", {})
-        for name, cfg in d["configs"].items():
-            r = {"run": exp_dir.name, "n_scenes": d.get("n_scenes", ""), "config": name}
-            r.update({c: cfg.get(c, "") for c in CLOSED_METRICS})
-            c = coc.get(name, {})
-            r["coc_degen"] = c.get("mean_degenerate_frac", "")
-            r["coc_empty"] = c.get("mean_empty_frac", "")
-            r["coc_soup"] = c.get("mean_soup_frac", "")
-            r["coc_len"] = c.get("mean_len", "")
-            p = paired.get(name, {})
-            for src, dst in (("d_score_mean", "d_score_mean"), ("d_score_ci_lo", "d_ci_lo"),
-                             ("d_score_ci_hi", "d_ci_hi"), ("wilcoxon_p", "wilcoxon_p"),
-                             ("wins", "wins"), ("losses", "losses"), ("ties", "ties")):
-                r[dst] = p.get(src, "")
-            rows.append(r)
+        if not isinstance(d, dict) or d.get("n_scenes") != CL_SCENES:
+            continue
+        for name, c in (d.get("coc") or {}).items():
+            out.setdefault(name, c)
+    return out
+
+
+def collect_closedloop(verbose):
+    """One row per driver config, read from the raw alpasim runs.
+
+    Only the reported shape is kept: exactly CL_SCENES scenes x CL_ROLLOUTS rollouts.
+    That drops the 30-scene pilots (underpowered: sigma ~ 0.32 per scene means 30 scenes
+    resolve only 0.179) and the partial shards, and it admits runs that were never fed
+    through `analyze_alpasim` -- reading the run JSON directly is what makes those
+    visible. Aggregation is per-rollout -> per-scene mean -> config mean, and the paired
+    delta is per-scene against the baseline run of the same shape.
+    """
+    runs = {}
+    for f in sorted(ALPASIM_RUNS.glob("*/aggregate/results-summary.json")):
+        run = f.parent.parent.name
+        try:
+            rollouts = load_alpasim_run(f)
+        except (json.JSONDecodeError, KeyError):
+            continue
+        scenes = {r["scene"] for r in rollouts}
+        if len(scenes) != CL_SCENES or len(rollouts) != CL_ROLLOUTS:
+            continue
+        runs[run] = rollouts
         if verbose:
-            print(f"  [closedloop] {exp_dir.name} n_scenes={d.get('n_scenes')} "
-                  f"configs={len(d['configs'])}", flush=True)
+            print(f"  [closedloop] {run} {len(scenes)}x{len(rollouts) // len(scenes)}",
+                  flush=True)
+
+    # the config name is the run dir minus its prefix; the baseline run is the one whose
+    # config is exactly "baseline"
+    def config_of(run):
+        """Run dir -> driver checkpoint name (`fmp_G_default_r40_merged` ->
+        `G_default_r40`, which is the dir under alpasim's drivers/)."""
+        for p in ("m2601_merged_", "m2601_150_", "matrix_", "fmp_"):
+            if run.startswith(p):
+                run = run[len(p):]
+                break
+        return run.removesuffix("_merged")
+
+    base = next((r for run, r in runs.items() if config_of(run) == "baseline"), None)
+    base_scene = per_scene(base, "score") if base else {}
+    coc = collect_coc_stats()
+
+    rows = []
+    for run, rollouts in sorted(runs.items(), key=lambda kv: config_of(kv[0])):
+        cfg = config_of(run)
+        r = {"run": run, "config": cfg, "n_scenes": len({x["scene"] for x in rollouts}),
+             "n_rollouts": len(rollouts)}
+        for k in CL_ROLLOUT_KEYS + CL_METRIC_KEYS:
+            sc = per_scene(rollouts, k)
+            if sc:
+                r[k] = float(np.mean(list(sc.values())))
+        sc = per_scene(rollouts, "score")
+        _, lo, hi = mean_boot_ci(list(sc.values()))
+        r["score_ci_lo"], r["score_ci_hi"] = lo, hi
+        # repeat noise: |score difference| between the two rollouts of one scene
+        by = {}
+        for x in rollouts:
+            if x.get("score") is not None:
+                by.setdefault(x["scene"], []).append(float(x["score"]))
+        rep = [abs(v[0] - v[1]) for v in by.values() if len(v) == 2]
+        if rep:
+            r["repeat_abs_diff_mean"] = float(np.mean(rep))
+            r["repeat_abs_diff_max"] = float(np.max(rep))
+        r["n_failed_rollouts"] = sum(1 for x in rollouts
+                                     if x["status"] != "pass" and not x["passed"])
+        c = coc.get(cfg) or coc.get(f"slim_{cfg}") or {}
+        r["coc_degen"] = c.get("mean_degenerate_frac", "")
+        r["coc_empty"] = c.get("mean_empty_frac", "")
+        r["coc_soup"] = c.get("mean_soup_frac", "")
+        r["coc_len"] = c.get("mean_len", "")
+        if base is not None and cfg != "baseline":
+            ids = sorted(set(sc) & set(base_scene))
+            d = np.array([sc[i] - base_scene[i] for i in ids])
+            if len(d):
+                mean, lo, hi = mean_boot_ci(d)
+                r["d_score_mean"], r["d_ci_lo"], r["d_ci_hi"] = mean, lo, hi
+                nz = d[d != 0]
+                r["wilcoxon_p"] = float(wilcoxon(nz).pvalue) if len(nz) >= 5 else ""
+                r["wins"] = int((d > 0).sum())
+                r["losses"] = int((d < 0).sum())
+                r["ties"] = int((d == 0).sum())
+        rows.append(r)
     return rows
 
 
@@ -384,8 +505,15 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "k": args.k, "protocol": "rollout only; OOD cut to split==val; minADE@k mean",
         "boot": BOOT, "paired_baseline": "same set, same GPU architecture",
+        "closedloop_shape": f"{CL_SCENES} scenes x {CL_ROLLOUTS} rollouts only",
+        "horizons": "minADE/minFDE@k at 6.4 s (no suffix), 1.6 s (_h16), 3.2 s (_h32); "
+                    "the min over samples is taken independently at each horizon",
+        "omitted": "teacher-forced columns (minADE_tf / minFDE_tf / nll_gtcoc) are not "
+                   "reported: no Ada baseline carries per-sample TF arrays, so the "
+                   "column would have arms but no anchor",
         "sources": {"openloop": "outputs/*/<tag>_s*of*.json",
-                    "closedloop": "outputs/alpasim_*/metrics.json",
+                    "closedloop": f"{ALPASIM_RUNS}/*/aggregate/results-summary.json "
+                                  "(CoC degeneracy from outputs/alpasim_*/metrics.json)",
                     "lingoqa": "outputs/lingo_vqa_scores*/metrics.json + "
                                "outputs/lingo_judge_*/metrics.json"},
     }, indent=2))
@@ -398,8 +526,9 @@ def main():
     head = (f"{'arm':22s} {'set':7s} {'n':>5s} {'arch':10s} "
             f"{'minADE@' + str(args.k):>9s} {'minFDE@' + str(args.k):>9s} "
             f"{'degen':>7s} {'d_med':>9s}")
-    lines = [f"open loop   {len(ol)} rows  {counts}",
-             f"closed loop {len(cl)} rows over {n_runs} alpasim runs",
+    cl_line = (f"closed loop {len(cl)} configs at "
+               f"{CL_SCENES}x{CL_ROLLOUTS // CL_SCENES} ({n_runs} alpasim runs)")
+    lines = [f"open loop   {len(ol)} rows  {counts}", cl_line,
              f"lingoqa     {len(lq)} rows", "", head]
     for e in ol:
         lines.append(f"{e['arm'][:22]:22s} {e['set']:7s} {e['n_clips']:5d} "
