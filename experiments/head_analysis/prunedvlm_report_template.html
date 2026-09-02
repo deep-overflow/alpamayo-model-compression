@@ -136,8 +136,10 @@ teacher-force한다 — 한 번은 그대로, 한 번은 <code>dual_u40_v2</code
   <figcaption>왼쪽: TV의 (expert 층 × 디노이징 스텝) 지도. <strong>층 축이 지배적</strong>이다 —
   층 0–5에서 0.02, 층 20–35에서 0.17. 스텝 축의 변화는 그보다 작다.
   가운데: 64개 action 토큰에 걸친 TV. 뒤쪽 waypoint일수록 재배치가 크다(0.083 → 0.090).
-  오른쪽: 층별 span mass 변화. 층 평균으로는 1 pp 미만이지만 <strong>층별로는 ±4 pp까지 흔들리고
-  서로 상쇄</strong>된다 — 집계가 숨긴 두 번째 층위.</figcaption>
+  오른쪽: 층별 span mass 변화. 층 평균으로는 1 pp 미만이지만 <strong>층별로는 ±4 pp까지
+  흔들린다</strong> — vision은 층 22에서 −4.2 pp, 같은 층에서 text가 +3.5 pp다. 층별 |Δ| 총합은
+  평균 4.68 pp인데 층을 먼저 평균내면 2.11 pp로 줄어, <strong>층 간 상쇄가 약 2.2배</strong>다.
+  집계가 숨긴 두 번째 층위.</figcaption>
 </figure>
 
 <div class="callout">
@@ -150,9 +152,15 @@ teacher-force한다 — 한 번은 그대로, 한 번은 <code>dual_u40_v2</code
 
 <figure>
   <img src="PLOT::pv::attn_judgement.png" alt="span mass change vs TV">
-  <figcaption>(층, head, 스텝) 셀마다 span 사이로 옮겨간 질량(x)과 전체 TV(y). 점들이 점선
-  (모든 이동이 span 사이에서 일어났을 경우) 위로 크게 떠 있고, 그 수직 간격이 span 안에서의
-  재배치다.</figcaption>
+  <figcaption>점 하나가 (층, head, 스텝) 셀 하나, 총 5,760개(36×16×10). x는 <strong>span mass만
+  보는 계측이 잡아낼 수 있는 TV</strong>(= ½Σ|Δmass|, 서로소인 coarse span 5개 + expert 자신의
+  64토큰), y는 <strong>키 하나하나까지 센 전체 TV</strong>. 두 축이 같은 단위이므로 모든 이동이
+  span 경계를 넘었다면 점들은 <code>y = x</code> 위에 놓인다. 실제로는 <strong>5,760개 중
+  99.9%가 선 위</strong>에 있고 y/x 중앙값이 <strong>4.73배</strong>다 — 그 수직 간격이 span
+  안에서의 재배치다. x가 0에 가까운 셀(span mass는 전혀 안 변한 셀)조차 y가 0.05–0.10까지
+  올라간다: <strong>"아무 일도 없었다"고 판정될 셀에서 실제로는 5–10%가 옮겨간다.</strong>
+  이 그림이 분석의 판정이다 — 점들이 선 위에 놓였다면 선행 계측에 사각지대가 없다는 뜻이고,
+  주장은 기각된다.</figcaption>
 </figure>
 
 <h3>2.1 그 71%는 층마다 다르고, 헤드마다 다르고, 방향도 깊이를 탄다</h3>
