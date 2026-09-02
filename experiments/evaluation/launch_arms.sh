@@ -14,7 +14,11 @@
 #   bash experiments/evaluation/launch_arms.sh worker 5 &     # one per free GPU
 #   bash experiments/evaluation/launch_arms.sh status
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+# ALPAMAYO_REPO overrides the checkout, matching run_retry_host.sh: a worktree session must
+# evaluate with ITS OWN code, or a checkpoint built against a patched slim_lib is loaded by
+# the trunk's unpatched one (the em100 zero-width MLP hit exactly that).
+REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/alpamayo-model-compression}
+export ALPAMAYO_REPO=$REPO
 cd "$REPO" || exit 1
 Q=logs/arms_queue.txt
 CUR=logs/arms_cursor
