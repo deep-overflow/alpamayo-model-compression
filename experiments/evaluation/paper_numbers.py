@@ -136,6 +136,37 @@ ARMS = {
     "dualr_w": {"indist": ("dualr_w_u40_indist", False),
                 "test": ("dualr_w_u40_test", False),
                 "oodval": ("dualr_w_u40_oodval", False)},
+    # wl = w's Hessian plus LingoQA train (plans/2026-08-30_dualr-w-lingo.md), and the
+    # two-tower configs built on it: the same refitted VLM plus expert MLP-only pruning
+    # at 50% / 75%, expert Q heads and KV untouched
+    # (plans/2026-08-31_dualrwl-expert-mlp.md)
+    "dualr_wl": {"indist": ("dualr_wl_u40_indist", False),
+                 "test": ("dualr_wl_u40_test", False),
+                 "oodval": ("dualr_wl_u40_oodval", False)},
+    "dualrwl_em50": {"indist": ("dualrwl_em50_indist", False),
+                     "test": ("dualrwl_em50_test", False),
+                     "oodval": ("dualrwl_em50_oodval", False)},
+    "dualrwl_em75": {"indist": ("dualrwl_em75_indist", False),
+                     "test": ("dualrwl_em75_test", False),
+                     "oodval": ("dualrwl_em75_oodval", False)},
+    "dualrwl_em87p5": {"indist": ("dualrwl_em87p5_indist", False),
+                      "test": ("dualrwl_em87p5_test", False),
+                      "oodval": ("dualrwl_em87p5_oodval", False)},
+    "dualrwl_em93p75": {"indist": ("dualrwl_em93p75_indist", False),
+                        "test": ("dualrwl_em93p75_test", False),
+                        "oodval": ("dualrwl_em93p75_oodval", False)},
+    "dualexp_em93p75": {"indist": ("dualexp_em93p75_indist", False),
+                        "test": ("dualexp_em93p75_test", False),
+                        "oodval": ("dualexp_em93p75_oodval", False)},
+    "dualrwl_em96p875": {"indist": ("dualrwl_em96p875_indist", False),
+                         "test": ("dualrwl_em96p875_test", False),
+                         "oodval": ("dualrwl_em96p875_oodval", False)},
+    "dualrwl_em98p4375": {"indist": ("dualrwl_em98p4375_indist", False),
+                          "test": ("dualrwl_em98p4375_test", False),
+                          "oodval": ("dualrwl_em98p4375_oodval", False)},
+    "dualrwl_em100": {"indist": ("dualrwl_em100_indist", False),
+                      "test": ("dualrwl_em100_test", False),
+                      "oodval": ("dualrwl_em100_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),
