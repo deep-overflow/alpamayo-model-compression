@@ -146,7 +146,85 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
 여기서 확인된다. 그 +0.0941은 카드 탓이 아니다.
 </p>
 
-<h2><span class="num">4</span>선택이 얼마나 흔들리는가</h2>
+<h2><span class="num">4</span>같은 조건의 추출 여섯 개</h2>
+
+<p>
+공식 train에서 서로소 100클립 블록 다섯 개를 <code>calib_100</code>과 같은 방식으로 뽑았다.
+<code>calib_100</code>까지 여섯 추출이 되고, 여섯의 속성 구성은 동일하며 클립 정체만 다르다.
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션 (n=100)</th><th class="r">test500 minADE@6</th>
+<th class="r">Δ vs 무압축</th><th class="r">95% CI</th></tr></thead>
+<tbody>
+<tr><td><code>calib_100</code> (기존 표준)</td><td class="r">{{absolute.calib_100.test|.4f}}</td>
+    <td class="r">{{vs_baseline.calib_100.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.calib_100.test.lo|+.4f}}, {{vs_baseline.calib_100.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 a</td><td class="r">{{absolute.nt_a.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_a.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_a.test.lo|+.4f}}, {{vs_baseline.nt_a.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 b</td><td class="r">{{absolute.nt_b.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_b.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_b.test.lo|+.4f}}, {{vs_baseline.nt_b.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 c</td><td class="r">{{absolute.nt_c.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_c.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_c.test.lo|+.4f}}, {{vs_baseline.nt_c.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 d</td><td class="r">{{absolute.nt_d.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_d.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_d.test.lo|+.4f}}, {{vs_baseline.nt_d.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 e</td><td class="r">{{absolute.nt_e.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_e.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_e.test.lo|+.4f}}, {{vs_baseline.nt_e.test.hi|+.4f}}]</td></tr>
+</tbody>
+</table>
+
+<div class="kpi">
+  <div><span class="k">추출 간 SD</span><span class="v">{{gates.G1_spread.sd|.4f}}</span></div>
+  <div><span class="k">최대−최소</span><span class="v">{{gates.G1_spread.range|.4f}}</span></div>
+  <div><span class="k">잡음 바닥 (카드)</span><span class="v">{{gates.G0b_card.median|+.4f}}</span></div>
+  <div><span class="k">calib_100 순위</span><span class="v">{{gates.G2_rank_of_calib_100.rank}}/{{gates.G2_rank_of_calib_100.of}}</span></div>
+</div>
+
+<figure>
+  <img src="PLOT::cv::draws.png" alt="six draws">
+  <figcaption>같은 레시피, 같은 예산, 같은 속성 구성. 캘리브레이션 100클립만 다르다.
+  점선은 무압축, 가로선은 여섯 추출의 평균이다.</figcaption>
+</figure>
+
+<p>
+블록 평균에서 <code>calib_100</code>을 뺀 값은
+<strong>{{gates.G2_blockmean_minus_calib100|+.4f}}</strong>이다.
+</p>
+
+<h2><span class="num">5</span>클립을 늘리면 나아지는가</h2>
+
+<p>
+같은 500클립을 누적 합집합으로 쌓아 n을 키운다. <strong>이웃한 두 단은 클립 수와 블록 구성이
+동시에 다르므로</strong>, 기울기를 n의 효과라고 읽으면 안 된다.
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션</th><th class="r">n</th><th class="r">test500 minADE@6</th>
+<th class="r">Δ vs 무압축</th></tr></thead>
+<tbody>
+<tr><td>블록 5개 평균</td><td class="r">100</td>
+    <td class="r">{{gates.G3_ladder.block_mean|.4f}} (SD {{gates.G3_ladder.block_sd|.4f}})</td>
+    <td class="r">—</td></tr>
+<tr><td>a+b</td><td class="r">200</td><td class="r">{{absolute.nt_200.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_200.test.median|+.4f}}</td></tr>
+<tr><td>a+b+c</td><td class="r">300</td><td class="r">{{absolute.nt_300.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_300.test.median|+.4f}}</td></tr>
+<tr><td>a..e</td><td class="r">500</td><td class="r">{{absolute.nt_500.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_500.test.median|+.4f}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cv::ladder.png" alt="ladder">
+  <figcaption>n=100은 블록 다섯 개의 평균과 표준편차, 나머지는 누적 합집합 한 점씩.</figcaption>
+</figure>
+
+<h2><span class="num">6</span>선택이 얼마나 흔들리는가</h2>
 
 <p>
 서로소 부분집합 두 개 = 같은 크기의 독립 추출 두 번. <code>mean(per-clip) == importance.npz</code>가
