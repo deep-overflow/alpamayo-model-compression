@@ -70,6 +70,11 @@ def main():
     ap.add_argument("--block-size", type=int, default=100)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--cache", default="train", help="pre_processed/<cache> to draw from")
+    ap.add_argument("--pool", choices=["cache", "split"], default="split",
+                    help="'cache' draws only clips already in pre_processed/<cache>, which "
+                         "costs no download but inherits whatever that cache was built "
+                         "for; 'split' draws from the whole official train split at "
+                         "CALIB_T0 and needs build_cache.py afterwards")
     ap.add_argument("--exp-id", default="eval_sets")
     ap.add_argument("--prefix", default="calib_tr")
     args = ap.parse_args()
@@ -77,18 +82,28 @@ def main():
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    t0_of = one_sample_per_clip(args.cache)
     ci = pd.read_parquet(AV / "clip_index.parquet")
     dc = pd.read_parquet(AV / "metadata" / "data_collection.parquet")
     ood = set(pd.read_parquet(AV / "reasoning" / "ood_reasoning.parquet").index.astype(str))
     prior = set(pd.read_parquet(out_dir / "calib_100.parquet")["clip_id"])
 
     full = derive(ci[ci.split == "train"], dc)          # target: the whole official split
-    pool = full[full.index.isin(t0_of)]                  # only what the cache can serve
+    if args.pool == "cache":
+        # WARNING: pre_processed/train is not a sample of official train. It was built
+        # from recovery_sets/train_official_50000.parquet, which is exactly 20% per
+        # scenario bucket and whose clips have minADE 2.20 against 0.84 for natural
+        # driving -- a hard, balanced training mix. Blocks drawn here are calibrated on
+        # long-tail clips no matter how well the six demographic attributes match, which
+        # is a bigger factor than the draw this study is trying to measure.
+        t0_of = one_sample_per_clip(args.cache)
+        pool = full[full.index.isin(t0_of)]
+    else:
+        t0_of = dict.fromkeys(full.index.astype(str), CALIB_T0)
+        pool = full
     n_cached = len(pool)
     pool = pool[~pool.index.isin(ood) & ~pool.index.isin(prior)]
     need = args.blocks * args.block_size
-    print(f"official train {len(full):,}  cached {n_cached:,}  "
+    print(f"official train {len(full):,}  pool={args.pool} {n_cached:,}  "
           f"-OOD/-calib_100 {n_cached - len(pool)}  -> pool {len(pool):,}  need {need}",
           flush=True)
     assert len(pool) >= need, f"pool {len(pool)} < {need}"
