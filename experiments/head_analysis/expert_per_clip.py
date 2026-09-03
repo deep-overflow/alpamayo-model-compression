@@ -127,8 +127,13 @@ def reserve_gpu(need_gb, chunk_gb=1.0, devices=None):
                 chunks.append(
                     torch.empty(int(chunk_gb * 1024**3 // 2), dtype=torch.bfloat16, device=dev)
                 )
-        except torch.OutOfMemoryError:
-            pass
+        except (torch.OutOfMemoryError, torch.AcceleratorError) as e:
+            # A card with no free memory at all raises AcceleratorError, not
+            # OutOfMemoryError -- the two are siblings under RuntimeError in torch 2.8,
+            # so catching only the latter aborts the whole scan on the first full card
+            # instead of moving to the next one.
+            if not isinstance(e, torch.OutOfMemoryError) and "out of memory" not in str(e):
+                raise
         got = sum(c.numel() * 2 for c in chunks) / 1024**3
         del chunks
         if got >= need_gb:
