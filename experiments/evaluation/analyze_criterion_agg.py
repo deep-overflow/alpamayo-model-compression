@@ -57,6 +57,11 @@ ARMS = {"baseline": ("baseline_ada_ps_{s}", False), "dual": ("dual_u40_v2_ps_{s}
         "dual_ada": ("dual_ada_u40_v2_{s}", False), "znorm11": ("znorm11_u40_v2_{s}", False),
         "dualfix": ("dualfix_u40_v2_{s}", False)}
 ARMS["dual"] = ("dual_u40_v2_ps_ood", True)
+# the union/operator 2x2 (plans/2026-09-03_union-step-criterion.md). An arm whose rows are
+# not on disk yet is dropped per set rather than emptying every intersection, so this runs
+# while only part of the extension has landed.
+ARMS["maxstep11"] = ("maxstep11_u40_v2_{s}", False)
+ARMS["meandual"] = ("meandual_u40_v2_{s}", False)
 BOOT = 10000
 
 
@@ -65,7 +70,10 @@ def load(arm, s):
     if arm == "dual" and s != "oodval":
         pat, val_only = "dual_u40_v2_ps_{s}", False
     rows = {}
-    for p in sorted((REPO / "outputs" / pat.format(s=s)).glob("*_s*of*.json")):
+    d = REPO / "outputs" / pat.format(s=s)
+    if not d.is_dir():
+        return rows
+    for p in sorted(d.glob("*_s*of*.json")):
         for r in json.loads(p.read_text()):
             if val_only and r.get("split") != "val":
                 continue
@@ -108,10 +116,13 @@ def main():
     # ---- absolute rows -------------------------------------------------------
     print(f"== minADE@{K} / minFDE@{K} mean (median) | CoC degen ==")
     for s in SETS:
-        ids = sorted(set.intersection(*[set(data[a][s]) for a in ARMS]))
-        M["sets"][s] = {"n": len(ids)}
-        print(f"-- {SET_LABEL[s]} (n={len(ids)})")
-        for a in ARMS:
+        have = [a for a in ARMS if data[a][s]]
+        missing = [a for a in ARMS if a not in have]
+        ids = sorted(set.intersection(*[set(data[a][s]) for a in have]))
+        M["sets"][s] = {"n": len(ids), "missing": missing}
+        print(f"-- {SET_LABEL[s]} (n={len(ids)})"
+              + (f"  [not run: {', '.join(missing)}]" if missing else ""))
+        for a in have:
             ade = np.array([at_k(data[a][s][c], "ade_rollout_k", K) for c in ids])
             fde = np.array([at_k(data[a][s][c], "fde_rollout_k", K) for c in ids])
             dg = np.array([data[a][s][c]["coc_degenerate"] for c in ids], float)
@@ -123,13 +134,16 @@ def main():
 
     # ---- paired deltas -------------------------------------------------------
     pairs = [("dual", "baseline"), ("dual_ada", "baseline"), ("znorm11", "baseline"),
-             ("dualfix", "baseline"), ("dual_ada", "dual"),
-             ("znorm11", "dual_ada"), ("dualfix", "dual_ada")]
+             ("dualfix", "baseline"), ("maxstep11", "baseline"), ("meandual", "baseline"),
+             ("dual_ada", "dual"), ("znorm11", "dual_ada"), ("dualfix", "dual_ada"),
+             ("maxstep11", "dualfix"), ("meandual", "dualfix"), ("maxstep11", "znorm11")]
     print(f"\n== paired minADE@{K} delta ==")
     for arm, ref in pairs:
         M["paired"][f"{arm}-{ref}"] = {}
         for s in SETS:
             ids = sorted(set(data[arm][s]) & set(data[ref][s]))
+            if not ids:
+                continue
             d = np.array([at_k(data[arm][s][c], "ade_rollout_k", K)
                           - at_k(data[ref][s][c], "ade_rollout_k", K) for c in ids])
             lo, hi = boot_med(d)
@@ -143,7 +157,8 @@ def main():
 
     # ---- how much of the model actually moved --------------------------------
     ref_q, ref_m = kept("slim_dual_ada_u40_v2")
-    for name in ("slim_dual_u40_v2", "slim_znorm11_u40_v2", "slim_dualfix_u40_v2"):
+    for name in ("slim_dual_u40_v2", "slim_znorm11_u40_v2", "slim_dualfix_u40_v2",
+                 "slim_maxstep11_u40_v2", "slim_meandual_u40_v2"):
         q, m = kept(name)
         aq = (q & ref_q).sum(1) / ref_q.sum(1)
         am = (m & ref_m).sum(1) / ref_m.sum(1)
@@ -155,10 +170,12 @@ def main():
               f"({len(diff)} layers differ)")
 
     # identical-output rate: how often the layer-35 guard changes nothing at all
-    for arm in ("dualfix", "znorm11"):
+    for arm in ("dualfix", "znorm11", "maxstep11", "meandual"):
         row = {}
         for s in SETS:
             ids = sorted(set(data[arm][s]) & set(data["dual_ada"][s]))
+            if not ids:
+                continue
             same_ade = sum(at_k(data[arm][s][c], "ade_rollout_k", K)
                            == at_k(data["dual_ada"][s][c], "ade_rollout_k", K) for c in ids)
             same_txt = sum(data[arm][s][c]["gen_coc"] == data["dual_ada"][s][c]["gen_coc"]
@@ -168,23 +185,25 @@ def main():
         M[f"identical_{arm}"] = row
         print(f"{arm} vs dual_ada identical: " + "  ".join(
             f"{SET_LABEL[s]} ADE {100*row[s]['same_ade']:.1f}% / CoC {100*row[s]['same_coc']:.1f}%"
-            for s in SETS))
+            for s in row))
 
     # ---- plots ---------------------------------------------------------------
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
-    arms4 = ["dual", "dual_ada", "dualfix", "znorm11"]
-    cols = {"dual": GREY, "dual_ada": MUTED, "dualfix": GOOD, "znorm11": ACCENT}
+    arms4 = ["dual", "dual_ada", "dualfix", "znorm11", "maxstep11", "meandual"]
+    cols = {"dual": GREY, "dual_ada": MUTED, "dualfix": GOOD, "znorm11": ACCENT,
+            "maxstep11": "#2F6FBF", "meandual": "#9B59B6"}
     for ax, ref, ttl in zip(axes, ("baseline", "dual_ada"),
                             ("vs unpruned baseline", "vs dual_ada (one factor)")):
-        w, xs = 0.2, np.arange(len(SETS))
+        w, xs = 0.14, np.arange(len(SETS))
         shown = [a for a in arms4 if a != ref]
         for i, a in enumerate(shown):
             key = f"{a}-{ref}"
-            if key not in M["paired"]:
+            if key not in M["paired"] or not M["paired"][key]:
                 continue
-            med = [M["paired"][key][s]["med"] for s in SETS]
-            lo = [med[j] - M["paired"][key][SETS[j]]["lo"] for j in range(3)]
-            hi = [M["paired"][key][SETS[j]]["hi"] - med[j] for j in range(3)]
+            r = M["paired"][key]
+            med = [r[s]["med"] if s in r else np.nan for s in SETS]
+            lo = [med[j] - r[SETS[j]]["lo"] if SETS[j] in r else 0 for j in range(3)]
+            hi = [r[SETS[j]]["hi"] - med[j] if SETS[j] in r else 0 for j in range(3)]
             ax.bar(xs + (i - (len(shown) - 1) / 2) * w, med, w, color=cols[a], label=a,
                    yerr=[lo, hi], capsize=3, ecolor=MUTED, error_kw={"lw": 1})
         ax.axhline(0, color=TEXT, lw=0.8)
@@ -221,7 +240,7 @@ def main():
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.4))
     ids = sorted(set(data["dualfix"]["indist"]) & set(data["dual_ada"]["indist"]))
-    for ax, arm, c in zip(axes, ("dualfix", "znorm11"), (GOOD, ACCENT)):
+    for ax, arm, c in zip(axes, ("maxstep11", "znorm11"), ("#2F6FBF", ACCENT)):
         d = np.array([at_k(data[arm]["indist"][c_], "ade_rollout_k", K)
                       - at_k(data["dual_ada"]["indist"][c_], "ade_rollout_k", K)
                       for c_ in ids])
@@ -238,12 +257,12 @@ def main():
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(6.2, 3.2))
-    w, xs = 0.16, np.arange(len(SETS))
+    w, xs = 0.12, np.arange(len(SETS))
+    dcol = {"baseline": "#B8B3A3", "dual": GREY, "dual_ada": MUTED, "dualfix": GOOD,
+            "znorm11": ACCENT, "maxstep11": "#2F6FBF", "meandual": "#9B59B6"}
     for i, a in enumerate(ARMS):
-        v = [100 * M["sets"][s][a]["degen"] for s in SETS]
-        ax.bar(xs + (i - 2) * w, v, w, label=a,
-               color={"baseline": "#B8B3A3", "dual": GREY, "dual_ada": MUTED,
-                      "dualfix": GOOD, "znorm11": ACCENT}[a])
+        v = [100 * M["sets"][s][a]["degen"] if a in M["sets"][s] else np.nan for s in SETS]
+        ax.bar(xs + (i - len(ARMS) / 2) * w, v, w, label=a, color=dcol[a])
     ax.set_xticks(xs, [SET_LABEL[s] for s in SETS])
     ax.set_ylabel("CoC degeneracy (%)")
     ax.legend(frameon=False, fontsize=8)
@@ -252,22 +271,29 @@ def main():
     plt.close(fig)
 
     (out / "metrics.json").write_text(json.dumps(M, indent=2))
-    g1 = all(abs(M["paired"]["znorm11-dual_ada"][s]["med"]) < 0.05 for s in SETS)
-    g2 = all(abs(M["paired"]["dualfix-dual_ada"][s]["med"]) < 0.05 for s in SETS)
+    def gate(key):
+        r = M["paired"][key]
+        return bool(r) and all(abs(v["med"]) < 0.05 for v in r.values())
+
+    g1, g2 = gate("znorm11-dual_ada"), gate("dualfix-dual_ada")
+    b1, b2 = gate("maxstep11-dualfix"), gate("meandual-dualfix")
     lines = [f"criterion aggregation, minADE@{K}",
-             f"A1 znorm11 == dual_ada : {'PASS' if g1 else 'REJECT'}",
-             f"A2 dualfix == dual_ada : {'PASS' if g2 else 'REJECT'}", ""]
+             f"A1 znorm11   == dual_ada : {'PASS' if g1 else 'REJECT'}",
+             f"A2 dualfix   == dual_ada : {'PASS' if g2 else 'REJECT'}",
+             f"B1 maxstep11 == dualfix  : {'PASS' if b1 else 'REJECT'}",
+             f"B2 meandual  == dualfix  : {'PASS' if b2 else 'REJECT'}", ""]
     for arm, ref in pairs:
-        for s in SETS:
-            r = M["paired"][f"{arm}-{ref}"][s]
-            lines.append(f"{arm+' - '+ref:22s} {SET_LABEL[s]:12s} n={r['n']:4d} "
+        for s, r in M["paired"][f"{arm}-{ref}"].items():
+            lines.append(f"{arm + ' - ' + ref:22s} {SET_LABEL[s]:12s} n={r['n']:4d} "
                          f"med {r['med']:+.4f} mean {r['mean']:+.4f} "
                          f"[{r['lo']:+.4f},{r['hi']:+.4f}] p={r['p']:.3g}")
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     (out / "config.json").write_text(json.dumps(
         {"k": K, "arms": ARMS, "sets": SETS, "boot": BOOT}, indent=2))
-    print(f"\nA1 (znorm11 == dual_ada): {'PASS' if g1 else 'REJECT'}")
-    print(f"A2 (dualfix == dual_ada): {'PASS' if g2 else 'REJECT'}")
+    print(f"\nA1 (znorm11   == dual_ada): {'PASS' if g1 else 'REJECT'}")
+    print(f"A2 (dualfix   == dual_ada): {'PASS' if g2 else 'REJECT'}")
+    print(f"B1 (maxstep11 == dualfix) : {'PASS' if b1 else 'REJECT'}")
+    print(f"B2 (meandual  == dualfix) : {'PASS' if b2 else 'REJECT'}")
     print(f"-> {out}")
 
 
