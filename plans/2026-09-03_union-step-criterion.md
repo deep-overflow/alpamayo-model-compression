@@ -114,17 +114,22 @@ GPU가 비면 아래 두 블록이면 된다. 큐는 append로만 늘린다(`ini
 검사한다 — 2026-09-03에 `pgrep -f "launch_arms.sh worker $g$"`가 다른 worktree의 워커를 잡아
 GPU 4-6 워커가 조용히 안 떴다.
 
+**`maxstep11`만 확장한다.** 두 arm의 역할이 다르다: `maxstep11`은 채택 후보라 held-out
+test500과 OOD-val이 필요하고, `meandual`은 2x2의 빈 칸을 채우는 메커니즘 대조군이라
+val500 하나로 족하다(+0.0058 [-0.0103, +0.0188], n=500이면 CI가 이미 충분히 좁다).
+대가로 상호작용 주장의 네 칸 중 `meandual`만 단일 세트 근거로 남는다 - 논문에 2x2를 그대로
+실을 때 아래 명령의 arm 이름만 바꿔 8 job을 더 돌리면 된다.
+
 ```bash
 cd /home/cvlab21/project/chan/alpamayo-model-compression
 SETS="test oodval" bash experiments/evaluation/launch_arms.sh append 4 \
-    maxstep11_u40_v2=outputs/slim_maxstep11_u40_v2 \
-    meandual_u40_v2=outputs/slim_meandual_u40_v2      # 16 job
+    maxstep11_u40_v2=outputs/slim_maxstep11_u40_v2      # 8 job
 for g in 4 5 6 7; do
   ps -eo args | grep -q "^bash experiments/evaluation/launch_arms.sh worker $g$" || \
     nohup bash experiments/evaluation/launch_arms.sh worker $g > logs/worker_$g.log 2>&1 &
 done
 ```
 
-Ada 4-7 고정(기존 arm과의 페어링이 아키텍처에 의존한다). 16 job = 2 arm x 2 set x 4 shard,
-4카드로 약 1.5~2시간. 끝나면 `analyze_criterion_agg.py`의 `ARMS`에 두 arm을 추가해
-같은 표로 확장한다.
+Ada 4-7 고정(기존 arm과의 페어링이 아키텍처에 의존한다). 8 job = 1 arm x 2 set x 4 shard,
+4카드로 약 45~60분. 끝나면 `analyze_criterion_agg.py`를 그대로 다시 돌리면 표와 플롯이
+자동으로 확장된다(안 돌린 세트는 arm 단위로 건너뛴다).
