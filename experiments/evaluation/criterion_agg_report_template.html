@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>집계 함수가 기준을 만든다: znorm11 기각과 35번 층 index-order 결함</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>집계 함수가 기준을 만든다: znorm11 기각과 35번 층 index-order 결함</h1>
+  <div class="meta">
+    2026-09-03 · <code>nvidia/Alpamayo-1.5-10B</code> 24.0% 압축 4종 + 무손상 baseline ·
+    val 500 + test 500 + OOD-val 262 · minADE@6 · RTX 5880 Ada
+  </div>
+</header>
+
+<p class="lede">
+같은 예산·같은 축·같은 캘리브레이션에서 <strong>층 안의 점수만</strong> 바꾼 네 개의 24.0% 체크포인트를
+3,786 클립에서 비교했다. 두 가지가 나왔다. 디노이징 스텝을 열 개로 쪼개 z-score 평균으로 섞는
+<code>znorm11</code>은 <strong>기각</strong>이다 &mdash; 세밀해진 대신 <code>max</code>의 합집합 성질을 잃고
+프루닝 손실이 3배가 된다. 그리고 출시 체크포인트에 실재하는 <strong>35번 층 index-order 결함은
+측정 한계 아래</strong>다 &mdash; 재빌드할 이유가 없다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">게이트 A1</span><span class="v">REJECT</span>znorm11 ≠ dual</div>
+  <div><span class="k">A1 대가</span><span class="v">+0.18~0.20</span>minADE@6 중앙값 (m)</div>
+  <div><span class="k">게이트 A2</span><span class="v">PASS</span>35번 층 가드는 무해</div>
+  <div><span class="k">A2 효과</span><span class="v">0.0000</span>세 세트 모두 정확히 0</div>
+  <div><span class="k">평가 규모</span><span class="v">3,786</span>클립 (3 arm × 1,262)</div>
+</div>
+
+<h2><span class="num">1</span>두 개의 질문</h2>
+
+<p>
+이 연구의 폭 프루닝 기준은 두 목적함수의 <strong>랭크 최댓값</strong>이다.
+</p>
+
+<pre><code>keep(u)  ∝  max( rank I_traj(u),  rank I_CoC(u) )</code></pre>
+
+<p>
+<code>I_traj</code>는 궤적 flow-matching MSE의 Taylor 중요도, <code>I_CoC</code>는 모델 자신이 쓴
+Chain-of-Causation의 NLL에 대한 Taylor 중요도다. 이 <code>max</code>는 <strong>합집합 규칙</strong>이다:
+어느 한 목적에서라도 상위권이면 살린다. 여기에 두 가지 의문이 남아 있었다.
+</p>
+
+<h3>Q1 &mdash; 궤적 목적을 하나로 뭉개도 되는가</h3>
+
+<p>
+<code>I_traj</code>는 10번의 디노이징 스텝을 합쳐서 하나의 점수로 만든다. 그런데 expert 타워에서는
+이 합산이 실제 결함이었다: 스텝별로 중요도 랭킹이 달라지는데 단순 합산이 특정 스텝을 압도시켜,
+znorm으로 바꾸자 r25의 dminADE가 +0.0977에서 +0.0003으로 떨어졌다
+(<code>2026-08-21_denoise-step-importance.html</code>). VLM 쪽에서도 같은 처방이 통할까?
+</p>
+
+<p>
+그래서 <strong><code>znorm11</code></strong>을 만들었다. CoC NLL 하나와 디노이징 스텝 열 개,
+총 11개 손실 각각을 <strong>층 안에서 z-score로 정규화한 뒤 평균</strong>낸다.
+</p>
+
+<pre><code>score(u) = ( z(I_CoC)(u) + Σ_{s=0..9} z(I_FM,s)(u) ) / 11</code></pre>
+
+<h3>Q2 &mdash; 35번 층의 순위는 무엇으로 정해졌는가</h3>
+
+<p>
+출시된 <code>slim_dual_u40_v2</code>를 뜯어보다 발견한 것이다. <strong>35번 층에서
+<code>I_traj</code>가 Q head·MLP channel 모두 정확히 0</strong>이다. 상수 벡터에
+<code>rank_norm</code>을 씌우면 남는 것은 <strong>인덱스 순서</strong>뿐이고, 그것이
+<code>max</code>의 한쪽 인자로 들어간다. 실제로 <strong>유지된 19개 헤드 중 8개가 그 half로
+결정</strong>됐다 &mdash; 즉 출시 체크포인트의 마지막 층은 일부가 사실상 &ldquo;앞 번호부터&rdquo;
+남았다.
+</p>
+
+<div class="callout">
+<p>
+<strong>이건 버그가 아니라 구조다.</strong> 35번 층의 <code>o_proj</code>/<code>down_proj</code> 출력은
+그 층의 K/V에 영향을 주지 않는다 &mdash; 층 35의 캐시는 층 34의 출력에서 계산되기 때문이다.
+expert는 VLM의 <em>캐시</em>만 읽으므로, <strong>층 35의 Q head와 MLP는 궤적 경로에 도달하는
+길이 아예 없다</strong>. 그래서 <code>I_traj[35]</code>는 근사적으로 0이 아니라 <em>정확히</em> 0이다.
+그 층은 오직 최종 norm → LM head → CoC 텍스트로만 나간다.
+</p>
+</div>
+
+<p>
+그렇다면 올바른 처방은 명확하다. <strong><code>dualfix</code></strong>는 한쪽 half가 상수인 층에서
+그 half를 <code>−inf</code>로 만들어 <code>max</code>에서 배제한다. 층 35는 순수하게 CoC 기준으로만
+선택된다. 남는 질문은 &ldquo;그래서 얼마나 달라지는가&rdquo;다.
+</p>
+
+<h2><span class="num">2</span>설계: 예산·축·캘리브레이션을 묶고 점수만 푼다</h2>
+
+<p>
+네 arm 전부 <strong>정확히 2,657,452,032개 파라미터</strong>를 제거한다(균일 비율 0.3985632694,
+36개 층 각각 19/32 Q head와 7,390/12,288 MLP channel). expert 타워와 KV 그룹은 건드리지 않는다.
+allocation, 예산, 축이 모두 동일하므로 arm 간 차이는 <strong>층 안의 점수 하나</strong>다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th>층 안의 점수</th><th>importance 실행</th><th>dual_ada kept set 일치</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code> (출시본)</td><td><code>max(rank I_traj, rank I_CoC)</code></td><td><code>importance_v2</code> (Blackwell)</td><td class="r">Q 0.9722 / MLP 0.9729</td></tr>
+<tr><td><code>dual_ada</code> <strong>기준</strong></td><td>동일</td><td><code>importance_v2_ada</code> (Ada)</td><td class="r">&mdash;</td></tr>
+<tr><td><code>znorm11</code></td><td>11개 손실 z-score 평균</td><td>동일 + <code>importance_stepvlm_v1</code></td><td class="r">Q 0.8713 / MLP 0.8805</td></tr>
+<tr><td><code>dualfix</code></td><td><code>max</code>, 상수 half는 −inf</td><td>동일</td><td class="r">Q 0.9942 / MLP 0.9934</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p>
+<strong>왜 <code>dual_ada</code>를 새로 빌드했는가.</strong> <code>znorm11</code>의 재료인 스텝별
+중요도 파일은 Ada에서만 측정돼 있는데, 출시 <code>dual</code>은 Blackwell에서 잰
+<code>importance_v2</code>로 만들어졌다. 이대로 비교하면 &ldquo;집계 방식&rdquo;과 &ldquo;측정 카드&rdquo;가
+같이 움직인다(그것만으로 kept set이 2.8% 달라진다). 그래서 dual 기준을 Ada 파일로 다시 빌드해
+세 arm이 같은 측정치를 공유하게 했다. 출시 <code>dual</code>은 그 재빌드의 대가를 말해주는
+두 번째 대조군으로 표에 남긴다.
+</p>
+</div>
+
+<p>
+평가는 고정 프로토콜을 따른다: rollout 조건만(teacher forcing 금지), val 500 / test 500 /
+OOD-val 262, <strong>minADE@6 · minFDE@6</strong>(저장된 8개 샘플 중 앞 6개 &mdash; 시드가
+<code>base+k</code>이므로 6-샘플 실행이 뽑았을 바로 그 여섯 개), 헤드라인은 평균, 중앙값 병기.
+시드는 <code>sha256("42:{clip_id}")</code>에서 유도되므로 arm·샤드·순서와 무관하고,
+공통 클립 전부에서 시드 불일치 0건을 확인했다. 다섯 arm 모두 <strong>Ada 4&ndash;7</strong>에서
+돌렸다 &mdash; 결정성은 한 아키텍처 안에서만 성립하기 때문이다.
+</p>
+
+<h2><span class="num">3</span>결과</h2>
+
+<table>
+<thead><tr><th>세트</th><th>arm</th><th class="r">minADE@6</th><th class="r">minFDE@6</th><th class="r">CoC 퇴화</th><th class="r">paired ΔminADE@6 vs baseline</th></tr></thead>
+<tbody>
+<tr><td rowspan="5">val500</td><td>baseline</td><td class="r">0.8236 (0.5241)</td><td class="r">2.2050 (1.1243)</td><td class="r">0.8%</td><td class="r">&mdash;</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.8904 (0.6391)</td><td class="r">2.3304 (1.3615)</td><td class="r">1.4%</td><td class="r">+0.0581 [+0.036, +0.083]*</td></tr>
+<tr><td><code>dual_ada</code></td><td class="r">0.9243 (0.6421)</td><td class="r">2.4038 (1.4281)</td><td class="r">2.4%</td><td class="r">+0.0554 [+0.029, +0.090]*</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">0.9236 (0.6398)</td><td class="r">2.4011 (1.4658)</td><td class="r">1.8%</td><td class="r">+0.0539 [+0.028, +0.087]*</td></tr>
+<tr><td><code>znorm11</code></td><td class="r"><strong>1.2890</strong> (0.9220)</td><td class="r">3.7160 (2.4913)</td><td class="r">3.4%</td><td class="r"><strong>+0.2318</strong> [+0.187, +0.274]*</td></tr>
+<tr><td rowspan="5">test500</td><td>baseline</td><td class="r">0.8417 (0.5086)</td><td class="r">2.2673 (1.1631)</td><td class="r">0.6%</td><td class="r">&mdash;</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.9498 (0.6637)</td><td class="r">2.5459 (1.4790)</td><td class="r">3.0%</td><td class="r">+0.0524 [+0.034, +0.079]*</td></tr>
+<tr><td><code>dual_ada</code></td><td class="r">0.9689 (0.6394)</td><td class="r">2.5882 (1.3335)</td><td class="r">2.4%</td><td class="r">+0.0598 [+0.039, +0.089]*</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">0.9649 (0.6658)</td><td class="r">2.5852 (1.3598)</td><td class="r">4.0%</td><td class="r">+0.0603 [+0.040, +0.088]*</td></tr>
+<tr><td><code>znorm11</code></td><td class="r"><strong>1.3897</strong> (1.0346)</td><td class="r">4.0047 (2.5634)</td><td class="r">6.4%</td><td class="r"><strong>+0.2734</strong> [+0.208, +0.321]*</td></tr>
+<tr><td rowspan="5">OOD-val 262</td><td>baseline</td><td class="r">0.9995 (0.5745)</td><td class="r">2.4959 (1.1184)</td><td class="r">0.0%</td><td class="r">&mdash;</td></tr>
+<tr><td><code>dual</code></td><td class="r">1.1192 (0.7287)</td><td class="r">2.8514 (1.3416)</td><td class="r">3.4%</td><td class="r">+0.0776 [+0.041, +0.114]*</td></tr>
+<tr><td><code>dual_ada</code></td><td class="r">1.1428 (0.6785)</td><td class="r">2.9034 (1.2984)</td><td class="r">5.0%</td><td class="r">+0.0731 [+0.038, +0.110]*</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">1.1303 (0.6768)</td><td class="r">2.8424 (1.2984)</td><td class="r">3.8%</td><td class="r">+0.0827 [+0.043, +0.113]*</td></tr>
+<tr><td><code>znorm11</code></td><td class="r"><strong>1.3962</strong> (0.8686)</td><td class="r">3.7441 (2.0474)</td><td class="r">5.0%</td><td class="r"><strong>+0.1820</strong> [+0.124, +0.274]*</td></tr>
+</tbody>
+</table>
+
+<p class="meta">평균 (중앙값). * = 부트스트랩 95% CI가 0을 제외. minADE는 꼬리가 무거워 중앙값과
+Wilcoxon이 1차 판정이고 평균은 병기한다.</p>
+
+<figure>
+  <img src="PLOT::agg::deltas.png" alt="세트별 페어드 델타">
+  <figcaption>
+    왼쪽은 무손상 baseline 대비, 오른쪽은 1요인 대조군 <code>dual_ada</code> 대비.
+    오차 막대는 중앙값의 부트스트랩 95% CI. 오른쪽 패널에서 <code>dualfix</code>의 막대는
+    세 세트 모두 정확히 0이라 보이지 않는다.
+  </figcaption>
+</figure>
+
+<h3>1요인 비교</h3>
+
+<table>
+<thead><tr><th>비교</th><th>격리된 요인</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td><code>znorm11 − dual_ada</code></td><td>집계 함수 (max → mean)</td>
+    <td class="r"><strong>+0.1785</strong><br><span class="meta">[+0.117,+0.242]* p=1.5e-22</span></td>
+    <td class="r"><strong>+0.1994</strong><br><span class="meta">[+0.147,+0.258]* p=5.3e-26</span></td>
+    <td class="r"><strong>+0.1373</strong><br><span class="meta">[+0.065,+0.181]* p=5.8e-08</span></td></tr>
+<tr><td><code>dualfix − dual_ada</code></td><td>35번 층 상수-half 가드</td>
+    <td class="r"><strong>+0.0000</strong><br><span class="meta">[0, 0] p=0.39</span></td>
+    <td class="r"><strong>+0.0000</strong><br><span class="meta">[0, 0] p=0.77</span></td>
+    <td class="r"><strong>+0.0000</strong><br><span class="meta">[0, 0] p=0.11</span></td></tr>
+<tr><td><code>dual_ada − dual</code></td><td>importance 측정 카드</td>
+    <td class="r">+0.0002<br><span class="meta">[−0.005,+0.005] p=0.95</span></td>
+    <td class="r">+0.0012<br><span class="meta">[−0.004,+0.008] p=0.68</span></td>
+    <td class="r">+0.0030<br><span class="meta">[−0.008,+0.012] p=0.84</span></td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">4</span>A1 REJECT: 평균은 <code>max</code>가 하던 일을 못 한다</h2>
+
+<div class="callout warn">
+<p>
+<strong>게이트 A1 (사전 등록): </strong><code>|median(znorm11 − dual_ada)| &lt; 0.05 m</code>가 세 세트
+모두에서 성립하면 스텝 축 세분화는 공짜 개선이다. <strong>세 세트 모두 위반</strong> &mdash;
++0.137 ~ +0.199로 게이트의 3~4배다.
+</p>
+</div>
+
+<p>
+크기를 감각적으로 잡으면 이렇다. <code>dual</code>이 24% 압축의 대가로 지불하는 것이
++0.055 ~ +0.073이다. <code>znorm11</code>은 <strong>그 위에 다시 그만큼의 2.5~3.3배를 더 얹는다</strong>.
+프루닝 손실 전체로는 4~5배다.
+</p>
+
+<p>
+어디에 착륙했는지 보면 원인이 드러난다. 같은 예산·같은 allocation의 <strong>단일 기준 대조군</strong>과
+나란히 놓으면:
+</p>
+
+<table>
+<thead><tr><th>val500 기준</th><th class="r">paired ΔminADE@6 vs baseline</th><th>층 안의 점수</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td class="r">+0.0581</td><td>max(traj, coc) &mdash; 합집합</td></tr>
+<tr><td><code>traj</code></td><td class="r">+0.0881</td><td>궤적 단독</td></tr>
+<tr><td><code>jtraj</code></td><td class="r">+0.0879</td><td>max(traj, J-lens)</td></tr>
+<tr><td><strong><code>znorm11</code></strong></td><td class="r"><strong>+0.2318</strong></td><td>11개 손실 평균</td></tr>
+<tr><td><code>coc</code></td><td class="r">+0.2932</td><td>CoC 단독</td></tr>
+<tr><td><code>j</code></td><td class="r">+0.7309</td><td>J-lens 단독</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>znorm11</code>은 두 기준을 <em>둘 다</em> 담았는데도 궤적 단독(<code>traj</code>, +0.088)보다
+2.6배 나쁘고, CoC 단독(<code>coc</code>, +0.293)에 가깝다. 정보를 더 넣었는데 성능은 더 나쁜
+기준 쪽으로 끌려간 것이다.
+</p>
+
+<p>
+설명은 <strong>집계 함수의 성질</strong>에 있다. <code>max(rank_a, rank_b)</code>는 &ldquo;a에서
+상위권이거나 b에서 상위권이면 보존&rdquo;이다 &mdash; 각 목적의 최상위 유닛이 다른 목적에서
+바닥이어도 살아남는다. <strong>평균</strong>은 반대다: 한쪽에서 최상위여도 다른 열 곳에서 중간이면
+총점이 중간으로 눌린다. 그래서 살아남는 것은 &ldquo;모든 목적에서 두루 중간&rdquo;인 유닛이고,
+어느 목적도 온전히 유지되지 않는다. 게다가 11개 항 중 10개가 FM 스텝이라 CoC의 몫은 1/11로
+희석된다 &mdash; 그런데도 결과가 CoC 단독 쪽으로 간 것은, 궤적 신호가 <em>서로</em> 상쇄되며
+평균 안에서 힘을 잃었다는 뜻이다.
+</p>
+
+<figure>
+  <img src="PLOT::agg::overlap.png" alt="층별 kept set 일치율">
+  <figcaption>
+    <code>dual_ada</code>의 kept set과 층별로 얼마나 겹치는가. <code>znorm11</code>(주황)은 MLP에서
+    깊이가 깊어질수록 이탈이 커지고(층 30 부근 0.82), <code>dualfix</code>(초록)는 35번 층 하나에서만
+    떨어진다. 회색은 측정 카드만 바뀐 출시 <code>dual</code> &mdash; 전 층에 걸쳐 2~4% 흔들리지만
+    성능은 구분되지 않는다.
+  </figcaption>
+</figure>
+
+<p>
+CoC 채널도 같은 방향이다. test500에서 퇴화율이 <code>dual_ada</code> 2.4%에서
+<code>znorm11</code> 6.4%로 2.7배가 된다. 궤적과 추론 어느 쪽도 얻지 못했다.
+</p>
+
+<figure>
+  <img src="PLOT::agg::degen.png" alt="arm별 CoC 퇴화율">
+  <figcaption>
+    세트별 CoC 퇴화율. <code>znorm11</code>(주황)만 세 세트에서 일관되게 높다.
+    <code>dualfix</code>(초록)와 <code>dual_ada</code>의 차이는 세트마다 부호가 바뀌는 노이즈다
+    (val500 12→9건, test500 12→20건).
+  </figcaption>
+</figure>
+
+<div class="callout">
+<p>
+<strong>expert에서 통한 처방이 VLM에서 통하지 않는 이유.</strong> expert에서 znorm이 이긴 것은
+비교 대상이 <em>단순 합산</em>이었기 때문이다 &mdash; 합산은 크기가 큰 스텝이 나머지를 압도하는
+스케일 문제였고, z-score가 그것을 고쳤다. VLM의 <code>dual</code>은 합산이 아니라
+<strong>랭크 최댓값</strong>이라 애초에 스케일 문제가 없다. 여기서 z-score 평균으로 바꾸는 것은
+스케일을 고치는 게 아니라 <strong>합집합을 평균으로 바꾸는</strong> 일이고, 그건 개선이 아니라
+성질의 상실이다. 처방은 병에 맞춰야 한다.
+</p>
+</div>
+
+<h2><span class="num">5</span>A2 PASS: 결함은 실재하지만 측정되지 않는다</h2>
+
+<div class="callout good">
+<p>
+<strong>게이트 A2: </strong><code>|median(dualfix − dual_ada)| &lt; 0.05 m</code>.
+세 세트 모두 <strong>정확히 0.0000</strong>, 부트스트랩 CI도 [0, 0]. <strong>PASS</strong> &mdash;
+출시된 <code>slim_dual_u40_v2</code>를 다시 만들 이유가 없다.
+</p>
+</div>
+
+<p>
+&ldquo;중앙값이 0&rdquo;은 여기서 우연이 아니라 구조다. 가드는 <strong>36개 층 중 35번 하나</strong>의
+kept set만 바꾸고, 그 결과 대부분의 클립에서 모델은 <em>글자 하나까지 같은</em> 출력을 낸다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th class="r">minADE@6이 완전히 동일</th><th class="r">CoC 텍스트가 비트 단위로 동일</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">85.6%</td><td class="r">85.6%</td></tr>
+<tr><td>test500</td><td class="r">87.0%</td><td class="r">87.0%</td></tr>
+<tr><td>OOD-val 262</td><td class="r">85.1%</td><td class="r">85.1%</td></tr>
+</tbody>
+</table>
+
+<p>
+두 열이 같은 값인 것도 시사적이다 &mdash; 궤적이 달라진 클립은 <strong>정확히</strong> CoC 텍스트가
+달라진 클립이다. 층 35는 캐시를 만들지 않으므로 궤적에 닿는 유일한 경로가 CoC 텍스트이고,
+텍스트가 같으면 궤적도 같다. 앞 절의 구조 설명이 클립 단위로 확인된 셈이다.
+</p>
+
+<figure>
+  <img src="PLOT::agg::delta_dist.png" alt="클립별 델타 분포">
+  <figcaption>
+    val500의 클립별 ΔminADE@6 (vs <code>dual_ada</code>, ±1 m로 클립, y축 log).
+    <code>dualfix</code>는 85.6%가 정확히 0인 스파이크이고 나머지도 좌우 대칭이다.
+    <code>znorm11</code>은 0인 클립이 하나도 없고 분포 전체가 오른쪽으로 이동해 있다.
+  </figcaption>
+</figure>
+
+<p>
+값이 달라진 나머지 14%도 방향이 없다: val500에서 중앙값 +0.0043, 평균 −0.0051로 부호가 엇갈린다.
+CoC 퇴화는 val500에서 12건 → 9건(불일치 6건 개선 / 3건 악화, McNemar p=0.51), test500에서는
+반대로 12건 → 20건이다. 노이즈다.
+</p>
+
+<div class="callout">
+<p>
+<strong>그래도 가드는 켜 둔다.</strong> 비용이 0이고, <code>rank_norm(상수)</code>가 인덱스 순서로
+떨어지는 것은 어떤 기준에서든 &ldquo;점수 없음&rdquo;을 &ldquo;앞 번호 우대&rdquo;로 바꾸는
+무작위 결정이다. 지금은 마지막 층 하나에만 걸렸고 그 층의 두 half가 비슷한 순위를 주는 덕에
+드러나지 않았을 뿐, 다른 축(예: 특정 층에서 한 목적의 기울기가 소멸하는 경우)에서 같은 함정이
+재발하면 그때는 조용히 틀린다.
+</p>
+</div>
+
+<h2><span class="num">6</span>부수 결과: importance를 어느 카드에서 쟀는지는 무관하다</h2>
+
+<p>
+<code>dual_ada − dual</code>은 세 세트 모두 중앙값 |0.003| 이하, p ≥ 0.68이다. 같은 100개
+캘리브 클립·같은 시드로 Taylor 중요도를 재도 커널이 다르면 경계선 유닛의 순위가 뒤집혀
+<strong>kept set이 2.7~2.8% 달라지지만</strong>, 성능은 구분되지 않는다. 지금까지 가정만 하고
+재본 적 없던 값이라 기록해 둔다 &mdash; 앞으로 importance를 어느 카드에서 재든 arm 간 페어링만
+한 아키텍처로 묶으면 된다.
+</p>
+
+<h2><span class="num">7</span>결론</h2>
+
+<ul>
+<li><strong>기준 설계에서 집계 함수가 지배 요인이다.</strong> 목적함수를 11개로 세분화한 이득보다
+    <code>max</code>를 <code>mean</code>으로 바꾼 손해가 훨씬 크다. 세분화를 살리려면 평균이 아니라
+    <strong>합집합을 보존하는 결합</strong>(스텝별 랭크의 최댓값 등)으로 다시 시도해야 한다.</li>
+<li><strong>출시 체크포인트는 유효하다.</strong> 35번 층 index-order 결함은 실재하지만 세 세트에서
+    측정 한계 아래이며, 그 이유는 층 35가 궤적 경로에 닿지 않는다는 구조에서 나온다.
+    새로 만드는 기준에는 가드를 기본으로 켠다.</li>
+<li><strong>다음.</strong> 이 두 arm은 폐루프로 넘길 가치가 없다 &mdash; <code>znorm11</code>은 개루프에서
+    이미 기각이고 <code>dualfix</code>는 <code>dual_ada</code>와 사실상 같은 모델이다. 스텝 축을
+    살리려면 결합 규칙을 바꾼 새 arm이 먼저다.</li>
+</ul>
+
+<footer>
+  <code>experiments/evaluation/analyze_criterion_agg.py</code> ·
+  데이터 <code>outputs/criterion_agg/</code> ·
+  빌드 <code>make_slim.py --config {znorm11,dualfix,dual}_u40_v2 --importance importance_v2_ada</code> ·
+  계획 <code>plans/2026-08-31_znorm11-criterion.md</code> ·
+  평가 3 arm × 3 세트 × 4 shard = 36 job, Ada 4&ndash;7, 2026-09-03
+</footer>
+
+</div>
+</body>
+</html>

@@ -260,6 +260,9 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `traj_u40_v2` / `coc_u40_v2` / `j_u40_v2` | `I_traj` / `I_CoC` / `J`, single criterion | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `expert_u25` | expert `traj_exp_*` (step agg chosen by `--importance`) | uniform 25% | **expert only** (−0.53B, 4.8%) |
 | `dualexp_u40_e25` | dual (VLM) + znorm `I_traj` (expert) | uniform 0.398563 / 25% | **VLM + expert** (−3.19B, 28.8%) |
+| `znorm11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 z-score 평균 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `dualfix_u40_v2` | dual, 상수 half는 `max`에서 −inf로 배제 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `dual_ada_u40_v2` | dual, `importance_v2_ada`로 재빌드 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -281,6 +284,19 @@ overlap 84.8% (Q heads) / 83.3% (MLP), so there is something to measure. Built w
 how the recipe was verified. The uniform ratio is **0.3985632694**, not 0.40 — it comes from
 `run_grid.allocations()` matching `slim_integrated_mag`'s realized budget, and rounding to 0.40
 moves 17 MLP channels per layer.
+
+`znorm11` / `dualfix` / `dual_ada` (2026-09-03) are a second one-factor family on the same
+budget. `I_traj` is **identically zero at layer 35** on both axes -- that layer's o_proj/down_proj
+never reaches the KV cache the expert reads (layer 35's cache comes from layer 34's output), so the
+trajectory objective has no path to it. `rank_norm` of a constant is then the index order, and 8 of
+the 19 kept heads in the shipped `slim_dual_u40_v2`'s layer 35 were decided by it. `dualfix` guards
+that (constant half -> `-inf`); measured effect is **exactly zero** on all three sets (85-87% of
+clips produce bit-identical CoC text), so the shipped checkpoint stands. `znorm11` replaces
+`max(rank, rank)` with the mean of 11 within-layer z-scores and is **REJECTed** (+0.14 to +0.20 vs
+`dual_ada`, 2.5-3.3x what the pruning itself costs): the mean loses the union property that lets
+each objective's top units survive. `dual_ada` exists because the per-step file is Ada-only while
+shipped `dual` came from Blackwell `importance_v2`; the rebuild itself is a no-op (median |0.003|,
+p>=0.68), which also settles that the importance run's architecture does not matter.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -435,6 +451,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 | `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
+| `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.

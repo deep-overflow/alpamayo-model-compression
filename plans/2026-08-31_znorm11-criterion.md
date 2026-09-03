@@ -74,3 +74,22 @@ per-step 파일과 같은 아키텍처여야 한다(Ada 본 `importance_v2_ada`)
 1. 두 체크포인트 빌드(Blackwell 가능, 각 ~3분) → val500 paired로 12% 선택 차이가 성능 차이인지.
 2. `dualfix`는 사실상 무비용 수정이므로, 차이가 없다면 "결함은 실재하나 영향 없음"으로 기록하고
    기준 코드에만 반영하는 선택지도 있다.
+
+## 결과 (2026-09-03, 실행 완료)
+
+3 arm × 3 세트 × 4 shard = 36 job, Ada 4–7, minADE@6 고정 프로토콜.
+
+| 비교 | 격리 요인 | val500 | test500 | OOD-val |
+|---|---|---|---|---|
+| znorm11 − dual_ada | 집계 함수 | +0.1785* | +0.1994* | +0.1373* |
+| dualfix − dual_ada | 35번 층 가드 | +0.0000 | +0.0000 | +0.0000 |
+| dual_ada − dual | 측정 카드 | +0.0002 | +0.0012 | +0.0030 |
+
+- **A1 REJECT** — znorm11은 dual 대비 게이트(0.05 m)의 3~4배. 단일 기준 `coc`(+0.293) 쪽에
+  가깝고 `traj`(+0.088)보다 2.6배 나쁘다. `max`의 합집합 성질을 평균이 잃는다.
+- **A2 PASS** — 35번 층 결함은 실재하나(그 층 `I_traj` ≡ 0, 구조적: 층 35는 캐시를 만들지
+  않아 궤적 경로에 닿지 않음) 세 세트에서 정확히 0. 85~87% 클립이 CoC 텍스트까지 동일.
+  출시 `slim_dual_u40_v2` 재빌드 불필요.
+
+보고서: `reports/evaluation/2026-09-03_criterion-aggregation.html`
+분석: `experiments/evaluation/analyze_criterion_agg.py` → `outputs/criterion_agg/`
