@@ -53,15 +53,32 @@ def main():
     per_clip = dict(np.load(src / "importance_perclip.npz"))
     man = pd.read_parquet(REPO / "outputs" / "eval_sets" / f"{args.manifest}.parquet")
 
-    # the run may have stopped short of the manifest, and --num-clips takes a prefix
-    n = len(cfg["clip_ids"])
-    assert list(man["clip_id"][:n]) == list(cfg["clip_ids"]), \
+    # config.json lists the whole manifest and is written before the first clip, so its
+    # length is the run's *intent*; the per-clip rows are what it actually finished. Take
+    # the rows as authoritative -- a run killed at 480 still splits into four whole blocks
+    # rather than failing the length check.
+    counts = {v.shape[0] for v in per_clip.values()}
+    assert len(counts) == 1, f"per-clip arrays disagree on row count: {counts}"
+    n = counts.pop()
+    assert list(man["clip_id"][:n]) == list(cfg["clip_ids"][:n]), \
         "run's clip order does not match the manifest -- the row split would be wrong"
-    assert all(v.shape[0] == n for v in per_clip.values()), "per-clip rows != clip count"
+    if n < len(cfg["clip_ids"]):
+        print(f"run stopped at {n}/{len(cfg['clip_ids'])} clips; "
+              f"splitting the completed prefix only", flush=True)
     man = man.iloc[:n]
+
+    full_size = pd.read_parquet(
+        REPO / "outputs" / "eval_sets" / f"{args.manifest}.parquet"
+    )["block"].value_counts()
 
     written = []
     for b, g in man.groupby("block", sort=True):
+        if len(g) != full_size[b]:
+            # a partially measured block is a different-sized draw, and the whole design
+            # rests on the blocks being equal-n -- drop it rather than quietly ship it
+            print(f"block {b}: only {len(g)}/{full_size[b]} clips measured, skipping",
+                  flush=True)
+            continue
         rows = np.asarray(g.index)
         write_run(REPO / "outputs" / f"{args.importance}_{b}", per_clip, rows, cfg,
                   list(g["clip_id"]), f"{args.importance} rows of block {b}")
