@@ -21,7 +21,11 @@ GPUS="4 5 6 7"
 FREE_MIB=2048          # 유휴 카드도 수백 MiB를 쓸 수 있어 0이 아닌 문턱
 POLL=60
 CONSEC=3               # GO 이후 3분 연속 비어 있어야 시작
-MAX_WAIT_H=${MAX_WAIT_H-36}
+# 두 대기의 한도를 분리한다. 하나의 deadline을 공유하면 GO가 늦게 올수록 GPU를 기다릴 시간이
+# 줄어들어, 신호를 제때 받고도 카드 대기 중에 만료되는 일이 생긴다. GO 한도는 "신호가 영영
+# 오지 않는" 경우를, GPU 한도는 "카드가 영영 비지 않는" 경우를 각각 막는다.
+GO_WAIT_H=${GO_WAIT_H-36}
+GPU_WAIT_H=${GPU_WAIT_H-12}
 N_SCENES=100
 N_ROLLOUTS=2
 CONFIGS="baseline slim_dual_u40_v2"
@@ -32,27 +36,30 @@ aborted() { [ -f "$DIR/ABORT" ]; }
 
 log "=== hard100 예약 대기 시작 (pid $$)"
 log "    트리거: $DIR/GO 파일 + Ada $GPUS 유휴 확인"
-log "    계획: 씬 100개, config [$CONFIGS], 씬당 $N_ROLLOUTS rollout, 최대 대기 ${MAX_WAIT_H}h"
+log "    계획: 씬 100개, config [$CONFIGS], 씬당 $N_ROLLOUTS rollout"
+log "    한도: GO 대기 ${GO_WAIT_H}h, GO 이후 GPU 대기 ${GPU_WAIT_H}h (각각 독립)"
 
-deadline=$(( $(date +%s) + MAX_WAIT_H * 3600 ))
+deadline=$(( $(date +%s) + GO_WAIT_H * 3600 ))
 
 # --- 1) GO 바통 대기
 while [ ! -f "$DIR/GO" ]; do
   if aborted; then log "ABORT 감지 -- 실행하지 않고 종료"; exit 130; fi
   if [ "$(date +%s)" -gt "$deadline" ]; then
-    log "FATAL: ${MAX_WAIT_H}h 안에 GO 신호가 오지 않았습니다 -- 실행하지 않고 종료"
+    log "FATAL: ${GO_WAIT_H}h 안에 GO 신호가 오지 않았습니다 -- 실행하지 않고 종료"
     exit 1
   fi
   sleep "$POLL"
 done
-log "GO 신호 감지 -- GPU 유휴 확인으로 넘어갑니다"
+# GO 이후에는 새 한도로 다시 센다: 신호를 제때 받았는데 카드 대기 중에 만료되면 안 된다.
+deadline=$(( $(date +%s) + GPU_WAIT_H * 3600 ))
+log "GO 신호 감지 -- 이제부터 ${GPU_WAIT_H}h 안에 GPU가 비면 실행합니다"
 
 # --- 2) GPU 유휴 확인 (GO가 일러도 남의 작업을 밟지 않도록)
 free_streak=0
 while true; do
   if aborted; then log "ABORT 감지 -- 실행하지 않고 종료"; exit 130; fi
   if [ "$(date +%s)" -gt "$deadline" ]; then
-    log "FATAL: GO 이후에도 GPU가 비지 않았습니다 -- 실행하지 않고 종료"
+    log "FATAL: GO 이후 ${GPU_WAIT_H}h 동안 GPU가 비지 않았습니다 -- 실행하지 않고 종료"
     exit 1
   fi
   busy=0
