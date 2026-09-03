@@ -392,6 +392,35 @@ Four things about this that will bite again:
   exceed its deadline; the run aborted with renderer exit 137, which looks like OOM but is the
   SIGKILL after the cascade. Relaunch that shard with `ONLY_SHARDS=<i>` (same k-way split).
 
+### Running an arbitrary scene set (2026-09-03)
+
+`launch_alpasim_shards.sh` took the suite's first N and nothing else. It now also accepts
+`SCENES_CSV=<path>`, an explicit `(scene_id, uuid)` list that replaces that selection, plus
+`PARENT_SUITE` (default `public_2601`) naming the release the uuids must belong to — every uuid
+is checked against it, so a 26.04 render cannot slip in for the 159 ids that exist in both. Set
+`PREFIX` so the log dirs do not collide with the matrix, and `DRY_RUN=1` to write the per-shard
+suites and print the plan without starting a container. A rejected scene list now aborts the
+script instead of falling through to an unbound-variable error several lines later.
+
+`make_hard_suite.py` writes such a list: it drops the matrix's first 150 scenes (and
+cross-checks that exclusion against a real run dir, refusing to proceed if they disagree), drops
+GT-path < 5 m scenes, ranks the rest by `hard_score`, and asserts the result is disjoint from the
+150 before writing. `--band 80 100` draws from the saturation plateau instead of the extreme tail,
+which is what to use when N grows past ~100.
+
+```bash
+python experiments/head_analysis/make_hard_suite.py \
+    --out outputs/scene_difficulty/hard100_suite.csv \
+    --exclude-runs /home/cvlab21/project/chan/alpasim-runs/m2601_merged_baseline
+SUITE=public_2601_hard100 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
+SCENES_CSV=$PWD/outputs/scene_difficulty/hard100_suite.csv \
+  bash experiments/head_analysis/launch_alpasim_shards.sh <config> 100 2 "4 5 6 7"
+```
+
+Plan and pre-registered gates: `plans/2026-09-03_hard100-closedloop.md`. The hard100 set's
+expected unpruned score is already known — 0.499 from sangoh's 913-scene run — so a baseline
+landing outside 0.42–0.58 means the setup is wrong, not the scenes.
+
 ### Scene suites
 
 `public_2601` (913 scenes) and `public_2604` (1,606) share 159 scene_ids but **zero artifact
