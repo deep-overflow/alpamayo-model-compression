@@ -44,35 +44,43 @@ plt.rcParams.update({
     "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
 })
 
-# arm -> (label, n calibration clips, run dir per set). The first six are the n=100
-# draws G1 measures the spread of; calib_100_ada is the same clips on the other card,
-# which is the noise floor G0b reads.
+# Two block families, and they are not interchangeable:
+#   nt  natural official train, t0=5.1 s -- drawn the way calib_100 was, so nt vs
+#       calib_100 is the one-factor draw contrast this study is about
+#   tr  the first pass, drawn from pre_processed/train, which turned out to be a hard
+#       scenario-balanced recovery mix (minADE 2.20 vs 0.84 natural, 20% per bucket).
+#       Kept because it answers a different question -- what calibrating on long-tail
+#       clips costs -- not because it is a draw replicate.
+def _family(tag, label, n_map):
+    out = {}
+    for b in "abcde":
+        out[f"{tag}_{b}"] = (f"{label} {b}", 100,
+                             {"test": f"dual_{tag}_{b}_test",
+                              "indist": f"dual_{tag}_{b}_indist"})
+    for k, lab in n_map.items():
+        out[f"{tag}_{k}"] = (f"{label} {lab}", k, {"test": f"dual_{tag}_c{k}_test"})
+    return out
+
+
+LADDER = {200: "a+b", 300: "a+b+c", 500: "a..e"}
 ARMS = {
     "baseline":     ("무압축",                   None, {"test": "baseline_ada_ps_test",
                                                         "indist": "baseline_ada_ps_indist"}),
     "calib_100":    ("calib_100 (train, BW)",     100, {"test": "dual_u40_v2_ps_test",
                                                         "indist": "dual_u40_v2_ps_indist"}),
     "calib_100_ada": ("calib_100 (train, Ada)",   100, {"test": "dual_u40_v2_ada_test"}),
-    "tr_a":         ("블록 a",                    100, {"test": "dual_tr_a_test",
-                                                        "indist": "dual_tr_a_indist"}),
-    "tr_b":         ("블록 b",                    100, {"test": "dual_tr_b_test",
-                                                        "indist": "dual_tr_b_indist"}),
-    "tr_c":         ("블록 c",                    100, {"test": "dual_tr_c_test",
-                                                        "indist": "dual_tr_c_indist"}),
-    "tr_d":         ("블록 d",                    100, {"test": "dual_tr_d_test",
-                                                        "indist": "dual_tr_d_indist"}),
-    "tr_e":         ("블록 e",                    100, {"test": "dual_tr_e_test",
-                                                        "indist": "dual_tr_e_indist"}),
-    "tr_200":       ("a+b",                       200, {"test": "dual_tr_c200_test"}),
-    "tr_300":       ("a+b+c",                     300, {"test": "dual_tr_c300_test"}),
-    "tr_500":       ("a..e",                      500, {"test": "dual_tr_c500_test"}),
+    **_family("nt", "자연추출", LADDER),
+    **_family("tr", "하드풀", LADDER),
     # the 2026-08-19 arms, re-scored at @6
     "calib_val100": ("calib_val100 (val)",        100, {"test": "dual_u40_ctl_test"}),
     "calib_ood100": ("calib_ood_100 (OOD)",       100, {"test": "dual_u40_ood_test"}),
     "pooled_200":   ("pooled 200 (in+OOD)",       200, {"test": "dual_u40_mix_test"}),
 }
-BLOCKS = ["tr_a", "tr_b", "tr_c", "tr_d", "tr_e"]
+FAMILY = "nt"                              # which family G1-G4 judge
+BLOCKS = [f"{FAMILY}_{b}" for b in "abcde"]
 DRAWS100 = ["calib_100"] + BLOCKS          # the six n=100 draws G1 measures
+LADDER_ARMS = [f"{FAMILY}_{k}" for k in LADDER]
+TR_BLOCKS = [f"tr_{b}" for b in "abcde"]
 EXPECT = {"test": 500, "indist": 500}
 
 
@@ -231,7 +239,7 @@ def plot_draws(rows, out):
 
 def plot_ladder(rows, out):
     pts = [(ARMS[a][1], mean_ade(rows, a, "test"))
-           for a in ("tr_200", "tr_300", "tr_500") if a in rows and "test" in rows[a]]
+           for a in LADDER_ARMS if a in rows and "test" in rows[a]]
     blocks = [mean_ade(rows, a, "test") for a in BLOCKS if a in rows and "test" in rows[a]]
     if not pts or not blocks:
         return
@@ -307,18 +315,35 @@ def main():
 
     # G3: does n help?
     blocks = [mean_ade(rows, a, "test") for a in BLOCKS if a in rows and "test" in rows[a]]
-    if blocks and "tr_500" in rows:
+    if blocks and f"{FAMILY}_500" in rows:
         m["gates"]["G3_ladder"] = {
             "block_mean": float(np.mean(blocks)),
             "block_sd": float(np.std(blocks, ddof=1)),
-            "n500": mean_ade(rows, "tr_500", "test"),
-            "gain": float(np.mean(blocks) - mean_ade(rows, "tr_500", "test")),
+            "n500": mean_ade(rows, f"{FAMILY}_500", "test"),
+            "gain": float(np.mean(blocks) - mean_ade(rows, f"{FAMILY}_500", "test")),
         }
+
+    # H5 (not pre-registered, found while diagnosing the first pass): calibrating on the
+    # hard scenario-balanced recovery mix. Reported against the natural blocks at the
+    # same n, and against the OOD arm, because the interesting claim is that "OOD
+    # calibration is worse" may really be "hard-clip calibration is worse".
+    tr = [mean_ade(rows, a, "test") for a in TR_BLOCKS if a in rows and "test" in rows[a]]
+    if tr:
+        m["gates"]["H5_hard_pool"] = {
+            "n_blocks": len(tr), "mean": float(np.mean(tr)),
+            "sd": float(np.std(tr, ddof=1)) if len(tr) > 1 else None,
+            "vs_natural_blocks": (float(np.mean(tr) - np.mean(blocks)) if blocks else None),
+            "ood_arm": mean_ade(rows, "calib_ood100", "test"),
+        }
+        for a in TR_BLOCKS:
+            d = paired_delta(rows, a, "calib_100", "test")
+            if d:
+                m["pairs"][f"{a}|calib_100"] = d
 
     # G4: does kept-set overlap predict the paired delta?
     imp_dirs = {"calib_100": "importance_v2", "calib_100_ada": "importance_v2_ada"}
-    imp_dirs.update({f"tr_{b}": f"{args.importance}_{b}" for b in "abcde"})
-    imp_dirs.update({f"tr_{k}": f"{args.importance}_c{k}" for k in (200, 300, 500)})
+    imp_dirs.update({f"{FAMILY}_{b}": f"{args.importance}_{b}" for b in "abcde"})
+    imp_dirs.update({f"{FAMILY}_{k}": f"{args.importance}_c{k}" for k in LADDER})
     masks = kept_sets(imp_dirs)
     ov, dl = [], []
     for i, a in enumerate(have):
