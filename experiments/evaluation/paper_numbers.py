@@ -149,6 +149,22 @@ ARMS = {
     "dualr_wl": {"indist": ("dualr_wl_u40_indist", False),
                  "test": ("dualr_wl_u40_test", False),
                  "oodval": ("dualr_wl_u40_oodval", False)},
+    # criterion comparison (plans/2026-08-31_znorm11-criterion.md): an 11-loss znorm
+    # (CoC + the ten FM steps, z-scored within a layer) and dual with the constant-layer
+    # guard. Both are dual's budget and axes; only the within-layer score differs.
+    # dual rebuilt from the ADA importance file, so znorm11/dualfix compare against a
+    # reference measured on the same importance run (the shipped dual_u40_v2 was built
+    # from importance_v2 on Blackwell; kept-set overlap between the two files is
+    # Q 0.965 / MLP 0.972, which would otherwise be a second factor)
+    "dual_ada": {"indist": ("dual_ada_u40_v2_indist", False),
+                 "test": ("dual_ada_u40_v2_test", False),
+                 "oodval": ("dual_ada_u40_v2_oodval", False)},
+    "znorm11": {"indist": ("znorm11_u40_v2_indist", False),
+                "test": ("znorm11_u40_v2_test", False),
+                "oodval": ("znorm11_u40_v2_oodval", False)},
+    "dualfix": {"indist": ("dualfix_u40_v2_indist", False),
+                "test": ("dualfix_u40_v2_test", False),
+                "oodval": ("dualfix_u40_v2_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),
