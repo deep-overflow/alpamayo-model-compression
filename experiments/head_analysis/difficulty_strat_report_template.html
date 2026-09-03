@@ -115,6 +115,8 @@
     &middot; 드라이버 전부 Ada, <code>OMP_NUM_THREADS=8</code>
     &middot; LLM-Pruner 2개 arm은 soowon님 런
     (<code>/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs</code>)
+    &middot; 정적 난이도 out-of-sample 검증은 sangoh님의 913씬 baseline
+    (<code>eval2601_a1_5</code>)
     &middot; 코드 <code>experiments/head_analysis/analyze_difficulty_strat.py</code>
     &middot; 산출물 <code>outputs/difficulty_strat/</code>
   </div>
@@ -141,6 +143,15 @@
   <div class="kpi"><div class="v">3.15&times;</div><div class="l">lp_r50_dual의 과실 충돌 OR (p=0.011)</div></div>
   <div class="kpi"><div class="v">+5.2pp</div><div class="l">lp_r50_dual이 우리 추세선 위로 뜬 정도</div></div>
   <div class="kpi"><div class="v">11/17</div><div class="l">난이도 분할 편향으로 부호가 뒤집힌 arm (쉬움 계층)</div></div>
+  <div class="kpi"><div class="v">0.499</div><div class="l">hard100 실측 점수 (easy100 0.826, p=5.4e-10) &mdash; 763씬 out-of-sample</div></div>
+</div>
+
+<div class="note">
+  <strong>결론 3 &mdash; 모델을 안 돌리고 매긴 난이도가 out-of-sample에서 통과했다.</strong>
+  sangoh님의 913씬 비압축 baseline 런으로, 우리 매트릭스가 건드린 적 없는 763씬에서
+  &rho;=&minus;0.293 (p=1.5e-16). 정적 점수만으로 뽑은 hard100은 0.499, easy100은 0.826이다
+  (7&sect;). 같은 런이 부수적으로 드러낸 사실 하나 &mdash; <strong>우리가 쓰는 첫 150씬은
+  나머지 763씬보다 유의하게 쉽다</strong>(0.742 vs 0.660, p=0.039; 과실 충돌 2.0% vs 5.5%).
 </div>
 
 <h2><span class="num">2.</span>무엇을 왜 쟀나</h2>
@@ -375,7 +386,7 @@ short_gt_distance_override : gt_dist_traveled_m &lt; 5 m 이면 progress_score =
   벌었다는 뜻이다.</figcaption>
 </figure>
 
-<h2><span class="num">7.</span>덤 &mdash; 모델을 돌리지 않고 매긴 난이도</h2>
+<h2><span class="num">7.</span>모델을 돌리지 않고 매긴 난이도 &mdash; out-of-sample 검증</h2>
 
 <p>4&sect;에서 정의한 <strong>정적 난이도</strong>는 usdz를 ZIP으로 열어 작은 멤버만 읽는다
 (<code>rig_trajectories.usda</code> 68 KB &rarr; 에고 GT 궤적 10 Hz &times; 20 s). 400 MB 메시는
@@ -383,29 +394,69 @@ short_gt_distance_override : gt_dist_traveled_m &lt; 5 m 이면 progress_score =
 길이가 시뮬레이터가 기록한 <code>gt_dist_traveled_m</code>과 r=1.00000, 중앙 상대오차 4.6e-5로
 일치한다.</p>
 
+<p>문제는 이 규칙의 피처(<code>v_mean</code>, <code>yaw_total_deg</code>)를 바로 그 150씬을 보고
+골랐다는 점이다. 그래서 150씬 위의 검증은 in-sample이다. 다행히
+<strong>sangoh님이 <code>public_2601</code> 913씬 전부를 비압축 baseline으로 돌린 런</strong>이
+있다 (<code>eval2601_a1_5</code>, 씬당 1 rollout, 2026-08-12 KST). 여기서 우리 매트릭스가 한 번도
+건드리지 않은 <strong>763씬</strong>을 꺼내면 순환성 없는 out-of-sample 검정이 된다.</p>
+
+<div class="note">
+  <strong>그 런이 우리 것과 비교 가능한가.</strong> 겹치는 150씬에서 sangoh 0.742 vs 우리 0.750,
+  Wilcoxon p=0.697로 차이가 없다. 두 런의 상관은 r=0.630인데 <em>우리 런 내부</em>의
+  rollout1&harr;rollout2 상관이 0.592다 &mdash; 즉 두 런의 일치도가 한 런 내부의 재현성 상한을
+  넘는다. 그 런은 <code>test_suite_id: null</code> + <code>scene_ids</code> 방식이라 26.04 렌더로
+  뒤바뀌는 함정 위험이 있었으나, 로그에서 2604 아티팩트 uuid가 0개 발견됐고 겹치는 159개 중 우리
+  150씬에도 있는 30개만 따로 봐도 차이가 없다 (위험 씬 +0.008 vs 나머지 &minus;0.011,
+  Mann-Whitney p=0.329). 30개만 검정 가능해 검정력은 제한적이다.
+</div>
+
 <table>
-<thead><tr><th>정적 난이도 구간 (913씬 퍼센타일)</th><th class="r">150씬 중</th><th class="r">913씬 중</th><th class="r">baseline 실측 점수</th></tr></thead>
+<thead><tr><th>정적 난이도 구간 (913씬 퍼센타일)</th><th class="r">150씬 n</th><th class="r">150씬 점수 <span style="font-weight:400">(in-sample)</span></th><th class="r">미사용 763씬 n</th><th class="r">미사용 763씬 점수 <span style="font-weight:400">(out-of-sample)</span></th></tr></thead>
 <tbody>
-<tr><td><code>0-20%</code></td><td class="r">36</td><td class="r">183</td><td class="r">0.937</td></tr>
-<tr><td><code>20-40%</code></td><td class="r">37</td><td class="r">182</td><td class="r">0.793</td></tr>
-<tr><td><code>40-60%</code></td><td class="r">25</td><td class="r">183</td><td class="r">0.739</td></tr>
-<tr><td><code>60-80%</code></td><td class="r">27</td><td class="r">182</td><td class="r">0.699</td></tr>
-<tr><td><code>80-90%</code></td><td class="r">13</td><td class="r">91</td><td class="r">0.485</td></tr>
-<tr><td><code>90-100%</code></td><td class="r">12</td><td class="r">92</td><td class="r">0.476</td></tr>
+<tr><td><code>0-20%</code></td><td class="r">36</td><td class="r">0.937</td><td class="r">147</td><td class="r">0.832</td></tr>
+<tr><td><code>20-40%</code></td><td class="r">37</td><td class="r">0.793</td><td class="r">145</td><td class="r">0.704</td></tr>
+<tr><td><code>40-60%</code></td><td class="r">25</td><td class="r">0.739</td><td class="r">158</td><td class="r">0.670</td></tr>
+<tr><td><code>60-80%</code></td><td class="r">27</td><td class="r">0.699</td><td class="r">155</td><td class="r">0.605</td></tr>
+<tr><td><code>80-90%</code></td><td class="r">13</td><td class="r">0.485</td><td class="r">78</td><td class="r">0.496</td></tr>
+<tr><td><code>90-100%</code></td><td class="r">12</td><td class="r">0.476</td><td class="r">80</td><td class="r">0.511</td></tr>
 </tbody>
 </table>
 
-<div class="note">
-  구간별 <em>씬 수</em>는 측정값이 아니라 정의다 &mdash; 913개를 퍼센타일로 자르면 20% 구간에는
-  183개가 들어갈 수밖에 없다. 의미 있는 것은 맨 오른쪽 열, 즉 모델을 안 돌리고 매긴 순서가
-  실측 점수와 0.937 &rarr; 0.476으로 <strong>단조 대응</strong>한다는 사실이다.
+<p>미사용 763씬만으로 <strong>Spearman &rho; = &minus;0.293 (p=1.5e-16)</strong>,
+Pearson r = &minus;0.260. 913씬 전체로는 &rho; = &minus;0.315다. 150씬 in-sample의
+&rho; = &minus;0.479보다 약한데, 이유는 두 가지다 &mdash; (1) 이 런은 씬당 1 rollout이라 측정
+노이즈가 크고(감쇠), (2) in-sample 쪽에는 피처 선택 낙관 편향이 있다.</p>
+
+<div class="callout">
+  <p><strong>hard100 선별이 실제로 통했다.</strong> 미사용 풀에서 정적 점수 상위 100개를 뽑은
+  <code>hard100</code>의 실측 baseline 점수는 <strong>0.499</strong> (0.7 미만 62%), 하위 100개
+  <code>easy100</code>은 <strong>0.826</strong> (0.7 미만 19%), 913씬 전체 평균은 0.673이다.
+  차이 <strong>&minus;0.327 (Mann-Whitney p=5.4e-10)</strong>로, 이 리포트를 쓰기 전 사전등록했던
+  게이트 &ldquo;차이 &le; &minus;0.25&rdquo;를 통과한다. 예측 구간으로 제시했던 0.45&ndash;0.55
+  안에 0.499가 들어왔다.</p>
+  <p style="margin-bottom:0"><strong>다만 상위 20%에서 포화한다.</strong> 80&ndash;90% 구간 0.496,
+  90&ndash;100% 구간 0.511로 사실상 평평하다. 정적 점수를 더 밀어붙여도 0.50 아래로 내려가지
+  않으므로, <code>hard100</code>을 87퍼센타일부터 뽑을 이유가 없다 &mdash;
+  <strong>80&ndash;100% 밴드 183씬 전체가 동등하게 어렵다.</strong> 씬 수를 늘리려면 여기서 뽑으면
+  된다.</p>
 </div>
 
 <figure>
-  <img src="PLOT::strat::static_validation.png" alt="정적 난이도 검증">
-  <figcaption>GT 궤적의 속도·선회량만으로 매긴 난이도가 실측 씬 점수를 단조롭게 예측한다.
-  이 관계는 실행된 150씬에서만 확인된 것이고, 나머지 763씬은 아직 미검증이다.</figcaption>
+  <img src="PLOT::strat::static_validation.png" alt="정적 난이도 out-of-sample 검증">
+  <figcaption>왼쪽: 구간별 실측 점수. 파랑은 규칙을 만든 150씬(in-sample), 초록은 한 번도 안 돌린
+  763씬(out-of-sample). 두 계열이 나란히 내려가고, 상위 두 구간에서 함께 평평해진다.
+  오른쪽: 미사용 풀에서 정적 점수만으로 뽑은 easy100 / hard100의 실측 성적.</figcaption>
 </figure>
+
+<div class="warn">
+  <p style="margin-bottom:0"><strong>부수적으로 드러난 것 &mdash; 우리가 쓰는 첫 150씬은 스위트
+  평균보다 유의하게 쉽다.</strong> 같은 913씬 런 안에서 첫 150씬 0.742 vs 나머지 763씬 0.660,
+  차이 <strong>+0.082 (Mann-Whitney p=0.039)</strong>. 게이트 실패도 낮다 &mdash; offroad 9.3% vs
+  13.0%, <strong>과실 충돌 2.0% vs 5.5%</strong>. <code>sorted(scene_id)[:150]</code>은 설계상
+  무편향 추출이지만 실현된 표본이 우연히 쉬운 쪽으로 치우쳤다. 이 리포트를 포함한 모든 폐루프
+  <em>절대</em> 수치는 스위트 대비 낙관적으로 읽어야 하고, 특히 6&sect;의 충돌률은 저평가된
+  표본에서 나온 값이다. arm 간 <em>상대</em> 비교는 페어드라 영향이 훨씬 작다.</p>
+</div>
 
 <h2><span class="num">8.</span>해석 <span class="tag">의견</span></h2>
 
@@ -439,11 +490,24 @@ baseline 대비 유의한 개선, 우리 최고 arm과 통계적 동률. LP 두 
   독립이 아니므로 p는 낙관적일 수 있다. 씬 단위 페어드 검정이 더 맞다.</li>
   <li><strong>예산이 정확히 맞지 않는다.</strong> LP 25.0% vs 우리 24.0%. 동률 결론에는 LP가
   불리한 방향이라 안전하지만, 안전 프로파일 차이의 일부가 예산 차이일 가능성은 배제하지 못한다.</li>
-  <li><strong>정적 난이도는 150씬 안에서만 검증됐다.</strong> 미사용 763씬은 그 범위를 넘어서고,
-  선형 외삽은 난이도를 +0.22 과대평가한다. 그리고 정적 난이도는 과실 충돌과 &rho;=+0.008로
-  <em>무관</em>하다 &mdash; 안전성 주장을 위한 씬 선별에는 다른 기준이 필요하다.</li>
+  <li><strong>정적 난이도는 과실 충돌과 무관하다</strong> (&rho;=+0.008). 7&sect;에서 out-of-sample
+  검증을 통과한 것은 <em>씬 점수</em>에 대해서지 <em>안전성</em>에 대해서가 아니다. 안전성 주장을
+  위한 씬 선별에는 다른 기준이 필요하다.</li>
+  <li><strong>913씬 런은 씬당 1 rollout이다.</strong> 우리 매트릭스의 절반이라 씬 단위 측정
+  노이즈가 크고, 7&sect;의 out-of-sample &rho;=&minus;0.293은 그만큼 감쇠된 값이다 &mdash;
+  규칙의 참 상관은 이보다 강할 것이다. 반대로 in-sample &rho;=&minus;0.479에는 피처 선택 낙관
+  편향이 있으므로, 참값은 두 수 사이로 보는 것이 맞다.</li>
+  <li><strong>정적 난이도의 선형성은 관측 범위 안에서만 성립한다.</strong> 150씬에서 Pearson
+  r=&minus;0.450 vs Spearman &rho;=&minus;0.479로 차이가 0.029뿐이고 2차항도 유의하지 않지만
+  (F=1.80, p=0.182), 종속변수가 [0,1]에 잘려 49%가 정확히 1.0이라 잔차 정규성이 기각된다
+  (Shapiro-Wilk p=5.2e-07). OLS의 p값/신뢰구간은 쓰면 안 되고, 무엇보다 <strong>외삽하면 안
+  된다</strong> &mdash; 913씬 최대 hard_score에서 선형 예측은 0.124인데 실제 상위 구간은 0.50에서
+  포화한다.</li>
   <li>soowon님 <code>cl150_baseline</code>이 중단돼 LP 쪽 자체 baseline이 없다. 우리 baseline은
   더 이른 시점 런이라 스택 드리프트를 완전히 배제하지 못한다.</li>
+  <li><strong>첫 150씬이 스위트보다 쉽다</strong>(7&sect;). 5&ndash;6&sect;의 절대 수치, 특히 충돌률은
+  스위트 전체에 그대로 옮길 수 없다. 80&ndash;100% 밴드 183씬으로 재측정하면 이 편향 없이 훨씬
+  가혹한 조건에서 arm을 비교할 수 있다.</li>
 </ul>
 
 <h2><span class="num">10.</span>재현</h2>
@@ -451,6 +515,7 @@ baseline 대비 유의한 개선, 우리 최고 arm과 통계적 동률. LP 두 
 <pre><code>python experiments/head_analysis/analyze_difficulty_strat.py \
     --runs-root /home/cvlab21/project/chan/alpasim-runs \
     --lp-root /mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs \
+    --full-suite-run /mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5 \
     --out outputs/difficulty_strat
 
 python experiments/head_analysis/build_report.py \

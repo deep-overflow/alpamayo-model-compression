@@ -403,12 +403,41 @@ scenes while 2601 was fully local; its 913 usdz are hardlinked into our cache (f
 filesystem, but `du` on that directory now double-counts).
 
 Scene selection is `sorted(artifacts, key=scene_id)[:N]`. scene_id is `clipgt-<UUID>`, so that is an
-unbiased random draw, deterministic, and **nested** — raising N extends the same sample. There is no
-scenario metadata to stratify on (`sim_suites.csv` has only test_suite_id/scene_id/uuid), and only
-~22% of scene ids join the PhysicalAI-AV clip index. Power: the per-scene paired delta has
-σ ≈ 0.32, so N=30 resolves 0.179 (which is why the 2026-07 matrix was uniformly non-significant),
-N=150 resolves 0.080, N=250 resolves 0.062. Half the scenes score exactly 1.0 for the baseline, so
-report the bootstrap mean CI as primary and Wilcoxon as secondary.
+unbiased draw *in expectation*, deterministic, and **nested** — raising N extends the same sample.
+**The realized first-150 sample is nevertheless easier than the suite** (measured 2026-09-03 against
+sangoh's 913-scene unpruned run, below): 0.742 vs 0.660 on the other 763, Mann-Whitney p=0.039, with
+offroad 9.3% vs 13.0% and **at-fault collision 2.0% vs 5.5%**. Paired arm-vs-arm deltas are barely
+affected, but every *absolute* closed-loop number this repo reports — collision rates above all — is
+optimistic relative to the suite. Say so when quoting one.
+
+There is no scenario metadata to stratify on (`sim_suites.csv` has only test_suite_id/scene_id/uuid)
+and only ~22% of scene ids join the PhysicalAI-AV clip index, but **difficulty can be scored offline
+from the usdz** — see `outputs/scene_difficulty/` (`extract_scene_feats.py`, 913 scenes in 39 s):
+a usdz is a ZIP, so `rig_trajectories.usda` (68 KB, ego GT pose at 10 Hz) and
+`sequence_tracks.json` are read by random access without touching the 400 MB meshes. The parse is
+verified — path length matches the sim's `gt_dist_traveled_m` at r=1.00000. `hard_score =
+z(v_mean) + z(yaw_total_deg)` holds up **out-of-sample** on the 763 never-run scenes (ρ=−0.293,
+p=1.5e-16; hard100 scores 0.499 vs easy100 0.826) and **saturates above the 80th percentile** —
+the 80–90% and 90–100% bands both sit at ≈0.50, so the whole 80–100% band (183 scenes) is equally
+hard and there is no reason to cut higher. Agent density does *not* predict difficulty (ρ=+0.02);
+ego kinematics do. The score is uncorrelated with at-fault collisions (ρ=+0.008), so it selects for
+progress/lane-keeping stress, not safety stress.
+
+**A full-suite unpruned baseline already exists**:
+`/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5` — all 913 `public_2601` scenes,
+`nvidia/Alpamayo-1.5-10B`, 1 rollout each. It agrees with our own baseline on the shared 150
+(Wilcoxon p=0.697, r=0.630) *above* that run's own rollout1↔rollout2 ceiling of 0.592. It was
+launched with `scene_ids` rather than a suite, so it was exposed to the 26.04 render swap, but no
+2604 artifact uuid appears in its logs and the 30 at-risk scenes we can check behave like the rest
+(p=0.33). Use it before spending GPU hours on a new scene-selection probe.
+
+Power: the per-scene paired delta has σ ≈ 0.32, so N=30 resolves 0.179 (which is why the 2026-07
+matrix was uniformly non-significant), N=150 resolves 0.080, N=250 resolves 0.062. Half the scenes
+score exactly 1.0 for the baseline, so report the bootstrap mean CI as primary and Wilcoxon as
+secondary. Selecting hard scenes by `hard_score` raises the effect size ~1.55× against a 1.12× rise
+in σ, i.e. **half the scenes for the same power** — but never select on the baseline's *own* score:
+grouping on it and reading a delta against that same baseline flipped the sign of 11 of 17 arms in
+the easy stratum (`reports/evaluation/2026-09-03_difficulty-stratified-arms.html`).
 
 Throughput on this box, `OMP_NUM_THREADS=8`, four stacks: 12.5 min/scene unpruned, 11.6 min/scene
 for an 8.4B slim model — 150 scenes over 4 GPUs is ~8 h per config. Open-loop, for contrast, is
