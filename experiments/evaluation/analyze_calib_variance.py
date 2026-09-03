@@ -275,10 +275,10 @@ def main():
         for s in ("test", "indist"):
             v = mean_ade(rows, arm, s)
             if v is not None:
-                m["absolute"][f"{arm}|{s}"] = v
+                m["absolute"].setdefault(arm, {})[s] = v
                 d = paired_delta(rows, arm, "baseline", s)
                 if d:
-                    m["vs_baseline"][f"{arm}|{s}"] = d
+                    m["vs_baseline"].setdefault(arm, {})[s] = d
 
     # G0b: same clips, same seed, different card
     m["gates"]["G0b_card"] = paired_delta(rows, "calib_100_ada", "calib_100", "test")
@@ -287,7 +287,7 @@ def main():
     for arm in ("calib_val100", "calib_ood100", "pooled_200"):
         d = paired_delta(rows, arm, "calib_100", "test")
         if d:
-            m["anchor_2026_08_19"][f"{arm}-calib_100"] = d
+            m["anchor_2026_08_19"][arm] = d
 
     # G1: spread of the six n=100 draws, and all 15 pairwise contrasts
     have = [a for a in DRAWS100 if a in rows and "test" in rows[a]]
@@ -299,7 +299,7 @@ def main():
         }
         for i, a in enumerate(have):
             for b in have[i + 1:]:
-                m["pairs"][f"{a}|{b}"] = paired_delta(rows, a, b, "test")
+                m["pairs"].setdefault(a, {})[b] = paired_delta(rows, a, b, "test")
 
     # G2: is calib_100 a lucky draw?
     if "G1_spread" in m["gates"]:
@@ -338,7 +338,7 @@ def main():
         for a in TR_BLOCKS:
             d = paired_delta(rows, a, "calib_100", "test")
             if d:
-                m["pairs"][f"{a}|calib_100"] = d
+                m["pairs"].setdefault(a, {})["calib_100"] = d
 
     # G4: does kept-set overlap predict the paired delta?
     imp_dirs = {"calib_100": "importance_v2", "calib_100_ada": "importance_v2_ada"}
@@ -348,12 +348,12 @@ def main():
     ov, dl = [], []
     for i, a in enumerate(have):
         for b in have[i + 1:]:
-            if a in masks and b in masks and f"{a}|{b}" in m["pairs"]:
+            if a in masks and b in masks and b in m["pairs"].get(a, {}):
                 o = 0.5 * (overlap(masks[a][0], masks[b][0])
                            + overlap(masks[a][1], masks[b][1]))
-                m["overlap"][f"{a}|{b}"] = o
+                m["overlap"].setdefault(a, {})[b] = o
                 ov.append(o)
-                dl.append(abs(m["pairs"][f"{a}|{b}"]["median"]))
+                dl.append(abs(m["pairs"][a][b]["median"]))
     if len(ov) >= 4:
         r = spearmanr(ov, dl)
         m["gates"]["G4_overlap_vs_delta"] = {"n": len(ov), "spearman": float(r.statistic),
@@ -373,10 +373,10 @@ def main():
 
     lines = ["== test500 minADE@6, dual_u40_v2 with the calibration clips varied =="]
     for arm, (label, n, _) in ARMS.items():
-        v = m["absolute"].get(f"{arm}|test")
+        v = m["absolute"].get(arm, {}).get("test")
         if v is None:
             continue
-        d = m["vs_baseline"].get(f"{arm}|test")
+        d = m["vs_baseline"].get(arm, {}).get("test")
         tail = (f"  vs baseline {d['median']:+.4f} [{d['lo']:+.4f},{d['hi']:+.4f}]"
                 f"{'*' if d['sig'] else ' '}") if d else ""
         lines.append(f"  {label:26s} n={n!s:>4s}  {v:.4f}{tail}")
