@@ -82,12 +82,37 @@ SUITE=public_2601_hard100 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
 SCENES_CSV=$PWD/outputs/scene_difficulty/hard100_suite.csv \
   bash experiments/head_analysis/launch_alpasim_shards.sh baseline 100 2 "4 5 6 7"
 
+# --shards / --out 은 --runs-root 기준 *이름*이지 경로가 아니다
 python experiments/head_analysis/merge_alpasim_shards.py \
-    --shards /home/cvlab21/project/chan/alpasim-runs/h100_baseline_sh{0,1,2,3} \
-    --out /home/cvlab21/project/chan/alpasim-runs/h100_merged_baseline --expect-scenes 100
+    --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    --shards h100_baseline_sh0 h100_baseline_sh1 h100_baseline_sh2 h100_baseline_sh3 \
+    --out h100_merged_baseline --expect-scenes 100
 
 # 3) dual (~4.8 h) — 위와 동일, config만 slim_dual_u40_v2
 ```
+
+### 예약 실행 (2026-09-04 00:38 KST 설정됨)
+
+위 순서를 `/home/cvlab21/project/chan/alpasim-runs/hard100/run_hard100.sh`가 대신 수행한다.
+그 디렉터리는 리포 밖(공유 결과 마운트)에 있고 런처와 씬 목록 사본을 함께 두므로, 워크트리가
+지워지거나 브랜치가 바뀌어도 영향받지 않는다.
+
+Ada 4–7에는 사용자 작업이 두 개 줄 서 있다 — 진행 중인 `calib-draw-variance` 개루프 평가와,
+그 다음 `dual` 세션의 실험 하나. **단순히 "GPU가 비면 시작"하면 두 실험 사이의 빈 틈에 잘못
+발사되므로**, 트리거를 명시적 바통으로 만들었다:
+
+1. `hard100/GO` 파일이 생길 때까지 대기 (`dual` 세션이 자기 실험을 마치고 touch)
+2. 그 다음 Ada 4–7이 **3분 연속** 2 GB 미만인지 확인 — GO가 일러도 남의 작업을 밟지 않는다
+3. baseline → 병합 → `slim_dual_u40_v2` → 병합. 앞 단계가 실패하면 뒤는 실행하지 않는다
+
+프로세스는 `setsid`로 분리돼 있어 (PPID 1) 요청한 세션이 사라져도 살아남는다.
+최대 대기 36시간, 그 안에 GO가 없으면 아무것도 실행하지 않고 종료한다.
+
+| | |
+|---|---|
+| 시작 신호 | `touch /home/cvlab21/project/chan/alpasim-runs/hard100/GO` |
+| 취소 | `touch .../hard100/ABORT` 또는 `kill $(cat .../hard100/scheduler.pid)` |
+| 진행 | `tail -f .../hard100/run.log` |
 
 `PREFIX=h100_`이라 로그 디렉터리가 매트릭스(`m2601_`)와 섞이지 않는다. 드라이버
 `/mnt/nvme1n1/ad_vla/data/alpasim/drivers/slim_dual_u40_v2`는 이미 있고 `outputs/`와 하드링크로
