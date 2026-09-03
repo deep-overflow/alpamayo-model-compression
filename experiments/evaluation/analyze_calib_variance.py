@@ -1,0 +1,297 @@
+"""How much does the calibration draw move a pruned model? (G0b/G1/G2/G3/G4)
+
+`2026-08-19_calibration-source.html` had one in-distribution control and put +0.0941 on
+the draw. This re-reads that comparison under the current frozen protocol (rollout-only,
+minADE@6) and adds five disjoint official-train blocks, so the point estimate becomes a
+spread. Every arm is the same `dual_u40_v2` recipe -- same criterion, same
+0.3985632694 budget, same 2,657,452,032 removed parameters, VLM only -- and differs only
+in the clips the Taylor scores were measured on.
+
+The three 2026-08-19 arms are re-scored, not re-run: `dual_u40_ctl/ood/mix_test` all
+carry `ade_rollout_k` with k=8 at seed 42 on Ada with `deterministic`, the same protocol
+as `dual_u40_v2_ps_test`, so @6 is a re-read of stored rows and costs no GPU.
+
+Arms not yet evaluated are skipped, so this runs while the queue is still filling.
+
+Usage:
+  python experiments/evaluation/analyze_calib_variance.py [--out outputs/calib_variance]
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr, wilcoxon
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
+
+import paper_numbers as pn
+
+BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
+C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"
+plt.rcParams.update({
+    "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
+    "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
+    "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
+})
+
+# arm -> (label, n calibration clips, run dir per set). The first six are the n=100
+# draws G1 measures the spread of; calib_100_ada is the same clips on the other card,
+# which is the noise floor G0b reads.
+ARMS = {
+    "baseline":     ("무압축",                   None, {"test": "baseline_ada_ps_test",
+                                                        "indist": "baseline_ada_ps_indist"}),
+    "calib_100":    ("calib_100 (train, BW)",     100, {"test": "dual_u40_v2_ps_test",
+                                                        "indist": "dual_u40_v2_ps_indist"}),
+    "calib_100_ada": ("calib_100 (train, Ada)",   100, {"test": "dual_u40_v2_ada_test"}),
+    "tr_a":         ("블록 a",                    100, {"test": "dual_tr_a_test",
+                                                        "indist": "dual_tr_a_indist"}),
+    "tr_b":         ("블록 b",                    100, {"test": "dual_tr_b_test",
+                                                        "indist": "dual_tr_b_indist"}),
+    "tr_c":         ("블록 c",                    100, {"test": "dual_tr_c_test",
+                                                        "indist": "dual_tr_c_indist"}),
+    "tr_d":         ("블록 d",                    100, {"test": "dual_tr_d_test",
+                                                        "indist": "dual_tr_d_indist"}),
+    "tr_e":         ("블록 e",                    100, {"test": "dual_tr_e_test",
+                                                        "indist": "dual_tr_e_indist"}),
+    "tr_200":       ("a+b",                       200, {"test": "dual_tr_c200_test"}),
+    "tr_300":       ("a+b+c",                     300, {"test": "dual_tr_c300_test"}),
+    "tr_500":       ("a..e",                      500, {"test": "dual_tr_c500_test"}),
+    # the 2026-08-19 arms, re-scored at @6
+    "calib_val100": ("calib_val100 (val)",        100, {"test": "dual_u40_ctl_test"}),
+    "calib_ood100": ("calib_ood_100 (OOD)",       100, {"test": "dual_u40_ood_test"}),
+    "pooled_200":   ("pooled 200 (in+OOD)",       200, {"test": "dual_u40_mix_test"}),
+}
+BLOCKS = ["tr_a", "tr_b", "tr_c", "tr_d", "tr_e"]
+DRAWS100 = ["calib_100"] + BLOCKS          # the six n=100 draws G1 measures
+EXPECT = {"test": 500, "indist": 500}
+
+
+def load_arms(sets):
+    rows = {}
+    for arm, (_, _, dirs) in ARMS.items():
+        for s in sets:
+            if s not in dirs:
+                continue
+            try:
+                r = pn.load(dirs[s], False)
+            except (SystemExit, ValueError):
+                continue
+            if len(r) >= EXPECT[s]:
+                rows.setdefault(arm, {})[s] = r
+    return rows
+
+
+def paired_delta(rows, a, b, s):
+    """median (arm a - arm b) minADE@6 with a bootstrap CI and Wilcoxon."""
+    if a not in rows or b not in rows or s not in rows[a] or s not in rows[b]:
+        return None
+    ids = sorted(set(rows[a][s]) & set(rows[b][s]))
+    d = np.array([pn.at6(rows[a][s][i], "ade_rollout_k")
+                  - pn.at6(rows[b][s][i], "ade_rollout_k") for i in ids])
+    rng = np.random.default_rng(0)
+    boot = [np.median(d[rng.integers(0, len(d), len(d))]) for _ in range(10000)]
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    p = float(wilcoxon(d).pvalue) if np.any(d) else 1.0
+    return {"n": len(ids), "median": float(np.median(d)), "lo": float(lo),
+            "hi": float(hi), "p": p, "sig": bool(lo > 0 or hi < 0)}
+
+
+def mean_ade(rows, arm, s):
+    return float(np.mean(pn.stats(rows[arm][s])[0])) if arm in rows and s in rows[arm] \
+        else None
+
+
+def kept_sets(importance_dirs):
+    """dual_u40_v2 kept masks for each importance run, for the overlap analyses."""
+    import mask_lib as ml
+    import tyr_lib as tyr
+    from make_slim import allocations
+
+    ref = json.loads(
+        (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+    out = {}
+    for name, d in importance_dirs.items():
+        p = REPO / "outputs" / d / "importance.npz"
+        if not p.exists():
+            continue
+        imp = dict(np.load(p))
+        allocs, _ = allocations(imp, ref, 36, 32, 12288, 0.5)
+        rq, rm = allocs["uniform"]
+        sq, sm = tyr.dual_scores(imp)
+        out[name] = (ml.select_mask_ratios(sq, rq), ml.select_mask_ratios(sm, rm))
+    return out
+
+
+def overlap(x, y):
+    return float((x * y).sum() / x.sum())
+
+
+def plot_draws(rows, out):
+    """The six n=100 draws on one axis, with the noise floor marked."""
+    have = [a for a in DRAWS100 if a in rows and "test" in rows[a]]
+    if len(have) < 2:
+        return
+    vals = [mean_ade(rows, a, "test") for a in have]
+    base = mean_ade(rows, "baseline", "test")
+    fig, ax = plt.subplots(figsize=(7.2, 3.6))
+    ax.bar(range(len(have)), vals, color=[C1 if a == "calib_100" else C2 for a in have])
+    if base:
+        ax.axhline(base, color=MUTED, ls="--", lw=1, label=f"무압축 {base:.4f}")
+    ax.axhline(float(np.mean(vals)), color=C4, lw=1,
+               label=f"추출 평균 {np.mean(vals):.4f} (SD {np.std(vals, ddof=1):.4f})")
+    ax.set_xticks(range(len(have)))
+    ax.set_xticklabels([ARMS[a][0] for a in have], rotation=20, ha="right", fontsize=8)
+    ax.set_ylabel("test500 minADE@6")
+    ax.set_ylim(min(vals) - 0.05, max(vals) + 0.05)
+    ax.set_title("같은 레시피, 캘리브레이션 100클립만 다름")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out / "draws.png", dpi=150)
+    plt.close(fig)
+
+
+def plot_ladder(rows, out):
+    pts = [(ARMS[a][1], mean_ade(rows, a, "test"))
+           for a in ("tr_200", "tr_300", "tr_500") if a in rows and "test" in rows[a]]
+    blocks = [mean_ade(rows, a, "test") for a in BLOCKS if a in rows and "test" in rows[a]]
+    if not pts or not blocks:
+        return
+    fig, ax = plt.subplots(figsize=(5.6, 3.6))
+    ax.errorbar([100], [np.mean(blocks)],
+                yerr=[[np.std(blocks, ddof=1)], [np.std(blocks, ddof=1)]],
+                fmt="o", color=C2, capsize=4, label="n=100 블록 평균 ± SD")
+    ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-", color=C1, label="누적 사다리")
+    ax.set_xlabel("캘리브레이션 클립 수")
+    ax.set_ylabel("test500 minADE@6")
+    ax.set_title("클립을 늘리면 좋아지는가")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out / "ladder.png", dpi=150)
+    plt.close(fig)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="outputs/calib_variance")
+    ap.add_argument("--importance", default="importance_tr500")
+    args = ap.parse_args()
+    out = REPO / args.out
+    (out / "plots").mkdir(parents=True, exist_ok=True)
+
+    rows = load_arms(("test", "indist"))
+    print("arms with complete rows:",
+          {a: sorted(v) for a, v in sorted(rows.items())}, flush=True)
+
+    m = {"absolute": {}, "vs_baseline": {}, "gates": {}, "pairs": {}, "overlap": {},
+         "anchor_2026_08_19": {}}
+    for arm in ARMS:
+        for s in ("test", "indist"):
+            v = mean_ade(rows, arm, s)
+            if v is not None:
+                m["absolute"][f"{arm}|{s}"] = v
+                d = paired_delta(rows, arm, "baseline", s)
+                if d:
+                    m["vs_baseline"][f"{arm}|{s}"] = d
+
+    # G0b: same clips, same seed, different card
+    m["gates"]["G0b_card"] = paired_delta(rows, "calib_100_ada", "calib_100", "test")
+
+    # the 2026-08-19 contrasts, restated at @6 so the +0.0941 anchor sits on this axis
+    for arm in ("calib_val100", "calib_ood100", "pooled_200"):
+        d = paired_delta(rows, arm, "calib_100", "test")
+        if d:
+            m["anchor_2026_08_19"][f"{arm}-calib_100"] = d
+
+    # G1: spread of the six n=100 draws, and all 15 pairwise contrasts
+    have = [a for a in DRAWS100 if a in rows and "test" in rows[a]]
+    if len(have) >= 2:
+        vals = [mean_ade(rows, a, "test") for a in have]
+        m["gates"]["G1_spread"] = {
+            "draws": have, "minADE": vals, "sd": float(np.std(vals, ddof=1)),
+            "range": float(max(vals) - min(vals)),
+        }
+        for i, a in enumerate(have):
+            for b in have[i + 1:]:
+                m["pairs"][f"{a}|{b}"] = paired_delta(rows, a, b, "test")
+
+    # G2: is calib_100 a lucky draw?
+    if "G1_spread" in m["gates"]:
+        vals = m["gates"]["G1_spread"]["minADE"]
+        if "calib_100" in have:
+            m["gates"]["G2_rank_of_calib_100"] = {
+                "rank": int(np.argsort(np.argsort(vals))[have.index("calib_100")]) + 1,
+                "of": len(have)}
+        blocks = [mean_ade(rows, a, "test") for a in BLOCKS if a in rows and "test" in rows[a]]
+        if blocks and "calib_100" in have:
+            m["gates"]["G2_blockmean_minus_calib100"] = \
+                float(np.mean(blocks) - mean_ade(rows, "calib_100", "test"))
+
+    # G3: does n help?
+    blocks = [mean_ade(rows, a, "test") for a in BLOCKS if a in rows and "test" in rows[a]]
+    if blocks and "tr_500" in rows:
+        m["gates"]["G3_ladder"] = {
+            "block_mean": float(np.mean(blocks)),
+            "block_sd": float(np.std(blocks, ddof=1)),
+            "n500": mean_ade(rows, "tr_500", "test"),
+            "gain": float(np.mean(blocks) - mean_ade(rows, "tr_500", "test")),
+        }
+
+    # G4: does kept-set overlap predict the paired delta?
+    imp_dirs = {"calib_100": "importance_v2", "calib_100_ada": "importance_v2_ada"}
+    imp_dirs.update({f"tr_{b}": f"{args.importance}_{b}" for b in "abcde"})
+    imp_dirs.update({f"tr_{k}": f"{args.importance}_c{k}" for k in (200, 300, 500)})
+    masks = kept_sets(imp_dirs)
+    ov, dl = [], []
+    for i, a in enumerate(have):
+        for b in have[i + 1:]:
+            if a in masks and b in masks and f"{a}|{b}" in m["pairs"]:
+                o = 0.5 * (overlap(masks[a][0], masks[b][0])
+                           + overlap(masks[a][1], masks[b][1]))
+                m["overlap"][f"{a}|{b}"] = o
+                ov.append(o)
+                dl.append(abs(m["pairs"][f"{a}|{b}"]["median"]))
+    if len(ov) >= 4:
+        r = spearmanr(ov, dl)
+        m["gates"]["G4_overlap_vs_delta"] = {"n": len(ov), "spearman": float(r.statistic),
+                                             "p": float(r.pvalue)}
+    if "calib_100" in masks and "calib_100_ada" in masks:
+        m["overlap"]["card_only"] = 0.5 * (
+            overlap(masks["calib_100"][0], masks["calib_100_ada"][0])
+            + overlap(masks["calib_100"][1], masks["calib_100_ada"][1]))
+
+    plot_draws(rows, out / "plots")
+    plot_ladder(rows, out / "plots")
+    (out / "metrics.json").write_text(json.dumps(m, indent=2, ensure_ascii=False))
+
+    lines = ["== test500 minADE@6, dual_u40_v2 with the calibration clips varied =="]
+    for arm, (label, n, _) in ARMS.items():
+        v = m["absolute"].get(f"{arm}|test")
+        if v is None:
+            continue
+        d = m["vs_baseline"].get(f"{arm}|test")
+        tail = (f"  vs baseline {d['median']:+.4f} [{d['lo']:+.4f},{d['hi']:+.4f}]"
+                f"{'*' if d['sig'] else ' '}") if d else ""
+        lines.append(f"  {label:26s} n={n!s:>4s}  {v:.4f}{tail}")
+    lines.append("-- 2026-08-19 contrasts vs calib_100, restated at @6 --")
+    for k, d in m["anchor_2026_08_19"].items():
+        lines.append(f"  {k:32s} {d['median']:+.4f} [{d['lo']:+.4f},{d['hi']:+.4f}]"
+                     f"{'*' if d['sig'] else ' '} p={d['p']:.2g}")
+    for k, v in m["gates"].items():
+        lines.append(f"{k}: {json.dumps(v, ensure_ascii=False)}")
+    (out / "summary.txt").write_text("\n".join(lines) + "\n")
+    print("\n".join(lines), flush=True)
+    print("->", out, flush=True)
+
+
+if __name__ == "__main__":
+    main()
