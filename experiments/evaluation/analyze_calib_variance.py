@@ -339,6 +339,19 @@ def main():
             d = paired_delta(rows, a, "calib_100", "test")
             if d:
                 m["pairs"].setdefault(a, {})["calib_100"] = d
+        # the same n-ladder on the hard pool. Cumulative unions, so a rung differs from
+        # its neighbour in BOTH the clip count and which blocks are in it -- read the
+        # direction, not the slope.
+        lad = {k: mean_ade(rows, f"tr_{k}", "test") for k in LADDER
+               if f"tr_{k}" in rows and "test" in rows[f"tr_{k}"]}
+        if lad:
+            m["gates"]["H5_hard_pool"]["ladder"] = lad
+            m["gates"]["H5_hard_pool"]["ladder_vs_block_mean"] = {
+                str(k): float(v - np.mean(tr)) for k, v in lad.items()}
+            for k in lad:
+                d = paired_delta(rows, f"tr_{k}", "tr_200", "test")
+                if d:
+                    m["pairs"].setdefault(f"tr_{k}", {})["tr_200"] = d
 
     # G4: does kept-set overlap predict the paired delta?
     imp_dirs = {"calib_100": "importance_v2", "calib_100_ada": "importance_v2_ada"}
