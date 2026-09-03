@@ -37,6 +37,13 @@ Configs:
   dualfix_u40_v2   -- dual with the degenerate-layer guard: a layer whose half is constant
                       (the last layer's trajectory importance is structurally zero) no
                       longer contributes its INDEX ORDER to max(rank, rank).
+  maxstep11_u40_v2 -- the same ELEVEN losses as znorm11, combined with the UNION operator
+                      instead of the mean: max over the eleven within-layer ranks. Isolates
+                      "per-step trajectory scores" from "mean instead of max", which znorm11
+                      changed together. Carries dualfix's guard. Needs --stepvlm.
+  meandual_u40_v2  -- dual's two halves under znorm11's operator: mean of z(I_traj) and
+                      z(I_CoC). The fourth cell of the 2x2 (operator x step axis).
+                      plans/2026-09-03_union-step-criterion.md.
   dualexp_u40_em<M> -- the same VLM half + expert MLP-ONLY at M% (expert Q heads and KV
                       untouched); M may carry a decimal written with `p` (em93p75 =
                       93.75%). The expert score comes from --expert-importance, so the
@@ -475,6 +482,38 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 zm = sum(zs(st["mlp_abs_step"][i]) for i in range(st["mlp_abs_step"].shape[0]))
                 n = st["q_abs_step"].shape[0] + 1
                 return (zq + zs(imp["coc_vlm_q"])) / n, (zm + zs(imp["coc_vlm_mlp"])) / n
+            if name in ("max11", "meandual"):
+                # The 2x2 that znorm11 collapsed into one move. Both read the same eleven
+                # losses' materials as znorm11 -- the ten per-step flow-matching gradients
+                # from run_step_importance_vlm plus the reference file's CoC NLL -- and
+                # differ only in how they are combined:
+                #   max11    max over the eleven WITHIN-LAYER RANKS (union, like dual)
+                #   meandual mean of z(I_traj) and z(I_CoC), i.e. dual's two halves under
+                #            znorm11's operator
+                # sum_s(q_abs_step) reproduces the summed traj_vlm_* it factorises to
+                # within-layer Spearman 0.99, so the two axes really are separable.
+                # plans/2026-09-03_union-step-criterion.md.
+                def zs(x):  # (L, U) -> within-layer z-score
+                    return (x - x.mean(1, keepdims=True)) / np.maximum(x.std(1, keepdims=True), 1e-12)
+
+                if name == "meandual":
+                    return ((zs(imp["traj_vlm_q"]) + zs(imp["coc_vlm_q"])) / 2,
+                            (zs(imp["traj_vlm_mlp"]) + zs(imp["coc_vlm_mlp"])) / 2)
+                st = np.load(REPO / "outputs" / stepvlm / "step_importance_vlm.npz")
+
+                def guarded_rank(x):
+                    # a layer whose scores are all equal must not contribute its index
+                    # order; the last layer is structurally constant on every FM step
+                    r = rank_norm(x)
+                    r[np.ptp(x, axis=1) == 0] = -np.inf
+                    return r
+
+                nq = st["q_abs_step"].shape[0]
+                sq = np.maximum.reduce([guarded_rank(st["q_abs_step"][i]) for i in range(nq)]
+                                       + [guarded_rank(imp["coc_vlm_q"])])
+                sm = np.maximum.reduce([guarded_rank(st["mlp_abs_step"][i]) for i in range(nq)]
+                                       + [guarded_rank(imp["coc_vlm_mlp"])])
+                return sq, sm
             if name == "cache":
                 # cache-Jacobian importance (plans/2026-08-30_cache-jlens-criterion.md):
                 # E ||d cache / d g||^2 weighted by the expert's per-(layer, group)
@@ -486,6 +525,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             return jl["q_j"], jl["mlp_j"]
 
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
+                 "maxstep11": ("max11",),
                  "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
