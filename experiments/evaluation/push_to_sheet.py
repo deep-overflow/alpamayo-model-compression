@@ -46,7 +46,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SHEETS = "https://sheets.googleapis.com/v4/spreadsheets"
 DRIVE = "https://www.googleapis.com/drive/v3/files"
-TABS = ["README", "openloop", "closedloop", "lingoqa"]
+TABS = ["README", "master", "openloop", "closedloop", "lingoqa"]
 BLANK = "-"                            # every empty cell reads as "no value for this row"
 
 # same palette as the coloured workbook, as Sheets 0-1 rgb
@@ -61,23 +61,34 @@ HEADER_BG = {"red": 0.161, "green": 0.149, "blue": 0.106}
 # purpose: a minADE delta is better when lower, an alpasim score delta when higher.
 # A delta whose bootstrap CI includes zero is left uncoloured via the gate, so "no
 # significant change" never reads as a result.
+# a minADE delta is better when lower, an alpasim score delta when higher; master
+# repeats both, so the bands are named once and referenced from each tab
+DELTA_ADE = [("{c}<=0", GOOD2), ("{c}<0.01", GOOD1), ("{c}<0.05", WARN),
+             ("{c}<0.15", BAD2), ("{c}>=0.15", BAD3)]
+DELTA_SCORE = [("{c}>=0.05", GOOD2), ("{c}>=0.01", GOOD1),
+               ("{c}<=-0.05", BAD3), ("{c}<0", BAD2)]
+DEGEN = [("{c}>0.30", BAD3), ("{c}>0.10", BAD2), ("{c}>0.02", WARN)]
+JUDGE = [("{c}>=70", GOOD2), ("{c}>=60", GOOD1), ("{c}<40", BAD2), ("{c}<20", BAD3)]
+
 RULES = {
+    "master": [("val_d", DELTA_ADE, "val_sig"), ("test_d", DELTA_ADE, "test_sig"),
+               ("ood_d", DELTA_ADE, "ood_sig"), ("cl_dscore", DELTA_SCORE, None),
+               ("cl_collision", [("{c}>0.10", BAD3), ("{c}>0.05", BAD2)], None),
+               ("cl_offroad", [("{c}>0.10", BAD3), ("{c}>0.05", BAD2)], None),
+               ("val_degen", DEGEN, None), ("test_degen", DEGEN, None),
+               ("ood_degen", DEGEN, None), ("lingo_pct", JUDGE, None)],
     "openloop": [
-        ("d_minADE6_median", [("{c}<=0", GOOD2), ("{c}<0.01", GOOD1),
-                              ("{c}<0.05", WARN), ("{c}<0.15", BAD2),
-                              ("{c}>=0.15", BAD3)], "d_sig"),
-        ("coc_degen", [("{c}>0.30", BAD3), ("{c}>0.10", BAD2), ("{c}>0.02", WARN)], None),
+        ("d_minADE6_median", DELTA_ADE, "d_sig"),
+        ("coc_degen", DEGEN, None),
     ],
     "closedloop": [
-        ("d_score_mean", [("{c}>=0.05", GOOD2), ("{c}>=0.01", GOOD1),
-                          ("{c}<=-0.05", BAD3), ("{c}<0", BAD2)], None),
+        ("d_score_mean", DELTA_SCORE, None),
         ("collision_at_fault", [("{c}>0.10", BAD3), ("{c}>0.05", BAD2)], None),
         ("offroad", [("{c}>0.10", BAD3), ("{c}>0.05", BAD2)], None),
-        ("coc_degen", [("{c}>0.30", BAD3), ("{c}>0.10", BAD2), ("{c}>0.02", WARN)], None),
+        ("coc_degen", DEGEN, None),
     ],
     "lingoqa": [
-        ("judge_pct", [("{c}>=70", GOOD2), ("{c}>=60", GOOD1),
-                       ("{c}<40", BAD2), ("{c}<20", BAD3)], None),
+        ("judge_pct", JUDGE, None),
         ("truncated_frac", [("{c}>0.20", BAD2), ("{c}>0.05", WARN)], None),
     ],
 }
@@ -153,12 +164,21 @@ def api(token, url, payload=None, method=None, soft=False):
 
 
 def read_table(index_dir, name):
+    """The table, plus any one-cell legend lines make_master.py writes above it.
+
+    Those lines go to README rather than the tab, so the header lands on row 1 where
+    the frozen row, the basic filter and every conditional format rule expect it."""
     with (index_dir / f"{name}.csv").open() as fh:
         rows = list(csv.reader(fh))
-    return [[c if c != "" else BLANK for c in r] for r in rows]
+    legend = []
+    while rows and len(rows[0]) <= 1:      # <=1: the blank line closing the legend
+        cell = rows.pop(0)
+        if cell:
+            legend.append(cell[0])
+    return [[c if c != "" else BLANK for c in r] for r in rows], legend
 
 
-def readme_rows(index_dir, cfg, counts):
+def readme_rows(index_dir, cfg, counts, master_legend=()):
     kst = datetime.timezone(datetime.timedelta(hours=9))
     stamp = datetime.datetime.now(tz=kst).strftime("%Y-%m-%d %H:%M KST")
     return [
@@ -166,6 +186,12 @@ def readme_rows(index_dir, cfg, counts):
         ["generated", stamp],
         ["by", "experiments/evaluation/collect_results.py -> push_to_sheet.py"],
         ["source", f"outputs/{index_dir.name}/*.csv, recomputed from the stored rows"],
+        [""],
+        ["MASTER"],
+        ["what", ("one row per method, the three evaluation families joined on the"
+                  " checkpoint; start here and use the raw tabs for per-run detail")],
+        *[["", line] for line in master_legend],
+        ["rows", counts["master"]],
         [""],
         ["OPEN LOOP"],
         ["protocol", cfg.get("protocol", "")],
@@ -265,9 +291,10 @@ def main():
 
     index_dir = REPO / "outputs" / args.index
     cfg = json.loads((index_dir / "config.json").read_text())
-    tables = {n: read_table(index_dir, n) for n in TABS[1:]}
+    read = {n: read_table(index_dir, n) for n in TABS[1:]}
+    tables = {n: t for n, (t, _) in read.items()}
     counts = {n: len(v) - 1 for n, v in tables.items()}
-    tables["README"] = readme_rows(index_dir, cfg, counts)
+    tables["README"] = readme_rows(index_dir, cfg, counts, read["master"][1])
     for t in TABS:
         print(f"  {t:11s} {len(tables[t]) - 1:4d} rows x "
               f"{max(len(r) for r in tables[t]):3d} cols", flush=True)
