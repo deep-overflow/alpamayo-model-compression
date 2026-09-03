@@ -70,10 +70,20 @@
 
 <p class="lede">
 2026-08-19 보고서는 캘리브레이션 100클립을 바꾸기만 해도 minADE가 +0.0941 나빠진다고 보고했고,
-그 근거는 대조군 <strong>하나</strong>였다. 이 실험은 공식 train에서 서로소 100클립 블록을 여러 개
-뽑아 그 점추정을 구간으로 바꾸고, 같은 축에 <strong>잡음 바닥</strong>(같은 클립·다른 GPU)을 세워
-"추출 효과가 크다"는 말에 척도를 준다.
+그 근거는 대조군 <strong>하나</strong>였다. 서로소 블록 다섯 개를 더 뽑아 재보니 그 값은 구간의
+<strong>아래쪽 끝</strong>이었다 — 여섯 추출의 SD는 <strong>{{gates.G1_spread.sd|.4f}}</strong>,
+최악과 최선의 차이는 <strong>{{gates.G1_spread.range|.4f}}</strong>로 24% 압축 자체의 여덟 배다.
+그리고 추출을 들여다봐서 어느 쪽이 나쁜지 미리 알아낼 방법은 찾지 못했다.
 </p>
+
+<div class="callout warn">
+<p><strong>요약.</strong> 같은 레시피·같은 예산·같은 속성 구성에서 캘리브레이션 클립만 바꾼 여섯
+모델의 test500 minADE가 {{absolute.calib_100.test|.4f}}에서 {{absolute.nt_d.test|.4f}}까지 퍼진다.
+15개 쌍대조 중 11개가 24% 압축의 대가(+{{vs_baseline.calib_100.test.median|.4f}})보다 크다.
+잡음 바닥은 {{gates.G0b_card.median|+.4f}}(n.s.)이므로 이 폭은 측정 잡음이 아니다.
+기존 <code>calib_100</code>은 여섯 중 <strong>1위</strong> — 이 프로젝트가 인용해 온 압축 대가는
+운이 좋은 추출에서의 값이다.</p>
+</div>
 
 <h2><span class="num">1</span>같은 축으로 다시 읽기</h2>
 
@@ -193,8 +203,33 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
 
 <p>
 블록 평균에서 <code>calib_100</code>을 뺀 값은
-<strong>{{gates.G2_blockmean_minus_calib100|+.4f}}</strong>이다.
+<strong>{{gates.G2_blockmean_minus_calib100|+.4f}}</strong>이고, <code>calib_100</code>은 여섯 중
+<strong>{{gates.G2_rank_of_calib_100.rank}}위</strong>다. 페어드로 보면 다섯 블록 전부가
+<code>calib_100</code>보다 유의하게 나쁘다:
 </p>
+
+<table>
+<thead><tr><th>대조</th><th class="r">페어드 중앙값</th><th class="r">95% CI</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>블록 a − <code>calib_100</code></td><td class="r up">+0.0374</td><td class="r">[+0.0165, +0.0621]</td><td class="r">4.6e-04</td></tr>
+<tr><td>블록 b − <code>calib_100</code></td><td class="r up">+0.0451</td><td class="r">[+0.0223, +0.0695]</td><td class="r">4.2e-07</td></tr>
+<tr><td>블록 c − <code>calib_100</code></td><td class="r up">+0.2037</td><td class="r">[+0.1648, +0.2528]</td><td class="r">2.9e-25</td></tr>
+<tr><td>블록 d − <code>calib_100</code></td><td class="r up"><strong>+0.4471</strong></td><td class="r">[+0.3552, +0.5386]</td><td class="r">1.2e-46</td></tr>
+<tr><td>블록 e − <code>calib_100</code></td><td class="r up">+0.3952</td><td class="r">[+0.3319, +0.4833]</td><td class="r">8.6e-43</td></tr>
+</tbody>
+</table>
+
+<p>
+여섯 추출의 15개 쌍대조 |Δ|는 최소 0.0208, 중앙값 0.2046, 최대 0.4471이다.
+<strong>15개 전부가 잡음 바닥을 넘고, 11개가 24% 압축 자체의 대가보다 크다.</strong>
+</p>
+
+<div class="callout">
+<p><strong>2026-08-19의 +0.0590은 이 분포의 아래쪽 끝이었다.</strong> 그 보고서는 대조군
+(<code>calib_val100</code>) 하나로 "추출 효과 ≈ +0.0590"을 얻었는데, 여기서 그보다 작은 대조는
+블록 a·b 둘뿐이다(+0.0374, +0.0451). 나머지 셋은 3.5–7.6배 크다. 점추정 하나로 이 요인의
+크기를 말할 수 없다는 것이 확인된다.</p>
+</div>
 
 <h2><span class="num">5</span>클립을 늘리면 나아지는가</h2>
 
@@ -223,6 +258,31 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
   <img src="PLOT::cv::ladder.png" alt="ladder">
   <figcaption>n=100은 블록 다섯 개의 평균과 표준편차, 나머지는 누적 합집합 한 점씩.</figcaption>
 </figure>
+
+<div class="callout good">
+<p><strong>클립을 늘리면 나아진다 — 그리고 그것이 추출 분산의 해법이다.</strong>
+n=500은 블록 평균보다 <strong>{{gates.G3_ladder.gain|+.4f}}</strong> 좋고, 이는 블록 SD
+({{gates.G3_ladder.block_sd|.4f}})와 같은 크기다. 즉 <strong>n을 100에서 500으로 올리면 추출 하나가
+잘못 걸릴 위험만큼을 되찾는다.</strong> n=500 arm의 압축 대가
+({{vs_baseline.nt_500.test.median|+.4f}})는 최악의 n=100 추출({{vs_baseline.nt_d.test.median|+.4f}})의
+5분의 1이다.</p>
+</div>
+
+<p>
+비용은 크지 않다. 중요도 측정은 500클립에 53분(1장)이고, 이후 프루닝·평가 비용은 n과 무관하다.
+<strong>표준 캘리브레이션 크기를 100에서 500으로 올릴 것을 권고한다</strong> — 이 실험에서 나온
+가장 실행 가능한 결론이다.
+</p>
+
+<h3>하드풀에서는 반대였다</h3>
+
+<p>
+같은 사다리를 하드풀(§7)에서 재면 <strong>클립을 늘릴수록 유의하게 나빠진다</strong>:
+n=300 − n=200 = +0.0314 [+0.0152, +0.0456] (p=1.9e-08), n=500 − n=200 = +0.0464
+[+0.0272, +0.0682] (p=1.1e-10). 늘린 클립이 평가 분포를 대표하지 않으면 n은 <em>잘못된 목표로</em>
+수렴시킨다. n을 늘리는 것이 이득인 이유는 표본이 커지기 때문이 아니라
+<strong>평가 분포에 가까워지기 때문</strong>이다.
+</p>
 
 <h2><span class="num">6</span>선택이 얼마나 흔들리는가</h2>
 
@@ -267,6 +327,39 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
 <strong>선택이 달라도 손해는 같을 수 있다</strong> — 도 성립한다.
 </p>
 
+<p>
+여섯 추출의 15개 쌍에 대해 정식으로 재면 spearman(중첩률, |Δ|) =
+<strong>{{gates.G4_overlap_vs_delta.spearman|+.3f}}</strong>
+(p={{gates.G4_overlap_vs_delta.p|.2f}}, n={{gates.G4_overlap_vs_delta.n}}) — <strong>무상관이다.</strong>
+</p>
+
+<h3>측정 가능한 어떤 성질도 예측하지 못했다</h3>
+
+<p>
+추출이 왜 이렇게 다른지 설명할 후보를 넷 시험했고, 넷 다 실패했다:
+</p>
+
+<table>
+<thead><tr><th>후보</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>6속성 분포 (국가·플랫폼·주야·계절·월·레이더)</td>
+    <td>설계상 동일 — 여섯 추출의 weighted L1이 0.0306으로 16자리까지 일치</td></tr>
+<tr><td>캘리브레이션 클립의 난이도 (<code>fm_loss</code>)</td>
+    <td>pearson −0.145 (p=0.82), 부호도 반대. 가장 어려운 블록이 가장 손해가 작았다</td></tr>
+<tr><td>시나리오 구성 (turn / stop / accel / cruise)</td>
+    <td>블록 간 turn+stop 비중 폭이 두 계열 모두 0.080으로 동일</td></tr>
+<tr><td>유지집합 중첩률</td>
+    <td>spearman {{gates.G4_overlap_vs_delta.spearman|+.3f}} (p={{gates.G4_overlap_vs_delta.p|.2f}})</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>이것은 실패가 아니라 결론이다.</strong> 캘리브레이션 세트를 <em>검사해서</em> 좋은지
+나쁜지 미리 걸러낼 수 없다 — 평가해 봐야 안다. 6속성 그리디 매칭이 하는 일이 바로 "검사해서
+고르기"인데, 그 매칭이 완벽해도(여섯 추출이 16자리까지 동일) 결과는 0.82만큼 퍼진다.
+그래서 §5의 권고가 유일하게 남는 방어책이다 — <strong>고르지 말고 늘려라.</strong></p>
+</div>
+
 <h2><span class="num">6</span>부수 결과: 하드 클립으로 캘리브레이션하면</h2>
 
 <p>
@@ -308,7 +401,12 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
 <ul>
 <li><strong>기준 하나, 개루프만.</strong> <code>dual</code>만 측정했고 폐루프는 없다.
     추출 분산이 폐루프 주행 점수로 전이되는지는 별건이다.</li>
-<li><strong>블록 다섯 개는 SD의 점추정이다.</strong> n=5의 표본 SD 자체가 넓은 신뢰구간을 갖는다.</li>
+<li><strong>블록 다섯 개는 SD의 점추정이다.</strong> n=5의 표본 SD 자체가 넓은 신뢰구간을 갖는다.
+    다만 이 문서의 주장은 "SD가 정확히 0.36"이 아니라 "쌍대조 15개 중 11개가 압축 대가보다 크다"이고,
+    후자는 SD 추정의 정밀도에 의존하지 않는다.</li>
+<li><strong>n=500 권고는 사다리 한 줄에 기댄다.</strong> 사다리는 누적 합집합이라 각 단이 서로 다른
+    블록을 포함하고, n=500 점은 하나뿐이다. 서로소 500클립 추출 두세 개로 재확인해야 이 권고가
+    구간을 얻는다 (추출당 약 1.2 GPU-시간 + 평가 2.7).</li>
 <li><strong>하드풀은 난이도와 시나리오 균형이 함께 움직인다.</strong> 두 요인은 분리되지 않았다.</li>
 <li><strong>사다리는 누적 합집합이다.</strong> 각 단이 서로 다른 블록을 포함하므로, 단 간 차이에는
     n의 효과와 블록 구성의 효과가 섞여 있다.</li>
