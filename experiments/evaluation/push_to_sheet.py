@@ -352,6 +352,15 @@ def main():
     meta = api(token, f"{SHEETS}/{sid}?fields=sheets.properties")
     ids = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
 
+    # a tab added by addSheet lands last, so master arrived behind the raw tabs the
+    # README tells the reader to skip. Put the tabs in TABS order; ascending target
+    # index means each move only shifts tabs that have not been placed yet.
+    if [s["properties"]["title"] for s in meta["sheets"]][:len(TABS)] != TABS:
+        api(token, f"{SHEETS}/{sid}:batchUpdate", {"requests": [
+            {"updateSheetProperties": {
+                "properties": {"sheetId": ids[t], "index": i}, "fields": "index"}}
+            for i, t in enumerate(TABS)]})
+
     api(token, f"{SHEETS}/{sid}/values:batchClear",
         {"ranges": [f"'{t}'" for t in TABS]})
     api(token, f"{SHEETS}/{sid}/values:batchUpdate",
