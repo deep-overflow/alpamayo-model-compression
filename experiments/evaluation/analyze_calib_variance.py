@@ -314,7 +314,7 @@ def main():
         for a in have_v:
             d = paired_delta(rows, a, "calib_100", "indist")
             if d:
-                m["pairs"].setdefault(a, {})["calib_100|val500"] = d
+                m["pairs"].setdefault(a, {})["calib_100_val500"] = d
         # the two sets must rank the draws the same way, or "the draw matters" is a
         # statement about test_500 rather than about the model
         common = [a for a in have_v if a in have]

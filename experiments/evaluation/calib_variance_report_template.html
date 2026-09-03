@@ -231,37 +231,48 @@ n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
 크기를 말할 수 없다는 것이 확인된다.</p>
 </div>
 
-<h3>두 번째 셋에서도 재현되는가 (진행 중)</h3>
+<h3>두 번째 셋에서 그대로 재현된다</h3>
 
 <p>
 val500은 official val에서 뽑혀 test500과 모든 캘리브레이션 세트에 서로소이므로, 같은 여섯 모델을
-<strong>독립적으로 다시 읽는다</strong>. 현재 {{gates.G1b_spread_val500.draws.0}} ·
-{{gates.G1b_spread_val500.draws.1}} · {{gates.G1b_spread_val500.draws.2}} 세 추출이 완료됐다:
+<strong>독립적으로 다시 읽는다</strong>.
 </p>
 
 <table>
-<thead><tr><th>캘리브레이션</th><th class="r">val500 minADE@6</th><th class="r">test500</th></tr></thead>
+<thead><tr><th>캘리브레이션 (n=100)</th><th class="r">test500</th><th class="r">val500</th>
+<th class="r">val500 vs <code>calib_100</code></th></tr></thead>
 <tbody>
-<tr><td><code>calib_100</code></td><td class="r">{{gates.G1b_spread_val500.minADE.0|.4f}}</td>
-    <td class="r">{{absolute.calib_100.test|.4f}}</td></tr>
-<tr><td>블록 a</td><td class="r">{{gates.G1b_spread_val500.minADE.1|.4f}}</td>
-    <td class="r">{{absolute.nt_a.test|.4f}}</td></tr>
-<tr><td>블록 b</td><td class="r">{{gates.G1b_spread_val500.minADE.2|.4f}}</td>
-    <td class="r">{{absolute.nt_b.test|.4f}}</td></tr>
+<tr><td><code>calib_100</code></td><td class="r">{{absolute.calib_100.test|.4f}}</td>
+    <td class="r">{{absolute.calib_100.indist|.4f}}</td><td class="r">—</td></tr>
+<tr><td>블록 a</td><td class="r">{{absolute.nt_a.test|.4f}}</td>
+    <td class="r">{{absolute.nt_a.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_a.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 b</td><td class="r">{{absolute.nt_b.test|.4f}}</td>
+    <td class="r">{{absolute.nt_b.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_b.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 c</td><td class="r">{{absolute.nt_c.test|.4f}}</td>
+    <td class="r">{{absolute.nt_c.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_c.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 d</td><td class="r">{{absolute.nt_d.test|.4f}}</td>
+    <td class="r">{{absolute.nt_d.indist|.4f}}</td>
+    <td class="r up"><strong>{{pairs.nt_d.calib_100_val500.median|+.4f}}</strong></td></tr>
+<tr><td>블록 e</td><td class="r">{{absolute.nt_e.test|.4f}}</td>
+    <td class="r">{{absolute.nt_e.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_e.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td><strong>SD / 범위</strong></td>
+    <td class="r"><strong>{{gates.G1_spread.sd|.4f}}</strong> / {{gates.G1_spread.range|.4f}}</td>
+    <td class="r"><strong>{{gates.G1b_spread_val500.sd|.4f}}</strong> / {{gates.G1b_spread_val500.range|.4f}}</td>
+    <td class="r">—</td></tr>
 </tbody>
 </table>
 
-<p>
-세 추출의 순위가 두 셋에서 <strong>완전히 일치한다</strong>
-(spearman {{gates.G1b_spread_val500.rank_agreement.spearman|.2f}}). 순위가 어긋나면 "추출이
-중요하다"는 말이 모델이 아니라 test500에 대한 진술이 되므로, 이 일치가 확인해야 할 핵심이다.
-</p>
-
-<div class="callout warn">
-<p><strong>이 표의 SD({{gates.G1b_spread_val500.sd|.4f}})를 val500의 추출 분산으로 읽으면 안 된다.</strong>
-완료된 세 추출은 test500에서 가장 순한 세 개(+0.052 / +0.106 / +0.116)이고, 큰 값을 낸 c·d·e
-(+0.282 / +0.539 / +0.465)는 아직 측정 중이다. 즉 이 SD는 구조적으로 <em>하한</em>이다. n=3의
-순위상관도 우연히 일치할 확률이 작지 않다. 여섯 개가 다 차면 갱신한다.</p>
+<div class="callout good">
+<p><strong>여섯 추출의 순위가 두 셋에서 완전히 일치한다</strong>
+(spearman {{gates.G1b_spread_val500.rank_agreement.spearman|.2f}}, n=6). SD도
+{{gates.G1_spread.sd|.4f}} 대 {{gates.G1b_spread_val500.sd|.4f}}로 같은 크기다. 순위가 어긋났다면
+"추출이 중요하다"는 말이 모델이 아니라 test500에 대한 진술이 됐을 것이다. 일치하므로
+<strong>추출 효과는 평가 세트를 넘어 이동하는 모델의 속성</strong>이다. 이 문서의 1차 주장은
+두 개의 서로소 500클립 셋에서 독립적으로 확인됐다.</p>
 </div>
 
 <h2><span class="num">5</span>클립을 늘리면 나아지는가</h2>
