@@ -14,7 +14,14 @@
 #   bash experiments/evaluation/launch_arms.sh worker 5 &     # one per free GPU
 #   bash experiments/evaluation/launch_arms.sh status
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+# The checkout this script lives in, resolved from $0 exactly as launch_axis_arms.sh does.
+# A worktree session must evaluate with ITS OWN code: the path used to be hardcoded to the
+# trunk, so a checkpoint built against a patched slim_lib was loaded by the trunk's
+# unpatched one (em100's zero-width MLP hit trunk's old assert). An ALPAMAYO_REPO override
+# would still default to the trunk and reproduce that silently whenever it was forgotten,
+# so the location is the single source. Exported for run_retry_host.sh, which reads it.
+REPO=$(cd "$(dirname "$0")/../.." && pwd)
+export ALPAMAYO_REPO=$REPO
 cd "$REPO" || exit 1
 Q=logs/arms_queue.txt
 CUR=logs/arms_cursor
