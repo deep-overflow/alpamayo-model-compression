@@ -20,7 +20,10 @@ REPO=${ALPAMAYO_REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
 export ALPAMAYO_REPO=$REPO
 cd "$REPO" || exit 1
 IMP=${IMP:-importance_tr500}
-GPU=${GPU:-4,5,6,7}
+# make_slim takes ONE card (--gpu is an int), so pinning it to the card this study
+# already holds keeps the builds off other members' jobs; reserve_gpu with no --gpu
+# would scan from cuda:0 and could take 30 GB out from under a busy card.
+BUILD_GPU=${BUILD_GPU:-6}
 
 # arm tag -> importance run supplying the dual scores
 declare -A RUNS=(
@@ -42,7 +45,7 @@ build)
     bash "$REPO/experiments/head_analysis/run_retry_host.sh" 60 \
       "$REPO/experiments/head_analysis/make_slim.py" \
       --config dual_u40_v2 --importance "${RUNS[$tag]}" --out "$out" --no-state \
-      --gpu "${GPU%%,*}" >>"$REPO/logs/build_$tag.log" 2>&1 ||
+      --gpu "$BUILD_GPU" >>"$REPO/logs/build_$tag.log" 2>&1 ||
       echo "!! $tag build failed, see logs/build_$tag.log"
   done
   ;;
