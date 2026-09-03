@@ -302,7 +302,90 @@
   시드가 어긋났다면 rollout이 달라져 <code>gen_coc</code>가 1.000일 수 없다.
 </p>
 
-<h2><span class="num">6</span>해석 (의견)</h2>
+<h2><span class="num">6</span>폐루프 — 두 계열 모두 검증, 그리고 개루프와의 역전</h2>
+
+<p>
+  개루프는 궤적이 GT에서 얼마나 벗어나는지만 본다. 이 트랙에서 반복적으로 확인된 것은 그것이
+  <strong>폐루프 실패를 예측하지 못한다</strong>는 사실이라(dualr 계열이 매번 그 자리에서 갈렸다),
+  압축률 주장에는 alpasim이 필요하다. 두 개의 −39.4% arm을 각각 150씬 × 2 rollout으로 돌렸다
+  (2601 suite, Ada 4–7, <code>DRIVER_OMP_THREADS=8</code>, 씬 {{closed.n_scenes}}개 공통).
+</p>
+
+<table>
+  <thead><tr><th>config</th><th class="r">압축</th><th class="r">score</th><th class="r">pass율</th>
+  <th class="r">at-fault 충돌</th><th class="r">offroad</th><th class="r">progress</th></tr></thead>
+  <tbody>
+    <tr><td>무압축 baseline</td><td class="r">—</td><td class="r">{{closed.arms.baseline.score|.4f}}</td>
+      <td class="r">{{closed.arms.baseline.passed|.3f}}</td><td class="r">{{closed.arms.baseline.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.baseline.offroad|.3f}}</td><td class="r">{{closed.arms.baseline.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>dual</code></td><td class="r">24.0%</td><td class="r"><strong>{{closed.arms.dual.score|.4f}}</strong></td>
+      <td class="r">{{closed.arms.dual.passed|.3f}}</td><td class="r">{{closed.arms.dual.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dual.offroad|.3f}}</td><td class="r">{{closed.arms.dual.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>dualr_wl</code></td><td class="r">24.0%</td><td class="r">{{closed.arms.dualr_wl.score|.4f}}</td>
+      <td class="r">{{closed.arms.dualr_wl.passed|.3f}}</td><td class="r">{{closed.arms.dualr_wl.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dualr_wl.offroad|.3f}}</td><td class="r">{{closed.arms.dualr_wl.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>em93p75</code> (dualr_wl + eMLP)</td><td class="r">39.4%</td><td class="r">{{closed.arms.em93p75.score|.4f}}</td>
+      <td class="r">{{closed.arms.em93p75.passed|.3f}}</td><td class="r">{{closed.arms.em93p75.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.em93p75.offroad|.3f}}</td><td class="r">{{closed.arms.em93p75.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><strong><code>dualexp_em93p75</code> (dual + eMLP)</strong></td><td class="r"><strong>39.4%</strong></td>
+      <td class="r"><strong>{{closed.arms.dualexp.score|.4f}}</strong></td>
+      <td class="r">{{closed.arms.dualexp.passed|.3f}}</td><td class="r">{{closed.arms.dualexp.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dualexp.offroad|.3f}}</td><td class="r">{{closed.arms.dualexp.progress_clipped_rel|.3f}}</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>대비 (씬 단위 페어드)</th><th class="r">Δscore [95% CI]</th><th class="r">Wilcoxon p</th><th class="r">W/L/T</th></tr></thead>
+  <tbody>
+    <tr><td><strong>em93p75 − dualr_wl</strong> (적층 비용)</td><td class="r">{{closed.pairs.em93p75-dualr_wl.mean|+.4f}} [{{closed.pairs.em93p75-dualr_wl.lo|+.4f}}, {{closed.pairs.em93p75-dualr_wl.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.em93p75-dualr_wl.p|.3g}}</td><td class="r">{{closed.pairs.em93p75-dualr_wl.win}}/{{closed.pairs.em93p75-dualr_wl.loss}}/{{closed.pairs.em93p75-dualr_wl.tie}}</td></tr>
+    <tr><td><strong>dualexp − dual</strong> (적층 비용)</td><td class="r">{{closed.pairs.dualexp-dual.mean|+.4f}} [{{closed.pairs.dualexp-dual.lo|+.4f}}, {{closed.pairs.dualexp-dual.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-dual.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-dual.win}}/{{closed.pairs.dualexp-dual.loss}}/{{closed.pairs.dualexp-dual.tie}}</td></tr>
+    <tr><td>dualexp − em93p75 (같은 예산, VLM 절반만 다름)</td><td class="r">{{closed.pairs.dualexp-em93p75.mean|+.4f}} [{{closed.pairs.dualexp-em93p75.lo|+.4f}}, {{closed.pairs.dualexp-em93p75.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-em93p75.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-em93p75.win}}/{{closed.pairs.dualexp-em93p75.loss}}/{{closed.pairs.dualexp-em93p75.tie}}</td></tr>
+    <tr><td><strong>dualexp − 무압축</strong></td><td class="r">{{closed.pairs.dualexp-baseline.mean|+.4f}} [{{closed.pairs.dualexp-baseline.lo|+.4f}}, {{closed.pairs.dualexp-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-baseline.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-baseline.win}}/{{closed.pairs.dualexp-baseline.loss}}/{{closed.pairs.dualexp-baseline.tie}}</td></tr>
+    <tr><td>em93p75 − 무압축</td><td class="r">{{closed.pairs.em93p75-baseline.mean|+.4f}} [{{closed.pairs.em93p75-baseline.lo|+.4f}}, {{closed.pairs.em93p75-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.em93p75-baseline.p|.3g}}</td><td class="r">{{closed.pairs.em93p75-baseline.win}}/{{closed.pairs.em93p75-baseline.loss}}/{{closed.pairs.em93p75-baseline.tie}}</td></tr>
+    <tr><td>dual − 무압축</td><td class="r">{{closed.pairs.dual-baseline.mean|+.4f}} [{{closed.pairs.dual-baseline.lo|+.4f}}, {{closed.pairs.dual-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dual-baseline.p|.3g}}</td><td class="r">{{closed.pairs.dual-baseline.win}}/{{closed.pairs.dual-baseline.loss}}/{{closed.pairs.dual-baseline.tie}}</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>−39.4%가 폐루프에서 무압축을 이긴다.</strong> <code>dualexp_em93p75</code>는 무압축 대비
+  {{closed.pairs.dualexp-baseline.mean|+.3f}} [{{closed.pairs.dualexp-baseline.lo|+.3f}}, {{closed.pairs.dualexp-baseline.hi|+.3f}}], p={{closed.pairs.dualexp-baseline.p|.3g}} — 파라미터를 39.4%
+  덜어내고도 주행 점수가 유의하게 높다. 적층 비용은 <code>dualr_wl</code> 쪽에서
+  {{closed.pairs.em93p75-dualr_wl.mean|+.3f}} [{{closed.pairs.em93p75-dualr_wl.lo|+.3f}}, {{closed.pairs.em93p75-dualr_wl.hi|+.3f}}] (p={{closed.pairs.em93p75-dualr_wl.p|.2g}}),
+  <code>dual</code> 쪽에서 {{closed.pairs.dualexp-dual.mean|+.3f}} [{{closed.pairs.dualexp-dual.lo|+.3f}}, {{closed.pairs.dualexp-dual.hi|+.3f}}] (p={{closed.pairs.dualexp-dual.p|.2g}}).
+</div>
+
+<div class="note">
+  <strong>dualexp − dual은 유의하다고 읽지 않는다.</strong> 부트스트랩 CI는 0을 간신히 벗어나지만
+  Wilcoxon은 p={{closed.pairs.dualexp-dual.p|.2g}}이고 승패가 {{closed.pairs.dualexp-dual.win}}/{{closed.pairs.dualexp-dual.loss}}/{{closed.pairs.dualexp-dual.tie}}로 오히려 지는
+  쪽이다 — 두 검정이 엇갈린다. 더 결정적인 것은 <strong>검정력</strong>이다: 씬당 σ≈0.32라 N=150은
+  0.080까지만 분해하는데 관측값은 {{closed.pairs.dualexp-dual.mean|+.3f}}로 그 절반도 안 된다.
+  개루프가 1,262클립에서 ±0.0002를 분해하는 것과 대조적이므로, 폐루프에서는 "무비용"이 아니라
+  <strong>"N=150에서 확정 불가"</strong>가 정확한 표현이다.
+</div>
+
+<figure>
+  PLOT::cl::paired_deltas.png
+  <figcaption>무압축 대비 씬 단위 페어드 Δscore. 두 −39.4% arm이 24.0% arm들과 같은 구간에 놓인다.</figcaption>
+</figure>
+
+<p>
+  <strong>개루프와 폐루프가 이 축에서 정반대다.</strong> 개루프 test500에서는 dualr_wl 계열이
+  {{gates.sets.test.arms.dualrwl_em93p75.minADE6_mean|.4f}}로 dual 계열
+  ({{dualexp_ol.test|.4f}})을 크게 앞서는데, 폐루프에서는 그 우위가
+  사라지고 부호가 뒤집힌다({{closed.arms.em93p75.score|.4f}} vs {{closed.arms.dualexp.score|.4f}},
+  {{closed.pairs.dualexp-em93p75.mean|+.3f}} [{{closed.pairs.dualexp-em93p75.lo|+.3f}}, {{closed.pairs.dualexp-em93p75.hi|+.3f}}], p={{closed.pairs.dualexp-em93p75.p|.2g}}). 개루프 minADE로
+  폐루프를 예측할 수 없다는 이 트랙의 반복된 관찰이 한 번 더 확인된다 — 그리고 그 역전이
+  <em>expert 절단이 아니라 VLM 절반</em>에서 온다는 점이 중요하다. expert MLP 절단은 두 계열 어느
+  쪽에서도 순위를 바꾸지 않는다.
+</p>
+
+<h2><span class="num">7</span>해석 (의견)</h2>
 
 <ul>
   <li><strong>붕괴는 연속이다 — 폭이 계속 중요하되, 1032채널 위에서는 그 중요도가 측정 한계 아래에 있을
@@ -330,26 +413,40 @@
       "이미 공짜인 영역에서 공짜가 이전된다"까지만 말한다. 축의 나머지 절반인 <strong>Q head</strong>
       (dense에서 q25 +0.022, q50 +0.116, 헤드 수에 초선형)가 refit과 상호작용할 여지가 큰 쪽이고,
       그 DiD는 미측정이다.</li>
-  <li><strong>그래도 폐루프는 대체되지 않는다.</strong> 네 칸에서 클립당 궤적 흔들림은 커지는데
-      (0.0036 → 0.0080) 악화/개선은 250:250에 머문다. 개루프 minADE가 <em>방향 없는</em> 섭동에 둔감한 것은
-      사실이고, 그 섭동이 폐루프에서 누적되지 않는다는 보장은 없다 — dualr 계열이 매번 갈렸던 자리가
-      정확히 거기다. em100은 "손상이 있으면 잡는다"를 보였을 뿐 "이 크기의 섭동이 무해하다"를 보인 것은 아니다.</li>
+  <li><strong>그 섭동은 폐루프에서도 누적되지 않았다 — 다만 검정력이 다르다.</strong> 네 칸에서 클립당
+      궤적 흔들림은 커지는데(0.0036 → 0.0080) 악화/개선은 250:250에 머문다. 개루프 minADE가
+      <em>방향 없는</em> 섭동에 둔감한 것은 사실이므로 alpasim으로 확인했고, 두 계열 모두에서 적층 비용이
+      잡히지 않았다({{closed.pairs.em93p75-dualr_wl.mean|+.3f}} / {{closed.pairs.dualexp-dual.mean|+.3f}}).
+      단 N=150은 0.080까지만 분해하므로 이것은 "무비용"이 아니라 <strong>"확정 불가"</strong>다.
+      개루프의 ±0.0002 해상도와 폐루프의 ±0.080 해상도를 같은 무게로 읽으면 안 된다.</li>
+  <li><strong>압축률과 주행 성능이 상충하지 않는다.</strong> −39.4%의 <code>dualexp_em93p75</code>가
+      무압축 대비 {{closed.pairs.dualexp-baseline.mean|+.3f}}
+      [{{closed.pairs.dualexp-baseline.lo|+.3f}}, {{closed.pairs.dualexp-baseline.hi|+.3f}}],
+      p={{closed.pairs.dualexp-baseline.p|.2g}}로 <em>유의하게 낫다</em>. 24.0%만 자른
+      <code>dual</code>(+{{closed.pairs.dual-baseline.mean|.3f}})보다는 낮지만 그 차이는 확정되지 않았고,
+      파라미터는 15.4%p 더 덜어낸다.</li>
+  <li><strong>개루프 순위와 폐루프 순위가 뒤집히는 원인은 VLM 절반이지 expert가 아니다.</strong>
+      개루프에서 dualr_wl 계열이 dual 계열을 크게 앞서지만 폐루프에서는 반대다. 그런데 expert MLP
+      절단은 어느 계열에서도 순위를 바꾸지 않는다 — 두 축이 독립적으로 움직인다는 뜻이고, VLM 쪽
+      선택을 개루프로 고르는 것이 위험하다는 뜻이기도 하다.</li>
 </ul>
 
 <div class="note">
-  <strong>주장의 범위.</strong> 이 보고서는 <strong>개루프</strong>에 대해서만 말한다: 516채널까지는 무비용,
-  그 아래는 가속하는 비용. 폐루프(alpasim 150씬 × 2, 대조 <code>dualr_wl</code> 0.783)는 미실행이고 배포
-  주장에는 그것이 필요하다. 지연시간(G4)도 미측정이다 — expert는 10스텝마다 가중치를 전부 다시 읽는
-  step-bound 경로라 1.71B 제거의 이득이 드러날 자리지만, <code>bench_fastdenoise.py</code>가 컨테이너 시절
-  경로를 하드코딩하고 있어 수정이 먼저다.
+  <strong>주장의 범위.</strong> 개루프는 516채널까지 무비용, 그 아래는 가속하는 비용 —
+  1,262클립에서 ±0.0002 해상도로 확정된다. 폐루프는 두 계열 모두에서 적층 비용을 잡지 못했으나
+  N=150의 분해능이 0.080이라 <strong>"확정 불가"이지 "무비용"이 아니다</strong>. 사다리의 다른 칸들
+  (258 / 129 / 0채널)은 폐루프 미측정이고, 129 이하가 개루프에서 명확히 비용을 내므로 폐루프로 확인할
+  가치가 있는 것은 오히려 그쪽이다. 지연시간(G4)도 미측정이다 — expert는 10스텝마다 가중치를 전부 다시
+  읽는 step-bound 경로라 1.71B 제거의 이득이 드러날 자리지만,
+  <code>bench_fastdenoise.py</code>가 컨테이너 시절 경로를 하드코딩하고 있어 수정이 먼저다.
 </div>
 
-<h2><span class="num">7</span>다음 단계</h2>
+<h2><span class="num">8</span>다음 단계</h2>
 
 <ul>
-  <li><strong>폐루프</strong> — <code>em93p75</code>로 150씬 × 2, 대조는 <code>dualr_wl</code>.
-      절벽 직전의 안전한 최대 압축이 그 arm이고, 개루프가 네 칸 내내 무차별이었으므로 하나면 충분하다.
-      여기서 갈리면 그것이 이 트랙의 진짜 결과다.</li>
+  <li><strong>폐루프 검정력</strong> — 지금의 N=150은 0.080까지만 분해하는데 관심 있는 효과가
+      0.014~0.036이다. N=250이면 0.062까지 내려간다. 적층 비용을 "확정 불가"에서 벗어나게 하려면
+      씬을 늘리는 것이 유일한 길이고, arm을 늘리는 것보다 우선한다.</li>
   <li><strong>경계의 정밀화</strong> — 516(무비용)과 258(경계선) 사이가 남았다. 387채널 한 점이면 자유
       구간의 끝을 절반으로 좁힐 수 있으나, 실익은 +0.03B뿐이라 우선순위는 낮다.</li>
   <li><strong>wl + expert Q 25%</strong> — Q head 축의 DiD. dense 쪽 <code>expertq_u25</code>가 이미 있어

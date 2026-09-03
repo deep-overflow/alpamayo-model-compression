@@ -9,6 +9,9 @@ beside them and that live outside that script's scope:
   sanity  the code-integrity checks: are consecutive rungs actually different models
           (bit-identical trajectory fraction), is the change directional (win/loss), and
           are the seeds identical across arms
+  closed  the alpasim 2601 runs (150 scenes x 2): per-arm headline scores and the paired
+          per-scene contrasts, which analyze_alpasim.py does not produce because it only
+          reports each arm against the unpruned baseline
 
 Writes outputs/<out>/metrics_report.json (keys gates / crit / sanity) plus the criterion
 plot, so fill_template.py can render the page with no hand-typed number.
@@ -43,6 +46,19 @@ plt.rcParams.update({
     "font.size": 9, "axes.grid": True, "axes.axisbelow": True,
 })
 REPO = Path(__file__).resolve().parents[2]
+RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+CLOSED = {
+    "baseline": "m2601_merged_baseline",
+    "dual": "m2601_merged_slim_dual_u40_v2",
+    "dualr_wl": "m2601_merged_slim_dualr_wl_u40",
+    "em93p75": "m2601_merged_slim_dualrwl_em93p75_u40",
+    "dualexp": "m2601_merged_slim_dualexp_u40_em93p75",
+}
+CLOSED_KEYS = ["score", "passed", "collision_at_fault", "offroad",
+               "progress_clipped_rel", "dist_to_gt_trajectory"]
+CLOSED_PAIRS = [("dualexp", "dual"), ("dualexp", "em93p75"), ("dualexp", "baseline"),
+                ("em93p75", "dualr_wl"), ("em93p75", "baseline"),
+                ("dualr_wl", "baseline"), ("dual", "baseline")]
 SNAP = Path("/mnt/nvme1n1/ad_vla/cache/hub/models--nvidia--Alpamayo-1.5-10B/snapshots/"
             "7aba8293c09993f2e125c6819df05d7fa3e873ea")
 L, INTER = 36, 8256
@@ -105,6 +121,69 @@ def criteria(wanda_run):
         "rho_mean": float(np.mean(rho)), "rho_min": float(np.min(rho)),
     }
     return out, crit
+
+
+def closed_loop():
+    """Per-scene means from each merged run, then the paired contrasts the gates use."""
+    from scipy.stats import wilcoxon
+
+    def per_scene(run):
+        d = json.loads((RUNS / run / "aggregate" / "results-summary.json").read_text())
+        out = {}
+        for r in d["rollouts"]:
+            rec = out.setdefault(r["clipgt_id"], {k: [] for k in CLOSED_KEYS})
+            rec["score"].append(float(r["score"]) if r["score"] is not None else np.nan)
+            rec["passed"].append(float(bool(r["passed"])))
+            for k in CLOSED_KEYS[2:]:
+                v = r.get("metrics", {}).get(k)
+                rec[k].append(float(v) if v is not None else np.nan)
+        return {s: {k: float(np.nanmean(v)) for k, v in rec.items()}
+                for s, rec in out.items()}
+
+    data = {}
+    for arm, run in CLOSED.items():
+        if (RUNS / run / "aggregate" / "results-summary.json").exists():
+            data[arm] = per_scene(run)
+    if len(data) < 2:
+        return {}
+    scenes = sorted(set.intersection(*[set(d) for d in data.values()]))
+    out = {"n_scenes": len(scenes), "arms": {}, "pairs": {}}
+    for arm, d in data.items():
+        out["arms"][arm] = {k: float(np.mean([d[s][k] for s in scenes]))
+                            for k in CLOSED_KEYS}
+    for a, b in CLOSED_PAIRS:
+        if a not in data or b not in data:
+            continue
+        dd = np.array([data[a][s]["score"] - data[b][s]["score"] for s in scenes])
+        dd = dd[~np.isnan(dd)]
+        rng = np.random.default_rng(0)
+        boots = [np.mean(dd[rng.integers(0, len(dd), len(dd))]) for _ in range(10000)]
+        lo, hi = np.percentile(boots, [2.5, 97.5])
+        out["pairs"][f"{a}-{b}"] = {
+            "mean": float(np.mean(dd)), "lo": float(lo), "hi": float(hi),
+            "p": float(wilcoxon(dd).pvalue) if np.any(dd) else 1.0,
+            "win": int((dd > 0).sum()), "loss": int((dd < 0).sum()),
+            "tie": int((dd == 0).sum()),
+            "sig": bool(lo > 0 or hi < 0),
+        }
+    return out
+
+
+def dualexp_openloop():
+    """The dual-based twin's open-loop means. It is not in analyze_dualrwl_em's ARMS --
+    its reference is dual, not dualr_wl, so it would fail that script's VLM==wl gate."""
+    out = {}
+    for st in ("indist", "test", "oodval"):
+        spec = pn.ARMS.get("dualexp_em93p75", {}).get(st)
+        if spec is None:
+            continue
+        try:
+            rows = pn.load(*spec)
+        except Exception:
+            continue
+        if rows:
+            out[st] = float(np.mean([pn.at6(r, "ade_rollout_k") for r in rows.values()]))
+    return out
 
 
 def sanity():
@@ -173,7 +252,8 @@ def main():
     gates = json.loads((out / "metrics.json").read_text())
     crit_metrics, _ = criteria(args.wanda)
     plot_criteria(crit_metrics, out / "plots")
-    merged = {"gates": gates, "crit": crit_metrics, "sanity": sanity()}
+    merged = {"gates": gates, "crit": crit_metrics, "sanity": sanity(),
+              "closed": closed_loop(), "dualexp_ol": dualexp_openloop()}
     (out / "metrics_report.json").write_text(json.dumps(merged, indent=1))
     print(f"wrote {out / 'metrics_report.json'} "
           f"(keys {list(merged)}) + plots/expert_mlp_criteria.png")

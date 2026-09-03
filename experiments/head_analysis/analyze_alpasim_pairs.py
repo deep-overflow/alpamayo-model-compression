@@ -16,6 +16,7 @@ ARMS = {
     "dual": "m2601_merged_slim_dual_u40_v2",
     "dualr_wl": "m2601_merged_slim_dualr_wl_u40",
     "em93p75": "m2601_merged_slim_dualrwl_em93p75_u40",
+    "dualexp": "m2601_merged_slim_dualexp_u40_em93p75",
 }
 KEYS = ["score", "passed", "collision_at_fault", "offroad", "progress_clipped_rel",
         "dist_to_gt_trajectory"]
@@ -54,9 +55,10 @@ def contrast(a, b, key="score"):
 
 
 print("score, paired per scene:")
-for a, b in (("em93p75", "dualr_wl"), ("em93p75", "baseline"), ("em93p75", "dual"),
+for a, b in (("dualexp", "dual"), ("dualexp", "em93p75"), ("dualexp", "baseline"),
+             ("em93p75", "dualr_wl"), ("em93p75", "baseline"), ("em93p75", "dual"),
              ("dualr_wl", "baseline"), ("dual", "baseline")):
     contrast(a, b)
-print("\nem93p75 - dualr_wl, the other headline metrics:")
+print("\ndualexp - dual, the other headline metrics:")
 for k in KEYS[1:]:
-    contrast("em93p75", "dualr_wl", k)
+    contrast("dualexp", "dual", k)
