@@ -301,6 +301,30 @@ def main():
             for b in have[i + 1:]:
                 m["pairs"].setdefault(a, {})[b] = paired_delta(rows, a, b, "test")
 
+    # G1b: does the spread reproduce on the second set? val500 is drawn from official
+    # val, disjoint from test_500 and from every calibration set, so it is an
+    # independent read of the same six models -- not a re-test of the same clips.
+    have_v = [a for a in DRAWS100 if a in rows and "indist" in rows[a]]
+    if len(have_v) >= 2:
+        vals_v = [mean_ade(rows, a, "indist") for a in have_v]
+        m["gates"]["G1b_spread_val500"] = {
+            "draws": have_v, "minADE": vals_v, "sd": float(np.std(vals_v, ddof=1)),
+            "range": float(max(vals_v) - min(vals_v)),
+        }
+        for a in have_v:
+            d = paired_delta(rows, a, "calib_100", "indist")
+            if d:
+                m["pairs"].setdefault(a, {})["calib_100|val500"] = d
+        # the two sets must rank the draws the same way, or "the draw matters" is a
+        # statement about test_500 rather than about the model
+        common = [a for a in have_v if a in have]
+        if len(common) >= 3:
+            t = [mean_ade(rows, a, "test") for a in common]
+            v = [mean_ade(rows, a, "indist") for a in common]
+            r = spearmanr(t, v)
+            m["gates"]["G1b_spread_val500"]["rank_agreement"] = {
+                "arms": common, "spearman": float(r.statistic), "p": float(r.pvalue)}
+
     # G2: is calib_100 a lucky draw?
     if "G1_spread" in m["gates"]:
         vals = m["gates"]["G1_spread"]["minADE"]
