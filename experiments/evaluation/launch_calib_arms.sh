@@ -47,7 +47,10 @@ build)
       continue
     fi
     echo "=== $tag from ${RUNS[$tag]}"
-    bash "$REPO/experiments/head_analysis/run_retry_host.sh" 60 \
+    # This box is shared and every card can be busy for an hour at a time, so the build
+    # waits rather than giving up: an arm without a recipe is silently dropped from the
+    # queue below, and a family missing arms is a broken comparison, not a slow one.
+    bash "$REPO/experiments/head_analysis/run_retry_host.sh" "${BUILD_RETRIES:-240}" \
       "$REPO/experiments/head_analysis/make_slim.py" \
       --config dual_u40_v2 --importance "${RUNS[$tag]}" --out "$out" --no-state \
       --gpu "$BUILD_GPU" >>"$REPO/logs/build_$tag.log" 2>&1 ||
@@ -62,12 +65,30 @@ queue | append)
   # are already running, or their claimed shards get handed out a second time.
   mode=init
   [ "$1" = append ] && mode=append
+  # queue only arms whose recipe actually exists: run_baseline would otherwise burn a
+  # card retrying a missing checkpoint, and the shard would be marked claimed
   specs=()
-  for tag in "${!RUNS[@]}"; do specs+=("$tag=outputs/slim_$tag"); done
+  missing=()
+  for tag in "${!RUNS[@]}"; do
+    if [ -f "outputs/slim_$tag/slim_meta.json" ]; then
+      specs+=("$tag=outputs/slim_$tag")
+    else
+      missing+=("$tag")
+    fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "!! not queued, no recipe: ${missing[*]}" >&2
+    echo "!! the family is incomplete -- build them before trusting the comparison" >&2
+  fi
+  [ "${#specs[@]}" -eq 0 ] && { echo "nothing to queue" >&2; exit 1; }
   SETS=test bash "$REPO/experiments/evaluation/launch_arms.sh" "$mode" 2 "${specs[@]}"
   blocks=()
-  for b in a b c d e; do blocks+=("${TAG}_$b=outputs/slim_${TAG}_$b"); done
-  SETS=indist bash "$REPO/experiments/evaluation/launch_arms.sh" append 2 "${blocks[@]}"
+  for b in a b c d e; do
+    [ -f "outputs/slim_${TAG}_$b/slim_meta.json" ] &&
+      blocks+=("${TAG}_$b=outputs/slim_${TAG}_$b")
+  done
+  [ "${#blocks[@]}" -gt 0 ] &&
+    SETS=indist bash "$REPO/experiments/evaluation/launch_arms.sh" append 2 "${blocks[@]}"
   bash "$REPO/experiments/evaluation/launch_arms.sh" status
   ;;
 
