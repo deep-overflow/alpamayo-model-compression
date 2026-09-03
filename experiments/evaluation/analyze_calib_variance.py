@@ -136,6 +136,75 @@ def overlap(x, y):
     return float((x * y).sum() / x.sum())
 
 
+def stability_curve(importance, sizes, draws=20, seed=0):
+    """Kept-set agreement between two DISJOINT subsets of n clips each.
+
+    Two disjoint halves of one run stand in for two independent draws of that size, so
+    this is the block-to-block overlap at a fraction of the cost -- and it reaches sizes
+    no pair of real blocks could without more runs. `mean(per-clip) == importance.npz`
+    holds to 0.0 on every array, so a subset's mean is exactly the mean a separate run
+    over those clips would have produced.
+    """
+    import mask_lib as ml
+    import tyr_lib as tyr
+    from make_slim import allocations
+
+    p = REPO / "outputs" / importance / "importance_perclip.npz"
+    if not p.exists():
+        return {}
+    per = dict(np.load(p))
+    full = dict(np.load(REPO / "outputs" / importance / "importance.npz"))
+    ref = json.loads(
+        (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+    allocs, _ = allocations(full, ref, 36, 32, 12288, 0.5)
+    rq, rm = allocs["uniform"]
+    n_clips = next(iter(per.values())).shape[0]
+
+    def masks(idx):
+        imp = {k: v[idx].astype(np.float64).mean(axis=0) for k, v in per.items()}
+        sq, sm = tyr.dual_scores(imp)
+        return ml.select_mask_ratios(sq, rq), ml.select_mask_ratios(sm, rm)
+
+    rng = np.random.default_rng(seed)
+    out = {}
+    for n in sizes:
+        if 2 * n > n_clips:
+            continue
+        q, m = [], []
+        for _ in range(draws):
+            pm = rng.permutation(n_clips)
+            a, b = masks(pm[:n]), masks(pm[n:2 * n])
+            q.append(overlap(a[0], b[0]))
+            m.append(overlap(a[1], b[1]))
+        out[str(n)] = {"q": float(np.mean(q)), "q_sd": float(np.std(q)),
+                       "mlp": float(np.mean(m)), "mlp_sd": float(np.std(m))}
+        print(f"  n={n:4d}  Q {np.mean(q):.4f}+-{np.std(q):.4f}  "
+              f"MLP {np.mean(m):.4f}+-{np.std(m):.4f}", flush=True)
+    return out
+
+
+def plot_stability(curve, card_only, out):
+    if not curve:
+        return
+    ns = sorted(int(k) for k in curve)
+    fig, ax = plt.subplots(figsize=(5.6, 3.6))
+    for key, c, lab in (("q", C1, "Q head"), ("mlp", C2, "MLP channel")):
+        y = [curve[str(n)][key] for n in ns]
+        e = [curve[str(n)][f"{key}_sd"] for n in ns]
+        ax.errorbar(ns, y, yerr=e, fmt="o-", color=c, capsize=3, label=lab)
+    if card_only:
+        ax.axhline(card_only, color=MUTED, ls="--", lw=1,
+                   label=f"card change only {card_only:.3f}")
+    ax.set_xscale("log")
+    ax.set_xlabel("clips per draw (two disjoint draws)")
+    ax.set_ylabel("kept-set overlap")
+    ax.set_title("selection converges slowly in the number of clips")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out / "stability.png", dpi=150)
+    plt.close(fig)
+
+
 def plot_draws(rows, out):
     """The six n=100 draws on one axis, with the noise floor marked."""
     have = [a for a in DRAWS100 if a in rows and "test" in rows[a]]
@@ -146,14 +215,14 @@ def plot_draws(rows, out):
     fig, ax = plt.subplots(figsize=(7.2, 3.6))
     ax.bar(range(len(have)), vals, color=[C1 if a == "calib_100" else C2 for a in have])
     if base:
-        ax.axhline(base, color=MUTED, ls="--", lw=1, label=f"무압축 {base:.4f}")
+        ax.axhline(base, color=MUTED, ls="--", lw=1, label=f"unpruned {base:.4f}")
     ax.axhline(float(np.mean(vals)), color=C4, lw=1,
-               label=f"추출 평균 {np.mean(vals):.4f} (SD {np.std(vals, ddof=1):.4f})")
+               label=f"draw mean {np.mean(vals):.4f} (SD {np.std(vals, ddof=1):.4f})")
     ax.set_xticks(range(len(have)))
     ax.set_xticklabels([ARMS[a][0] for a in have], rotation=20, ha="right", fontsize=8)
     ax.set_ylabel("test500 minADE@6")
     ax.set_ylim(min(vals) - 0.05, max(vals) + 0.05)
-    ax.set_title("같은 레시피, 캘리브레이션 100클립만 다름")
+    ax.set_title("same recipe, only the 100 calibration clips differ")
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(out / "draws.png", dpi=150)
@@ -169,11 +238,11 @@ def plot_ladder(rows, out):
     fig, ax = plt.subplots(figsize=(5.6, 3.6))
     ax.errorbar([100], [np.mean(blocks)],
                 yerr=[[np.std(blocks, ddof=1)], [np.std(blocks, ddof=1)]],
-                fmt="o", color=C2, capsize=4, label="n=100 블록 평균 ± SD")
-    ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-", color=C1, label="누적 사다리")
-    ax.set_xlabel("캘리브레이션 클립 수")
+                fmt="o", color=C2, capsize=4, label="n=100 block mean +- SD")
+    ax.plot([p[0] for p in pts], [p[1] for p in pts], "o-", color=C1, label="cumulative ladder")
+    ax.set_xlabel("calibration clips")
     ax.set_ylabel("test500 minADE@6")
-    ax.set_title("클립을 늘리면 좋아지는가")
+    ax.set_title("does more calibration data help?")
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(out / "ladder.png", dpi=150)
@@ -269,8 +338,12 @@ def main():
             overlap(masks["calib_100"][0], masks["calib_100_ada"][0])
             + overlap(masks["calib_100"][1], masks["calib_100_ada"][1]))
 
+    print("stability curve (disjoint draws of n clips each):", flush=True)
+    m["stability"] = stability_curve(args.importance, (10, 25, 50, 100, 150, 250))
+
     plot_draws(rows, out / "plots")
     plot_ladder(rows, out / "plots")
+    plot_stability(m["stability"], m["overlap"].get("card_only"), out / "plots")
     (out / "metrics.json").write_text(json.dumps(m, indent=2, ensure_ascii=False))
 
     lines = ["== test500 minADE@6, dual_u40_v2 with the calibration clips varied =="]
