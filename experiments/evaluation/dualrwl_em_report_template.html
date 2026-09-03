@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action expert의 MLP — 폭 1/16까지는 공짜, 그 아래는 칸마다 6~30배씩 가속하는 붕괴</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; } li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  a { color: var(--accent-dark); text-decoration: none; border-bottom: 1px solid rgba(193,95,60,0.35); }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; } tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: #FBF0EB; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem; }
+  figure { margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem; }
+  .kpi .v { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .bad { color: #B33A3A; font-weight: 650; } .good { color: #008300; font-weight: 650; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { body { padding: 1.5rem 1rem 3rem; } h1 { font-size: 1.55rem; } table { display: block; overflow-x: auto; } }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression · Expert MLP ladder</div>
+  <h1>action expert의 MLP — 폭 1/16까지는 공짜, 그 아래는 칸마다 6~30배씩 가속하는 붕괴</h1>
+  <div class="meta">
+    2026-09-01 · <code>dualr_wl</code>(재구성된 VLM, −24.0%) 위에 <strong>expert MLP-only</strong> 절단을
+    50 → 75 → 87.5 → 93.75 → 96.875 → 98.4375 → 100%로 쌓은 반감 사다리
+    (8256 → 4128 → 2064 → 1032 → 516 → 258 → 129 → 0 채널) ·
+    개루프 고정 프로토콜(rollout only, val500 / test500 / OOD-val 262, minADE@6, k=8, paired) ·
+    Ada 4–7 · 계획 <code>plans/2026-08-31_dualrwl-expert-mlp.md</code> ·
+    분석 <code>outputs/dualrwl_em_analysis</code>
+  </div>
+</header>
+
+<h2><span class="num">1</span>가설과 사전 등록 게이트</h2>
+
+<p>
+  expert의 프루닝 비용은 <strong>전부 Q head 축</strong>에서 나오고 MLP 폭은 50%까지 공짜였다
+  (<code>reports/evaluation/2026-08-28_expert-axis.html</code>). 단 그 측정은 <strong>무압축 VLM 위</strong>에서
+  이뤄졌다. 이 실험이 묻는 것은 두 가지다.
+</p>
+<ul>
+  <li><strong>H1 (적층)</strong> — OSSCAR로 <em>가중치를 다시 쓴</em> VLM(<code>dualr_wl</code>) 위에 얹어도
+      여전히 공짜인가? <code>dualexp_u40_e25</code>(dual + expert <em>양축</em> 25%)는 dual 대비 median
+      +0.0248로 REJECT였지만, 그 비용은 축 분해에서 전부 Q head 몫으로 밝혀졌다. MLP-only 적층은
+      그 계획서가 지목한 "다음 후보"이고 한 번도 측정되지 않았다.</li>
+  <li><strong>H2 (자유 상한)</strong> — 50%는 측정된 최대치일 뿐 상한이 아니다. 1차 중요도 질량으로 보면
+      하위 75%가 층 질량의 0.95%, 하위 87.5%가 1.47%뿐이라 위쪽에 여지가 있어 보인다.</li>
+</ul>
+
+<p>게이트는 착수 전에 등록했다.</p>
+<ul>
+  <li><strong>G0 (레시피)</strong> — 각 arm의 VLM kept set이 <code>slim_dualr_wl_u40</code>과 <em>bit-identical</em>,
+      expert Q head는 16개 전부 보존, em50의 expert kept set이 <code>slim_expertm_u50</code>과 bit-identical,
+      사다리가 중첩(em50 ⊃ em75 ⊃ em87p5 ⊃ em93p75), 제거 파라미터가 정확히 가산적.</li>
+  <li><strong>G1 / G2*</strong> — paired median ΔminADE@6, 문턱 <strong>±{{gates.threshold|.3f}}</strong>
+      (<code>dualexp</code> 계획서의 비례 비용 경계). 통과는 <em>동등</em>이 아니라 n=500에서의
+      <strong>비열등성</strong>이므로 CI가 인용할 숫자다.</li>
+  <li><strong>G3 (경로 분리)</strong> — expert 절단은 CoC 생성 경로 밖이므로 <code>gen_coc</code>가 모든
+      클립에서 <code>dualr_wl</code>과 동일해야 한다. 아니면 빌드 버그다.</li>
+</ul>
+
+<h2><span class="num">2</span>레시피 무결성 (G0 PASS)</h2>
+
+<table>
+  <thead><tr><th>arm</th><th class="r">expert MLP 잔존</th><th class="r">제거 파라미터</th><th class="r">전체</th><th>VLM == wl</th><th>expert Q 온전</th></tr></thead>
+  <tbody>
+    <tr><td><code>dualr_wl</code></td><td class="r">8256</td><td class="r">{{gates.g0.dualr_wl.removed|,}}</td><td class="r">24.0%</td><td>{{gates.g0.dualr_wl.vlm_identical_to_wl}}</td><td>{{gates.g0.dualr_wl.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em50</code></td><td class="r">4128</td><td class="r">{{gates.g0.dualrwl_em50.removed|,}}</td><td class="r">32.2%</td><td>{{gates.g0.dualrwl_em50.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em50.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em75</code></td><td class="r">2064</td><td class="r">{{gates.g0.dualrwl_em75.removed|,}}</td><td class="r">36.3%</td><td>{{gates.g0.dualrwl_em75.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em75.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em87p5</code></td><td class="r">1032</td><td class="r">{{gates.g0.dualrwl_em87p5.removed|,}}</td><td class="r">38.4%</td><td>{{gates.g0.dualrwl_em87p5.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em87p5.expert_q_whole}}</td></tr>
+    <tr><td><strong><code>dualrwl_em93p75</code></strong></td><td class="r"><strong>516</strong></td><td class="r"><strong>{{gates.g0.dualrwl_em93p75.removed|,}}</strong></td><td class="r"><strong>39.4%</strong></td><td>{{gates.g0.dualrwl_em93p75.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em93p75.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em96p875</code></td><td class="r">258</td><td class="r">{{gates.g0.dualrwl_em96p875.removed|,}}</td><td class="r">40.0%</td><td>{{gates.g0.dualrwl_em96p875.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em96p875.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em98p4375</code></td><td class="r">129</td><td class="r">{{gates.g0.dualrwl_em98p4375.removed|,}}</td><td class="r">40.2%</td><td>{{gates.g0.dualrwl_em98p4375.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em98p4375.expert_q_whole}}</td></tr>
+    <tr><td><code>dualrwl_em100</code> <em>(음성 대조군)</em></td><td class="r">0</td><td class="r">{{gates.g0.dualrwl_em100.removed|,}}</td><td class="r">40.5%</td><td>{{gates.g0.dualrwl_em100.vlm_identical_to_wl}}</td><td>{{gates.g0.dualrwl_em100.expert_q_whole}}</td></tr>
+  </tbody>
+</table>
+
+<p>
+  추가로 <code>em50</code>의 expert kept set == <code>slim_expertm_u50</code>
+  <strong>{{gates.g0.em50_expert_is_expertm_u50}}</strong>, 사다리 중첩
+  <strong>{{gates.g0.em75_nested_in_em50}}</strong>, 파라미터 가산성
+  <strong>{{gates.g0.additive}}</strong>. 다섯 arm 모두 VLM 절반이 인덱스 단위로 <code>dualr_wl</code>과
+  같고 expert Q head는 층당 16개가 그대로다 — 바뀐 것은 expert MLP 폭 하나뿐이다.
+  끝점 <code>em100</code>은 층당 잔존 채널이 0이다(<code>expert_mlp_empty</code>
+  {{gates.g0.dualrwl_em100.expert_mlp_empty}}): gate/up이 <code>Linear(2048, 0)</code>,
+  down이 <code>Linear(0, 2048)</code>가 되어 블록 출력이 <strong>정확히 0</strong>이 되므로 잔차가 그대로
+  통과한다 — 폭이 좁아진 것이 아니라 <strong>MLP 서브레이어가 사라진 것</strong>이다.
+</p>
+
+<h2><span class="num">3</span>결과 — 네 칸은 무비용, 끝점에서 절벽</h2>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">{{gates.sets.indist.arms.dualrwl_em93p75.minADE6_mean|.4f}}</div><div class="l">em93p75 val500 minADE@6 (무압축 {{gates.sets.indist.baselines.baseline.minADE6_mean|.4f}})</div></div>
+  <div class="kpi"><div class="v good">{{gates.sets.indist.contrasts.G2f dualrwl_em93p75-dualr_wl.med|+.4f}}</div><div class="l">em93p75 − dualr_wl, val500 중앙값</div></div>
+  <div class="kpi"><div class="v">39.4%</div><div class="l">전체 제거 (11.08B → 6.71B)</div></div>
+  <div class="kpi"><div class="v bad">{{gates.sets.indist.contrasts.G2h dualrwl_em100-dualr_wl.med|+.3f}}</div><div class="l">em100(MLP 제거) − dualr_wl, val500 — 문턱의 115배</div></div>
+  <div class="kpi"><div class="v good">1262/1262</div><div class="l">gen_coc가 dualr_wl과 동일한 클립</div></div>
+</div>
+
+<table>
+  <thead><tr><th>arm</th><th class="r">expert MLP</th><th class="r">전체 제거</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+  <tbody>
+    <tr><td>무압축 baseline</td><td class="r">8256</td><td class="r">—</td><td class="r">{{gates.sets.indist.baselines.baseline.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.baselines.baseline.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.baselines.baseline.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>dualr_wl</code> (−24.0%)</td><td class="r">8256</td><td class="r">2.66B</td><td class="r">{{gates.sets.indist.arms.dualr_wl.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.arms.dualr_wl.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.arms.dualr_wl.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>em50</code> (−32.2%)</td><td class="r">4128</td><td class="r">3.57B</td><td class="r">{{gates.sets.indist.arms.dualrwl_em50.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.arms.dualrwl_em50.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.arms.dualrwl_em50.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>em75</code> (−36.3%)</td><td class="r">2064</td><td class="r">4.03B</td><td class="r">{{gates.sets.indist.arms.dualrwl_em75.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.arms.dualrwl_em75.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.arms.dualrwl_em75.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>em87p5</code> (−38.4%)</td><td class="r">1032</td><td class="r">4.26B</td><td class="r">{{gates.sets.indist.arms.dualrwl_em87p5.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.arms.dualrwl_em87p5.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.arms.dualrwl_em87p5.minADE6_mean|.4f}}</td></tr>
+    <tr><td><strong><code>em93p75</code> (−39.4%)</strong></td><td class="r"><strong>516</strong></td><td class="r"><strong>4.37B</strong></td><td class="r"><strong>{{gates.sets.indist.arms.dualrwl_em93p75.minADE6_mean|.4f}}</strong></td><td class="r"><strong>{{gates.sets.test.arms.dualrwl_em93p75.minADE6_mean|.4f}}</strong></td><td class="r"><strong>{{gates.sets.oodval.arms.dualrwl_em93p75.minADE6_mean|.4f}}</strong></td></tr>
+    <tr><td><code>em96p875</code> (−40.0%)</td><td class="r">258</td><td class="r">4.43B</td><td class="r">{{gates.sets.indist.arms.dualrwl_em96p875.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.test.arms.dualrwl_em96p875.minADE6_mean|.4f}}</td><td class="r">{{gates.sets.oodval.arms.dualrwl_em96p875.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>em98p4375</code> (−40.2%)</td><td class="r">129</td><td class="r">4.46B</td><td class="r bad">{{gates.sets.indist.arms.dualrwl_em98p4375.minADE6_mean|.4f}}</td><td class="r bad">{{gates.sets.test.arms.dualrwl_em98p4375.minADE6_mean|.4f}}</td><td class="r bad">{{gates.sets.oodval.arms.dualrwl_em98p4375.minADE6_mean|.4f}}</td></tr>
+    <tr><td><code>em100</code> (−40.5%) <em>음성 대조군</em></td><td class="r">0</td><td class="r">4.48B</td><td class="r bad">{{gates.sets.indist.arms.dualrwl_em100.minADE6_mean|.4f}}</td><td class="r bad">{{gates.sets.test.arms.dualrwl_em100.minADE6_mean|.4f}}</td><td class="r bad">{{gates.sets.oodval.arms.dualrwl_em100.minADE6_mean|.4f}}</td></tr>
+  </tbody>
+</table>
+
+<p>사다리 각 칸의 증분과 누적 비용 (paired median ΔminADE@6 [95% CI], 문턱 ±{{gates.threshold|.3f}}):</p>
+
+<table>
+  <thead><tr><th>게이트</th><th>대비</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+  <tbody>
+    <tr><td>G1</td><td>em50 − dualr_wl</td>
+      <td class="r">{{gates.sets.indist.contrasts.G1 dualrwl_em50-dualr_wl.med|+.4f}} [{{gates.sets.indist.contrasts.G1 dualrwl_em50-dualr_wl.lo|+.4f}}, {{gates.sets.indist.contrasts.G1 dualrwl_em50-dualr_wl.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.test.contrasts.G1 dualrwl_em50-dualr_wl.med|+.4f}} [{{gates.sets.test.contrasts.G1 dualrwl_em50-dualr_wl.lo|+.4f}}, {{gates.sets.test.contrasts.G1 dualrwl_em50-dualr_wl.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.oodval.contrasts.G1 dualrwl_em50-dualr_wl.med|+.4f}} [{{gates.sets.oodval.contrasts.G1 dualrwl_em50-dualr_wl.lo|+.4f}}, {{gates.sets.oodval.contrasts.G1 dualrwl_em50-dualr_wl.hi|+.4f}}]</td></tr>
+    <tr><td>G2</td><td>em75 − em50</td>
+      <td class="r">{{gates.sets.indist.contrasts.G2 dualrwl_em75-dualrwl_em50.med|+.4f}} [{{gates.sets.indist.contrasts.G2 dualrwl_em75-dualrwl_em50.lo|+.4f}}, {{gates.sets.indist.contrasts.G2 dualrwl_em75-dualrwl_em50.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.test.contrasts.G2 dualrwl_em75-dualrwl_em50.med|+.4f}} [{{gates.sets.test.contrasts.G2 dualrwl_em75-dualrwl_em50.lo|+.4f}}, {{gates.sets.test.contrasts.G2 dualrwl_em75-dualrwl_em50.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.oodval.contrasts.G2 dualrwl_em75-dualrwl_em50.med|+.4f}} [{{gates.sets.oodval.contrasts.G2 dualrwl_em75-dualrwl_em50.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2 dualrwl_em75-dualrwl_em50.hi|+.4f}}]</td></tr>
+    <tr><td>G2c</td><td>em87p5 − em75</td>
+      <td class="r">{{gates.sets.indist.contrasts.G2c dualrwl_em87p5-dualrwl_em75.med|+.4f}} [{{gates.sets.indist.contrasts.G2c dualrwl_em87p5-dualrwl_em75.lo|+.4f}}, {{gates.sets.indist.contrasts.G2c dualrwl_em87p5-dualrwl_em75.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.test.contrasts.G2c dualrwl_em87p5-dualrwl_em75.med|+.4f}} [{{gates.sets.test.contrasts.G2c dualrwl_em87p5-dualrwl_em75.lo|+.4f}}, {{gates.sets.test.contrasts.G2c dualrwl_em87p5-dualrwl_em75.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.oodval.contrasts.G2c dualrwl_em87p5-dualrwl_em75.med|+.4f}} [{{gates.sets.oodval.contrasts.G2c dualrwl_em87p5-dualrwl_em75.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2c dualrwl_em87p5-dualrwl_em75.hi|+.4f}}]</td></tr>
+    <tr><td><strong>G2e</strong></td><td><strong>em93p75 − em87p5</strong></td>
+      <td class="r"><strong>{{gates.sets.indist.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.med|+.4f}}</strong> [{{gates.sets.indist.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.lo|+.4f}}, {{gates.sets.indist.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.hi|+.4f}}]</td>
+      <td class="r"><strong>{{gates.sets.test.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.med|+.4f}}</strong> [{{gates.sets.test.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.lo|+.4f}}, {{gates.sets.test.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.hi|+.4f}}]</td>
+      <td class="r"><strong>{{gates.sets.oodval.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.med|+.4f}}</strong> [{{gates.sets.oodval.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2e dualrwl_em93p75-dualrwl_em87p5.hi|+.4f}}]</td></tr>
+    <tr><td>G2i</td><td>em96p875 − em93p75 (258 vs 516)</td>
+      <td class="r">{{gates.sets.indist.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.med|+.4f}} [{{gates.sets.indist.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.lo|+.4f}}, {{gates.sets.indist.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.hi|+.4f}}]*</td>
+      <td class="r">{{gates.sets.test.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.med|+.4f}} [{{gates.sets.test.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.lo|+.4f}}, {{gates.sets.test.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.hi|+.4f}}]</td>
+      <td class="r">{{gates.sets.oodval.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.med|+.4f}} [{{gates.sets.oodval.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2i dualrwl_em96p875-dualrwl_em93p75.hi|+.4f}}]</td></tr>
+    <tr><td><strong>G2j</strong></td><td><strong>em98p4375 − em96p875</strong> (129 vs 258) <em>(REJECT)</em></td>
+      <td class="r bad">{{gates.sets.indist.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.med|+.4f}} [{{gates.sets.indist.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.lo|+.4f}}, {{gates.sets.indist.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.hi|+.4f}}]*</td>
+      <td class="r bad">{{gates.sets.test.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.med|+.4f}} [{{gates.sets.test.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.lo|+.4f}}, {{gates.sets.test.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.hi|+.4f}}]*</td>
+      <td class="r bad">{{gates.sets.oodval.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.med|+.4f}} [{{gates.sets.oodval.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2j dualrwl_em98p4375-dualrwl_em96p875.hi|+.4f}}]*</td></tr>
+    <tr><td><strong>G2k</strong></td><td><strong>em100 − em98p4375</strong> (0 vs 129) <em>(REJECT)</em></td>
+      <td class="r bad">{{gates.sets.indist.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.med|+.3f}} [{{gates.sets.indist.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.lo|+.2f}}, {{gates.sets.indist.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.hi|+.2f}}]*</td>
+      <td class="r bad">{{gates.sets.test.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.med|+.3f}} [{{gates.sets.test.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.lo|+.2f}}, {{gates.sets.test.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.hi|+.2f}}]*</td>
+      <td class="r bad">{{gates.sets.oodval.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.med|+.3f}} [{{gates.sets.oodval.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.lo|+.2f}}, {{gates.sets.oodval.contrasts.G2k dualrwl_em100-dualrwl_em98p4375.hi|+.2f}}]*</td></tr>
+    <tr><td><strong>G2g</strong></td><td><strong>em100 − em93p75</strong> <em>(REJECT)</em></td>
+      <td class="r bad">{{gates.sets.indist.contrasts.G2g dualrwl_em100-dualrwl_em93p75.med|+.4f}} [{{gates.sets.indist.contrasts.G2g dualrwl_em100-dualrwl_em93p75.lo|+.3f}}, {{gates.sets.indist.contrasts.G2g dualrwl_em100-dualrwl_em93p75.hi|+.3f}}]</td>
+      <td class="r bad">{{gates.sets.test.contrasts.G2g dualrwl_em100-dualrwl_em93p75.med|+.4f}} [{{gates.sets.test.contrasts.G2g dualrwl_em100-dualrwl_em93p75.lo|+.3f}}, {{gates.sets.test.contrasts.G2g dualrwl_em100-dualrwl_em93p75.hi|+.3f}}]</td>
+      <td class="r bad">{{gates.sets.oodval.contrasts.G2g dualrwl_em100-dualrwl_em93p75.med|+.4f}} [{{gates.sets.oodval.contrasts.G2g dualrwl_em100-dualrwl_em93p75.lo|+.3f}}, {{gates.sets.oodval.contrasts.G2g dualrwl_em100-dualrwl_em93p75.hi|+.3f}}]</td></tr>
+    <tr><td><strong>G2f</strong></td><td><strong>em93p75 − dualr_wl</strong> (누적)</td>
+      <td class="r"><strong>{{gates.sets.indist.contrasts.G2f dualrwl_em93p75-dualr_wl.med|+.4f}}</strong> [{{gates.sets.indist.contrasts.G2f dualrwl_em93p75-dualr_wl.lo|+.4f}}, {{gates.sets.indist.contrasts.G2f dualrwl_em93p75-dualr_wl.hi|+.4f}}]</td>
+      <td class="r"><strong>{{gates.sets.test.contrasts.G2f dualrwl_em93p75-dualr_wl.med|+.4f}}</strong> [{{gates.sets.test.contrasts.G2f dualrwl_em93p75-dualr_wl.lo|+.4f}}, {{gates.sets.test.contrasts.G2f dualrwl_em93p75-dualr_wl.hi|+.4f}}]</td>
+      <td class="r"><strong>{{gates.sets.oodval.contrasts.G2f dualrwl_em93p75-dualr_wl.med|+.4f}}</strong> [{{gates.sets.oodval.contrasts.G2f dualrwl_em93p75-dualr_wl.lo|+.4f}}, {{gates.sets.oodval.contrasts.G2f dualrwl_em93p75-dualr_wl.hi|+.4f}}]</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>H1 채택. 자유 구간은 516채널에서 끝나고, 그 아래는 칸마다 가속한다.</strong>
+  8256 → 516(93.75% 제거)까지 열다섯 개 대비가 모두 문턱의 1/10 이하이고 CI가 전부 0을 포함한다.
+  그 아래로는 반감할 때마다 비용이
+  <strong>+0.0001 → +0.0078 → +0.0444 → +1.328</strong>(val500 중앙값)로 <strong>6~30배씩 커진다</strong>.
+  <code>gen_coc</code>는 여덟 arm 사이 <strong>1,262/1,262 완전 일치</strong>(G3 확정) — 4배 열화조차
+  전부 denoiser 경로에서만 났고 CoC는 글자 하나 바뀌지 않았다.
+</div>
+
+<figure>
+  PLOT::em::dualrwl_em_deltas.png
+  <figcaption>사다리 각 arm의 <code>dualr_wl</code> 대비 paired ΔminADE@6 (점 = 중앙값과 95% CI, × = 평균).
+  음영은 사전 등록 비열등성 경계 ±0.013. 축은 symlog — 네 칸은 경계 안에 머물고
+  <code>em100</code>만 두 자릿수 밖으로 벗어난다.</figcaption>
+</figure>
+
+<figure>
+  PLOT::em::expert_mlp_cliff.png
+  <figcaption>잔존 채널 수 대 minADE@6(양축 로그, 점선 = 무압축 baseline). 8256에서 516까지 평평하다가
+  258에서 처음 들리고, 129에서 확실히 오르며, 0에서 4배가 된다. 절벽이 아니라
+  <strong>가속하는 경사</strong>다.</figcaption>
+</figure>
+
+<p>
+  <strong>test500과 OOD-val은 사다리 다섯 칸이 단조 감소한다</strong>
+  ({{gates.sets.test.arms.dualr_wl.minADE6_mean|.4f}} → {{gates.sets.test.arms.dualrwl_em93p75.minADE6_mean|.4f}},
+  {{gates.sets.oodval.arms.dualr_wl.minADE6_mean|.4f}} → {{gates.sets.oodval.arms.dualrwl_em93p75.minADE6_mean|.4f}}).
+  개별 칸은 CI가 0을 포함하는 잡음이지만 다섯 칸 내내 같은 방향이라, 최소한 손해가 아니라는 것은 확실하다.
+</p>
+
+<h2><span class="num">4</span>왜 안 떨어지는가 — 기준이 무관할 만큼 축이 헐겁다</h2>
+
+<p>
+  두 번째 질문: 이 축에서 <strong>어느 채널을 고르느냐가 중요하기는 한가?</strong> 비율이 고정되면 채널
+  <em>개수</em>는 기준과 무관하게 같다(<code>select_mask</code>가 층마다 <code>k = round(n_units × ratio)</code>를
+  적용). 그래서 비교할 것은 <em>어느</em> 채널이냐다.
+</p>
+<p>
+  expert Wanda 점수는 저장소에 없었다 — <code>run_wanda.py</code>는 VLM 전용이다. 동일한 공식 WrappedGPT
+  누적을 <strong>10-step Euler denoise 중 expert의 <code>down_proj</code> 입력</strong>에서 수집하는
+  <code>run_wanda_expert.py</code>를 새로 만들었다(<code>outputs/wanda_expert_v1</code>, calib_100).
+  Taylor에서는 스텝 축 합산이 부호 상쇄 결함이었지만 Wanda는 <strong>2차 모멘트</strong>라 상쇄가 불가능하므로,
+  10스텝에 걸친 합산은 Wanda가 원래 토큰에 대해 하는 연산과 같다.
+</p>
+
+<table>
+  <thead><tr><th class="r">제거 비율</th><th class="r">잔존/층</th><th class="r">fm Taylor (pre-fix |Σₛ|)</th><th class="r">weight magnitude</th><th class="r">Wanda</th></tr></thead>
+  <tbody>
+    <tr><td class="r">50%</td><td class="r">{{crit.kept.0}}</td><td class="r">{{crit.overlap.fm_taylor_sum.0|.4f}}</td><td class="r">{{crit.overlap.weight_magnitude.0|.4f}}</td><td class="r">{{crit.overlap.wanda.0|.4f}}</td></tr>
+    <tr><td class="r">75%</td><td class="r">{{crit.kept.1}}</td><td class="r">{{crit.overlap.fm_taylor_sum.1|.4f}}</td><td class="r">{{crit.overlap.weight_magnitude.1|.4f}}</td><td class="r">{{crit.overlap.wanda.1|.4f}}</td></tr>
+    <tr><td class="r">87.5%</td><td class="r">{{crit.kept.2}}</td><td class="r">{{crit.overlap.fm_taylor_sum.2|.4f}}</td><td class="r">{{crit.overlap.weight_magnitude.2|.4f}}</td><td class="r">{{crit.overlap.wanda.2|.4f}}</td></tr>
+    <tr><td class="r"><strong>93.75%</strong></td><td class="r"><strong>{{crit.kept.3}}</strong></td><td class="r">{{crit.overlap.fm_taylor_sum.3|.4f}}</td><td class="r">{{crit.overlap.weight_magnitude.3|.4f}}</td><td class="r"><strong>{{crit.overlap.wanda.3|.4f}}</strong></td></tr>
+  </tbody>
+</table>
+<p class="meta">값은 shipped 기준 <code>fm Taylor (znorm)</code>과의 kept-set 겹침이다.</p>
+
+<figure>
+  PLOT::em::expert_mlp_criteria.png
+  <figcaption>깊이 자를수록 세 기준이 더 일치한다. 남길 채널이 516개뿐이면 "확실히 중요한 것"의 정체는
+  어느 기준으로 봐도 같기 때문이다.</figcaption>
+</figure>
+
+<p>
+  93.75%에서 Wanda와 fm Taylor는 {{crit.deep.kept}}개 중 평균 <strong>{{crit.deep.shared_mean|.1f}}개</strong>를
+  공유한다 — 겹침 <strong>{{crit.deep.overlap|.4f}}</strong>, Jaccard {{crit.deep.jaccard|.4f}},
+  층별 최소 {{crit.deep.shared_min}} 최대 {{crit.deep.shared_max}}. 다른 채널은
+  <strong>{{crit.deep.differ|.0f}}개뿐</strong>이고 층별 Spearman은 평균
+  <strong>{{crit.deep.rho_mean|+.3f}}</strong>(최소 {{crit.deep.rho_min|+.3f}})이다.
+</p>
+<p>
+  <strong>활성 항의 기여는 작다.</strong> Wanda를 자기 |W| 절반과 비교하면 겹침이
+  <strong>{{crit.deep.wanda_vs_own_magnitude|.4f}}</strong>다 — 활성 2차 모멘트를 곱해도 선택의 8%만 바뀐다.
+  그리고 |W| 단독이 fm Taylor와 {{crit.overlap.weight_magnitude.3|.4f}}로 완전한 Wanda
+  ({{crit.overlap.wanda.3|.4f}})와 큰 차이가 없다. <strong>세 기준이 사실상 같은 것을 고른다.</strong>
+</p>
+
+<h2><span class="num">5</span>코드 정합성 — 마스크가 no-op이 아님을 증명</h2>
+
+<p>
+  "다섯 칸을 잘라도 아무 일이 없다"는 결과는 <strong>마스크가 적용되지 않았을 때</strong>와 겉으로
+  구분되지 않는다. 그래서 별도로 확인했다. 마스크가 no-op이었다면 연속된 두 arm이 클립마다
+  <em>비트 단위로 같은 궤적</em>을 냈어야 한다.
+</p>
+
+<table>
+  <thead><tr><th>대비 (val500)</th><th class="r">비트 단위 동일 궤적</th><th class="r">악화</th><th class="r">개선</th><th class="r">클립당 평균 |Δ|</th><th class="r">gen_coc 동일</th></tr></thead>
+  <tbody>
+    <tr><td>em50 − dualr_wl</td><td class="r">{{sanity.sets.indist.0.identical}} / {{sanity.sets.indist.0.n}}</td><td class="r">{{sanity.sets.indist.0.worse}}</td><td class="r">{{sanity.sets.indist.0.better}}</td><td class="r">{{sanity.sets.indist.0.mean_abs|.4f}}</td><td class="r">{{sanity.sets.indist.0.coc_same|.3f}}</td></tr>
+    <tr><td>em75 − em50</td><td class="r">{{sanity.sets.indist.1.identical}} / {{sanity.sets.indist.1.n}}</td><td class="r">{{sanity.sets.indist.1.worse}}</td><td class="r">{{sanity.sets.indist.1.better}}</td><td class="r">{{sanity.sets.indist.1.mean_abs|.4f}}</td><td class="r">{{sanity.sets.indist.1.coc_same|.3f}}</td></tr>
+    <tr><td>em87p5 − em75</td><td class="r">{{sanity.sets.indist.2.identical}} / {{sanity.sets.indist.2.n}}</td><td class="r">{{sanity.sets.indist.2.worse}}</td><td class="r">{{sanity.sets.indist.2.better}}</td><td class="r">{{sanity.sets.indist.2.mean_abs|.4f}}</td><td class="r">{{sanity.sets.indist.2.coc_same|.3f}}</td></tr>
+    <tr><td>em93p75 − em87p5</td><td class="r">{{sanity.sets.indist.3.identical}} / {{sanity.sets.indist.3.n}}</td><td class="r">{{sanity.sets.indist.3.worse}}</td><td class="r">{{sanity.sets.indist.3.better}}</td><td class="r">{{sanity.sets.indist.3.mean_abs|.4f}}</td><td class="r">{{sanity.sets.indist.3.coc_same|.3f}}</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>모델은 확실히 달라졌고, 동시에 VLM은 확실히 불변이다.</strong> 비트 단위 동일 궤적은
+  <strong>0/500</strong>(양 세트, per-sample 최대 편차 0.28~0.67 m)이면서 <code>gen_coc</code>는 1.000이다.
+  둘 중 하나만 어긋나도 나올 수 없는 조합이다. 그리고 악화/개선이 250:250으로 대칭인데 클립당 평균 |Δ|만
+  {{sanity.sets.indist.0.mean_abs|.4f}} → {{sanity.sets.indist.3.mean_abs|.4f}}로 커진다 —
+  <strong>손상이 아니라 방향 없는 섭동</strong>이다.
+</div>
+
+<p>
+  시드도 다섯 arm이 동일하다: <code>seed={{sanity.seed}}</code>, <code>{{sanity.seed_rule}}</code>,
+  k={{sanity.k}}, <code>use_deterministic_algorithms={{sanity.det.use_deterministic_algorithms}}</code>,
+  TF32 {{sanity.det.tf32}}, <code>CUBLAS_WORKSPACE_CONFIG={{sanity.det.CUBLAS_WORKSPACE_CONFIG}}</code>.
+  시드는 루프 인덱스가 아니라 clip_id에서 유도되므로 2-way 샤딩과 통짜 실행이 같은 결과를 낸다.
+  시드가 어긋났다면 rollout이 달라져 <code>gen_coc</code>가 1.000일 수 없다.
+</p>
+
+<h2><span class="num">6</span>폐루프 — 두 계열 모두 검증, 그리고 개루프와의 역전</h2>
+
+<p>
+  개루프는 궤적이 GT에서 얼마나 벗어나는지만 본다. 이 트랙에서 반복적으로 확인된 것은 그것이
+  <strong>폐루프 실패를 예측하지 못한다</strong>는 사실이라(dualr 계열이 매번 그 자리에서 갈렸다),
+  압축률 주장에는 alpasim이 필요하다. 두 개의 −39.4% arm을 각각 150씬 × 2 rollout으로 돌렸다
+  (2601 suite, Ada 4–7, <code>DRIVER_OMP_THREADS=8</code>, 씬 {{closed.n_scenes}}개 공통).
+</p>
+
+<table>
+  <thead><tr><th>config</th><th class="r">압축</th><th class="r">score</th><th class="r">pass율</th>
+  <th class="r">at-fault 충돌</th><th class="r">offroad</th><th class="r">progress</th></tr></thead>
+  <tbody>
+    <tr><td>무압축 baseline</td><td class="r">—</td><td class="r">{{closed.arms.baseline.score|.4f}}</td>
+      <td class="r">{{closed.arms.baseline.passed|.3f}}</td><td class="r">{{closed.arms.baseline.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.baseline.offroad|.3f}}</td><td class="r">{{closed.arms.baseline.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>dual</code></td><td class="r">24.0%</td><td class="r"><strong>{{closed.arms.dual.score|.4f}}</strong></td>
+      <td class="r">{{closed.arms.dual.passed|.3f}}</td><td class="r">{{closed.arms.dual.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dual.offroad|.3f}}</td><td class="r">{{closed.arms.dual.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>dualr_wl</code></td><td class="r">24.0%</td><td class="r">{{closed.arms.dualr_wl.score|.4f}}</td>
+      <td class="r">{{closed.arms.dualr_wl.passed|.3f}}</td><td class="r">{{closed.arms.dualr_wl.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dualr_wl.offroad|.3f}}</td><td class="r">{{closed.arms.dualr_wl.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><code>em93p75</code> (dualr_wl + eMLP)</td><td class="r">39.4%</td><td class="r">{{closed.arms.em93p75.score|.4f}}</td>
+      <td class="r">{{closed.arms.em93p75.passed|.3f}}</td><td class="r">{{closed.arms.em93p75.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.em93p75.offroad|.3f}}</td><td class="r">{{closed.arms.em93p75.progress_clipped_rel|.3f}}</td></tr>
+    <tr><td><strong><code>dualexp_em93p75</code> (dual + eMLP)</strong></td><td class="r"><strong>39.4%</strong></td>
+      <td class="r"><strong>{{closed.arms.dualexp.score|.4f}}</strong></td>
+      <td class="r">{{closed.arms.dualexp.passed|.3f}}</td><td class="r">{{closed.arms.dualexp.collision_at_fault|.3f}}</td>
+      <td class="r">{{closed.arms.dualexp.offroad|.3f}}</td><td class="r">{{closed.arms.dualexp.progress_clipped_rel|.3f}}</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>대비 (씬 단위 페어드)</th><th class="r">Δscore [95% CI]</th><th class="r">Wilcoxon p</th><th class="r">W/L/T</th></tr></thead>
+  <tbody>
+    <tr><td><strong>em93p75 − dualr_wl</strong> (적층 비용)</td><td class="r">{{closed.pairs.em93p75-dualr_wl.mean|+.4f}} [{{closed.pairs.em93p75-dualr_wl.lo|+.4f}}, {{closed.pairs.em93p75-dualr_wl.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.em93p75-dualr_wl.p|.3g}}</td><td class="r">{{closed.pairs.em93p75-dualr_wl.win}}/{{closed.pairs.em93p75-dualr_wl.loss}}/{{closed.pairs.em93p75-dualr_wl.tie}}</td></tr>
+    <tr><td><strong>dualexp − dual</strong> (적층 비용)</td><td class="r">{{closed.pairs.dualexp-dual.mean|+.4f}} [{{closed.pairs.dualexp-dual.lo|+.4f}}, {{closed.pairs.dualexp-dual.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-dual.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-dual.win}}/{{closed.pairs.dualexp-dual.loss}}/{{closed.pairs.dualexp-dual.tie}}</td></tr>
+    <tr><td>dualexp − em93p75 (같은 예산, VLM 절반만 다름)</td><td class="r">{{closed.pairs.dualexp-em93p75.mean|+.4f}} [{{closed.pairs.dualexp-em93p75.lo|+.4f}}, {{closed.pairs.dualexp-em93p75.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-em93p75.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-em93p75.win}}/{{closed.pairs.dualexp-em93p75.loss}}/{{closed.pairs.dualexp-em93p75.tie}}</td></tr>
+    <tr><td><strong>dualexp − 무압축</strong></td><td class="r">{{closed.pairs.dualexp-baseline.mean|+.4f}} [{{closed.pairs.dualexp-baseline.lo|+.4f}}, {{closed.pairs.dualexp-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dualexp-baseline.p|.3g}}</td><td class="r">{{closed.pairs.dualexp-baseline.win}}/{{closed.pairs.dualexp-baseline.loss}}/{{closed.pairs.dualexp-baseline.tie}}</td></tr>
+    <tr><td>em93p75 − 무압축</td><td class="r">{{closed.pairs.em93p75-baseline.mean|+.4f}} [{{closed.pairs.em93p75-baseline.lo|+.4f}}, {{closed.pairs.em93p75-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.em93p75-baseline.p|.3g}}</td><td class="r">{{closed.pairs.em93p75-baseline.win}}/{{closed.pairs.em93p75-baseline.loss}}/{{closed.pairs.em93p75-baseline.tie}}</td></tr>
+    <tr><td>dual − 무압축</td><td class="r">{{closed.pairs.dual-baseline.mean|+.4f}} [{{closed.pairs.dual-baseline.lo|+.4f}}, {{closed.pairs.dual-baseline.hi|+.4f}}]</td>
+      <td class="r">{{closed.pairs.dual-baseline.p|.3g}}</td><td class="r">{{closed.pairs.dual-baseline.win}}/{{closed.pairs.dual-baseline.loss}}/{{closed.pairs.dual-baseline.tie}}</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>−39.4%가 폐루프에서 무압축을 이긴다.</strong> <code>dualexp_em93p75</code>는 무압축 대비
+  {{closed.pairs.dualexp-baseline.mean|+.3f}} [{{closed.pairs.dualexp-baseline.lo|+.3f}}, {{closed.pairs.dualexp-baseline.hi|+.3f}}], p={{closed.pairs.dualexp-baseline.p|.3g}} — 파라미터를 39.4%
+  덜어내고도 주행 점수가 유의하게 높다. 적층 비용은 <code>dualr_wl</code> 쪽에서
+  {{closed.pairs.em93p75-dualr_wl.mean|+.3f}} [{{closed.pairs.em93p75-dualr_wl.lo|+.3f}}, {{closed.pairs.em93p75-dualr_wl.hi|+.3f}}] (p={{closed.pairs.em93p75-dualr_wl.p|.2g}}),
+  <code>dual</code> 쪽에서 {{closed.pairs.dualexp-dual.mean|+.3f}} [{{closed.pairs.dualexp-dual.lo|+.3f}}, {{closed.pairs.dualexp-dual.hi|+.3f}}] (p={{closed.pairs.dualexp-dual.p|.2g}}).
+</div>
+
+<div class="note">
+  <strong>dualexp − dual은 유의하다고 읽지 않는다.</strong> 부트스트랩 CI는 0을 간신히 벗어나지만
+  Wilcoxon은 p={{closed.pairs.dualexp-dual.p|.2g}}이고 승패가 {{closed.pairs.dualexp-dual.win}}/{{closed.pairs.dualexp-dual.loss}}/{{closed.pairs.dualexp-dual.tie}}로 오히려 지는
+  쪽이다 — 두 검정이 엇갈린다. 더 결정적인 것은 <strong>검정력</strong>이다: 씬당 σ≈0.32라 N=150은
+  0.080까지만 분해하는데 관측값은 {{closed.pairs.dualexp-dual.mean|+.3f}}로 그 절반도 안 된다.
+  개루프가 1,262클립에서 ±0.0002를 분해하는 것과 대조적이므로, 폐루프에서는 "무비용"이 아니라
+  <strong>"N=150에서 확정 불가"</strong>가 정확한 표현이다.
+</div>
+
+<figure>
+  PLOT::cl::paired_deltas.png
+  <figcaption>무압축 대비 씬 단위 페어드 Δscore. 두 −39.4% arm이 24.0% arm들과 같은 구간에 놓인다.</figcaption>
+</figure>
+
+<p>
+  <strong>개루프와 폐루프가 이 축에서 정반대다.</strong> 개루프 test500에서는 dualr_wl 계열이
+  {{gates.sets.test.arms.dualrwl_em93p75.minADE6_mean|.4f}}로 dual 계열
+  ({{dualexp_ol.test|.4f}})을 크게 앞서는데, 폐루프에서는 그 우위가
+  사라지고 부호가 뒤집힌다({{closed.arms.em93p75.score|.4f}} vs {{closed.arms.dualexp.score|.4f}},
+  {{closed.pairs.dualexp-em93p75.mean|+.3f}} [{{closed.pairs.dualexp-em93p75.lo|+.3f}}, {{closed.pairs.dualexp-em93p75.hi|+.3f}}], p={{closed.pairs.dualexp-em93p75.p|.2g}}). 개루프 minADE로
+  폐루프를 예측할 수 없다는 이 트랙의 반복된 관찰이 한 번 더 확인된다 — 그리고 그 역전이
+  <em>expert 절단이 아니라 VLM 절반</em>에서 온다는 점이 중요하다. expert MLP 절단은 두 계열 어느
+  쪽에서도 순위를 바꾸지 않는다.
+</p>
+
+<h2><span class="num">7</span>해석 (의견)</h2>
+
+<ul>
+  <li><strong>붕괴는 연속이다 — 폭이 계속 중요하되, 1032채널 위에서는 그 중요도가 측정 한계 아래에 있을
+      뿐이다.</strong> 516과 0 사이를 이등분해 보면 반감마다 비용이
+      <strong>+0.0001 → +0.0078 → +0.0444 → +1.328</strong>로 6~30배씩 가속한다. 이산적인 "서브레이어
+      유무" 효과였다면 129채널이 516과 같은 수준이어야 했는데, 129는 세 세트 모두에서 REJECT다
+      (+0.044 / +0.047 / +0.040, p = 2.4e-8 / 1.7e-10 / 4.1e-4). em100의 4배 붕괴는 특별한 사건이 아니라
+      <strong>같은 곡선의 끝점</strong>이다.</li>
+  <li><strong>자유 구간의 경계는 516채널(원폭의 6.25%)이다.</strong> 258은 문턱은 통과하지만 val500에서만
+      유의하고(+0.0078, p=0.004) test500·OOD-val에서는 잡음이라(p=0.62 / 0.96) 세트 간 부호 일관성을
+      만족하지 못한다 — 경계선이므로 배포 후보로 삼지 않는다. 실용적으로도 516 → 129는 겨우 +0.086B를
+      더 얻으면서 minADE를 +0.044 악화시키는 반면, 8256 → 516은 <strong>1.71B를 공짜로</strong> 얻는다.
+      남는 구간에 가져갈 것이 없다.</li>
+  <li><strong>측정 도구가 멀쩡하다는 것이 증명됐다.</strong> 네 칸이 연속으로 통과했을 때는 두 해석이 열려
+      있었다 — (a) 축이 정말 헐겁다, (b) 개루프 minADE가 이 축의 손상을 못 잡는다. <code>em100</code>이
+      p ≈ 1e-70으로, <code>em98p4375</code>가 세 세트 모두에서 REJECT되면서 <strong>(b)가 닫혔다</strong>.
+      같은 프로토콜·같은 시드·같은 페어링이 expert MLP 손상을 잡을 때는 확실히 잡고, +0.04 크기도 놓치지
+      않는다. 네 칸이 통과한 것은 못 잡아서가 아니라 없어서다. 이 음성 대조군이 없었다면 사다리 전체가
+      해석 불가였다.</li>
+  <li><strong>기준은 이 축에서 거의 무관하다.</strong> 93.75%에서 Wanda·fm Taylor·weight magnitude가
+      {{crit.deep.overlap|.1%}} 안팎으로 같은 채널을 고른다. 1차 중요도 질량에서 하위 93.75%가 층 질량의
+      1.5% 미만이라는 관측과 일관된다. <strong>어느 채널을 남기느냐보다 몇 개라도 남기느냐가 중요하다.</strong></li>
+  <li><strong>refit된 캐시가 이 성질을 바꾸지 않는다.</strong> 같은 절단을 dense VLM 위에 얹었을 때와의
+      차이의 차이(DiD)가 세 세트에서 +0.0000 / −0.0000 / −0.0001이다. 단 이것은 <em>null에서 null을 뺀 것</em>이라
+      "이미 공짜인 영역에서 공짜가 이전된다"까지만 말한다. 축의 나머지 절반인 <strong>Q head</strong>
+      (dense에서 q25 +0.022, q50 +0.116, 헤드 수에 초선형)가 refit과 상호작용할 여지가 큰 쪽이고,
+      그 DiD는 미측정이다.</li>
+  <li><strong>그 섭동은 폐루프에서도 누적되지 않았다 — 다만 검정력이 다르다.</strong> 네 칸에서 클립당
+      궤적 흔들림은 커지는데(0.0036 → 0.0080) 악화/개선은 250:250에 머문다. 개루프 minADE가
+      <em>방향 없는</em> 섭동에 둔감한 것은 사실이므로 alpasim으로 확인했고, 두 계열 모두에서 적층 비용이
+      잡히지 않았다({{closed.pairs.em93p75-dualr_wl.mean|+.3f}} / {{closed.pairs.dualexp-dual.mean|+.3f}}).
+      단 N=150은 0.080까지만 분해하므로 이것은 "무비용"이 아니라 <strong>"확정 불가"</strong>다.
+      개루프의 ±0.0002 해상도와 폐루프의 ±0.080 해상도를 같은 무게로 읽으면 안 된다.</li>
+  <li><strong>압축률과 주행 성능이 상충하지 않는다.</strong> −39.4%의 <code>dualexp_em93p75</code>가
+      무압축 대비 {{closed.pairs.dualexp-baseline.mean|+.3f}}
+      [{{closed.pairs.dualexp-baseline.lo|+.3f}}, {{closed.pairs.dualexp-baseline.hi|+.3f}}],
+      p={{closed.pairs.dualexp-baseline.p|.2g}}로 <em>유의하게 낫다</em>. 24.0%만 자른
+      <code>dual</code>(+{{closed.pairs.dual-baseline.mean|.3f}})보다는 낮지만 그 차이는 확정되지 않았고,
+      파라미터는 15.4%p 더 덜어낸다.</li>
+  <li><strong>개루프 순위와 폐루프 순위가 뒤집히는 원인은 VLM 절반이지 expert가 아니다.</strong>
+      개루프에서 dualr_wl 계열이 dual 계열을 크게 앞서지만 폐루프에서는 반대다. 그런데 expert MLP
+      절단은 어느 계열에서도 순위를 바꾸지 않는다 — 두 축이 독립적으로 움직인다는 뜻이고, VLM 쪽
+      선택을 개루프로 고르는 것이 위험하다는 뜻이기도 하다.</li>
+</ul>
+
+<div class="note">
+  <strong>주장의 범위.</strong> 개루프는 516채널까지 무비용, 그 아래는 가속하는 비용 —
+  1,262클립에서 ±0.0002 해상도로 확정된다. 폐루프는 두 계열 모두에서 적층 비용을 잡지 못했으나
+  N=150의 분해능이 0.080이라 <strong>"확정 불가"이지 "무비용"이 아니다</strong>. 사다리의 다른 칸들
+  (258 / 129 / 0채널)은 폐루프 미측정이고, 129 이하가 개루프에서 명확히 비용을 내므로 폐루프로 확인할
+  가치가 있는 것은 오히려 그쪽이다. 지연시간(G4)도 미측정이다 — expert는 10스텝마다 가중치를 전부 다시
+  읽는 step-bound 경로라 1.71B 제거의 이득이 드러날 자리지만,
+  <code>bench_fastdenoise.py</code>가 컨테이너 시절 경로를 하드코딩하고 있어 수정이 먼저다.
+</div>
+
+<h2><span class="num">8</span>다음 단계</h2>
+
+<ul>
+  <li><strong>폐루프 검정력</strong> — 지금의 N=150은 0.080까지만 분해하는데 관심 있는 효과가
+      0.014~0.036이다. N=250이면 0.062까지 내려간다. 적층 비용을 "확정 불가"에서 벗어나게 하려면
+      씬을 늘리는 것이 유일한 길이고, arm을 늘리는 것보다 우선한다.</li>
+  <li><strong>경계의 정밀화</strong> — 516(무비용)과 258(경계선) 사이가 남았다. 387채널 한 점이면 자유
+      구간의 끝을 절반으로 좁힐 수 있으나, 실익은 +0.03B뿐이라 우선순위는 낮다.</li>
+  <li><strong>wl + expert Q 25%</strong> — Q head 축의 DiD. dense 쪽 <code>expertq_u25</code>가 이미 있어
+      빌드 하나만 새로 하면 된다.</li>
+  <li><strong>G4 지연시간</strong> — <code>bench_fastdenoise.py</code>의 <code>REPO</code> 하드코딩과
+      <code>load_physical_aiavdataset</code> 의존을 먼저 고쳐야 한다(같은 문제가 네 개 벤치 스크립트 전부에 있다).</li>
+</ul>
+
+<div class="note">
+  <strong>부수 수정.</strong> <code>expert_per_clip.reserve_gpu</code>가 꽉 찬 카드에서 나는
+  <code>torch.AcceleratorError</code>를 못 잡아 스캔이 첫 카드에서 중단됐다 —
+  <code>OutOfMemoryError</code>의 하위 클래스가 아니라 <code>RuntimeError</code> 아래 형제다. Wanda 실행이
+  이것 때문에 44회 헛돌았다. 두 예외를 함께 잡되 메시지가 할당 실패가 아니면 그대로 올리도록 고치고,
+  꽉 찬 Blackwell 0 → 빈 Ada 5 시나리오로 검증했다. 같은 계열의 두 번째 수정:
+  <code>launch_arms.sh</code>가 체크아웃 경로를 하드코딩하고 있어 워크트리에서 만든 체크포인트를
+  <strong>트렁크의 코드</strong>로 평가했다 — em100의 0폭 MLP가 트렁크의 옛 assert에 걸려 36분을 헛돌고서야
+  드러났다. <code>run_retry_host.sh</code>와 같은 규약(<code>ALPAMAYO_REPO</code> 우선)으로 바꿨다.
+</div>
+
+</div>
+</body>
+</html>

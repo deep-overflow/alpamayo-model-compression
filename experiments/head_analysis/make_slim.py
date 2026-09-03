@@ -30,10 +30,20 @@ Configs:
   dualexp_u40_e<N> -- dual_u40_v2's VLM half + expert_u<N>'s expert half in one
                       checkpoint (first config pruning both towers). Expected -3.19B
                       at N=25.
+  dualexp_u40_em<M> -- the same VLM half + expert MLP-ONLY at M% (expert Q heads and KV
+                      untouched); M may carry a decimal written with `p` (em93p75 =
+                      93.75%). The expert score comes from --expert-importance, so the
+                      kept set matches the dualrc_u40_s<N>_em<M> ladder unit for unit.
+                      plans/2026-08-31_dualrwl-expert-mlp.md.
   dualrc_u40_s<N>  -- dual_u40_v2's selection everywhere + cache-targeted OSSCAR refit of
                       o_proj / down_proj in layers >= N (run_cache_recon.py supernet via
                       --tyr-supernet; expert-attention-weighted prefill + own-CoC Hessian).
                       Needs slim_state.pt. plans/2026-08-29_cache-targeted-reconstruction.md.
+  dualrc_u40_s<N>_em<M>  the same VLM half plus expert MLP-only pruning at M% (expert Q
+                      heads and KV untouched), i.e. the union of the reconstructed VLM and
+                      expertm_u<M>; the two halves' removed params add. M may carry a
+                      decimal written with `p` (em87p5 = 87.5%).
+                      plans/2026-08-31_dualrwl-expert-mlp.md.
   expert{q,m}_u<N> -- ONE expert axis only: q = Q heads, m = MLP channels, N% of that
   expert{q,m}_c<N>    axis per layer (u) or exactly N units per layer (c, the
                       parameter-matched control); VLM, KV and the other axis untouched.
@@ -113,7 +123,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 wanda_run="wanda_v1", wanda_txt_run="wanda_txt_v1",
                 tyr_supernet="tyr_supernet_u40",
                 tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
-                imp_run="importance_v2"):
+                imp_run="importance_v2", cache_imp="cachejlens_v1",
+                expert_imp="importance_stepexp_znorm"):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -123,9 +134,10 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
+    dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
     axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
     vaxis = re.match(r"^dual([qm])_u40_v2$|^dualm_c(\d+)$", cfg_name)
-    dualrc = re.match(r"^dualrc_u40_s(\d+)$", cfg_name)
+    dualrc = re.match(r"^dualrc_u40_s(\d+)(?:_em(\d+(?:p\d+)?))?$", cfg_name)
     if vaxis:
         # The VLM twin of the expert-axis decomposition
         # (plans/2026-08-30_axis-taylor-comparability.md). dual_u40_v2's own masks are
@@ -191,6 +203,19 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         print(f"dualrc: refitted weights written into layers {start}..{tc.num_hidden_layers - 1} "
               f"({written} modules) from {tyr_supernet}", flush=True)
         eq, em = np.ones_like(eq), np.ones_like(em)
+        if dualrc.group(2):
+            # expert MLP-only on top of the reconstructed VLM: Q heads, KV and head_dim stay
+            # whole, so the expert kept set is bit-identical to expertm_u<M> and the two
+            # halves' removed-parameter counts simply add (different matrices). The expert
+            # score comes from its OWN run -- the axis ablation used the step-normalised
+            # aggregation while the VLM half needs importance_v2's dual keys, so two
+            # importance files are live at once. plans/2026-08-31_dualrwl-expert-mlp.md.
+            ez = dict(np.load(REPO / "outputs" / expert_imp / "importance.npz"))
+            # `p` stands in for the decimal point: em87p5 = 87.5%, which keeps 1032 of
+            # 8256 channels and continues the halving ladder past the integer grid
+            pct = float(dualrc.group(2).replace("p", "."))
+            em = ml.select_mask(ez["traj_exp_mlp"], pct / 100,
+                                list(range(ec.num_hidden_layers)))  # (36, 8256)
         kvonly = ()
     elif axis:
         # One expert axis at a time (plans/2026-08-28_expert-axis-ablation.md): does the
@@ -245,6 +270,27 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         all_e = list(range(ec.num_hidden_layers))
         eq = ml.select_mask(imp["traj_exp_q"], ratio, all_e)  # (36, 16)
         em = ml.select_mask(imp["traj_exp_mlp"], ratio, all_e)  # (36, 8256)
+        kvonly = ()
+    elif dualexp_m:
+        # dual_u40_v2's VLM half + expert MLP-only. The expert Q heads carry the whole
+        # cost of an expert cut (reports/evaluation/2026-08-28_expert-axis.html), so this
+        # leaves them whole and takes only the width, which the dualr_wl ladder showed is
+        # free to 516 channels open- and closed-loop. Same budget as dualrc_u40_s0_em<M>,
+        # so the two differ only in the VLM half -- a one-factor test of whether the
+        # expert cut transfers to dual's (unrewritten) selection.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq, rm = allocs["uniform"]  # the matched 0.3985632694, never 0.40
+        sq, sm = tyr.dual_scores(imp)
+        vq = ml.select_mask_ratios(sq, rq)  # (36, 32)
+        vm = ml.select_mask_ratios(sm, rm)  # (36, 12288)
+        ez = dict(np.load(REPO / "outputs" / expert_imp / "importance.npz"))
+        pct = float(dualexp_m.group(1).replace("p", "."))
+        eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads))  # (36, 16)
+        em = ml.select_mask(ez["traj_exp_mlp"], pct / 100,
+                            list(range(ec.num_hidden_layers)))  # (36, 8256)
         kvonly = ()
     elif it:
         # Staged re-calibration masks from run_iter_prune.py: same budget, allocation
@@ -406,13 +452,21 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 pre = name[:-1]
                 return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
                         (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
+            if name == "cache":
+                # cache-Jacobian importance (plans/2026-08-30_cache-jlens-criterion.md):
+                # E ||d cache / d g||^2 weighted by the expert's per-(layer, group)
+                # sensitivity, from run_cache_jlens.py. Label-free and second-order, so it
+                # is not an |dL/dg| Taylor score; it enters through rank_norm like the rest.
+                z = dict(np.load(REPO / "outputs" / cache_imp / "importance.npz"))
+                return z["cache_vlm_q"], z["cache_vlm_mlp"]
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
         parts = {"dual": ("traj", "coc"), "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
-                 "dualprod": ("traj", "coc")}.get(stem, (stem,))
+                 "dualprod": ("traj", "coc"),
+                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
         op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
@@ -530,6 +584,13 @@ def main():
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",
                     help="J-lens run supplying q_j/mlp_j for the j_traj configs")
+    ap.add_argument("--cache-importance", type=str, default="cachejlens_v1",
+                    help="run_cache_jlens.py run supplying cache_vlm_* for the cachedual / "
+                         "cacheonly configs")
+    ap.add_argument("--expert-importance", type=str, default="importance_stepexp_znorm",
+                    help="run supplying traj_exp_mlp for the dualrc_u40_s<N>_em<M> "
+                         "expert-MLP-only half (importance_stepexp_znorm is what the "
+                         "expert-axis ablation selected with)")
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
                     help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
                          "trajvqa configs (measured on LingoQA train)")
@@ -584,7 +645,8 @@ def main():
                                          args.wanda_txt,
                                          args.tyr_supernet, args.tyr_config,
                                          (args.scope_start, args.scope_end),
-                                         args.importance)
+                                         args.importance, args.cache_importance,
+                                         args.expert_importance)
 
     full_total = sl.n_params(model)
     t0 = time.time()

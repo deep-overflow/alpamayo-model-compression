@@ -118,6 +118,12 @@ def reserve_gpu(need_gb, chunk_gb=1.0, devices=None):
     The reservation is freed but stays in PyTorch's caching allocator, so it is
     held against other processes for the lifetime of this process.
     devices restricts the scan, so parallel runs can be pinned to distinct GPUs.
+
+    A card with no free memory at all reports the failed cudaMalloc as
+    `torch.AcceleratorError`, a *sibling* of `torch.OutOfMemoryError` under RuntimeError
+    rather than a subclass, so both have to be caught or the scan aborts on the first
+    full card and never reaches the free ones (44 wasted retries on 2026-09-01).
+    Anything that is not an allocation failure still propagates.
     """
     for idx in devices if devices is not None else range(torch.cuda.device_count()):
         dev = torch.device(f"cuda:{idx}")
@@ -127,8 +133,9 @@ def reserve_gpu(need_gb, chunk_gb=1.0, devices=None):
                 chunks.append(
                     torch.empty(int(chunk_gb * 1024**3 // 2), dtype=torch.bfloat16, device=dev)
                 )
-        except torch.OutOfMemoryError:
-            pass
+        except (torch.OutOfMemoryError, torch.AcceleratorError) as e:
+            if not isinstance(e, torch.OutOfMemoryError) and "out of memory" not in str(e):
+                raise
         got = sum(c.numel() * 2 for c in chunks) / 1024**3
         del chunks
         if got >= need_gb:
