@@ -58,7 +58,11 @@ TRACKS = {
                           "dualrwl_em98p4375", "dualrwl_em100",
                           "dualexp_em93p75"],
     "cache-targeted recon": ["dualrc_s16", "dualrc_s24"],
-    "cache criterion": ["cachedual_u40_v2", "cacheonly_u40_v2"],
+    # both spellings on purpose: a method is named by paper_numbers.ARMS when it is
+    # registered there and by the directory stem when it is not, and the two registries
+    # in play (main, and the znorm11-criterion branch) register different subsets.
+    "cache criterion": ["cachedual", "cachedual_u40_v2",
+                        "cacheonly", "cacheonly_u40_v2"],
     "expert axis": ["expert_q25", "expert_m25", "expert_m_pm", "expert_q50",
                     "expert_m50", "expert_both25", "dualexp_cond_ps",
                     "dualexp_e10_cond_ps", "dualexp_e15_cond_ps",
@@ -75,13 +79,15 @@ TRACKS = {
     # plans/2026-08-31_znorm11-criterion.md. All three rebuild the u40 budget from
     # importance_v2_ada, so dual_ada -- the shipped dual recipe on that same importance
     # file -- is the peer to read them against, not the shipped dual_u40_v2.
-    "znorm11 criterion": ["dual_ada", "dualfix", "znorm11"],
+    "znorm11 criterion": ["dual_ada", "dual_ada_u40_v2", "dualfix", "dualfix_u40_v2",
+                          "znorm11", "znorm11_u40_v2"],
 }
 METHOD2TRACK = {m: t for t, ms in TRACKS.items() for m in ms}
 # controls exist to say what a factor does alone; they are not candidate configs
 CONTROLS = {"dual_u40_ctl", "dual_u40_mix", "dual_u40_ood", "trajctl_val",
             "trajsumabs_val", "trajznorm_val", "dualsum", "dualprod",
-            "expert_m_pm", "vlm_m_pm", "dualm_c1109_ada", "dual_ada"}
+            "expert_m_pm", "vlm_m_pm", "dualm_c1109_ada",
+            "dual_ada", "dual_ada_u40_v2"}
 SETS = [("indist", "val"), ("test", "test"), ("oodval", "ood")]
 MASTER_COLS = (
     ["track", "method", "ckpt", "role", "budget", "prune_pct", "arch", "vs"]
