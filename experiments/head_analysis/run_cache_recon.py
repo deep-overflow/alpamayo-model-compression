@@ -51,6 +51,10 @@ from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-r
 from make_slim import build_masks  # noqa: E402
 from slim_lib import MODEL_REV  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lingoqa"))
+import lingo_lib as ll  # noqa: E402
+from run_vqa_importance import TRAIN as LINGO_TRAIN, load_train_manifest  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 # expert attention mass per cache span, run_cacheuse Stage A (calib_100, step/layer/head mean)
 SPAN_SHARE = {"vision": 0.7223, "text": 0.1656, "hist": 0.0418, "sink": 0.0110}
@@ -109,26 +113,74 @@ class WeightedHessianHook:
         self.handle.remove()
 
 
-def token_weights(spans, prompt_len, n_coc, decode_share, first_pass, k_seeds, mode="expert"):
-    """Per-token weights for one [prompt; CoC] forward. Prefill spans get their expert
-    attention share (mode "expert") or one equal weight per token (mode "uniform"), only
-    on the first of the K passes -- prefill activations are causal and identical across
-    them; the CoC gets decode_share / K; each stream is token-mean normalised within the
-    clip."""
+def token_weights(spans, prompt_len, n_coc, decode_share, first_pass, k_seeds, mode="expert",
+                  prefill_share=None, span_share=None):
+    """Per-token weights for one [prompt; generated text] forward. Prefill spans get their
+    expert attention share (mode "expert") or one equal weight per token (mode "uniform"),
+    only on the first of the K passes -- prefill activations are causal and identical
+    across them; the generated tokens get decode_share / K; each stream is token-mean
+    normalised within the sample. prefill_share defaults to 1 - decode_share (the
+    driving clips); the LingoQA samples pass their own shares and a hist-less span table."""
     T = prompt_len + n_coc
     w = torch.zeros(T, dtype=torch.float32)
+    pshare = (1.0 - decode_share) if prefill_share is None else prefill_share
+    table = SPAN_SHARE if span_share is None else span_share
     if first_pass:
         if mode == "uniform":
-            w[:prompt_len] = (1.0 - decode_share) / prompt_len
+            w[:prompt_len] = pshare / prompt_len
         else:
-            for name, share in SPAN_SHARE.items():
+            tot = sum(table.values())
+            for name, share in table.items():
                 m = spans[name].cpu()
                 n = int(m.sum())
                 if n:
-                    w[:prompt_len][m] = (1.0 - decode_share) * share / n
+                    w[:prompt_len][m] = pshare * share / tot / n
     if n_coc:
         w[prompt_len:] = decode_share / (k_seeds * n_coc)
     return w
+
+
+# VQA prompts carry no trajectory history: fold hist's share into text
+VQA_SPAN_SHARE = {"vision": SPAN_SHARE["vision"], "text": SPAN_SHARE["text"] + SPAN_SHARE["hist"],
+                  "sink": SPAN_SHARE["sink"]}
+
+
+def preload_lingo(model, processor, n_segments, n_questions, seed, prefill_share, answer_share,
+                  mode):
+    """LingoQA TRAIN samples as [VQA prompt; reference answer] passes, weighted like the
+    driving clips (run_vqa_importance.vqa_nll builds the same sequence)."""
+    tok = model.tokenizer
+    end = tok.convert_tokens_to_ids("<|answer_end|>")
+    store = []
+    for m in load_train_manifest(n_segments, n_questions, seed):
+        data = ll.load_segment(m["segment_id"], data=LINGO_TRAIN, device="cuda", split="train")
+        for q in m["questions"]:
+            msgs = helper.create_vqa_message(frames=data["image_frames"].flatten(0, 1),
+                                             question=q["question"],
+                                             camera_indices=data["camera_indices"])
+            enc = processor.apply_chat_template(msgs, tokenize=True, add_generation_prompt=False,
+                                                continue_final_message=True, return_dict=True,
+                                                return_tensors="pt")
+            enc = dict(enc)
+            prompt_ids = enc.pop("input_ids")  # (1, T_prompt)
+            ans = tok(str(q["answer"]), add_special_tokens=False)["input_ids"]
+            if end is not None and end >= 0:
+                ans = ans + [end]
+            if not ans:
+                continue
+            ids = torch.cat([prompt_ids, torch.tensor([ans], dtype=prompt_ids.dtype)], dim=1)
+            prompt_len = prompt_ids.shape[1]
+            spans = lib.compute_spans(model, prompt_ids.to("cuda"))
+            w = token_weights(spans, prompt_len, len(ans), answer_share, True, 1, mode,
+                              prefill_share=prefill_share, span_share=VQA_SPAN_SHARE)
+            sm = torch.zeros(ids.shape[1], dtype=torch.bool)
+            sm[prompt_len:] = True
+            store.append({"clip_id": f"lingo:{m['segment_id']}", "prompt_len": prompt_len,
+                          "passes": [(ids, w, sm)], "lingo": True,
+                          "pixel_values": enc["pixel_values"].cpu(),
+                          "image_grid_thw": enc["image_grid_thw"].cpu()})
+        del data
+    return store
 
 
 def main():
@@ -143,6 +195,16 @@ def main():
                     help="exp-id holding rollouts.json (K on-policy CoCs per calib clip)")
     ap.add_argument("--k-seeds", type=int, default=4)
     ap.add_argument("--decode-share", type=float, default=0.16)
+    ap.add_argument("--lingo-segments", type=int, default=0,
+                    help="LingoQA TRAIN segments to add to the Hessian (0 = off); each "
+                         "contributes --lingo-questions VQA samples (prompt + reference answer)")
+    ap.add_argument("--lingo-questions", type=int, default=2)
+    ap.add_argument("--lingo-prefill-share", type=float, default=0.16,
+                    help="mixture share of the LingoQA VQA prompts (vision/text/sink spans, "
+                         "expert shares with hist folded into text)")
+    ap.add_argument("--lingo-answer-share", type=float, default=0.12,
+                    help="mixture share of the LingoQA reference-answer tokens (decode)")
+    ap.add_argument("--lingo-seed", type=int, default=0)
     ap.add_argument("--prompt-only", action="store_true",
                     help="do not append the own-CoC (diagnostic: dualr builder parity)")
     ap.add_argument("--no-masks", action="store_true",
@@ -214,6 +276,26 @@ def main():
     n_tok = {"prefill": sum(it["prompt_len"] for it in store),
              "decode": sum(ids.shape[1] - it["prompt_len"] for it in store
                            for ids, _, _ in it["passes"])}
+    if args.lingo_segments:
+        # the driving prefill keeps 1 - decode_share - lingo shares; token_weights above
+        # gave it 1 - decode_share, so rescale those passes
+        drive_prefill = 1.0 - args.decode_share - args.lingo_prefill_share - args.lingo_answer_share
+        assert drive_prefill > 0, drive_prefill
+        for it in store:
+            ids0, w0, sm0 = it["passes"][0]
+            w0[: it["prompt_len"]] *= drive_prefill / (1.0 - args.decode_share)
+        print(f"preloading LingoQA train: {args.lingo_segments} segments x "
+              f"{args.lingo_questions} questions...", flush=True)
+        lingo = preload_lingo(model, processor, args.lingo_segments, args.lingo_questions,
+                              args.lingo_seed, args.lingo_prefill_share, args.lingo_answer_share,
+                              args.prefill_weights)
+        n_tok["lingo_prefill"] = sum(it["prompt_len"] for it in lingo)
+        n_tok["lingo_answer"] = sum(it["passes"][0][0].shape[1] - it["prompt_len"] for it in lingo)
+        store += lingo
+        print(f"  {len(lingo)} VQA samples, {n_tok['lingo_prefill']} prompt tokens, "
+              f"{n_tok['lingo_answer']} answer tokens; mixture: driving prefill {drive_prefill:.2f}, "
+              f"own-CoC {args.decode_share}, lingo prefill {args.lingo_prefill_share}, "
+              f"lingo answers {args.lingo_answer_share}", flush=True)
 
     nh, hd = tc.num_attention_heads, tc.head_dim
     layer_names = []
@@ -235,17 +317,21 @@ def main():
                  "mlp.down_proj": WeightedHessianHook(down)}
         # in-sample stream Hessians (unweighted) for the reconstruction error readout:
         # P = prefill tokens (first pass only), D = own-CoC tokens (every pass)
-        ev = {k: {"P": WeightedHessianHook(m), "D": WeightedHessianHook(m)}
+        ev = {k: {"P": WeightedHessianHook(m), "D": WeightedHessianHook(m),
+                  "L": WeightedHessianHook(m)}
               for k, m in (("self_attn.o_proj", o_proj), ("mlp.down_proj", down))}
         for item in store:
+            is_lingo = item.get("lingo", False)
             for pi, (ids, w, sm) in enumerate(item["passes"]):
                 wc = w.to("cuda")
                 smc = sm.to("cuda")
                 for h in hooks.values():
                     h.weights = wc
+                zero = torch.zeros_like(wc)
                 for k in ev:
-                    ev[k]["P"].weights = (~smc).float() if pi == 0 else torch.zeros_like(wc)
-                    ev[k]["D"].weights = smc.float()
+                    ev[k]["P"].weights = ((~smc).float() if (pi == 0 and not is_lingo) else zero)
+                    ev[k]["D"].weights = smc.float() if not is_lingo else zero
+                    ev[k]["L"].weights = smc.float() if is_lingo else zero
                 ids = ids.cuda()
                 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
                     model.vlm.model(
@@ -276,7 +362,7 @@ def main():
             w_mask = W0.clone()
             w_mask[:, [c for c in range(W0.shape[1]) if c not in set(kept_cols)]] = 0
             errs = {}
-            for st in ("P", "D"):
+            for st in ("P", "D", "L"):
                 He = ev[suffix][st].H
                 if float(torch.diag(He).sum()) > 0:
                     errs[f"err_{st}_refit"] = float(tyr.recon_error(W0, w, He))
@@ -306,6 +392,9 @@ def main():
         "importance": args.importance, "damp": args.damp,
         "start": args.start, "end": args.end, "layer_names": layer_names,
         "prefill_weights": args.prefill_weights, "decode_share": args.decode_share,
+        "lingo": {"segments": args.lingo_segments, "questions": args.lingo_questions,
+                  "prefill_share": args.lingo_prefill_share, "answer_share": args.lingo_answer_share,
+                  "seed": args.lingo_seed, "source": str(LINGO_TRAIN)} if args.lingo_segments else None,
         "k_seeds": args.k_seeds, "recon_errors": recon_errors,
         "levels_q": {"0": keep_q}, "levels_mlp": {"0": keep_m}, "num_levels": 1,
         "hessian_tokens": ("per-token weighted: prefill spans by expert attention share "

@@ -106,6 +106,23 @@ ARMS = {
                    "test": ("expertm_u50_test", False),
                    "oodval": ("expertm_u50_oodval", False)},
     "expert_both25": {"indist": ("expert_znorm_r25_ps_indist", False)},
+    # VLM axis decomposition (plans/2026-08-30_axis-taylor-comparability.md): the same
+    # one-axis-at-a-time split on the VLM at dual_u40_v2's exact budget and score.
+    # dualq | dualm == dual_u40_v2, so the shipped `dual` rows are the additivity arm;
+    # dualm_pm = dualm_c1109 is parameter-matched to dualq (490.6M vs 490.7M)
+    "vlm_q": {"indist": ("dualq_u40_v2_indist", False),
+              "test": ("dualq_u40_v2_test", False),
+              "oodval": ("dualq_u40_v2_oodval", False)},
+    "vlm_m": {"indist": ("dualm_u40_v2_indist", False),
+              "test": ("dualm_u40_v2_test", False),
+              "oodval": ("dualm_u40_v2_oodval", False)},
+    "vlm_m_pm": {"indist": ("dualm_c1109_indist", False),
+                 "test": ("dualm_c1109_test", False),
+                 "oodval": ("dualm_c1109_oodval", False)},
+    # the three axis arms ran on Blackwell (a parallel session held every Ada card on
+    # 2026-08-30), so dual_u40_v2 is re-measured there for a same-architecture additivity
+    # gate; val500 only, as expert_both25 is
+    "dual_bw": {"indist": ("dual_u40_v2_bw_indist", False)},
     # cache-targeted reconstruction (plans/2026-08-29_cache-targeted-reconstruction.md):
     # dual selection + expert-weighted OSSCAR refit of layers >= 16 / >= 24 only
     "dualrc_s16": {"indist": ("dualrc_u40_s16_indist", False),
@@ -140,9 +157,6 @@ ARMS = {
     # two-tower configs built on it: the same refitted VLM plus expert MLP-only pruning
     # at 50% / 75%, expert Q heads and KV untouched
     # (plans/2026-08-31_dualrwl-expert-mlp.md)
-    "dualr_wl": {"indist": ("dualr_wl_u40_indist", False),
-                 "test": ("dualr_wl_u40_test", False),
-                 "oodval": ("dualr_wl_u40_oodval", False)},
     "dualrwl_em50": {"indist": ("dualrwl_em50_indist", False),
                      "test": ("dualrwl_em50_test", False),
                      "oodval": ("dualrwl_em50_oodval", False)},
@@ -167,6 +181,10 @@ ARMS = {
     "dualrwl_em100": {"indist": ("dualrwl_em100_indist", False),
                       "test": ("dualrwl_em100_test", False),
                       "oodval": ("dualrwl_em100_oodval", False)},
+    # dualr_w + LingoQA-train samples in the refit Hessian (plans/2026-08-30_dualr-w-lingo.md)
+    "dualr_wl": {"indist": ("dualr_wl_u40_indist", False),
+                 "test": ("dualr_wl_u40_test", False),
+                 "oodval": ("dualr_wl_u40_oodval", False)},
     # unpruned model re-measured on Blackwell WITH per-sample arrays (baseline_* has only
     # minADE@8): the same-architecture anchor for the Blackwell-evaluated expert_q50/m50
     "baseline_bw": {"indist": ("baseline_bw_ps_indist", False),

@@ -50,6 +50,11 @@ Configs:
                       Same score and selection as expert_u<N>, so
                       expertq_u25 | expertm_u25 == expert_u25 unit for unit.
                       plans/2026-08-28_expert-axis-ablation.md.
+  dual{q,m}_u40_v2 -- the same one-axis-at-a-time decomposition on the VLM, at
+  dualm_c<N>          dual_u40_v2's exact budget and score; dualq | dualm ==
+                      dual_u40_v2 unit for unit, and dualm_c1109 is the
+                      parameter-matched control for dualq (0.03%).
+                      plans/2026-08-30_axis-taylor-comparability.md.
 
 The mask recipes are imported from run_integrated / run_cocsafe -- no duplicated math.
 Writes slim_state.pt + slim_meta.json to --out, then smoke-tests one val clip
@@ -131,8 +136,38 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
     axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
+    vaxis = re.match(r"^dual([qm])_u40_v2$|^dualm_c(\d+)$", cfg_name)
     dualrc = re.match(r"^dualrc_u40_s(\d+)(?:_em(\d+(?:p\d+)?))?$", cfg_name)
-    if dualrc:
+    if vaxis:
+        # The VLM twin of the expert-axis decomposition
+        # (plans/2026-08-30_axis-taylor-comparability.md). dual_u40_v2's own masks are
+        # already axis-separable -- vq and vm come from two independent
+        # select_mask_ratios calls -- so dualq | dualm == dual_u40_v2 unit for unit and
+        # the shipped dual_u40_v2 runs serve as the additivity arm at no cost.
+        # Everything but the axis is held: same dual score, same 0.3985632694 budget,
+        # expert and KV untouched. `dualm_c<N>` cuts exactly N channels per layer, the
+        # parameter-matched control for dualq (1109 ch = 13 heads to 0.03%).
+        # Must be matched before `uni`, whose (.+)_u(\d+)_v2 also accepts dualq_u40_v2.
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
+                                tc.num_attention_heads, tc.intermediate_size, 0.5)
+        rq, rm = allocs["uniform"]  # the matched 0.3985632694, never 0.40
+        sq, sm = tyr.dual_scores(imp)
+        which = vaxis.group(1)
+        vq = np.ones((tc.num_hidden_layers, tc.num_attention_heads))  # (36, 32)
+        vm = np.ones((tc.num_hidden_layers, tc.intermediate_size))  # (36, 12288)
+        if which == "q":
+            vq = ml.select_mask_ratios(sq, rq)
+        elif which == "m":
+            vm = ml.select_mask_ratios(sm, rm)
+        else:  # dualm_c<N>: N channels per layer, same score and per-layer rule
+            n_ch = int(vaxis.group(2))
+            vm = ml.select_mask_ratios(
+                sm, np.full(tc.num_hidden_layers, n_ch / tc.intermediate_size))
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif dualrc:
         # Cache-targeted reconstruction (plans/2026-08-29_cache-targeted-reconstruction.md):
         # dual_u40_v2's selection in every layer, and run_cache_recon.py's refitted
         # o_proj / down_proj written into layers >= s<N> only. The refit supernet is read
@@ -543,7 +578,8 @@ def main():
                     help="a named config, or <criterion>_u<pct>_v2 for the uniform family "
                          "(criterion in traj|coc|j|dual|j_traj; pct 40 means the matched "
                          "0.3985632694, any other pct means exactly pct/100), or "
-                         "expert_u<N> / expert{q,m}_{u,c}<N> / dualexp_u40_e<N> for the expert-tower cuts")
+                         "expert_u<N> / expert{q,m}_{u,c}<N> / dualexp_u40_e<N> for the expert-tower cuts; "
+                         "dual{q,m}_u40_v2 / dualm_c<N> for the VLM axis split")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--importance", type=str, default="importance_v1")
     ap.add_argument("--jlens", type=str, default="jlens_v2",

@@ -55,7 +55,9 @@ def main():
     ap.add_argument("--ref", default="dual")
     ap.add_argument("--out", default="cacheproxy_analysis")
     ap.add_argument("--val-arms", nargs="*", default=[],
-                    help="paper_numbers ARMS keys to summarise on val500 vs baseline (G2)")
+                    help="paper_numbers ARMS keys to summarise vs baseline (G2)")
+    ap.add_argument("--sets", nargs="*", default=["indist"],
+                    help="sets for --val-arms: indist (val500), test, oodval")
     args = ap.parse_args()
     out = REPO / "outputs" / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
@@ -106,14 +108,20 @@ def main():
         import sys
         sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
         import paper_numbers as pn
-        base = pn.load(*pn.ARMS["baseline"]["indist"])
-        res["val500"] = {}
-        lines.append("")
-        for arm in args.val_arms:
-            spec = pn.ARMS.get(arm, {}).get("indist")
+        for s_name in args.sets:
+          base = pn.load(*pn.ARMS["baseline"][s_name])
+          key = "val500" if s_name == "indist" else s_name
+          ba = np.array([pn.at6(r, "ade_rollout_k") for r in base.values()])
+          bf = np.array([pn.at6(r, "fde_rollout_k") for r in base.values()])
+          res[key] = {"baseline": {"n": len(base), "minADE6": float(ba.mean()),
+                                    "minFDE6": float(bf.mean())}}
+          lines.append("")
+          lines.append(f"{key} baseline     n={len(base)} ADE {ba.mean():.4f} FDE {bf.mean():.4f}")
+          for arm in args.val_arms:
+            spec = pn.ARMS.get(arm, {}).get(s_name)
             rows = pn.load(*spec) if spec else {}
             if not rows:
-                lines.append(f"val500 {arm}: no rows yet")
+                lines.append(f"{key} {arm}: no rows yet")
                 continue
             cids = sorted(set(base) & set(rows))
             a = np.array([pn.at6(rows[i], "ade_rollout_k") for i in cids])
@@ -125,11 +133,11 @@ def main():
             except ValueError:
                 p = float("nan")
             degen = float(np.mean([rows[i]["coc_degenerate"] for i in cids]))
-            res["val500"][arm] = {"n": len(cids), "minADE6": float(a.mean()),
-                                  "minFDE6": float(f.mean()), "d_ade": med_ci(d),
-                                  "d_ade_mean": float(d.mean()), "p": p, "degen": degen}
-            r = res["val500"][arm]
-            lines.append(f"val500 {arm:12s} n={r['n']} ADE {r['minADE6']:.4f} FDE {r['minFDE6']:.4f} "
+            res[key][arm] = {"n": len(cids), "minADE6": float(a.mean()),
+                             "minFDE6": float(f.mean()), "d_ade": med_ci(d),
+                             "d_ade_mean": float(d.mean()), "p": p, "degen": degen}
+            r = res[key][arm]
+            lines.append(f"{key} {arm:12s} n={r['n']} ADE {r['minADE6']:.4f} FDE {r['minFDE6']:.4f} "
                          f"dADE {r['d_ade'][0]:+.4f} [{r['d_ade'][1]:+.4f},{r['d_ade'][2]:+.4f}] "
                          f"mean {r['d_ade_mean']:+.4f} p={p:.2g} degen {degen:.3f}")
     text = "\n".join(lines)
