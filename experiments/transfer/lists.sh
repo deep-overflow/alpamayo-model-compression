@@ -79,6 +79,18 @@ hub_list() {
   fi
 }
 
+# The LingoQA judge, for the LingoQA benchmark run. Weights included -- unlike the
+# processor-chain repos this one is actually executed (a 1.4 GB DeBERTa classifier),
+# and its score is the metric, so it cannot be substituted.
+judge_list() {
+  local repo=models--wayveai--Lingo-Judge rv
+  [ -d "$HUB/$repo" ] || { echo "judge_list: missing $HUB/$repo" >&2; return 1; }
+  rv=$(cat "$HUB/$repo/refs/main")
+  _repo_meta "$repo"
+  ls "$HUB/$repo/snapshots/$rv" | grep -E '\.(safetensors|bin)$' \
+    | sed "s|^|$repo/snapshots/$rv/|" || true
+}
+
 # --- relative to $PRE: only the clips a manifest actually names -------------------
 sample_list() {  # sample_list <namespace> <parquet>
   "$PY" - "$PRE" "$1" "$2" <<'PY'
