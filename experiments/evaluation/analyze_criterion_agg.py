@@ -136,7 +136,8 @@ def main():
     pairs = [("dual", "baseline"), ("dual_ada", "baseline"), ("znorm11", "baseline"),
              ("dualfix", "baseline"), ("maxstep11", "baseline"), ("meandual", "baseline"),
              ("dual_ada", "dual"), ("znorm11", "dual_ada"), ("dualfix", "dual_ada"),
-             ("maxstep11", "dualfix"), ("meandual", "dualfix"), ("maxstep11", "znorm11")]
+             ("maxstep11", "dualfix"), ("meandual", "dualfix"), ("znorm11", "dualfix"),
+             ("maxstep11", "znorm11")]
     print(f"\n== paired minADE@{K} delta ==")
     for arm, ref in pairs:
         M["paired"][f"{arm}-{ref}"] = {}
@@ -268,6 +269,73 @@ def main():
     ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
     fig.savefig(out / "plots" / "degen.png", dpi=150)
+    plt.close(fig)
+
+    # the 2x2 itself: operator (max / mean) x arity (2 losses / 11 losses), read as
+    # paired median delta against dualfix. Neither factor moves alone; only the corner
+    # where both change does, which is what makes znorm11's damage an interaction.
+    cells = {("max", "2-way"): "dualfix", ("max", "11-way"): "maxstep11",
+             ("mean", "2-way"): "meandual", ("mean", "11-way"): "znorm11"}
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.5))
+    ax = axes[0]
+    for op, style in (("max", "-o"), ("mean", "--s")):
+        ys = []
+        for arity in ("2-way", "11-way"):
+            arm = cells[(op, arity)]
+            r = M["paired"].get(f"{arm}-dualfix", {})
+            ys.append(0.0 if arm == "dualfix" else r.get("indist", {}).get("med", np.nan))
+        ax.plot([0, 1], ys, style, color=GOOD if op == "max" else ACCENT, lw=1.8,
+                label=f"{op} (union)" if op == "max" else f"{op} (average)")
+        for x, y in zip((0, 1), ys):
+            ax.annotate(f"{y:+.4f}", (x, y), textcoords="offset points", xytext=(0, 8),
+                        ha="center", fontsize=8)
+    ax.axhline(0, color=TEXT, lw=0.8)
+    ax.axhline(0.05, color=WARN, lw=0.9, ls=":")
+    ax.set_xticks([0, 1], ["2 losses\n(summed traj + CoC)", "11 losses\n(10 FM steps + CoC)"])
+    ax.set_ylabel(f"paired median ΔminADE@{K} vs dualfix (m)")
+    ax.set_title("val500: only the both-changed corner moves")
+    ax.legend(frameon=False, fontsize=8)
+    ax = axes[1]
+    w, xs = 0.35, np.arange(len(SETS))
+    for i, arm in enumerate(("maxstep11", "znorm11")):
+        r = M["paired"].get(f"{arm}-dualfix", {})
+        ys = [r[s]["med"] if s in r else np.nan for s in SETS]
+        ax.bar(xs + (i - 0.5) * w, ys, w, color="#2F6FBF" if arm == "maxstep11" else ACCENT,
+               label=f"{arm} - dualfix")
+    ax.axhline(0, color=TEXT, lw=0.8)
+    ax.axhline(0.05, color=WARN, lw=0.9, ls=":")
+    ax.set_xticks(xs, [SET_LABEL[s] for s in SETS])
+    ax.set_ylabel(f"paired median ΔminADE@{K} (m)")
+    ax.set_title("same 11 losses, union vs average")
+    ax.legend(frameon=False, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "interaction.png", dpi=150)
+    plt.close(fig)
+
+    # where maxstep11's difference lives: nowhere typical, only in the hard tail
+    fig, ax = plt.subplots(figsize=(6.6, 3.3))
+    w, xs = 0.35, np.arange(len(SETS))
+    tail = {}
+    for j, s in enumerate(SETS):
+        a, b = data["maxstep11"][s], data["dualfix"][s]
+        ids = sorted(set(a) & set(b))
+        if not ids:
+            continue
+        da = np.array([at_k(a[c], "ade_rollout_k", K) for c in ids])
+        db = np.array([at_k(b[c], "ade_rollout_k", K) for c in ids])
+        hard = db >= np.quantile(db, 0.9)
+        tail[s] = {"easy_mean": float((da - db)[~hard].mean()),
+                   "hard_mean": float((da - db)[hard].mean()),
+                   "hard_med": float(np.median((da - db)[hard]))}
+        ax.bar(xs[j] - w / 2, tail[s]["easy_mean"], w, color=GREY)
+        ax.bar(xs[j] + w / 2, tail[s]["hard_mean"], w, color="#2F6FBF")
+    M["tail"] = tail
+    ax.axhline(0, color=TEXT, lw=0.8)
+    ax.set_xticks(xs, [SET_LABEL[s] for s in SETS])
+    ax.set_ylabel(f"mean ΔminADE@{K} vs dualfix (m)")
+    ax.set_title("maxstep11: easiest 90% (grey) vs hardest 10% (blue)")
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "tail.png", dpi=150)
     plt.close(fig)
 
     (out / "metrics.json").write_text(json.dumps(M, indent=2))

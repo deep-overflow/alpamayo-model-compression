@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>평균은 중복 항의 개수에 취약하다: 프루닝 기준 결합 연산의 2×2</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>평균은 중복 항의 개수에 취약하다: 프루닝 기준 결합 연산의 2×2</h1>
+  <div class="meta">
+    2026-09-04 · <code>nvidia/Alpamayo-1.5-10B</code> 24.0% 압축 4종 + 무손상 baseline ·
+    val 500 + test 500 + OOD-val 262 · minADE@6 · RTX 5880 Ada
+  </div>
+</header>
+
+<p class="lede">
+직전 보고서는 <code>znorm11</code>의 기각 원인을 &ldquo;평균 연산자&rdquo;로 돌렸다.
+<strong>그 귀속은 틀렸다.</strong> 2×2를 채워보니 평균으로 바꾸기만 해도, 손실을 열한 개로
+쪼개기만 해도 아무 일이 없다. 둘을 동시에 해야 무너진다. 원인은 어느 한 요인이 아니라
+<strong>결합 연산과 중복 항 개수의 상호작용</strong>이다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">게이트 B1</span><span class="v">PASS</span>maxstep11 = dualfix</div>
+  <div><span class="k">게이트 B2</span><span class="v">PASS</span>meandual = dualfix</div>
+  <div><span class="k">둘 다 바꾸면</span><span class="v">+0.173</span>znorm11, minADE@6 중앙값</div>
+  <div><span class="k">꼬리 이득</span><span class="v">3/3</span>세 세트에서 재현</div>
+  <div><span class="k">평가 규모</span><span class="v">1,762</span>클립 (신규)</div>
+</div>
+
+<h2><span class="num">1</span>직전 보고서의 귀속을 취소한다</h2>
+
+<p>
+<code>2026-09-03_criterion-aggregation.html</code>은 <code>znorm11</code>(11개 손실의 층내
+z-score 평균)이 <code>dual</code>(<code>max(rank I_traj, rank I_CoC)</code>) 대비
++0.14~+0.20으로 기각된다는 것을 보였고, 그 원인을 이렇게 적었다.
+</p>
+
+<blockquote class="callout warn">
+<p>
+&ldquo;<code>max</code>는 합집합 규칙이라 각 목적의 최상위 유닛이 살아남지만, 평균은
+&lsquo;모든 목적에서 두루 중간&rsquo;인 유닛을 남긴다.&rdquo;
+</p>
+</blockquote>
+
+<p>
+그럴듯하지만 <strong>측정된 적이 없는 주장</strong>이었다. <code>znorm11</code>은
+<code>dual</code>에서 두 가지를 <em>동시에</em> 바꿨기 때문이다.
+</p>
+
+<ol>
+<li><strong>궤적 표현</strong>: 합산된 <code>I_traj</code> 하나 → 디노이징 스텝별 10개 점수</li>
+<li><strong>결합 연산</strong>: <code>max</code>(합집합) → <code>mean</code>(평균)</li>
+</ol>
+
+<p>
+어느 쪽이 범인인지 가르려면 나머지 두 칸이 필요하다.
+</p>
+
+<table>
+<thead><tr><th></th><th>2-way (합산 traj + CoC)</th><th>11-way (FM 10스텝 + CoC)</th></tr></thead>
+<tbody>
+<tr><th>max (합집합)</th><td><code>dualfix</code> — 기존</td><td><strong><code>maxstep11</code> — 신규</strong></td></tr>
+<tr><th>mean (평균)</th><td><strong><code>meandual</code> — 신규</strong></td><td><code>znorm11</code> — 기존</td></tr>
+</tbody>
+</table>
+
+<ul>
+<li><code>maxstep11</code> = <code>max(rank FM<sub>0</sub>, …, rank FM<sub>9</sub>, rank I_CoC)</code></li>
+<li><code>meandual</code> = <code>mean(z(I_traj), z(I_CoC))</code></li>
+</ul>
+
+<p>
+네 arm 모두 <strong>정확히 2,657,452,032개 파라미터</strong>를 제거한다(균일 0.3985632694,
+층당 19/32 Q head · 7,390/12,288 MLP channel, expert와 KV는 건드리지 않음). 두 신규 arm은
+<code>dualfix</code>의 상수-층 가드를 상속하고, 실제로 <strong>층 35 kept set이
+<code>dualfix</code>와 비트 단위로 동일</strong>함을 빌드 시점에 확인했다.
+</p>
+
+<h3>빌드 전에 이미 알 수 있던 것</h3>
+
+<p>
+재료를 먼저 검사했다. <code>sum<sub>s</sub>(q_abs_step)</code>은 합산 <code>traj_vlm_q</code>를
+층내 Spearman <strong>+0.989</strong>로 재현하므로 두 축은 실제로 분리 가능하다. 그런데
+<strong>스텝 간 랭킹이 이미 매우 비슷하다</strong> — Q head 층내 페어와이즈 Spearman 평균
+<strong>+0.920</strong>(최소 +0.812). expert 타워에서 스텝 축이 컸던 것과 정반대다. 그래서
+&ldquo;스텝 축에서 얻을 것이 얇다&rdquo;는 것이 사전 예측이었고, 결과는 그 예측을 확인했다.
+</p>
+
+<h2><span class="num">2</span>결과: 어느 요인도 단독으로는 아무 일을 하지 않는다</h2>
+
+<figure>
+  <img src="PLOT::agg::interaction.png" alt="2x2 상호작용">
+  <figcaption>
+    왼쪽: <code>dualfix</code> 기준 페어드 중앙값 델타. <strong>max 선은 평평하고, mean 선은
+    11-way에서만 치솟는다</strong> — 교과서적인 상호작용 형태다. 오른쪽: 같은 11개 손실을
+    합집합으로 묶었을 때(파랑)와 평균으로 묶었을 때(주황)의 세 세트 비교. 점선은 게이트 0.05 m.
+  </figcaption>
+</figure>
+
+<table>
+<thead><tr><th>비교</th><th>바꾼 것</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td><code>meandual − dualfix</code></td><td>연산자만</td>
+    <td class="r">+0.0058<br><span class="meta">[−0.010,+0.019] p=0.50</span></td>
+    <td class="r">—</td><td class="r">—</td></tr>
+<tr><td><code>maxstep11 − dualfix</code></td><td>손실 개수만</td>
+    <td class="r">−0.0033<br><span class="meta">[−0.016,+0.004] p=0.19</span></td>
+    <td class="r">−0.0115<br><span class="meta">[−0.032,+0.004] p=0.062</span></td>
+    <td class="r">+0.0011<br><span class="meta">[−0.019,+0.018] p=0.90</span></td></tr>
+<tr><td><code>znorm11 − dualfix</code></td><td><strong>둘 다</strong></td>
+    <td class="r"><strong>+0.1731</strong><br><span class="meta">[+0.104,+0.238]* p=8.2e-22</span></td>
+    <td class="r"><strong>+0.2052</strong><br><span class="meta">[+0.145,+0.258]* p=1.6e-25</span></td>
+    <td class="r"><strong>+0.1272</strong><br><span class="meta">[+0.055,+0.181]* p=5.9e-08</span></td></tr>
+</tbody>
+</table>
+
+<p class="meta">
+paired minADE@6 중앙값, 부트스트랩 95% CI. <code>meandual</code>은 val500에서만 평가했다 —
+2×2의 빈 칸을 채우는 메커니즘 대조군이라 n=500이면 CI가 충분히 좁고, 세트를 늘려도 결론이
+바뀔 여지가 적기 때문이다.
+</p>
+
+<div class="callout good">
+<p>
+<strong>가법성이 없다.</strong> 연산자 단독 +0.006, 손실 개수 단독 −0.003, 둘의 합은
+0.003이어야 하는데 실제는 <strong>+0.173, 약 58배</strong>다. <code>znorm11</code>의 손해는
+어느 요인에도 귀속되지 않는 <strong>순수한 상호작용</strong>이다.
+</p>
+</div>
+
+<h3>메커니즘: 평균은 중복 항의 개수에 취약하다</h3>
+
+<p>
+스텝 간 상관이 0.92라는 것은 10개 FM 항이 사실상 <strong>같은 랭킹 하나</strong>라는 뜻이다.
+평균을 취하면 그 공통 성분이 10/11의 무게를 갖고, CoC는 2-way 평균에서 1/2이던 몫이
+<strong>1/11로 떨어진다</strong>. 즉 <code>znorm11</code>은 &ldquo;두 목적을 섞은 기준&rdquo;이
+아니라 <strong>궤적 기준에 CoC를 9%만 섞은 것</strong>에 가깝다. 반면 <code>max</code>에는
+무게라는 개념이 없다 — 항이 10개로 늘어도 CoC가 상위권이면 그대로 살아남으므로 발언권이
+줄지 않는다.
+</p>
+
+<p>
+이 설명은 왜 <code>meandual</code>이 멀쩡한지도 말해준다. 항이 두 개뿐이면 중복이 없고
+1/2씩 나눠 가지므로 평균이 <code>max</code>와 크게 다르지 않다. <strong>평균이 나쁜 것이
+아니라, 평균이 항 개수에 민감한 것이다.</strong>
+</p>
+
+<h2><span class="num">3</span>B1: 합집합 아래에서 스텝 축은 무해하다</h2>
+
+<div class="callout good">
+<p>
+<strong>게이트 B1 (사전 등록): </strong><code>|median(maxstep11 − dualfix)| &lt; 0.05</code>가
+세 세트 모두에서 성립. 최대값이 test500의 <strong>0.0115로 게이트의 1/4</strong>. <strong>PASS</strong>.
+</p>
+</div>
+
+<table>
+<thead><tr><th>세트</th><th class="r">baseline</th><th class="r"><code>dualfix</code></th><th class="r"><code>maxstep11</code></th><th class="r">vs baseline (dualfix)</th><th class="r">vs baseline (maxstep11)</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">0.8236 (0.5241)</td><td class="r">0.9236 (0.6398)</td><td class="r">0.8915 (0.5991)</td><td class="r">+0.0539</td><td class="r">+0.0475</td></tr>
+<tr><td>test500</td><td class="r">0.8417 (0.5086)</td><td class="r">0.9649 (0.6658)</td><td class="r">0.9351 (0.6339)</td><td class="r">+0.0603</td><td class="r">+0.0520</td></tr>
+<tr><td>OOD-val</td><td class="r">0.9995 (0.5745)</td><td class="r">1.1303 (0.6768)</td><td class="r">1.1039 (0.7113)</td><td class="r">+0.0827</td><td class="r">+0.0775</td></tr>
+</tbody>
+</table>
+
+<p class="meta">minADE@6 평균(중앙값)과 baseline 대비 페어드 중앙값 델타. 두 arm의 CI는 세 세트 모두 겹친다.</p>
+
+<p>
+같은 11개 손실을 쓰고도 <code>maxstep11 − znorm11</code>은 세 세트 모두 크게 유의하다
+(−0.150 / −0.230 / −0.130, CI 전부 0 제외). <strong>재료가 같아도 결합 방식만으로 이만큼
+갈린다</strong>는 것이 이 실험의 가장 단단한 사실이다.
+</p>
+
+<h2><span class="num">4</span>차이는 꼬리에만 있다 — 그리고 세 번 재현된다</h2>
+
+<figure>
+  <img src="PLOT::agg::tail.png" alt="난이도 구간별 분해">
+  <figcaption>
+    <code>dualfix</code>의 minADE@6 상위 10%를 &ldquo;어려운&rdquo; 구간으로 잡고 나눈
+    평균 델타. 회색이 쉬운 90%, 파랑이 어려운 10%. 세 세트에서 같은 방향으로 재현된다.
+  </figcaption>
+</figure>
+
+<table>
+<thead><tr><th>세트</th><th class="r">쉬운 90% mean</th><th class="r">어려운 10% mean</th><th class="r">어려운 10% median</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">+0.0220</td><td class="r"><strong>−0.5186</strong></td><td class="r">−0.1245</td></tr>
+<tr><td>test500</td><td class="r">+0.0074</td><td class="r"><strong>−0.3646</strong></td><td class="r">−0.2050</td></tr>
+<tr><td>OOD-val</td><td class="r">+0.0415</td><td class="r"><strong>−0.6164</strong></td><td class="r">−0.3696</td></tr>
+</tbody>
+</table>
+
+<p>
+전형적인 클립에서는 차이가 없고 어려운 구간에서만 <code>maxstep11</code>이 낫다. 해석하자면,
+스텝별 랭크의 합집합은 <strong>특정 디노이징 구간에서만 중요한 유닛</strong>을 살려두는데,
+그런 유닛은 평상시에 값을 하지 않다가 어려운 장면에서 쓰인다.
+</p>
+
+<div class="callout warn">
+<p>
+<strong>과대 해석 금지.</strong> 전체 페어드는 세 세트 모두 유의하지 않다(p=0.19 / 0.062 / 0.90).
+정확한 진술은 &ldquo;평균적으로 더 좋다&rdquo;가 아니라 <strong>&ldquo;꼬리에서만 다르다&rdquo;</strong>이다.
+구간당 클립이 50개 안팎이라 CI도 넓다. 세 세트 독립 재현이 근거를 강화하지만, 확정하려면
+꼬리가 곧 결과가 되는 평가 &mdash; 즉 폐루프 &mdash; 가 필요하다.
+</p>
+</div>
+
+<h2><span class="num">5</span>남은 교란과 결론</h2>
+
+<p>
+이 2×2는 행마다 정규화가 다르다: <code>max</code> 행은 <code>rank_norm</code>,
+<code>mean</code> 행은 z-score를 쓴다(각각 기존 <code>dual</code>과 <code>znorm11</code>의
+정의를 그대로 물려받았기 때문이다). 따라서 &ldquo;11개 평균&rdquo;의 해악이 <em>평균</em>에서
+오는지 <em>z-score</em>에서 오는지는 아직 분리되지 않았다. 가르려면
+<code>mean of 11 rank_norm</code> arm이 하나 더 필요하다 &mdash; 미실행이다. 다만 어느 쪽이든
+&ldquo;중복 항이 많을 때 항별 가중 평균은 위험하다&rdquo;는 실무적 결론은 바뀌지 않는다.
+</p>
+
+<ul>
+<li><strong>기준을 설계할 때 결합 연산을 먼저 정하라.</strong> 목적함수를 세분화하는 이득보다
+    결합을 잘못 고르는 손해가 훨씬 크다. 세분화하려면 <strong>합집합을 보존하는 결합</strong>
+    (스텝별 랭크의 최댓값 등)을 써야 하고, 평균을 쓸 거라면 항 사이의 중복을 먼저 확인해야 한다.</li>
+<li><strong>VLM에서 스텝 축은 살릴 것이 없다.</strong> 스텝 간 Spearman 0.92가 사전에 말해줬고,
+    <code>maxstep11</code>이 세 세트에서 <code>dualfix</code>와 구분되지 않는 것으로 확인됐다.
+    expert 타워에서 스텝 축이 컸던 것과 대조적이다 &mdash; 처방은 병에 맞춰야 한다.</li>
+<li><strong>다음.</strong> 꼬리 이득이 실재한다면 그것이 드러나는 자리는 개루프 평균이 아니라
+    폐루프다. <code>maxstep11</code>을 어려운 씬 스위트(alpasim hard100 등)에 올리는 것이
+    자연스러운 후속이다.</li>
+</ul>
+
+<footer>
+  <code>experiments/evaluation/analyze_criterion_agg.py</code> ·
+  데이터 <code>outputs/criterion_agg/</code> ·
+  빌드 <code>make_slim.py --config {maxstep11,meandual}_u40_v2 --importance importance_v2_ada</code> ·
+  계획 <code>plans/2026-09-03_union-step-criterion.md</code> ·
+  선행 보고서 <code>2026-09-03_criterion-aggregation.html</code> (이 보고서가 그 귀속을 정정한다) ·
+  평가 Ada 4&ndash;7, 2026-09-03/04
+</footer>
+
+</div>
+</body>
+</html>
