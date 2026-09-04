@@ -47,7 +47,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SHEETS = "https://sheets.googleapis.com/v4/spreadsheets"
 DRIVE = "https://www.googleapis.com/drive/v3/files"
-TABS = ["README", "master", "openloop", "closedloop", "lingoqa"]
+TABS = ["README", "master", "openloop", "closedloop", "lingoqa", "diagnostics"]
 BLANK = "-"                            # every empty cell reads as "no value for this row"
 
 # same palette as the coloured workbook, as Sheets 0-1 rgb
@@ -237,6 +237,22 @@ def readme_rows(index_dir, cfg, counts, master_legend=()):
         ["note", ("truncated_frac / answer_words / n_matched describe the answerer, so"
                   " they are blank for coc_judge rows by definition, not by omission")],
         ["rows", counts["lingoqa"]],
+        [""],
+        ["DIAGNOSTICS"],
+        ["what", ("not an evaluation: how far a reconstruction arm's internals sit from"
+                  " the dense model, per token type. LOCAL rows are one sublayer's own"
+                  " output with dense inputs (what the OSSCAR refit minimises);"
+                  " PROPAGATED rows are the accumulated hidden state and the KV cache"
+                  " the expert actually reads.")],
+        ["why it is here", ("the two disagree. The energy-weighted verdict on the same"
+                            " Hessian change has the opposite SIGN locally and"
+                            " propagated, and neither predicts capability -- dualr_wl is"
+                            " furthest from dense on all five quantities and leads"
+                            " LingoQA by 20.4pp. Do not pick an arm by its fit error.")],
+        ["weighting", ("energy_weighted is the per-stream error combined by each"
+                       " stream's share of the dense output energy, which is not its"
+                       " token share: sink is 0.03% of tokens but 6.25% of hidden energy")],
+        ["rows", counts["diagnostics"]],
         [""],
         ["blank cells", f"'{BLANK}' means the value does not exist for that row"],
     ]

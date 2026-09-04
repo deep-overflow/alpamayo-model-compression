@@ -517,6 +517,20 @@ for an 8.4B slim model — 150 scenes over 4 GPUs is ~8 h per config. Open-loop,
 8 s/clip in-distribution and 13 s/clip on OOD (two conditions), i.e. ~2 h per config for all
 2,533 clips.
 
+### Results spreadsheet
+
+`collect_results.py` -> `make_master.py` -> `push_to_sheet.py --sheet-id <id>` rewrites the
+"AD VLA Results (auto)" workbook in place (six tabs, fixed order: README / master / openloop /
+closedloop / lingoqa / diagnostics). Discovery is by directory shape, so a finished run appears
+without editing a registry. `collect_diagnostics.py` builds the sixth tab, which holds the
+reconstruction diagnostics -- they are not "arm x set -> score" and cannot join the master, and
+their point is a warning the other tabs cannot carry: local fit error, propagated divergence and
+capability disagree, so an arm must not be chosen by its reconstruction error.
+
+The blocker is never the data, it is the Google token: it lasts about an hour, no refresh token
+is stored, and re-authentication is a browser round trip whose callback listens on the server's
+`localhost:8765` (see the `results-google-sheet` memory for the flow and its traps).
+
 ## Plans and reports
 
 Per the global workflow rule, non-trivial work starts with a plan `.md` in `plans/`
