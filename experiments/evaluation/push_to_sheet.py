@@ -38,6 +38,7 @@ import csv
 import datetime
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -131,6 +132,20 @@ def get_token(args):
         return Path(args.token_file).read_text().strip()
     if os.environ.get("SHEETS_ACCESS_TOKEN"):
         return os.environ["SHEETS_ACCESS_TOKEN"].strip()
+    # A refresh token, if `sheets_refresh_token.py auth` has been run once, mints an
+    # access token here and needs no browser. Preferred over the connector's cached
+    # token, which lasts an hour and cannot be renewed.
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from sheets_refresh_token import access_token
+        tok = access_token()
+        if tok:
+            return tok
+    except SystemExit:
+        raise
+    except Exception as e:                      # noqa: BLE001 -- fall back to the cache
+        print(f"stored refresh token unusable ({type(e).__name__}: {e}); "
+              "falling back to the connector's cached token", flush=True)
     return token_from_store()
 
 
