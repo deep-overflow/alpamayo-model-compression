@@ -307,9 +307,14 @@ val/test/OOD, all n.s.), yet both together cost +0.173. The earlier attribution 
 damage to "the mean operator" is therefore **wrong**: it is a pure interaction. Mechanism: the ten
 FM steps rank alike (within-layer pairwise Spearman +0.920), so under a mean their shared component
 carries 10/11 of the weight and CoC's share drops from 1/2 to 1/11; `max` has no weights, so extra
-duplicated terms cost CoC nothing. `maxstep11` differs from `dualfix` only in the hard tail
-(top-10% mean -0.36 to -0.62, replicated on all three sets) while the overall paired delta stays
-n.s. -- a closed-loop suite of hard scenes is where that would show, if it is real. Caveat: the
+duplicated terms cost CoC nothing. `maxstep11` and `dualfix` are indistinguishable overall AND in
+the hard tail: the report's first edition claimed a tail-only gain (top-10% mean -0.36 to -0.62,
+"replicated on all three sets"), but that tail was selected by `dualfix`'s OWN score, so
+regression to the mean produced it -- selecting by `maxstep11`'s score flips the sign on all three
+sets (+0.06 / +0.08 / +0.14), and neither the symmetric (mean-of-both) nor the neutral (baseline)
+rule gives a consistent significant effect. Three "independent replications" of a biased estimator
+reproduce the bias, not the effect; when a subgroup is defined by one arm's own metric, always
+re-select by the other arm and by a third variable before believing it. Caveat: the
 2x2's rows differ in normalisation too (`max` rows use `rank_norm`, `mean` rows z-scores), so
 "mean vs z-score" is not yet separated; a `mean of 11 rank_norm` arm would do it.
 
