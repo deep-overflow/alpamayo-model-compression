@@ -83,7 +83,7 @@
   <div><span class="k">게이트 B1</span><span class="v">PASS</span>maxstep11 = dualfix</div>
   <div><span class="k">게이트 B2</span><span class="v">PASS</span>meandual = dualfix</div>
   <div><span class="k">둘 다 바꾸면</span><span class="v">+0.173</span>znorm11, minADE@6 중앙값</div>
-  <div><span class="k">꼬리 이득</span><span class="v">3/3</span>세 세트에서 재현</div>
+  <div><span class="k">꼬리 이득</span><span class="v">기각</span>선택 편향이었음 (§4)</div>
   <div><span class="k">평가 규모</span><span class="v">1,762</span>클립 (신규)</div>
 </div>
 
@@ -231,39 +231,75 @@ paired minADE@6 중앙값, 부트스트랩 95% CI. <code>meandual</code>은 val5
 갈린다</strong>는 것이 이 실험의 가장 단단한 사실이다.
 </p>
 
-<h2><span class="num">4</span>차이는 꼬리에만 있다 — 그리고 세 번 재현된다</h2>
+<h2><span class="num">4</span>꼬리 이득은 없었다 &mdash; 선택 편향의 자기 정정</h2>
+
+<div class="callout warn">
+<p>
+<strong>이 절은 초판의 오류를 정정한다.</strong> 초판은 &ldquo;<code>maxstep11</code>의 이득은
+어려운 10%에만 있고 세 세트에서 재현된다&rdquo;고 적었다. 그 표는 <strong>꼬리를
+<code>dualfix</code>의 점수로 정의</strong>해 놓고 그 위에서 <code>maxstep11 &minus; dualfix</code>를
+쟀다. 한 arm의 자기 점수로 극단을 고르면 그 극단성의 일부는 노이즈이고, 비교 대상 arm은 그
+노이즈를 공유하지 않으므로 <strong>자동으로 좋아 보인다</strong>. 평균 회귀다.
+</p>
+</div>
+
+<p>
+진단은 간단하다. 같은 델타를 <strong>네 가지 선택 규칙</strong>으로 다시 재면 된다 &mdash;
+두 arm 각자의 점수(편향이 서로 반대 방향), 두 arm의 평균(둘 사이에 대칭이라 편향 없음),
+그리고 무손상 baseline(제3의 변수).
+</p>
 
 <figure>
-  <img src="PLOT::agg::tail.png" alt="난이도 구간별 분해">
+  <img src="PLOT::agg::tail.png" alt="선택 규칙별 꼬리 델타">
   <figcaption>
-    <code>dualfix</code>의 minADE@6 상위 10%를 &ldquo;어려운&rdquo; 구간으로 잡고 나눈
-    평균 델타. 회색이 쉬운 90%, 파랑이 어려운 10%. 세 세트에서 같은 방향으로 재현된다.
+    어려운 10%에서의 평균 ΔminADE@6 (<code>maxstep11 &minus; dualfix</code>, 음수 =
+    <code>maxstep11</code>이 좋음). 막대 색은 꼬리를 무엇으로 골랐는지를 나타낸다.
+    <strong>선택 규칙을 바꾸면 부호가 뒤집힌다.</strong>
   </figcaption>
 </figure>
 
 <table>
-<thead><tr><th>세트</th><th class="r">쉬운 90% mean</th><th class="r">어려운 10% mean</th><th class="r">어려운 10% median</th></tr></thead>
+<thead><tr><th>꼬리 선택 기준</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
 <tbody>
-<tr><td>val500</td><td class="r">+0.0220</td><td class="r"><strong>−0.5186</strong></td><td class="r">−0.1245</td></tr>
-<tr><td>test500</td><td class="r">+0.0074</td><td class="r"><strong>−0.3646</strong></td><td class="r">−0.2050</td></tr>
-<tr><td>OOD-val</td><td class="r">+0.0415</td><td class="r"><strong>−0.6164</strong></td><td class="r">−0.3696</td></tr>
+<tr><td><code>dualfix</code> 점수 <span class="meta">(초판)</span></td>
+    <td class="r">&minus;0.5186 [&minus;1.09, &minus;0.13]*</td>
+    <td class="r">&minus;0.3646 [&minus;0.63, &minus;0.09]*</td>
+    <td class="r">&minus;0.6164 [&minus;1.07, &minus;0.19]*</td></tr>
+<tr><td><code>maxstep11</code> 점수 <span class="meta">(반대 방향)</span></td>
+    <td class="r"><strong>+0.0646</strong></td><td class="r"><strong>+0.0846</strong></td><td class="r"><strong>+0.1373</strong></td></tr>
+<tr><td>두 arm 평균 <span class="meta">(대칭)</span></td>
+    <td class="r">&minus;0.1186 [&minus;0.84, +0.60]</td>
+    <td class="r">&minus;0.1149 [&minus;0.38, +0.17]</td>
+    <td class="r">&minus;0.4051 [&minus;0.88, +0.02]</td></tr>
+<tr><td>baseline 점수 <span class="meta">(중립)</span></td>
+    <td class="r">+0.0453 [&minus;0.66, +0.72]</td>
+    <td class="r">&minus;0.1843 [&minus;0.37, &minus;0.01]*</td>
+    <td class="r">+0.0779 [&minus;0.13, +0.29]</td></tr>
 </tbody>
 </table>
 
+<p class="meta">어려운 10%의 평균 ΔminADE@6과 부트스트랩 95% CI. n = 50 / 50 / 27.</p>
+
 <p>
-전형적인 클립에서는 차이가 없고 어려운 구간에서만 <code>maxstep11</code>이 낫다. 해석하자면,
-스텝별 랭크의 합집합은 <strong>특정 디노이징 구간에서만 중요한 유닛</strong>을 살려두는데,
-그런 유닛은 평상시에 값을 하지 않다가 어려운 장면에서 쓰인다.
+초판의 행(첫 줄)만 크고 유의하다. 선택 기준을 반대 arm으로 옮기면 <strong>세 세트 모두
+부호가 뒤집힌다</strong> &mdash; 평균 회귀의 교과서적 서명이다. 편향이 없는 두 규칙에서는
+대칭 선택이 음수 방향을 유지하지만 어느 세트도 유의하지 않고(p = 0.50 / 0.13 / 0.086),
+중립 선택은 부호조차 일관되지 않는다(test500만 유의한데 이는 세 세트 중 하나이고 CI가
+겨우 0을 벗어난다).
 </p>
 
-<div class="callout warn">
+<div class="callout">
 <p>
-<strong>과대 해석 금지.</strong> 전체 페어드는 세 세트 모두 유의하지 않다(p=0.19 / 0.062 / 0.90).
-정확한 진술은 &ldquo;평균적으로 더 좋다&rdquo;가 아니라 <strong>&ldquo;꼬리에서만 다르다&rdquo;</strong>이다.
-구간당 클립이 50개 안팎이라 CI도 넓다. 세 세트 독립 재현이 근거를 강화하지만, 확정하려면
-꼬리가 곧 결과가 되는 평가 &mdash; 즉 폐루프 &mdash; 가 필요하다.
+<strong>&ldquo;세 세트에서 재현&rdquo;도 근거가 되지 못했다.</strong> 같은 편향된 추정량을 세 번
+적용하면 재현되는 것은 효과가 아니라 <strong>편향</strong>이다. 독립 재현은 추정량이
+편향되지 않았을 때만 증거가 된다 &mdash; 이것이 이번 오류에서 남길 교훈이다.
 </p>
 </div>
+
+<p>
+정정된 결론: <strong><code>maxstep11</code>은 <code>dualfix</code>와 전체에서도 꼬리에서도
+구분되지 않는다.</strong> B1 PASS는 &ldquo;동급&rdquo;을 뜻하며, 그 이상은 아니다.
+</p>
 
 <h2><span class="num">5</span>남은 교란과 결론</h2>
 
@@ -283,9 +319,11 @@ paired minADE@6 중앙값, 부트스트랩 95% CI. <code>meandual</code>은 val5
 <li><strong>VLM에서 스텝 축은 살릴 것이 없다.</strong> 스텝 간 Spearman 0.92가 사전에 말해줬고,
     <code>maxstep11</code>이 세 세트에서 <code>dualfix</code>와 구분되지 않는 것으로 확인됐다.
     expert 타워에서 스텝 축이 컸던 것과 대조적이다 &mdash; 처방은 병에 맞춰야 한다.</li>
-<li><strong>다음.</strong> 꼬리 이득이 실재한다면 그것이 드러나는 자리는 개루프 평균이 아니라
-    폐루프다. <code>maxstep11</code>을 어려운 씬 스위트(alpasim hard100 등)에 올리는 것이
-    자연스러운 후속이다.</li>
+<li><strong>다음.</strong> 초판은 여기서 &ldquo;꼬리 이득이 실재하니 어려운 씬 폐루프로
+    가자&rdquo;고 제안했다. 그 근거가 §4에서 사라졌으므로 제안도 함께 내린다.
+    <code>maxstep11</code>은 <code>dualfix</code>의 동급 대안일 뿐이고, 지금 데이터로는
+    둘 중 하나를 고를 이유가 없다. 남은 실험 가치는 <code>mean of 11 rank_norm</code>
+    대조군 하나다.</li>
 </ul>
 
 <footer>
@@ -294,6 +332,7 @@ paired minADE@6 중앙값, 부트스트랩 95% CI. <code>meandual</code>은 val5
   빌드 <code>make_slim.py --config {maxstep11,meandual}_u40_v2 --importance importance_v2_ada</code> ·
   계획 <code>plans/2026-09-03_union-step-criterion.md</code> ·
   선행 보고서 <code>2026-09-03_criterion-aggregation.html</code> (이 보고서가 그 귀속을 정정한다) ·
+  2026-09-04 개정: §4의 꼬리 주장을 선택 편향으로 판정하고 철회 ·
   평가 Ada 4&ndash;7, 2026-09-03/04
 </footer>
 
