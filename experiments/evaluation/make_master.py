@@ -48,9 +48,21 @@ TRACKS = {
                            "tyr_d1r", "tyr_uniform_r", "tyr_r"],
     "dual x Tyr factorial": ["dualg", "dualr", "dualgr", "dualscope", "dualg_tyralloc"],
     "dualr Hessian 2x2": ["dualr_rep", "dualr_d", "dualr_e", "dualr_w"],
-    "LingoQA Hessian": ["dualr_wl", "dualrwl_em50", "dualrwl_em75"],
+    "LingoQA Hessian": ["dualr_wl"],
+    # expert MLP-only pruning at M%, stacked on a VLM half. dualrwl_* keep dualr_wl's
+    # half, dualexp_em93p75 the plain dual half, so the two VLM halves are readable
+    # against each other at the one shared rung. reports/evaluation/
+    # 2026-09-01_expert-mlp-ladder.html.
+    "expert MLP ladder": ["dualrwl_em50", "dualrwl_em75", "dualrwl_em87p5",
+                          "dualrwl_em93p75", "dualrwl_em96p875",
+                          "dualrwl_em98p4375", "dualrwl_em100",
+                          "dualexp_em93p75"],
     "cache-targeted recon": ["dualrc_s16", "dualrc_s24"],
-    "cache criterion": ["cachedual_u40_v2", "cacheonly_u40_v2"],
+    # both spellings on purpose: a method is named by paper_numbers.ARMS when it is
+    # registered there and by the directory stem when it is not, and the two registries
+    # in play (main, and the znorm11-criterion branch) register different subsets.
+    "cache criterion": ["cachedual", "cachedual_u40_v2",
+                        "cacheonly", "cacheonly_u40_v2"],
     "expert axis": ["expert_q25", "expert_m25", "expert_m_pm", "expert_q50",
                     "expert_m50", "expert_both25", "dualexp_cond_ps",
                     "dualexp_e10_cond_ps", "dualexp_e15_cond_ps",
@@ -64,12 +76,18 @@ TRACKS = {
     "traj aggregation": ["trajctl_val", "trajsumabs_val", "trajznorm_val"],
     "iterative": ["it3", "iter_coc"],
     "LingoQA-informed criterion": ["trajvqa_u40_v2", "vqa_u40_v2", "coclingo_u40_v2"],
+    # plans/2026-08-31_znorm11-criterion.md. All three rebuild the u40 budget from
+    # importance_v2_ada, so dual_ada -- the shipped dual recipe on that same importance
+    # file -- is the peer to read them against, not the shipped dual_u40_v2.
+    "znorm11 criterion": ["dual_ada", "dual_ada_u40_v2", "dualfix", "dualfix_u40_v2",
+                          "znorm11", "znorm11_u40_v2"],
 }
 METHOD2TRACK = {m: t for t, ms in TRACKS.items() for m in ms}
 # controls exist to say what a factor does alone; they are not candidate configs
 CONTROLS = {"dual_u40_ctl", "dual_u40_mix", "dual_u40_ood", "trajctl_val",
             "trajsumabs_val", "trajznorm_val", "dualsum", "dualprod",
-            "expert_m_pm", "vlm_m_pm", "dualm_c1109_ada"}
+            "expert_m_pm", "vlm_m_pm", "dualm_c1109_ada",
+            "dual_ada", "dual_ada_u40_v2"}
 SETS = [("indist", "val"), ("test", "test"), ("oodval", "ood")]
 MASTER_COLS = (
     ["track", "method", "ckpt", "role", "budget", "prune_pct", "arch", "vs"]

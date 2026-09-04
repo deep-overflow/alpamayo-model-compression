@@ -9,6 +9,11 @@
 #   Tiers:  code data weights recipes   (default: all four)
 #           resume   the whole run dir of $RESUME_RUNS, to continue an interrupted run
 #           cosmos   the Cosmos-Reason2-8B safetensors, which `weights` skips
+#           evalsets val_500 + test_500 caches and the importance files an on-NEURON
+#                    criterion comparison needs. Evaluation normally stays on Ada -- send
+#                    this ONLY for a self-contained comparison whose reference arms are
+#                    re-measured on the same NEURON cards
+#                    (plans/2026-08-31_znorm11-neuron-eval.md).
 #   LIST_ONLY=1 prints what would move, with byte totals, contacting nothing.
 #
 # NEURON authenticates with OTP, so open ONE multiplexed connection first and every
@@ -140,6 +145,28 @@ if has data; then
   echo "  $(wc -l < "$TMP/probe.txt") files, $(total_of "$PRE" "$TMP/probe.txt")"
   run "${RSYNC[@]}" --files-from="$TMP/probe.txt" "$PRE/" \
       "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+fi
+
+if has evalsets; then
+  step "val_500 + test_500 caches -> $SCRATCH/datasets/physicalai_av/pre_processed"
+  # ood_val's 262 clips already travel inside the `data` tier's ood namespace; these two
+  # are the sets `data` deliberately leaves behind (MANIFEST.md, "what does not travel").
+  # namespaces differ by set: run_baseline reads `eval` for indist and `test` for test
+  : > "$TMP/evalsets.txt"
+  sample_list eval "$OUT/eval_sets/indist_500.parquet" >> "$TMP/evalsets.txt"
+  sample_list test "$OUT/eval_sets/test_500.parquet" >> "$TMP/evalsets.txt"
+  sort -u "$TMP/evalsets.txt" -o "$TMP/evalsets.txt"
+  echo "  $(wc -l < "$TMP/evalsets.txt") files, $(total_of "$PRE" "$TMP/evalsets.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/evalsets.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+
+  step "importance files for the criterion builds -> $SCRATCH/outputs"
+  # importance_v2_ada is the CoC half and the reference the per-step run was normalised
+  # against; importance_stepvlm_v1 carries the ten per-step VLM gradients. They must be
+  # the same architecture as each other -- not as the evaluation cards.
+  echo "  $(du -shL "$OUT/importance_v2_ada" "$OUT/importance_stepvlm_v1" | tr '\n' ' ')"
+  run "${RSYNC[@]}" "$OUT/importance_v2_ada" "$OUT/importance_stepvlm_v1" \
+      "$OUT/importance_v2" "$OUT/slim_integrated_mag" "$HOST:$SCRATCH/outputs/"
 fi
 
 if has weights; then

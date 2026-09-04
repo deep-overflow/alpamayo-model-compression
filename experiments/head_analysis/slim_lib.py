@@ -102,8 +102,15 @@ def _swap(linear, weight):
 
 
 def slice_layer(layer, kept_q, kept_mlp, head_dim):
-    """Physical surgery on one decoder layer. kept_q/kept_mlp: ascending original indices."""
-    assert len(kept_q) > 0 and len(kept_mlp) > 0
+    """Physical surgery on one decoder layer. kept_q/kept_mlp: ascending original indices.
+
+    `kept_mlp` may be empty: gate/up become Linear(hidden, 0), down Linear(0, hidden), and
+    the block returns exact zeros, so the residual passes through and the MLP sublayer is
+    gone rather than merely narrow (the endpoint of the expert-MLP ladder,
+    plans/2026-08-31_dualrwl-expert-mlp.md). `kept_q` must still be non-empty -- a layer
+    with no attention heads is what make_kvonly() is for.
+    """
+    assert len(kept_q) > 0
     attn = layer.self_attn
     assert attn.q_proj.bias is None and attn.o_proj.bias is None
     qi = torch.as_tensor(kept_q, dtype=torch.long, device=attn.q_proj.weight.device)

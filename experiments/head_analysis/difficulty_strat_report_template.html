@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>난이도 계층 &times; 안전 프로파일 — 종합 점수가 가리는 것</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --bg-card: #FFFFFF;
+    --bg-code: #F0EEE6;
+    --text: #29261B;
+    --text-muted: #6B6555;
+    --accent: #D97757;
+    --accent-dark: #C15F3C;
+    --border: #E8E6DC;
+    --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem;
+    overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.9rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .warn {
+    background: #FFF8E6; border-left: 4px solid #eda100;
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.95rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .lp { color: var(--accent-dark); font-weight: 700; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 폐루프 평가</div>
+  <h1>난이도 계층 &times; 안전 프로파일 &mdash; 종합 점수가 가리는 것</h1>
+  <div class="meta">
+    2026-09-03 &middot; alpasim <code>public_2601</code> 150씬 &times; 2 rollout &times; <strong>17 arm</strong>
+    &middot; 드라이버 전부 Ada, <code>OMP_NUM_THREADS=8</code>
+    &middot; LLM-Pruner 2개 arm은 soowon님 런
+    (<code>/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs</code>)
+    &middot; 정적 난이도 out-of-sample 검증은 sangoh님의 913씬 baseline
+    (<code>eval2601_a1_5</code>)
+    &middot; 코드 <code>experiments/head_analysis/analyze_difficulty_strat.py</code>
+    &middot; 산출물 <code>outputs/difficulty_strat/</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>요약</h2>
+
+<div class="callout">
+  <p><strong>결론 1 &mdash; LLM-Pruner는 우리 최고 arm과 종합 점수로는 구분되지 않는다.</strong>
+  <span class="lp">lp_r50</span> 0.810, <span class="lp">lp_r50_dual</span> 0.816으로 17개 arm 중
+  5위·3위이고, 둘 다 baseline 대비 유의하게 좋다 (+0.061 p=0.005 / +0.067 p=0.003).
+  우리 최고 <code>dual_u40_v2</code>(0.828)와의 차이는 +0.012&ndash;0.018로 p=0.69&ndash;0.91,
+  즉 <strong>동률</strong>이다. 그것도 LP 쪽이 제거량이 더 크다 (25.0% vs 24.0%).</p>
+  <p style="margin-bottom:0"><strong>결론 2 &mdash; 그런데 실패 양상이 반대다.</strong>
+  <span class="lp">lp_r50_dual</span>의 과실 충돌률은 rollout당 <strong>7.0% (21/300)</strong>로
+  점수가 같은 <code>dual_u40_v2</code>의 2.3% (7/300)의 <strong>3.15배</strong>다
+  (Fisher p=0.011). 우리 15개 arm은 점수&harr;충돌이 r=&minus;0.95로 거의 완벽하게
+  같이 움직이는데, LP 두 arm만 그 추세선 위로 <strong>3.5pp / 5.2pp</strong> 떠 있다.
+  종합 점수는 progress 가중이라 이 차이를 통째로 흡수한다.</p>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">p=0.91</div><div class="l">dual_u40_v2 vs lp_r50_dual, 종합 점수 (동률)</div></div>
+  <div class="kpi"><div class="v">3.15&times;</div><div class="l">lp_r50_dual의 과실 충돌 OR (p=0.011)</div></div>
+  <div class="kpi"><div class="v">+5.2pp</div><div class="l">lp_r50_dual이 우리 추세선 위로 뜬 정도</div></div>
+  <div class="kpi"><div class="v">11/17</div><div class="l">난이도 분할 편향으로 부호가 뒤집힌 arm (쉬움 계층)</div></div>
+  <div class="kpi"><div class="v">0.499</div><div class="l">hard100 실측 점수 (easy100 0.826, p=5.4e-10) &mdash; 763씬 out-of-sample</div></div>
+</div>
+
+<div class="note">
+  <strong>결론 3 &mdash; 모델을 안 돌리고 매긴 난이도가 out-of-sample에서 통과했다.</strong>
+  sangoh님의 913씬 비압축 baseline 런으로, 우리 매트릭스가 건드린 적 없는 763씬에서
+  &rho;=&minus;0.293 (p=1.5e-16). 정적 점수만으로 뽑은 hard100은 0.499, easy100은 0.826이다
+  (7&sect;). 같은 런이 부수적으로 드러낸 사실 하나 &mdash; <strong>우리가 쓰는 첫 150씬은
+  나머지 763씬보다 유의하게 쉽다</strong>(0.742 vs 0.660, p=0.039; 과실 충돌 2.0% vs 5.5%).
+</div>
+
+<h2><span class="num">2.</span>무엇을 왜 쟀나</h2>
+
+<p>alpasim 150씬 매트릭스는 지금까지 <strong>arm당 숫자 하나</strong>로만 읽혀 왔다. 그런데
+150씬의 절반이 baseline 만점이라 그 숫자는 사실상 나머지 절반에서만 만들어진다. 그래서 두 가지를
+물었다. (1) 난이도 계층별로 쪼개면 arm 간 차이가 어디서 오는가. (2) 종합 점수 하나가
+<em>무엇을 가리고 있는가</em>.</p>
+
+<p>두 번째 질문은 2026-07 매트릭스에서 이미 한 번 데인 자리다. 당시
+<code>integrated_mag</code>는 종합 점수 &Delta;+0.002 (p=0.80)로 "무해"였지만 과실 충돌이 2&rarr;8건
+(4배)이었다 &mdash; 점수가 progress 가중이라 <em>더 멀리 간</em> 것이 <em>더 위험하게 간</em> 것을
+상쇄했다. 이번에 soowon님의 LLM-Pruner arm이 같은 150씬에 들어오면서 그 함정이 정확히 재현됐다.</p>
+
+<h2><span class="num">3.</span>데이터 &mdash; 17개 arm이 정말 비교 가능한가</h2>
+
+<p>150씬은 <code>public_2601</code>을 <code>sorted(scene_id)[:150]</code>으로 자른 것이고
+(무편향 무작위 추출이자 nested), 모든 arm이 씬당 2 rollout이다. LP 두 런은 우리 150씬과
+<strong>150/150 완전 일치</strong>한다.</p>
+
+<table>
+<thead><tr><th>런</th><th class="r">씬</th><th class="r">rollout</th><th>드라이버 GPU</th><th>완료 (KST)</th></tr></thead>
+<tbody>
+<tr><td><code>m2601_merged_*</code> (우리 15개)</td><td class="r">150</td><td class="r">2</td><td>Ada 4&ndash;7 (샤드당 1장에 전 서비스)</td><td>2026-08 전반</td></tr>
+<tr><td><span class="lp">cl150_merged_lp_r50</span></td><td class="r">150</td><td class="r">2</td><td>Ada 5 (renderer/physics Ada 4)</td><td>2026-08-18 14:36</td></tr>
+<tr><td><span class="lp">cl150_merged_lp_r50_dual</span></td><td class="r">150</td><td class="r">2</td><td>Ada 5 (renderer/physics Ada 4)</td><td>2026-08-19 08:16</td></tr>
+</tbody>
+</table>
+
+<p>양쪽 모두 드라이버가 Ada이고 <code>OMP_NUM_THREADS=8</code>로 같다 &mdash; 스레드 수는 CPU
+리듀스 순서를 바꾸므로 매트릭스 안에서 섞이면 안 되는 설정인데, 여기서는 일치한다.
+soowon님 쪽 <code>cl150_baseline</code>은 <code>aggregate/</code>가 없어 중단된 상태라,
+baseline은 우리 런을 공통 기준으로 쓴다.</p>
+
+<h3>LLM-Pruner가 무엇인가</h3>
+
+<pre><code>method        : LLM-Pruner block-wise, grouped Taylor
+importance    : lp_importance_v1
+ratio         : 0.5   (층당 head 16/32, MLP 6144/12288)
+layer_scope   : [4, 34)  -- 30개 층만, 층 0-3 / 34-35는 무손상
+removed       : 2,768,240,640  (모델의 25.0%, text layer의 39.9%)
+arm           : lp_r50 = coc_param_first / lp_r50_dual = dual_param_first</code></pre>
+
+<p>우리 <code>*_u40_v2</code> 계열은 36개 층 <em>전부</em>에서 균일 39.86%를 잘라
+2,657,452,032 (24.0%)를 제거한다. 즉 <strong>예산은 LP 쪽이 1pp 더 공격적</strong>이고
+(111M 더 제거), 배분 형태가 다르다 &mdash; LP는 가운데 30개 층을 50%씩, 우리는 전 층을 40%씩.
+동률이라는 결론은 이 핸디캡을 LP가 지고 나온 것이다.</p>
+
+<h2><span class="num">4.</span>난이도를 두 가지로 정의한다 &mdash; 섞으면 안 된다</h2>
+
+<div class="warn">
+  <p style="margin-bottom:0.5rem"><strong>측정 난이도</strong> &mdash; baseline이 그 씬에서 실제로 받은
+  점수. 5&sect;의 계층 분할(쉬움/보통/어려움)이 이것을 쓴다. <em>모델을 돌려야</em> 알 수 있다.</p>
+  <p style="margin-bottom:0"><strong>정적 난이도</strong> &mdash; usdz 안의 에고 GT 궤적에서만
+  계산한 <code>hard_score = z(평균속도) + z(누적 선회각)</code>. 7&sect;가 이것을 쓴다.
+  <em>모델을 전혀 돌리지 않고</em> 913씬 전부에 매길 수 있다. 궤적의 "복잡도"라기보다
+  <strong>얼마나 빠르고 얼마나 많이 도는가</strong>다 &mdash; 곡률·저크·정차 비율·주변 에이전트
+  밀도도 계산했지만, 특히 <strong>에이전트 밀도는 예측력이 사실상 0</strong>(&rho;=+0.02)이라
+  점수에서 뺐다.</p>
+</div>
+
+<h3>150씬의 측정 난이도 분포</h3>
+
+<table>
+<thead><tr><th>baseline 점수</th><th class="r">씬 수</th><th class="r">비율</th><th class="r">게이트 실패 씬</th></tr></thead>
+<tbody>
+<tr><td><code>= 1.00</code></td><td class="r">74</td><td class="r">49.3%</td><td class="r">0</td></tr>
+<tr><td><code>0.90-1.00</code></td><td class="r">5</td><td class="r">3.3%</td><td class="r">0</td></tr>
+<tr><td><code>0.70-0.90</code></td><td class="r">17</td><td class="r">11.3%</td><td class="r">0</td></tr>
+<tr><td><code>0.40-0.70</code></td><td class="r">29</td><td class="r">19.3%</td><td class="r">12</td></tr>
+<tr><td><code>0.10-0.40</code></td><td class="r">15</td><td class="r">10.0%</td><td class="r">3</td></tr>
+<tr><td><code>&lt; 0.10</code></td><td class="r">10</td><td class="r">6.7%</td><td class="r">9</td></tr>
+</tbody>
+</table>
+
+<p><strong>절반(74씬)이 만점 천장</strong>이다. 0.90 이상까지 79씬(52.7%). 완전 실패 10씬 중 9개가
+게이트 사고다.</p>
+
+<h3>"게이트"란</h3>
+
+<p>alpasim의 씬 점수는 연속 점수가 아니라 두 개의 하드 게이트를 통과한 뒤의 progress다:</p>
+
+<pre><code>collision_at_fault : == 0        &lt;- 게이트
+offroad            : == 0        &lt;- 게이트
+progress_score     : min(clamp(progress_clipped_rel, 0, 1) / 0.8, 1.0)
+short_gt_distance_override : gt_dist_traveled_m &lt; 5 m 이면 progress_score = 1.0</code></pre>
+
+<p>확인해 보면 예외가 없다 &mdash; baseline 300 rollout 중 게이트에 걸린 33개가 <strong>전부 정확히
+0.000</strong>이고, 안 걸린 267개 중 0점은 하나도 없다. 그래서 "점수가 낮다"는 두 가지 전혀 다른
+사건을 뭉뚱그린다: <em>사고를 냈다</em>(게이트)와 <em>덜 갔다</em>(progress). 6&sect;가 이걸 쪼갠다.</p>
+
+<h2><span class="num">5.</span>난이도 계층별 arm 성능</h2>
+
+<div class="warn">
+  <p style="margin-bottom:0"><strong>편향 경고.</strong> baseline 점수로 계층을 나눈 뒤 <em>같은</em>
+  baseline과 델타를 계산하면 평균회귀에 걸린다. 어려움 계층은 정의상 baseline이 자기 노이즈의 불운한
+  끝에 고정되므로 모든 모델이 좋아 보인다. 그래서 두 버전을 같이 싣는다. 고치는 방법에 추가 GPU는
+  필요 없다 &mdash; <strong>rollout 1로 계층을 나누고 baseline 값은 독립인 rollout 2로 읽으면</strong>
+  된다. 두 표 사이에서 부호가 뒤집힌 arm은 쉬움 11/17, 보통 2/17, 어려움 1/17로,
+  <strong>편향은 거의 전부 쉬움 계층에서 나온다</strong>(baseline이 0.998로 천장에 붙어 있어
+  내려갈 일만 남으므로).</p>
+</div>
+
+<h3>표 A &mdash; 원본 분할 (baseline 2 rollout 평균) <span class="tag">편향 있음</span></h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">쉬움 &ge;0.9 (n=79)</th><th class="r">보통 0.4&ndash;0.9 (n=46)</th><th class="r">어려움 &lt;0.4 (n=25)</th><th class="r">전체 150</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.998</td><td class="r">0.640</td><td class="r">0.168</td><td class="r">0.750</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0.945 <span style="color:#6B6555">(-0.053)</span></td><td class="r">0.838 <span style="color:#6B6555">(+0.199)</span></td><td class="r">0.441 <span style="color:#6B6555">(+0.273)</span></td><td class="r">0.828 <span style="color:#6B6555">(+0.079)</span></td></tr>
+<tr><td><code>recover_dual_u55</code></td><td class="r">0.942 <span style="color:#6B6555">(-0.055)</span></td><td class="r">0.791 <span style="color:#6B6555">(+0.151)</span></td><td class="r">0.506 <span style="color:#6B6555">(+0.338)</span></td><td class="r">0.823 <span style="color:#6B6555">(+0.074)</span></td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50_dual</strong></td><td class="r">0.901 <span style="color:#6B6555">(-0.096)</span></td><td class="r">0.834 <span style="color:#6B6555">(+0.195)</span></td><td class="r">0.514 <span style="color:#6B6555">(+0.346)</span></td><td class="r">0.816 <span style="color:#6B6555">(+0.067)</span></td></tr>
+<tr><td><code>dual_u40_w8</code></td><td class="r">0.978 <span style="color:#6B6555">(-0.019)</span></td><td class="r">0.766 <span style="color:#6B6555">(+0.126)</span></td><td class="r">0.378 <span style="color:#6B6555">(+0.210)</span></td><td class="r">0.813 <span style="color:#6B6555">(+0.064)</span></td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50</strong></td><td class="r">0.918 <span style="color:#6B6555">(-0.080)</span></td><td class="r">0.815 <span style="color:#6B6555">(+0.175)</span></td><td class="r">0.463 <span style="color:#6B6555">(+0.295)</span></td><td class="r">0.810 <span style="color:#6B6555">(+0.061)</span></td></tr>
+<tr><td><code>dualexp_u40_em93p75</code></td><td class="r">0.950 <span style="color:#6B6555">(-0.047)</span></td><td class="r">0.763 <span style="color:#6B6555">(+0.123)</span></td><td class="r">0.349 <span style="color:#6B6555">(+0.181)</span></td><td class="r">0.793 <span style="color:#6B6555">(+0.043)</span></td></tr>
+<tr><td><code>dualr_u40</code></td><td class="r">0.949 <span style="color:#6B6555">(-0.048)</span></td><td class="r">0.782 <span style="color:#6B6555">(+0.142)</span></td><td class="r">0.313 <span style="color:#6B6555">(+0.145)</span></td><td class="r">0.792 <span style="color:#6B6555">(+0.042)</span></td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r">0.929 <span style="color:#6B6555">(-0.069)</span></td><td class="r">0.778 <span style="color:#6B6555">(+0.138)</span></td><td class="r">0.382 <span style="color:#6B6555">(+0.214)</span></td><td class="r">0.791 <span style="color:#6B6555">(+0.042)</span></td></tr>
+<tr><td><code>tyr_u40_r</code></td><td class="r">0.921 <span style="color:#6B6555">(-0.076)</span></td><td class="r">0.775 <span style="color:#6B6555">(+0.135)</span></td><td class="r">0.381 <span style="color:#6B6555">(+0.213)</span></td><td class="r">0.786 <span style="color:#6B6555">(+0.037)</span></td></tr>
+<tr><td><code>traj_u40_v2</code></td><td class="r">0.934 <span style="color:#6B6555">(-0.064)</span></td><td class="r">0.718 <span style="color:#6B6555">(+0.078)</span></td><td class="r">0.426 <span style="color:#6B6555">(+0.258)</span></td><td class="r">0.783 <span style="color:#6B6555">(+0.033)</span></td></tr>
+<tr><td><code>dualr_wl_u40</code></td><td class="r">0.947 <span style="color:#6B6555">(-0.051)</span></td><td class="r">0.754 <span style="color:#6B6555">(+0.114)</span></td><td class="r">0.318 <span style="color:#6B6555">(+0.150)</span></td><td class="r">0.783 <span style="color:#6B6555">(+0.033)</span></td></tr>
+<tr><td><code>dualrwl_em93p75_u40</code></td><td class="r">0.926 <span style="color:#6B6555">(-0.071)</span></td><td class="r">0.751 <span style="color:#6B6555">(+0.112)</span></td><td class="r">0.304 <span style="color:#6B6555">(+0.136)</span></td><td class="r">0.769 <span style="color:#6B6555">(+0.019)</span></td></tr>
+<tr><td><code>dual_u40_w4</code></td><td class="r">0.899 <span style="color:#6B6555">(-0.098)</span></td><td class="r">0.738 <span style="color:#6B6555">(+0.098)</span></td><td class="r">0.406 <span style="color:#6B6555">(+0.238)</span></td><td class="r">0.768 <span style="color:#6B6555">(+0.018)</span></td></tr>
+<tr><td><code>expert_znorm_r25</code></td><td class="r">0.925 <span style="color:#6B6555">(-0.072)</span></td><td class="r">0.630 <span style="color:#6B6555">(-0.010)</span></td><td class="r">0.237 <span style="color:#6B6555">(+0.068)</span></td><td class="r">0.720 <span style="color:#6B6555">(-0.030)</span></td></tr>
+<tr><td><code>coc_u40_v2</code></td><td class="r">0.742 <span style="color:#6B6555">(-0.255)</span></td><td class="r">0.650 <span style="color:#6B6555">(+0.011)</span></td><td class="r">0.421 <span style="color:#6B6555">(+0.253)</span></td><td class="r">0.660 <span style="color:#6B6555">(-0.089)</span></td></tr>
+<tr><td><code>wanda_u40_v2</code></td><td class="r">0.662 <span style="color:#6B6555">(-0.335)</span></td><td class="r">0.652 <span style="color:#6B6555">(+0.012)</span></td><td class="r">0.435 <span style="color:#6B6555">(+0.267)</span></td><td class="r">0.621 <span style="color:#6B6555">(-0.128)</span></td></tr>
+<tr><td><code>j_u40_v2</code></td><td class="r">0.617 <span style="color:#6B6555">(-0.380)</span></td><td class="r">0.487 <span style="color:#6B6555">(-0.153)</span></td><td class="r">0.368 <span style="color:#6B6555">(+0.199)</span></td><td class="r">0.536 <span style="color:#6B6555">(-0.214)</span></td></tr>
+</tbody>
+</table>
+
+<p>어려움 계층에서 <strong>17개 arm 전부가 baseline보다 좋다</strong>(+0.068 &sim; +0.346).
+가지친 모델이 원본보다 어려운 씬을 잘 푼다는 뜻이 아니라, baseline이 0.168로 바닥에 고정된 결과다.
+이 표를 단독으로 읽으면 안 되는 이유가 이것이다.</p>
+
+<h3>표 B &mdash; 편향 제거 (rollout1 분할, baseline은 rollout2) <span class="tag">이쪽을 읽을 것</span></h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">쉬움 (n=93)</th><th class="r">보통 (n=25)</th><th class="r">어려움 (n=32)</th><th class="r">전체 150</th></tr></thead>
+<tbody>
+<tr><td>baseline (rollout2)</td><td class="r">0.890</td><td class="r">0.696</td><td class="r">0.381</td><td class="r">0.750</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0.921 <span style="color:#6B6555">(+0.031)</span></td><td class="r">0.832 <span style="color:#6B6555">(+0.136)</span></td><td class="r">0.556 <span style="color:#6B6555">(+0.175)</span></td><td class="r">0.828 <span style="color:#6B6555">(+0.079)</span></td></tr>
+<tr><td><code>recover_dual_u55</code></td><td class="r">0.912 <span style="color:#6B6555">(+0.022)</span></td><td class="r">0.778 <span style="color:#6B6555">(+0.082)</span></td><td class="r">0.599 <span style="color:#6B6555">(+0.217)</span></td><td class="r">0.823 <span style="color:#6B6555">(+0.074)</span></td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50_dual</strong></td><td class="r">0.898 <span style="color:#6B6555">(+0.008)</span></td><td class="r">0.782 <span style="color:#6B6555">(+0.086)</span></td><td class="r">0.605 <span style="color:#6B6555">(+0.224)</span></td><td class="r">0.816 <span style="color:#6B6555">(+0.067)</span></td></tr>
+<tr><td><code>dual_u40_w8</code></td><td class="r">0.938 <span style="color:#6B6555">(+0.047)</span></td><td class="r">0.743 <span style="color:#6B6555">(+0.046)</span></td><td class="r">0.506 <span style="color:#6B6555">(+0.125)</span></td><td class="r">0.813 <span style="color:#6B6555">(+0.064)</span></td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50</strong></td><td class="r">0.901 <span style="color:#6B6555">(+0.011)</span></td><td class="r">0.809 <span style="color:#6B6555">(+0.113)</span></td><td class="r">0.548 <span style="color:#6B6555">(+0.166)</span></td><td class="r">0.810 <span style="color:#6B6555">(+0.061)</span></td></tr>
+<tr><td><code>dualexp_u40_em93p75</code></td><td class="r">0.908 <span style="color:#6B6555">(+0.018)</span></td><td class="r">0.795 <span style="color:#6B6555">(+0.099)</span></td><td class="r">0.456 <span style="color:#6B6555">(+0.074)</span></td><td class="r">0.793 <span style="color:#6B6555">(+0.043)</span></td></tr>
+<tr><td><code>dualr_u40</code></td><td class="r">0.920 <span style="color:#6B6555">(+0.029)</span></td><td class="r">0.750 <span style="color:#6B6555">(+0.054)</span></td><td class="r">0.454 <span style="color:#6B6555">(+0.073)</span></td><td class="r">0.792 <span style="color:#6B6555">(+0.042)</span></td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r">0.910 <span style="color:#6B6555">(+0.019)</span></td><td class="r">0.722 <span style="color:#6B6555">(+0.026)</span></td><td class="r">0.502 <span style="color:#6B6555">(+0.121)</span></td><td class="r">0.791 <span style="color:#6B6555">(+0.042)</span></td></tr>
+<tr><td><code>tyr_u40_r</code></td><td class="r">0.891 <span style="color:#6B6555">(+0.001)</span></td><td class="r">0.764 <span style="color:#6B6555">(+0.068)</span></td><td class="r">0.499 <span style="color:#6B6555">(+0.118)</span></td><td class="r">0.786 <span style="color:#6B6555">(+0.037)</span></td></tr>
+<tr><td><code>traj_u40_v2</code></td><td class="r">0.901 <span style="color:#6B6555">(+0.011)</span></td><td class="r">0.770 <span style="color:#6B6555">(+0.073)</span></td><td class="r">0.449 <span style="color:#6B6555">(+0.068)</span></td><td class="r">0.783 <span style="color:#6B6555">(+0.033)</span></td></tr>
+<tr><td><code>dualr_wl_u40</code></td><td class="r">0.903 <span style="color:#6B6555">(+0.012)</span></td><td class="r">0.801 <span style="color:#6B6555">(+0.104)</span></td><td class="r">0.421 <span style="color:#6B6555">(+0.040)</span></td><td class="r">0.783 <span style="color:#6B6555">(+0.033)</span></td></tr>
+<tr><td><code>dualrwl_em93p75_u40</code></td><td class="r">0.880 <span style="color:#6B6555">(-0.010)</span></td><td class="r">0.765 <span style="color:#6B6555">(+0.068)</span></td><td class="r">0.450 <span style="color:#6B6555">(+0.069)</span></td><td class="r">0.769 <span style="color:#6B6555">(+0.019)</span></td></tr>
+<tr><td><code>dual_u40_w4</code></td><td class="r">0.869 <span style="color:#6B6555">(-0.022)</span></td><td class="r">0.748 <span style="color:#6B6555">(+0.051)</span></td><td class="r">0.489 <span style="color:#6B6555">(+0.108)</span></td><td class="r">0.768 <span style="color:#6B6555">(+0.018)</span></td></tr>
+<tr><td><code>expert_znorm_r25</code></td><td class="r">0.876 <span style="color:#6B6555">(-0.014)</span></td><td class="r">0.658 <span style="color:#6B6555">(-0.039)</span></td><td class="r">0.315 <span style="color:#6B6555">(-0.067)</span></td><td class="r">0.720 <span style="color:#6B6555">(-0.030)</span></td></tr>
+<tr><td><code>coc_u40_v2</code></td><td class="r">0.734 <span style="color:#6B6555">(-0.157)</span></td><td class="r">0.657 <span style="color:#6B6555">(-0.039)</span></td><td class="r">0.450 <span style="color:#6B6555">(+0.069)</span></td><td class="r">0.660 <span style="color:#6B6555">(-0.089)</span></td></tr>
+<tr><td><code>wanda_u40_v2</code></td><td class="r">0.653 <span style="color:#6B6555">(-0.238)</span></td><td class="r">0.638 <span style="color:#6B6555">(-0.058)</span></td><td class="r">0.516 <span style="color:#6B6555">(+0.135)</span></td><td class="r">0.621 <span style="color:#6B6555">(-0.128)</span></td></tr>
+<tr><td><code>j_u40_v2</code></td><td class="r">0.605 <span style="color:#6B6555">(-0.285)</span></td><td class="r">0.457 <span style="color:#6B6555">(-0.240)</span></td><td class="r">0.395 <span style="color:#6B6555">(+0.014)</span></td><td class="r">0.536 <span style="color:#6B6555">(-0.214)</span></td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::strat::arm_by_difficulty.png" alt="난이도 계층별 arm 성능">
+  <figcaption>표 B를 그림으로. 계층마다 서로 <em>다른 것</em>이 보인다: 쉬움(파랑)은 붕괴형 arm만
+  아래로 튀고, 어려움(초록)은 정상 arm 사이의 서열을 만든다. 주황 라벨이 LLM-Pruner.</figcaption>
+</figure>
+
+<div class="callout">
+  <p style="margin-bottom:0"><strong>계층마다 측정하는 대상이 다르다.</strong>
+  <em>쉬움 계층은 붕괴를 잡는다</em> &mdash; <code>j_u40_v2</code> &minus;0.285,
+  <code>wanda</code> &minus;0.238, <code>coc</code> &minus;0.157인데 정상 arm들은 전부
+  &plusmn;0.05 안쪽이라 서로 구분되지 않는다. <em>어려움 계층은 정상 arm의 서열을 잡는다</em> &mdash;
+  <code>dual_u40_v2</code> +0.175 / <span class="lp">lp_r50_dual</span> +0.224 vs
+  <code>dualr_wl</code> +0.040인데, 붕괴 arm은 여기서 오히려 0 근처다
+  (<code>j_u40_v2</code> +0.014). <strong>어려운 씬만 늘리면 붕괴 감지력은 오히려 떨어진다.</strong></p>
+</div>
+
+<h2><span class="num">6.</span>게이트 분해 &mdash; 종합 점수가 가리는 것</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">씬 점수</th><th class="r">게이트 실패 %</th><th class="r">도로 이탈 %</th><th class="r">과실 충돌 %</th><th class="r">충돌 rollout</th></tr></thead>
+<tbody>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0.828</td><td class="r">9.0</td><td class="r">6.7</td><td class="r">2.3</td><td class="r">7/300</td></tr>
+<tr><td><code>recover_dual_u55</code></td><td class="r">0.823</td><td class="r">11.3</td><td class="r">8.3</td><td class="r">3.0</td><td class="r">9/300</td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50_dual</strong></td><td class="r">0.816</td><td class="r">12.7</td><td class="r">5.7</td><td class="r">7.0</td><td class="r">21/300</td></tr>
+<tr><td><code>dual_u40_w8</code></td><td class="r">0.813</td><td class="r">10.3</td><td class="r">8.3</td><td class="r">2.0</td><td class="r">6/300</td></tr>
+<tr><td><strong style="color:#C15F3C">lp_r50</strong></td><td class="r">0.810</td><td class="r">9.3</td><td class="r">3.7</td><td class="r">5.7</td><td class="r">17/300</td></tr>
+<tr><td><code>dualexp_u40_em93p75</code></td><td class="r">0.793</td><td class="r">11.3</td><td class="r">8.3</td><td class="r">3.0</td><td class="r">9/300</td></tr>
+<tr><td><code>dualr_u40</code></td><td class="r">0.792</td><td class="r">11.3</td><td class="r">7.7</td><td class="r">3.7</td><td class="r">11/300</td></tr>
+<tr><td><code>jtraj_u40_v2</code></td><td class="r">0.791</td><td class="r">11.3</td><td class="r">7.0</td><td class="r">4.3</td><td class="r">13/300</td></tr>
+<tr><td><code>tyr_u40_r</code></td><td class="r">0.786</td><td class="r">11.7</td><td class="r">8.7</td><td class="r">3.0</td><td class="r">9/300</td></tr>
+<tr><td><code>traj_u40_v2</code></td><td class="r">0.783</td><td class="r">12.0</td><td class="r">8.7</td><td class="r">3.3</td><td class="r">10/300</td></tr>
+<tr><td><code>dualr_wl_u40</code></td><td class="r">0.783</td><td class="r">12.7</td><td class="r">9.7</td><td class="r">3.0</td><td class="r">9/300</td></tr>
+<tr><td><code>dualrwl_em93p75_u40</code></td><td class="r">0.769</td><td class="r">13.3</td><td class="r">9.7</td><td class="r">3.7</td><td class="r">11/300</td></tr>
+<tr><td><code>dual_u40_w4</code></td><td class="r">0.768</td><td class="r">11.7</td><td class="r">7.0</td><td class="r">4.7</td><td class="r">14/300</td></tr>
+<tr><td>baseline</td><td class="r">0.750</td><td class="r">11.0</td><td class="r">7.0</td><td class="r">4.0</td><td class="r">12/300</td></tr>
+<tr><td><code>expert_znorm_r25</code></td><td class="r">0.720</td><td class="r">12.3</td><td class="r">8.3</td><td class="r">4.0</td><td class="r">12/300</td></tr>
+<tr><td><code>coc_u40_v2</code></td><td class="r">0.660</td><td class="r">16.3</td><td class="r">9.0</td><td class="r">7.3</td><td class="r">22/300</td></tr>
+<tr><td><code>wanda_u40_v2</code></td><td class="r">0.621</td><td class="r">24.0</td><td class="r">9.3</td><td class="r">14.7</td><td class="r">44/300</td></tr>
+<tr><td><code>j_u40_v2</code></td><td class="r">0.536</td><td class="r">29.3</td><td class="r">12.0</td><td class="r">17.3</td><td class="r">52/300</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::strat::safety_profile.png" alt="안전 프로파일">
+  <figcaption>도로 이탈률(x) vs 과실 충돌률(y), rollout 단위. 점선은 baseline. LP 두 arm은
+  <strong>좌상 사분면</strong>에 홀로 있다 &mdash; 이탈은 적고 충돌은 많다. 우리 arm들은 반대로
+  이탈이 많고 충돌이 적은 쪽에 몰려 있다.</figcaption>
+</figure>
+
+<h3>이 차이가 유의한가</h3>
+
+<table>
+<thead><tr><th>비교</th><th class="r">과실 충돌</th><th class="r">OR</th><th class="r">Fisher p</th></tr></thead>
+<tbody>
+<tr><td><span class="lp">lp_r50_dual</span> vs <code>dual_u40_v2</code></td><td class="r">21/300 vs 7/300</td><td class="r">3.15</td><td class="r"><strong>0.011</strong></td></tr>
+<tr><td><span class="lp">lp_r50</span> vs <code>dual_u40_v2</code></td><td class="r">17/300 vs 7/300</td><td class="r">2.51</td><td class="r">0.059</td></tr>
+<tr><td><span class="lp">lp_r50_dual</span> vs baseline</td><td class="r">21/300 vs 12/300</td><td class="r">1.81</td><td class="r">0.151</td></tr>
+<tr><td><span class="lp">lp_r50</span> vs baseline</td><td class="r">17/300 vs 12/300</td><td class="r">1.44</td><td class="r">0.447</td></tr>
+<tr><td><code>dual_u40_v2</code> vs baseline</td><td class="r">7/300 vs 12/300</td><td class="r">0.57</td><td class="r">0.351</td></tr>
+</tbody>
+</table>
+
+<p>즉 <strong>LP가 baseline보다 위험하다고는 아직 말할 수 없다</strong>(p=0.15/0.45).
+말할 수 있는 것은 <strong>점수가 같은 우리 arm보다 유의하게 위험하다</strong>는 것이다
+(lp_r50_dual 3.15배, p=0.011). LP의 도로 이탈 감소도 유의하지 않다
+(lp_r50 11/300 vs baseline 21/300, p=0.101).</p>
+
+<figure>
+  <img src="PLOT::strat::score_vs_atfault.png" alt="점수 vs 과실 충돌">
+  <figcaption>우리 15개 arm에서 씬 점수와 과실 충돌률은 <strong>r=&minus;0.95</strong>로 거의
+  완벽하게 같이 움직인다 &mdash; 점수를 버는 방법이 곧 충돌을 피하는 것이었다. LP 두 arm만 그
+  추세선 위로 <strong>+3.5pp / +5.2pp</strong> 떠 있다(점선). 같은 점수를 다른 방식으로
+  벌었다는 뜻이다.</figcaption>
+</figure>
+
+<h2><span class="num">7.</span>모델을 돌리지 않고 매긴 난이도 &mdash; out-of-sample 검증</h2>
+
+<p>4&sect;에서 정의한 <strong>정적 난이도</strong>는 usdz를 ZIP으로 열어 작은 멤버만 읽는다
+(<code>rig_trajectories.usda</code> 68 KB &rarr; 에고 GT 궤적 10 Hz &times; 20 s). 400 MB 메시는
+건드리지 않으므로 913씬 전부가 <strong>39초</strong>에 처리된다. 파싱 검증: 여기서 계산한 경로
+길이가 시뮬레이터가 기록한 <code>gt_dist_traveled_m</code>과 r=1.00000, 중앙 상대오차 4.6e-5로
+일치한다.</p>
+
+<p>문제는 이 규칙의 피처(<code>v_mean</code>, <code>yaw_total_deg</code>)를 바로 그 150씬을 보고
+골랐다는 점이다. 그래서 150씬 위의 검증은 in-sample이다. 다행히
+<strong>sangoh님이 <code>public_2601</code> 913씬 전부를 비압축 baseline으로 돌린 런</strong>이
+있다 (<code>eval2601_a1_5</code>, 씬당 1 rollout, 2026-08-12 KST). 여기서 우리 매트릭스가 한 번도
+건드리지 않은 <strong>763씬</strong>을 꺼내면 순환성 없는 out-of-sample 검정이 된다.</p>
+
+<div class="note">
+  <strong>그 런이 우리 것과 비교 가능한가.</strong> 겹치는 150씬에서 sangoh 0.742 vs 우리 0.750,
+  Wilcoxon p=0.697로 차이가 없다. 두 런의 상관은 r=0.630인데 <em>우리 런 내부</em>의
+  rollout1&harr;rollout2 상관이 0.592다 &mdash; 즉 두 런의 일치도가 한 런 내부의 재현성 상한을
+  넘는다. 그 런은 <code>test_suite_id: null</code> + <code>scene_ids</code> 방식이라 26.04 렌더로
+  뒤바뀌는 함정 위험이 있었으나, 로그에서 2604 아티팩트 uuid가 0개 발견됐고 겹치는 159개 중 우리
+  150씬에도 있는 30개만 따로 봐도 차이가 없다 (위험 씬 +0.008 vs 나머지 &minus;0.011,
+  Mann-Whitney p=0.329). 30개만 검정 가능해 검정력은 제한적이다.
+</div>
+
+<table>
+<thead><tr><th>정적 난이도 구간 (913씬 퍼센타일)</th><th class="r">150씬 n</th><th class="r">150씬 점수 <span style="font-weight:400">(in-sample)</span></th><th class="r">미사용 763씬 n</th><th class="r">미사용 763씬 점수 <span style="font-weight:400">(out-of-sample)</span></th></tr></thead>
+<tbody>
+<tr><td><code>0-20%</code></td><td class="r">36</td><td class="r">0.937</td><td class="r">147</td><td class="r">0.832</td></tr>
+<tr><td><code>20-40%</code></td><td class="r">37</td><td class="r">0.793</td><td class="r">145</td><td class="r">0.704</td></tr>
+<tr><td><code>40-60%</code></td><td class="r">25</td><td class="r">0.739</td><td class="r">158</td><td class="r">0.670</td></tr>
+<tr><td><code>60-80%</code></td><td class="r">27</td><td class="r">0.699</td><td class="r">155</td><td class="r">0.605</td></tr>
+<tr><td><code>80-90%</code></td><td class="r">13</td><td class="r">0.485</td><td class="r">78</td><td class="r">0.496</td></tr>
+<tr><td><code>90-100%</code></td><td class="r">12</td><td class="r">0.476</td><td class="r">80</td><td class="r">0.511</td></tr>
+</tbody>
+</table>
+
+<p>미사용 763씬만으로 <strong>Spearman &rho; = &minus;0.293 (p=1.5e-16)</strong>,
+Pearson r = &minus;0.260. 913씬 전체로는 &rho; = &minus;0.315다. 150씬 in-sample의
+&rho; = &minus;0.479보다 약한데, 이유는 두 가지다 &mdash; (1) 이 런은 씬당 1 rollout이라 측정
+노이즈가 크고(감쇠), (2) in-sample 쪽에는 피처 선택 낙관 편향이 있다.</p>
+
+<div class="callout">
+  <p><strong>hard100 선별이 실제로 통했다.</strong> 미사용 풀에서 정적 점수 상위 100개를 뽑은
+  <code>hard100</code>의 실측 baseline 점수는 <strong>0.499</strong> (0.7 미만 62%), 하위 100개
+  <code>easy100</code>은 <strong>0.826</strong> (0.7 미만 19%), 913씬 전체 평균은 0.673이다.
+  차이 <strong>&minus;0.327 (Mann-Whitney p=5.4e-10)</strong>로, 이 리포트를 쓰기 전 사전등록했던
+  게이트 &ldquo;차이 &le; &minus;0.25&rdquo;를 통과한다. 예측 구간으로 제시했던 0.45&ndash;0.55
+  안에 0.499가 들어왔다.</p>
+  <p style="margin-bottom:0"><strong>다만 상위 20%에서 포화한다.</strong> 80&ndash;90% 구간 0.496,
+  90&ndash;100% 구간 0.511로 사실상 평평하다. 정적 점수를 더 밀어붙여도 0.50 아래로 내려가지
+  않으므로, <code>hard100</code>을 87퍼센타일부터 뽑을 이유가 없다 &mdash;
+  <strong>80&ndash;100% 밴드 183씬 전체가 동등하게 어렵다.</strong> 씬 수를 늘리려면 여기서 뽑으면
+  된다.</p>
+</div>
+
+<figure>
+  <img src="PLOT::strat::static_validation.png" alt="정적 난이도 out-of-sample 검증">
+  <figcaption>왼쪽: 구간별 실측 점수. 파랑은 규칙을 만든 150씬(in-sample), 초록은 한 번도 안 돌린
+  763씬(out-of-sample). 두 계열이 나란히 내려가고, 상위 두 구간에서 함께 평평해진다.
+  오른쪽: 미사용 풀에서 정적 점수만으로 뽑은 easy100 / hard100의 실측 성적.</figcaption>
+</figure>
+
+<div class="warn">
+  <p style="margin-bottom:0"><strong>부수적으로 드러난 것 &mdash; 우리가 쓰는 첫 150씬은 스위트
+  평균보다 유의하게 쉽다.</strong> 같은 913씬 런 안에서 첫 150씬 0.742 vs 나머지 763씬 0.660,
+  차이 <strong>+0.082 (Mann-Whitney p=0.039)</strong>. 게이트 실패도 낮다 &mdash; offroad 9.3% vs
+  13.0%, <strong>과실 충돌 2.0% vs 5.5%</strong>. <code>sorted(scene_id)[:150]</code>은 설계상
+  무편향 추출이지만 실현된 표본이 우연히 쉬운 쪽으로 치우쳤다. 이 리포트를 포함한 모든 폐루프
+  <em>절대</em> 수치는 스위트 대비 낙관적으로 읽어야 하고, 특히 6&sect;의 충돌률은 저평가된
+  표본에서 나온 값이다. arm 간 <em>상대</em> 비교는 페어드라 영향이 훨씬 작다.</p>
+</div>
+
+<h2><span class="num">8.</span>해석 <span class="tag">의견</span></h2>
+
+<p><strong>LP는 실질적으로 우리와 동급의 압축기다.</strong> 25.0%를 제거하고 0.810&ndash;0.816,
+baseline 대비 유의한 개선, 우리 최고 arm과 통계적 동률. LP 두 아암(coc / dual importance) 사이에
+차이가 없다는 것(p=0.69)도 그 자체로 정보다 &mdash; LLM-Pruner의 그룹 Taylor 프레임 안에서는
+어떤 목적함수로 중요도를 재든 결과가 같다는 뜻이고, 우리 쪽에서 criterion을 바꿨을 때 나타나는
+큰 차이(<code>dual</code> 0.828 vs <code>j</code> 0.536)와 대비된다. 다만 이건 배분 형태가
+동시에 다르므로(가운데 30층 50% vs 전 층 40%) 단일 요인 결론으로 쓸 수는 없다.</p>
+
+<p><strong>진짜 차이는 점수가 아니라 실패 양상에 있다.</strong> 우리 arm은 예외 없이
+"충돌을 피해서 점수를 번다"는 한 줄 위에 놓이는데(r=&minus;0.95), LP만 그 선 위로 떠 있다.
+가설은 두 가지다. (a) LP가 층 0&ndash;3과 34&ndash;35를 온전히 남기고 가운데를 50% 자르는 배분이,
+차선 경계 같은 <em>기하적</em> 신호는 보존하면서 선행 차량 거리 판단 같은 <em>동적</em> 신호를
+더 깎았을 수 있다. (b) 종합 점수가 progress 가중이라, 더 공격적으로 밀어붙이는 정책이 progress로
+번 점수와 충돌로 잃은 점수가 상쇄됐을 수 있다. 표 B의 어려움 계층에서 lp_r50_dual이 +0.224로
+최상위인 것은 (b)와 정합적이다. 지금 데이터로는 둘을 가르지 못한다.</p>
+
+<p><strong>2026-07의 교훈이 그대로 재현됐다.</strong> 당시 <code>integrated_mag</code>가
+&Delta;+0.002 (p=0.80)로 "무해"인데 과실 충돌 2&rarr;8건이었던 것과 같은 구조다. 씬 점수 하나로
+압축 방법을 비교하면 안 된다는 것이 이제 두 번째 사례다.</p>
+
+<h2><span class="num">9.</span>한계</h2>
+
+<ul>
+  <li><strong>충돌 카운트는 검정력이 낮다.</strong> 300 rollout에 7&ndash;21건이라 Fisher가
+  겨우 p=0.011을 낸다. baseline과의 비교는 아예 유의하지 않다. 이래서
+  <code>analyze_longitudinal.py</code>(time headway, proximity exposure, 제동 반응 등 연속
+  대리지표)가 존재한다 &mdash; LP arm에 대해 아직 돌리지 않았고, 이게 다음 순서다.</li>
+  <li><strong>rollout 단위 Fisher는 씬 내 상관을 무시한다.</strong> 같은 씬의 2 rollout은
+  독립이 아니므로 p는 낙관적일 수 있다. 씬 단위 페어드 검정이 더 맞다.</li>
+  <li><strong>예산이 정확히 맞지 않는다.</strong> LP 25.0% vs 우리 24.0%. 동률 결론에는 LP가
+  불리한 방향이라 안전하지만, 안전 프로파일 차이의 일부가 예산 차이일 가능성은 배제하지 못한다.</li>
+  <li><strong>정적 난이도는 과실 충돌과 무관하다</strong> (&rho;=+0.008). 7&sect;에서 out-of-sample
+  검증을 통과한 것은 <em>씬 점수</em>에 대해서지 <em>안전성</em>에 대해서가 아니다. 안전성 주장을
+  위한 씬 선별에는 다른 기준이 필요하다.</li>
+  <li><strong>913씬 런은 씬당 1 rollout이다.</strong> 우리 매트릭스의 절반이라 씬 단위 측정
+  노이즈가 크고, 7&sect;의 out-of-sample &rho;=&minus;0.293은 그만큼 감쇠된 값이다 &mdash;
+  규칙의 참 상관은 이보다 강할 것이다. 반대로 in-sample &rho;=&minus;0.479에는 피처 선택 낙관
+  편향이 있으므로, 참값은 두 수 사이로 보는 것이 맞다.</li>
+  <li><strong>정적 난이도의 선형성은 관측 범위 안에서만 성립한다.</strong> 150씬에서 Pearson
+  r=&minus;0.450 vs Spearman &rho;=&minus;0.479로 차이가 0.029뿐이고 2차항도 유의하지 않지만
+  (F=1.80, p=0.182), 종속변수가 [0,1]에 잘려 49%가 정확히 1.0이라 잔차 정규성이 기각된다
+  (Shapiro-Wilk p=5.2e-07). OLS의 p값/신뢰구간은 쓰면 안 되고, 무엇보다 <strong>외삽하면 안
+  된다</strong> &mdash; 913씬 최대 hard_score에서 선형 예측은 0.124인데 실제 상위 구간은 0.50에서
+  포화한다.</li>
+  <li>soowon님 <code>cl150_baseline</code>이 중단돼 LP 쪽 자체 baseline이 없다. 우리 baseline은
+  더 이른 시점 런이라 스택 드리프트를 완전히 배제하지 못한다.</li>
+  <li><strong>첫 150씬이 스위트보다 쉽다</strong>(7&sect;). 5&ndash;6&sect;의 절대 수치, 특히 충돌률은
+  스위트 전체에 그대로 옮길 수 없다. 80&ndash;100% 밴드 183씬으로 재측정하면 이 편향 없이 훨씬
+  가혹한 조건에서 arm을 비교할 수 있다.</li>
+</ul>
+
+<h2><span class="num">10.</span>재현</h2>
+
+<pre><code>python experiments/head_analysis/analyze_difficulty_strat.py \
+    --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    --lp-root /mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs \
+    --full-suite-run /mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5 \
+    --out outputs/difficulty_strat
+
+python experiments/head_analysis/build_report.py \
+    experiments/head_analysis/difficulty_strat_report_template.html \
+    reports/evaluation/2026-09-03_difficulty-stratified-arms.html \
+    strat=$PWD/outputs/difficulty_strat/plots</code></pre>
+
+<p class="note" style="margin-top:1.5rem">정적 난이도 피처는 별도로
+<code>outputs/scene_difficulty/</code>에 있다 &mdash; <code>extract_scene_feats.py</code>(913씬 39초),
+<code>scene_difficulty_public2601.csv</code>(전체 랭킹),
+<code>hard100_candidates.csv</code>(미사용 755개 중 상위 100, alpasim 스위트 CSV 포맷).</p>
+
+</div>
+</body>
+</html>
