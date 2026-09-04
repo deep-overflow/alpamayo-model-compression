@@ -312,31 +312,53 @@ def main():
     fig.savefig(out / "plots" / "interaction.png", dpi=150)
     plt.close(fig)
 
-    # where maxstep11's difference lives: nowhere typical, only in the hard tail
-    fig, ax = plt.subplots(figsize=(6.6, 3.3))
-    w, xs = 0.35, np.arange(len(SETS))
+    # Does maxstep11 differ from dualfix in the hard tail? Selecting the tail by ONE arm's
+    # own score makes the other arm look better by regression to the mean -- that arm's
+    # extreme values are extreme partly by noise, which the comparison arm does not share.
+    # So the same delta is reported under four selection rules: each arm's own score (the
+    # two biased directions), the two arms' mean (symmetric, unbiased between them), and
+    # the unpruned baseline (a third variable). A real effect survives all four; regression
+    # to the mean flips sign between the first two.
+    RULES = [("dualfix", GREY), ("maxstep11", "#2F6FBF"), ("mean of both", GOOD),
+             ("baseline", MUTED)]
+    fig, ax = plt.subplots(figsize=(7.6, 3.4))
+    w, xs = 0.2, np.arange(len(SETS))
     tail = {}
     for j, s in enumerate(SETS):
-        a, b = data["maxstep11"][s], data["dualfix"][s]
-        ids = sorted(set(a) & set(b))
+        a_, b_ = data["maxstep11"][s], data["dualfix"][s]
+        base = data["baseline"][s]
+        ids = sorted(set(a_) & set(b_) & set(base))
         if not ids:
             continue
-        da = np.array([at_k(a[c], "ade_rollout_k", K) for c in ids])
-        db = np.array([at_k(b[c], "ade_rollout_k", K) for c in ids])
-        hard = db >= np.quantile(db, 0.9)
-        tail[s] = {"easy_mean": float((da - db)[~hard].mean()),
-                   "hard_mean": float((da - db)[hard].mean()),
-                   "hard_med": float(np.median((da - db)[hard]))}
-        ax.bar(xs[j] - w / 2, tail[s]["easy_mean"], w, color=GREY)
-        ax.bar(xs[j] + w / 2, tail[s]["hard_mean"], w, color="#2F6FBF")
+        da = np.array([at_k(a_[c], "ade_rollout_k", K) for c in ids])
+        db = np.array([at_k(b_[c], "ade_rollout_k", K) for c in ids])
+        dbase = np.array([at_k(base[c], "ade_rollout_k", K) for c in ids])
+        d = da - db
+        sels = {"dualfix": db, "maxstep11": da, "mean of both": (da + db) / 2,
+                "baseline": dbase}
+        tail[s] = {}
+        for i, (nm, col) in enumerate(RULES):
+            m = sels[nm] >= np.quantile(sels[nm], 0.9)
+            g = np.random.default_rng(0)
+            bs = d[m][g.integers(0, m.sum(), (BOOT, m.sum()))].mean(1)
+            lo, hi = np.percentile(bs, [2.5, 97.5])
+            tail[s][nm] = {"n": int(m.sum()), "mean": float(d[m].mean()),
+                           "med": float(np.median(d[m])), "lo": float(lo), "hi": float(hi)}
+            ax.bar(xs[j] + (i - 1.5) * w, d[m].mean(), w, color=col,
+                   label=nm if j == 0 else None)
     M["tail"] = tail
     ax.axhline(0, color=TEXT, lw=0.8)
     ax.set_xticks(xs, [SET_LABEL[s] for s in SETS])
-    ax.set_ylabel(f"mean ΔminADE@{K} vs dualfix (m)")
-    ax.set_title("maxstep11: easiest 90% (grey) vs hardest 10% (blue)")
+    ax.set_ylabel(f"hardest-10% mean ΔminADE@{K} vs dualfix (m)")
+    ax.set_title("the tail effect is the selection rule, not the arm")
+    ax.legend(frameon=False, fontsize=8, title="tail selected by", title_fontsize=8)
     fig.tight_layout()
     fig.savefig(out / "plots" / "tail.png", dpi=150)
     plt.close(fig)
+    print("\n== hardest 10%, maxstep11 - dualfix, by selection rule (mean [CI]) ==")
+    for s in tail:
+        print(f"  {SET_LABEL[s]:12s} " + "  ".join(
+            f"{nm}: {tail[s][nm]['mean']:+.4f}" for nm, _ in RULES))
 
     (out / "metrics.json").write_text(json.dumps(M, indent=2))
     def gate(key):
