@@ -201,6 +201,9 @@ if has lingoqa; then
   step "LingoQA benchmark package -> $SCRATCH/project/LingoQA/benchmark"
   # judge.py lives in LingoQA's own repo, not in ours -- score_lingo_vqa.py and
   # run_lingo_judge.py sys.path-insert it. Without this the LingoQA arm cannot score.
+  # rsync creates only the LAST path component, and this one is two levels below
+  # $SCRATCH/project, so make the parent first rather than relying on --mkpath.
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/project/LingoQA"
   echo "  $(du -shL "$LINGO_BENCH" | cut -f1)"
   run "${RSYNC[@]}" "$LINGO_BENCH/" "$HOST:$SCRATCH/project/LingoQA/benchmark/"
 
