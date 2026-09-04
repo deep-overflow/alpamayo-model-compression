@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재구성은 예산이다: 토큰 타입별 오차 분해</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>재구성은 예산이다: 토큰 타입별 오차 분해</h1>
+  <div class="meta">
+    2026-09-04 · <code>nvidia/Alpamayo-1.5-10B</code> 24% 압축 + OSSCAR 재구성 4종 ·
+    held-out 40클립 · 36층 × o_proj/down_proj × 5 토큰 타입
+  </div>
+</header>
+
+<p class="lede">
+기존 &ldquo;rel err on own-CoC tokens&rdquo; 그래프는 <strong>정보를 담을 수 없는 그림</strong>이었다.
+최소제곱 refit은 <code>H_fit</code>이 가중한 오차를 정의상 최소화하므로, own-CoC를
+<code>H_fit</code>에 넣은 arm이 own-CoC에서 이기는 것은 결과가 아니라 항등식이다. 오차를
+5개 토큰 타입으로 쪼개고 <strong>에너지로 가중</strong>해서 다시 보면, CoC를 사는 거래는
+<strong>순손실</strong>이다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">CoC 오차</span><span class="v">&minus;0.12</span>사면 내려간다</div>
+  <div><span class="k">vision 오차</span><span class="v">+0.011</span>대신 올라간다</div>
+  <div><span class="k">에너지 순변화</span><span class="v">+0.0098</span>o_proj, 순손실</div>
+  <div><span class="k">sink 에너지</span><span class="v">4.14%</span>토큰은 0.03%인데</div>
+  <div><span class="k">H2</span><span class="v">기각</span>오차는 fit 가중치를 안 따른다</div>
+</div>
+
+<h2><span class="num">1</span>이 지표가 재는 것 (용어 정정)</h2>
+
+<p>
+<code>tyr_lib.recon_error</code>는 이것이다.
+</p>
+
+<pre><code>rel = ‖(W − Ŵ) X‖_F / ‖W X‖_F ,   X = 그 층 o_proj / down_proj의 <strong>입력</strong></code></pre>
+
+<p>
+훅이 <code>register_forward_pre_hook</code>으로 모듈 입력에 걸리므로, 이 값은 <strong>그
+서브블록이 residual stream에 쓰는 출력이 얼마나 바뀌었는가</strong>다. 지금까지 이 그림에
+붙어 있던 &ldquo;own-CoC tokens&rdquo;라는 라벨은 측정 대상이 아니라 <strong>오차를 읽는
+위치를 고르는 마스크</strong>를 가리킨다.
+</p>
+
+<table>
+<thead><tr><th>흔한 오해</th><th>실제</th></tr></thead>
+<tbody>
+<tr><td>KV cache가 얼마나 바뀌는가</td>
+    <td>아니다. 층 <em>l</em>의 출력은 residual → 층 <em>l+1</em>의 k/v_proj → 층 <em>l+1</em>의
+    캐시로 간다. 캐시 변화의 <strong>상류 원인</strong>이지 캐시 변화 자체가 아니다.</td></tr>
+<tr><td>CoC 위치 hidden state가 얼마나 바뀌는가</td>
+    <td>아니다. 층 하나·서브블록 하나의 <strong>증분</strong>이고, dense 입력에서 층별로
+    독립 측정된다 &mdash; 오차가 층을 타고 누적되지 않는다.</td></tr>
+<tr><td colspan="2"><strong>정확히는</strong>: 층 <em>l</em>의 어텐션(또는 MLP) 출력이
+    해당 토큰 위치에서 얼마나 달라졌는가.</td></tr>
+</tbody>
+</table>
+
+<h2><span class="num">2</span>설계</h2>
+
+<p>
+기존 racfit의 3분할(<code>V</code> = vision+hist+sink, <code>T</code>, <code>D</code>)을
+이 저장소의 표준 5분할로 쪼갠다: <strong>vision · prompt_text(instruction) · hist(ego
+history) · sink · coc(own rollout)</strong>. arm 4종은 fit 구성이 metadata에 숫자로
+남아 있어, &ldquo;무엇을 얼마나 넣었는가&rdquo;와 &ldquo;어디서 오차가 났는가&rdquo;를
+직접 대응시킬 수 있다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th>prefill 가중</th><th class="r">CoC 몫</th><th>LingoQA</th></tr></thead>
+<tbody>
+<tr><td><code>dualr</code></td><td>균일</td><td class="r">0.0</td><td>없음</td></tr>
+<tr><td><code>dualr_rep</code></td><td>expert 어텐션 (vision .7223 / text .1656 / hist .0418 / sink .0110)</td><td class="r">0.0</td><td>없음</td></tr>
+<tr><td><code>dualr_w</code></td><td>동일</td><td class="r"><strong>0.16</strong></td><td>없음</td></tr>
+<tr><td><code>dualr_wl</code></td><td>동일</td><td class="r">0.04</td><td><strong>있음</strong></td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p>
+<strong>Hessian을 쌓지 않는다.</strong> 5분할이면 down_proj의 <code>H</code>가 층·스트림당
+12288² = 604 MB다. 대신 dense forward의 hook에서 이미 손에 있는 <code>y = Wx</code>와
+<code>ŷ = Ŵ x_kept</code>로 타입별 <code>Σ‖y−ŷ‖²</code>, <code>Σ‖y‖²</code>만 누적한다 &mdash;
+스칼라라 메모리가 상수이고 비율은 <code>recon_error</code>와 정확히 같은 양이다.
+그리고 클립은 fit 캘리브가 아니라 <code>indist_500</code>에서 뽑아 <strong>held-out</strong>이다
+(기존 그림의 두 번째 결함이 in-sample이었다).
+</p>
+</div>
+
+<h2><span class="num">3</span>타입별 오차</h2>
+
+<table>
+<thead><tr><th>arm</th><th>모듈</th><th class="r">vision</th><th class="r">prompt_text</th><th class="r">hist</th><th class="r">sink</th><th class="r">coc</th></tr></thead>
+<tbody>
+<tr><td><code>dualr</code></td><td>o_proj</td><td class="r">0.2800</td><td class="r">0.2923</td><td class="r">0.2591</td><td class="r">0.2579</td><td class="r">0.5231</td></tr>
+<tr><td><code>dualr_rep</code></td><td>o_proj</td><td class="r">0.2715</td><td class="r">0.2859</td><td class="r">0.2412</td><td class="r">0.2626</td><td class="r">0.5159</td></tr>
+<tr><td><code>dualr_w</code></td><td>o_proj</td><td class="r">0.2939</td><td class="r">0.2811</td><td class="r">0.2698</td><td class="r"><strong>0.1129</strong></td><td class="r"><strong>0.3870</strong></td></tr>
+<tr><td><code>dualr_wl</code></td><td>o_proj</td><td class="r">0.2948</td><td class="r">0.3357</td><td class="r">0.2846</td><td class="r">0.1922</td><td class="r">0.4311</td></tr>
+<tr><td><code>dualr</code></td><td>down_proj</td><td class="r">0.3195</td><td class="r">0.1622</td><td class="r">0.2838</td><td class="r">0.3203</td><td class="r">0.3966</td></tr>
+<tr><td><code>dualr_rep</code></td><td>down_proj</td><td class="r">0.3195</td><td class="r">0.1621</td><td class="r">0.2836</td><td class="r">0.3208</td><td class="r">0.3962</td></tr>
+<tr><td><code>dualr_w</code></td><td>down_proj</td><td class="r">0.3255</td><td class="r"><strong>0.1202</strong></td><td class="r">0.2647</td><td class="r">0.2677</td><td class="r"><strong>0.2622</strong></td></tr>
+<tr><td><code>dualr_wl</code></td><td>down_proj</td><td class="r">0.3368</td><td class="r">0.1503</td><td class="r">0.3080</td><td class="r">0.2868</td><td class="r">0.3010</td></tr>
+</tbody>
+</table>
+
+<p class="meta">36개 층의 중앙값. 낮을수록 그 타입에서 원래 출력이 잘 보존됐다는 뜻.</p>
+
+<figure>
+  <img src="PLOT::se::layers.png" alt="층별 타입별 오차 곡선">
+  <figcaption>
+    층별 상대 오차. 위가 <code>o_proj</code>, 아래가 <code>down_proj</code>.
+    <code>dualr</code>과 <code>dualr_rep</code>은 <code>down_proj</code>에서 사실상 겹친다
+    (선이 포개져 보이지 않는다) &mdash; expert 어텐션 가중은 MLP 축에서 아무것도 바꾸지
+    못했다는 뜻이다. <code>down_proj</code>는 층 0&ndash;5와 35에서 오차가 거의 0이고
+    27&ndash;31에서 최고조에 이른다.
+  </figcaption>
+</figure>
+
+<h2><span class="num">4</span>H1: 교환은 실재하고, 계산해 보면 손해다</h2>
+
+<p>
+CoC 몫만 0 → 0.16으로 바꾼 <code>dualr_w − dualr_rep</code> (다른 요인 동일, 36개 층 페어드):
+</p>
+
+<figure>
+  <img src="PLOT::se::exchange.png" alt="CoC를 Hessian에 넣을 때의 타입별 변화">
+  <figcaption>
+    초록이 개선, 주황이 악화. 오차 막대는 층에 대한 부트스트랩 95% CI.
+    <strong>coc와 sink가 크게 내려가고 vision만 올라간다</strong> &mdash; 그리고 vision은
+    유일하게 CI가 0 위에 완전히 놓인 악화다.
+  </figcaption>
+</figure>
+
+<table>
+<thead><tr><th>스트림</th><th class="r">o_proj</th><th class="r">down_proj</th></tr></thead>
+<tbody>
+<tr><td>vision</td><td class="r"><strong>+0.0114</strong> [+0.008, +0.021]*</td><td class="r"><strong>+0.0028</strong> [+0.002, +0.007]*</td></tr>
+<tr><td>prompt_text</td><td class="r">&minus;0.0189 [&minus;0.034, +0.002]</td><td class="r">&minus;0.0033 [&minus;0.018, &minus;0.001]*</td></tr>
+<tr><td>hist</td><td class="r">&minus;0.0029 [&minus;0.007, +0.001]</td><td class="r">&minus;0.0142 [&minus;0.027, &minus;0.008]*</td></tr>
+<tr><td>sink</td><td class="r">&minus;0.1174 [&minus;0.166, &minus;0.078]*</td><td class="r">&minus;0.0080 [&minus;0.022, &minus;0.000]*</td></tr>
+<tr><td>coc</td><td class="r"><strong>&minus;0.1215</strong> [&minus;0.156, &minus;0.087]*</td><td class="r"><strong>&minus;0.1145</strong> [&minus;0.122, &minus;0.102]*</td></tr>
+</tbody>
+</table>
+
+<h3>토큰 수가 아니라 에너지로 세야 한다</h3>
+
+<p>
+&ldquo;coc가 &minus;0.12 좋아지고 vision이 +0.011 나빠졌다&rdquo;를 더하려면 각 스트림이
+모델의 출력 에너지에서 차지하는 몫이 필요하다. 그리고 그 몫은 <strong>토큰 비율과 다르다</strong>.
+</p>
+
+<figure>
+  <img src="PLOT::se::shares.png" alt="토큰 비율 vs 에너지 비율">
+  <figcaption>
+    회색이 토큰 비율, 주황이 dense 출력 에너지 비율(로그 축). <code>sink</code>는 토큰의
+    0.03%인데 <code>down_proj</code> 에너지의 <strong>4.14%</strong>를 차지한다 &mdash;
+    토큰당 138배다. <code>coc</code>도 토큰 0.46%에 <code>o_proj</code> 에너지 1.64%로
+    토큰당 3.5배 진하다.
+  </figcaption>
+</figure>
+
+<p>
+에너지로 가중해 합산하면(<code>Σ_s share_s × (err_w² − err_rep²)</code>, 에너지는 제곱으로
+더해지므로 제곱차를 쓴다):
+</p>
+
+<table>
+<thead><tr><th>모듈</th><th class="r">순변화</th><th class="r">vision</th><th class="r">prompt_text</th><th class="r">hist</th><th class="r">sink</th><th class="r">coc</th></tr></thead>
+<tbody>
+<tr><td>o_proj</td><td class="r"><strong>+0.00982</strong></td><td class="r">+0.01166</td><td class="r">&minus;0.00014</td><td class="r">+0.00022</td><td class="r">&minus;0.00001</td><td class="r">&minus;0.00191</td></tr>
+<tr><td>down_proj</td><td class="r"><strong>+0.00153</strong></td><td class="r">+0.00351</td><td class="r">&minus;0.00061</td><td class="r">&minus;0.00003</td><td class="r">&minus;0.00129</td><td class="r">&minus;0.00004</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p>
+<strong>순변화가 두 모듈 모두 양수다 &mdash; CoC를 사는 거래는 출력 보존 관점에서 순손실이다.</strong>
+<code>o_proj</code>에서 vision이 잃는 +0.01166이 coc가 버는 &minus;0.00191의 <strong>6.1배</strong>다.
+own-CoC 그래프에서 <code>dualr_w</code>가 가장 좋아 보였던 것과, 실제 LingoQA 성능이 가장
+나빴던 것(41.8%)이 모순이 아니었던 이유가 여기 있다. 그 그래프는 거래의 <strong>수입 쪽만</strong>
+보여주고 있었다.
+</p>
+</div>
+
+<h2><span class="num">5</span>H2 기각: 오차는 fit 가중치를 따르지 않는다</h2>
+
+<p>
+&ldquo;많이 넣은 타입일수록 오차가 작다&rdquo;가 성립하는지 arm 안에서 Spearman으로 봤다
+(가설대로면 음수여야 한다).
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">o_proj ρ</th><th class="r">down_proj ρ</th></tr></thead>
+<tbody>
+<tr><td><code>dualr</code></td><td class="r">&minus;0.707 (p=0.18)</td><td class="r">&minus;0.707 (p=0.18)</td></tr>
+<tr><td><code>dualr_rep</code></td><td class="r">&minus;0.200 (p=0.75)</td><td class="r">&minus;0.700 (p=0.19)</td></tr>
+<tr><td><code>dualr_w</code></td><td class="r"><strong>+0.900 (p=0.04)</strong></td><td class="r">+0.100 (p=0.87)</td></tr>
+<tr><td><code>dualr_wl</code></td><td class="r">+0.300 (p=0.62)</td><td class="r">+0.400 (p=0.50)</td></tr>
+</tbody>
+</table>
+
+<p>
+일관된 음의 상관이 없고, <code>dualr_w</code>의 <code>o_proj</code>는 오히려 유의한
+<strong>양의</strong> 상관이다. 즉 오차 크기를 지배하는 것은 그 타입을 fit에 얼마나 넣었는지가
+아니라 <strong>그 타입 활성값의 고유 난이도</strong>(부분공간 차원, 에너지 분포)다. 가중치는
+&ldquo;누가 이기는지&rdquo;의 순위를 바꿀 뿐 절대 난이도를 바꾸지 못한다.
+</p>
+
+<h2><span class="num">6</span>H3: 흔들리는 스트림과 굳어 있는 스트림</h2>
+
+<table>
+<thead><tr><th>스트림</th><th class="r">토큰 수</th><th class="r">arm 간 범위</th><th class="r">폭</th></tr></thead>
+<tbody>
+<tr><td>coc</td><td class="r">566</td><td class="r">0.262 ~ 0.523</td><td class="r"><strong>0.261</strong></td></tr>
+<tr><td>prompt_text</td><td class="r">6,280</td><td class="r">0.120 ~ 0.336</td><td class="r"><strong>0.216</strong></td></tr>
+<tr><td>sink</td><td class="r">40</td><td class="r">0.113 ~ 0.321</td><td class="r"><strong>0.208</strong></td></tr>
+<tr><td>hist</td><td class="r">1,920</td><td class="r">0.241 ~ 0.308</td><td class="r">0.067</td></tr>
+<tr><td>vision</td><td class="r">115,200</td><td class="r">0.271 ~ 0.337</td><td class="r">0.065</td></tr>
+</tbody>
+</table>
+
+<p>
+<strong>vision은 굳어 있다.</strong> 에너지의 90% 이상을 차지하니 어떤 fit이든 비슷하게 맞추고,
+arm 간 폭이 0.065로 가장 좁다. 반대로 <code>coc</code>·<code>prompt_text</code>·<code>sink</code>는
+0.21~0.26으로 크게 흔들린다 &mdash; <strong>재구성 레시피가 실제로 결정하는 것은 이 세
+스트림</strong>이고, vision은 협상 대상이 아니다.
+</p>
+
+<p>
+부수적으로, <code>prompt_text</code>의 <code>down_proj</code> 오차는 0.12~0.15로 전
+스트림 중 가장 낮다. 지시문 토큰은 MLP 관점에서 가장 잘 재구성된다 &mdash; 따라서
+<code>dualr_w</code>의 LingoQA 붕괴를 &ldquo;MLP가 지시문을 못 살렸다&rdquo;로 설명할 수는 없다.
+</p>
+
+<h2><span class="num">7</span>결론</h2>
+
+<ul>
+<li><strong>단일 스트림 오차 그래프는 폐기한다.</strong> fit이 산 스트림에서 이기는 것은
+    항등식이다. 재구성 arm을 비교할 때는 <strong>사지 않은 스트림</strong>을 함께 보고,
+    <strong>에너지로 가중</strong>해 순변화를 계산해야 한다.</li>
+<li><strong>CoC를 16% 넣는 거래는 순손실이다</strong>(o_proj +0.0098, down_proj +0.0015).
+    <code>dualr_w</code>가 own-CoC에서 이기고 LingoQA에서 진 것은 모순이 아니라 같은 사실의
+    양면이다.</li>
+<li><strong>가중치는 순위를 바꾸고 난이도는 못 바꾼다.</strong> 오차의 절대 크기는 스트림
+    고유 성질이 지배한다(H2 기각). 재구성으로 능력을 되찾으려면 가중치를 옮기는 것으로는
+    부족하고, <code>dualr_wl</code>처럼 <strong>그 능력의 데이터 자체</strong>를 넣어야 한다는
+    기존 결론과 일관된다.</li>
+<li><strong>다음.</strong> 이 지표는 층별 <em>국소</em> 오차다. 같은 분해를 누적된 hidden
+    state와 실제 KV cache에서 반복하면, 국소 오차가 어디서 상쇄되고 어디서 증폭되는지 알 수
+    있다 &mdash; 국소 오차 순위와 최종 능력 순위가 어긋나는 이유가 거기 있을 것이다.</li>
+</ul>
+
+<footer>
+  <code>experiments/head_analysis/run_streamerr.py</code> ·
+  <code>analyze_streamerr.py</code> ·
+  데이터 <code>outputs/streamerr_v1/</code> ·
+  계획 <code>plans/2026-09-04_stream-error-decomposition.md</code> ·
+  선행 <code>2026-08-25_cot-reconstruction.html</code>, dualr_w/wl 보고서 ·
+  held-out 40클립 (<code>indist_500</code>), 2026-09-04
+</footer>
+
+</div>
+</body>
+</html>
