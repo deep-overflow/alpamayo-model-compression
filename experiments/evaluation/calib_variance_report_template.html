@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캘리브레이션 추출 분산: +0.0941은 점추정 하나였다</title>
+<style>
+  :root { --bg:#FAF9F5; --bg-card:#FFF; --bg-code:#F0EEE6; --text:#29261B;
+    --text-muted:#6B6555; --accent:#D97757; --accent-dark:#C15F3C; --border:#E8E6DC;
+    --table-stripe:#F5F4EF; --good:#008300; --warn:#eda100; --bad:#b0402a; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); margin:0;
+    font-family:"Söhne","Pretendard","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    font-size:16px; line-height:1.7; padding:3rem 1.5rem 5rem; }
+  .container { max-width:920px; margin:0 auto; }
+  header { margin-bottom:3rem; border-bottom:2px solid var(--accent); padding-bottom:1.5rem; }
+  .eyebrow { color:var(--accent-dark); font-size:.78rem; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; margin-bottom:.6rem; }
+  h1 { font-family:"Tiempos Headline",Georgia,serif; font-size:2rem; font-weight:500;
+    line-height:1.3; margin:0 0 .75rem; }
+  .meta { color:var(--text-muted); font-size:.9rem; }
+  .meta code { background:none; padding:0; color:var(--text-muted); }
+  h2 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.4rem; font-weight:500;
+    margin:2.75rem 0 1rem; padding-top:.5rem; }
+  h2 .num { color:var(--accent); margin-right:.4rem; }
+  h3 { font-size:1.05rem; font-weight:600; margin:1.75rem 0 .6rem; }
+  p { margin:.9rem 0; }
+  code { font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.86em;
+    background:var(--bg-code); padding:.12em .35em; border-radius:4px; }
+  pre { background:var(--bg-code); padding:1rem 1.1rem; border-radius:8px; overflow-x:auto;
+    font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.84rem; line-height:1.6; }
+  pre code { background:none; padding:0; }
+  table { width:100%; border-collapse:collapse; margin:1.25rem 0 1.75rem; font-size:.9rem;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th { background:var(--bg-code); text-align:left; font-weight:600; padding:.55rem .8rem;
+    border-bottom:2px solid var(--border); white-space:nowrap; }
+  td { padding:.5rem .8rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:nth-child(even) { background:var(--table-stripe); }
+  tbody tr:last-child td { border-bottom:none; }
+  .r { text-align:right; font-variant-numeric:tabular-nums; }
+  .up { color:var(--bad); } .down { color:var(--good); }
+  .callout { background:var(--bg-card); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; padding:1rem 1.2rem; margin:1.5rem 0; }
+  .callout.good { border-left-color:var(--good); }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout p:first-child { margin-top:0; } .callout p:last-child { margin-bottom:0; }
+  .lede { font-size:1.05rem; color:var(--text-muted); }
+  figure { margin:1.75rem 0; }
+  figure img { width:100%; border:1px solid var(--border); border-radius:8px; display:block; }
+  figcaption { color:var(--text-muted); font-size:.84rem; margin-top:.6rem; }
+  ul, ol { padding-left:1.3rem; } li { margin:.35rem 0; }
+  .kpi { display:flex; flex-wrap:wrap; gap:.9rem; margin:1.5rem 0; }
+  .kpi div { flex:1 1 150px; background:var(--bg-card); border:1px solid var(--border);
+    border-radius:8px; padding:.9rem 1rem; }
+  .kpi .v { font-family:"Tiempos Headline",Georgia,serif; font-size:1.5rem; display:block; }
+  .kpi .k { color:var(--text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  footer { margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--border);
+    color:var(--text-muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>캘리브레이션 추출 분산: +0.0941은 점추정 하나였다</h1>
+  <p class="meta">2026-09-03 · <code>dual_u40_v2</code> 레시피 고정, 중요도를 잰 클립만 변경 ·
+     개루프 test500, rollout-only, minADE@6, 페어드 중앙값 · Ada</p>
+</header>
+
+<p class="lede">
+2026-08-19 보고서는 캘리브레이션 100클립을 바꾸기만 해도 minADE가 +0.0941 나빠진다고 보고했고,
+그 근거는 대조군 <strong>하나</strong>였다. 서로소 블록 다섯 개를 더 뽑아 재보니 그 값은 구간의
+<strong>아래쪽 끝</strong>이었다 — 여섯 추출의 SD는 <strong>{{gates.G1_spread.sd|.4f}}</strong>,
+최악과 최선의 차이는 <strong>{{gates.G1_spread.range|.4f}}</strong>로 24% 압축 자체의 여덟 배다.
+그리고 추출을 들여다봐서 어느 쪽이 나쁜지 미리 알아낼 방법은 찾지 못했다.
+</p>
+
+<div class="callout warn">
+<p><strong>요약.</strong> 같은 레시피·같은 예산·같은 속성 구성에서 캘리브레이션 클립만 바꾼 여섯
+모델의 test500 minADE가 {{absolute.calib_100.test|.4f}}에서 {{absolute.nt_d.test|.4f}}까지 퍼진다.
+15개 쌍대조 중 11개가 24% 압축의 대가(+{{vs_baseline.calib_100.test.median|.4f}})보다 크다.
+잡음 바닥은 {{gates.G0b_card.median|+.4f}}(n.s.)이므로 이 폭은 측정 잡음이 아니다.
+기존 <code>calib_100</code>은 여섯 중 <strong>1위</strong> — 이 프로젝트가 인용해 온 압축 대가는
+운이 좋은 추출에서의 값이다.</p>
+</div>
+
+<h2><span class="num">1</span>같은 축으로 다시 읽기</h2>
+
+<p>
+옛 비교는 minADE@8이었고 지금 고정 프로토콜은 @6이다. 세 arm(<code>dual_u40_ctl</code>,
+<code>_ood</code>, <code>_mix</code>)이 모두 <code>ade_rollout_k</code> k=8을 seed 42 · Ada ·
+<code>deterministic</code>으로 저장해 두었고 이는 <code>dual_u40_v2_ps_test</code>와 같은
+프로토콜이므로, @6 재채점은 <strong>저장된 row를 다시 읽는 것</strong>일 뿐 GPU가 들지 않는다.
+</p>
+
+<table>
+<thead><tr><th>대조 (vs <code>calib_100</code>)</th><th class="r">@8 (구 보고서)</th>
+<th class="r">@6 (현행)</th><th class="r">95% CI</th></tr></thead>
+<tbody>
+<tr><td><code>calib_val100</code> — 추출만 바꿈</td><td class="r">+0.0941</td>
+    <td class="r up">{{anchor_2026_08_19.calib_val100.median|+.4f}}</td>
+    <td class="r">[{{anchor_2026_08_19.calib_val100.lo|+.4f}}, {{anchor_2026_08_19.calib_val100.hi|+.4f}}]</td></tr>
+<tr><td><code>calib_ood_100</code></td><td class="r">+0.1905</td>
+    <td class="r up">{{anchor_2026_08_19.calib_ood100.median|+.4f}}</td>
+    <td class="r">[{{anchor_2026_08_19.calib_ood100.lo|+.4f}}, {{anchor_2026_08_19.calib_ood100.hi|+.4f}}]</td></tr>
+<tr><td>pooled 200</td><td class="r">+0.0838</td>
+    <td class="r up">{{anchor_2026_08_19.pooled_200.median|+.4f}}</td>
+    <td class="r">[{{anchor_2026_08_19.pooled_200.lo|+.4f}}, {{anchor_2026_08_19.pooled_200.hi|+.4f}}]</td></tr>
+<tr><td><strong>24% 압축 자체</strong> (<code>calib_100</code> − 무압축)</td><td class="r">+0.0955</td>
+    <td class="r up"><strong>{{vs_baseline.calib_100.test.median|+.4f}}</strong></td>
+    <td class="r">[{{vs_baseline.calib_100.test.lo|+.4f}}, {{vs_baseline.calib_100.test.hi|+.4f}}]</td></tr>
+</tbody>
+</table>
+
+<p>
+셋 다 줄었지만 전부 유의하고 순서도 같다. <strong>결론은 오히려 강해진다</strong> — @8에서는
+추출(+0.0941)과 압축(+0.0955)이 비슷했는데, @6에서는 추출이 압축보다 크다.
+</p>
+
+<h2><span class="num">2</span>설계: 무엇을 고정했는가</h2>
+
+<p>
+모든 arm이 같은 <code>dual_u40_v2</code> 레시피다 — 같은 기준
+<code>max(rank I_traj, rank I_CoC)</code>, 같은 예산(uniform 0.3985632694, 정확히
+2,657,452,032 파라미터 제거), VLM만, expert·KV 불변. 아홉 개 레시피 전부 층당 19 Q head /
+7390 MLP 채널로 <strong>형상까지 동일</strong>함을 확인했다.
+</p>
+
+<p>
+추출은 <code>make_calib_blocks.py</code>가 <code>calib_100</code>과 <em>같은 방식</em>으로 뽑는다:
+전체 공식 train 153,625클립 풀, 같은 6속성 그리디 매칭, t0 = 5.1 s 고정, 이전 calib 클립과 OOD 제외.
+블록 다섯 개와 <code>calib_100</code>의 weighted L1이 <strong>0.0306으로 16자리까지 같다</strong> —
+풀이 충분히 커서 그리디가 매번 같은 최적 개수 벡터에 도달하기 때문이다. 결과적으로 여섯 추출의
+국가·플랫폼·주야·계절·월·레이더 구성이 동일하고 <strong>클립 정체만 다르다</strong>.
+</p>
+
+<h2><span class="num">3</span>잡음 바닥: 카드를 바꿔도 minADE는 안 움직인다</h2>
+
+<p>
+<code>calib_100</code>의 100클립을 같은 시드로 Blackwell과 Ada에서 각각 재고 두 모델을 비교했다.
+선택은 <strong>{{overlap.card_only|.1%}}</strong>만 일치한다(Q head 2.8% 이동). 그런데 minADE는:
+</p>
+
+<div class="callout good">
+<p><code>calib_100</code> [Ada] − <code>calib_100</code> [Blackwell] =
+<strong>{{gates.G0b_card.median|+.4f}}</strong>
+[{{gates.G0b_card.lo|+.4f}}, {{gates.G0b_card.hi|+.4f}}], p={{gates.G0b_card.p|.2f}},
+n={{gates.G0b_card.n}} — <strong>유의하지 않다.</strong></p>
+</div>
+
+<p>
+바닥이 이만큼 낮으니 추출 효과는 그 위에서 깨끗하게 읽힌다. 부수적으로, 2026-08-19 연구가
+<code>importance_v2</code>(Blackwell)를 <code>importance_ood</code>·<code>importance_val100</code>
+(둘 다 Ada)와 비교했다는 사실을 이번에 발견했는데 — <strong>그 교락은 무시해도 되는 크기</strong>임이
+여기서 확인된다. 그 +0.0941은 카드 탓이 아니다.
+</p>
+
+<h2><span class="num">4</span>같은 조건의 추출 여섯 개</h2>
+
+<p>
+공식 train에서 서로소 100클립 블록 다섯 개를 <code>calib_100</code>과 같은 방식으로 뽑았다.
+<code>calib_100</code>까지 여섯 추출이 되고, 여섯의 속성 구성은 동일하며 클립 정체만 다르다.
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션 (n=100)</th><th class="r">test500 minADE@6</th>
+<th class="r">Δ vs 무압축</th><th class="r">95% CI</th></tr></thead>
+<tbody>
+<tr><td><code>calib_100</code> (기존 표준)</td><td class="r">{{absolute.calib_100.test|.4f}}</td>
+    <td class="r">{{vs_baseline.calib_100.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.calib_100.test.lo|+.4f}}, {{vs_baseline.calib_100.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 a</td><td class="r">{{absolute.nt_a.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_a.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_a.test.lo|+.4f}}, {{vs_baseline.nt_a.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 b</td><td class="r">{{absolute.nt_b.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_b.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_b.test.lo|+.4f}}, {{vs_baseline.nt_b.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 c</td><td class="r">{{absolute.nt_c.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_c.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_c.test.lo|+.4f}}, {{vs_baseline.nt_c.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 d</td><td class="r">{{absolute.nt_d.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_d.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_d.test.lo|+.4f}}, {{vs_baseline.nt_d.test.hi|+.4f}}]</td></tr>
+<tr><td>블록 e</td><td class="r">{{absolute.nt_e.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_e.test.median|+.4f}}</td>
+    <td class="r">[{{vs_baseline.nt_e.test.lo|+.4f}}, {{vs_baseline.nt_e.test.hi|+.4f}}]</td></tr>
+</tbody>
+</table>
+
+<div class="kpi">
+  <div><span class="k">추출 간 SD</span><span class="v">{{gates.G1_spread.sd|.4f}}</span></div>
+  <div><span class="k">최대−최소</span><span class="v">{{gates.G1_spread.range|.4f}}</span></div>
+  <div><span class="k">잡음 바닥 (카드)</span><span class="v">{{gates.G0b_card.median|+.4f}}</span></div>
+  <div><span class="k">calib_100 순위</span><span class="v">{{gates.G2_rank_of_calib_100.rank}}/{{gates.G2_rank_of_calib_100.of}}</span></div>
+</div>
+
+<figure>
+  <img src="PLOT::cv::draws.png" alt="six draws">
+  <figcaption>같은 레시피, 같은 예산, 같은 속성 구성. 캘리브레이션 100클립만 다르다.
+  점선은 무압축, 가로선은 여섯 추출의 평균이다.</figcaption>
+</figure>
+
+<p>
+블록 평균에서 <code>calib_100</code>을 뺀 값은
+<strong>{{gates.G2_blockmean_minus_calib100|+.4f}}</strong>이고, <code>calib_100</code>은 여섯 중
+<strong>{{gates.G2_rank_of_calib_100.rank}}위</strong>다. 페어드로 보면 다섯 블록 전부가
+<code>calib_100</code>보다 유의하게 나쁘다:
+</p>
+
+<table>
+<thead><tr><th>대조</th><th class="r">페어드 중앙값</th><th class="r">95% CI</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>블록 a − <code>calib_100</code></td><td class="r up">+0.0374</td><td class="r">[+0.0165, +0.0621]</td><td class="r">4.6e-04</td></tr>
+<tr><td>블록 b − <code>calib_100</code></td><td class="r up">+0.0451</td><td class="r">[+0.0223, +0.0695]</td><td class="r">4.2e-07</td></tr>
+<tr><td>블록 c − <code>calib_100</code></td><td class="r up">+0.2037</td><td class="r">[+0.1648, +0.2528]</td><td class="r">2.9e-25</td></tr>
+<tr><td>블록 d − <code>calib_100</code></td><td class="r up"><strong>+0.4471</strong></td><td class="r">[+0.3552, +0.5386]</td><td class="r">1.2e-46</td></tr>
+<tr><td>블록 e − <code>calib_100</code></td><td class="r up">+0.3952</td><td class="r">[+0.3319, +0.4833]</td><td class="r">8.6e-43</td></tr>
+</tbody>
+</table>
+
+<p>
+여섯 추출의 15개 쌍대조 |Δ|는 최소 0.0208, 중앙값 0.2046, 최대 0.4471이다.
+<strong>15개 전부가 잡음 바닥을 넘고, 11개가 24% 압축 자체의 대가보다 크다.</strong>
+</p>
+
+<div class="callout">
+<p><strong>2026-08-19의 +0.0590은 이 분포의 아래쪽 끝이었다.</strong> 그 보고서는 대조군
+(<code>calib_val100</code>) 하나로 "추출 효과 ≈ +0.0590"을 얻었는데, 여기서 그보다 작은 대조는
+블록 a·b 둘뿐이다(+0.0374, +0.0451). 나머지 셋은 3.5–7.6배 크다. 점추정 하나로 이 요인의
+크기를 말할 수 없다는 것이 확인된다.</p>
+</div>
+
+<h3>두 번째 셋에서 그대로 재현된다</h3>
+
+<p>
+val500은 official val에서 뽑혀 test500과 모든 캘리브레이션 세트에 서로소이므로, 같은 여섯 모델을
+<strong>독립적으로 다시 읽는다</strong>.
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션 (n=100)</th><th class="r">test500</th><th class="r">val500</th>
+<th class="r">val500 vs <code>calib_100</code></th></tr></thead>
+<tbody>
+<tr><td><code>calib_100</code></td><td class="r">{{absolute.calib_100.test|.4f}}</td>
+    <td class="r">{{absolute.calib_100.indist|.4f}}</td><td class="r">—</td></tr>
+<tr><td>블록 a</td><td class="r">{{absolute.nt_a.test|.4f}}</td>
+    <td class="r">{{absolute.nt_a.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_a.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 b</td><td class="r">{{absolute.nt_b.test|.4f}}</td>
+    <td class="r">{{absolute.nt_b.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_b.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 c</td><td class="r">{{absolute.nt_c.test|.4f}}</td>
+    <td class="r">{{absolute.nt_c.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_c.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td>블록 d</td><td class="r">{{absolute.nt_d.test|.4f}}</td>
+    <td class="r">{{absolute.nt_d.indist|.4f}}</td>
+    <td class="r up"><strong>{{pairs.nt_d.calib_100_val500.median|+.4f}}</strong></td></tr>
+<tr><td>블록 e</td><td class="r">{{absolute.nt_e.test|.4f}}</td>
+    <td class="r">{{absolute.nt_e.indist|.4f}}</td>
+    <td class="r up">{{pairs.nt_e.calib_100_val500.median|+.4f}}</td></tr>
+<tr><td><strong>SD / 범위</strong></td>
+    <td class="r"><strong>{{gates.G1_spread.sd|.4f}}</strong> / {{gates.G1_spread.range|.4f}}</td>
+    <td class="r"><strong>{{gates.G1b_spread_val500.sd|.4f}}</strong> / {{gates.G1b_spread_val500.range|.4f}}</td>
+    <td class="r">—</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>여섯 추출의 순위가 두 셋에서 완전히 일치한다</strong>
+(spearman {{gates.G1b_spread_val500.rank_agreement.spearman|.2f}}, n=6). SD도
+{{gates.G1_spread.sd|.4f}} 대 {{gates.G1b_spread_val500.sd|.4f}}로 같은 크기다. 순위가 어긋났다면
+"추출이 중요하다"는 말이 모델이 아니라 test500에 대한 진술이 됐을 것이다. 일치하므로
+<strong>추출 효과는 평가 세트를 넘어 이동하는 모델의 속성</strong>이다. 이 문서의 1차 주장은
+두 개의 서로소 500클립 셋에서 독립적으로 확인됐다.</p>
+</div>
+
+<h2><span class="num">5</span>클립을 늘리면 나아지는가</h2>
+
+<p>
+같은 500클립을 누적 합집합으로 쌓아 n을 키운다. <strong>이웃한 두 단은 클립 수와 블록 구성이
+동시에 다르므로</strong>, 기울기를 n의 효과라고 읽으면 안 된다.
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션</th><th class="r">n</th><th class="r">test500 minADE@6</th>
+<th class="r">Δ vs 무압축</th></tr></thead>
+<tbody>
+<tr><td>블록 5개 평균</td><td class="r">100</td>
+    <td class="r">{{gates.G3_ladder.block_mean|.4f}} (SD {{gates.G3_ladder.block_sd|.4f}})</td>
+    <td class="r">—</td></tr>
+<tr><td>a+b</td><td class="r">200</td><td class="r">{{absolute.nt_200.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_200.test.median|+.4f}}</td></tr>
+<tr><td>a+b+c</td><td class="r">300</td><td class="r">{{absolute.nt_300.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_300.test.median|+.4f}}</td></tr>
+<tr><td>a..e</td><td class="r">500</td><td class="r">{{absolute.nt_500.test|.4f}}</td>
+    <td class="r">{{vs_baseline.nt_500.test.median|+.4f}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cv::ladder.png" alt="ladder">
+  <figcaption>n=100은 블록 다섯 개의 평균과 표준편차, 나머지는 누적 합집합 한 점씩.</figcaption>
+</figure>
+
+<div class="callout good">
+<p><strong>클립을 늘리면 나아진다 — 그리고 그것이 추출 분산의 해법이다.</strong>
+n=500은 블록 평균보다 <strong>{{gates.G3_ladder.gain|+.4f}}</strong> 좋고, 이는 블록 SD
+({{gates.G3_ladder.block_sd|.4f}})와 같은 크기다. 즉 <strong>n을 100에서 500으로 올리면 추출 하나가
+잘못 걸릴 위험만큼을 되찾는다.</strong> n=500 arm의 압축 대가
+({{vs_baseline.nt_500.test.median|+.4f}})는 최악의 n=100 추출({{vs_baseline.nt_d.test.median|+.4f}})의
+5분의 1이다.</p>
+</div>
+
+<p>
+비용은 크지 않다. 중요도 측정은 500클립에 53분(1장)이고, 이후 프루닝·평가 비용은 n과 무관하다.
+<strong>표준 캘리브레이션 크기를 100에서 500으로 올릴 것을 권고한다</strong> — 이 실험에서 나온
+가장 실행 가능한 결론이다.
+</p>
+
+<h3>하드풀에서는 반대였다</h3>
+
+<p>
+같은 사다리를 하드풀(§7)에서 재면 <strong>클립을 늘릴수록 유의하게 나빠진다</strong>:
+n=300 − n=200 = +0.0314 [+0.0152, +0.0456] (p=1.9e-08), n=500 − n=200 = +0.0464
+[+0.0272, +0.0682] (p=1.1e-10). 늘린 클립이 평가 분포를 대표하지 않으면 n은 <em>잘못된 목표로</em>
+수렴시킨다. n을 늘리는 것이 이득인 이유는 표본이 커지기 때문이 아니라
+<strong>평가 분포에 가까워지기 때문</strong>이다.
+</p>
+
+<h2><span class="num">6</span>선택이 얼마나 흔들리는가</h2>
+
+<p>
+서로소 부분집합 두 개 = 같은 크기의 독립 추출 두 번. <code>mean(per-clip) == importance.npz</code>가
+모든 배열에서 max&nbsp;|diff|&nbsp;=&nbsp;0.0로 성립하므로 부분집합 평균은 별도 실행과 정확히 같다.
+</p>
+
+<table>
+<thead><tr><th class="r">추출당 클립</th><th class="r">Q head 유지집합 중첩</th><th class="r">MLP 채널</th></tr></thead>
+<tbody>
+<tr><td class="r">10</td><td class="r">{{stability.10.q|.4f}}</td><td class="r">{{stability.10.mlp|.4f}}</td></tr>
+<tr><td class="r">25</td><td class="r">{{stability.25.q|.4f}}</td><td class="r">{{stability.25.mlp|.4f}}</td></tr>
+<tr><td class="r">50</td><td class="r">{{stability.50.q|.4f}}</td><td class="r">{{stability.50.mlp|.4f}}</td></tr>
+<tr><td class="r">100</td><td class="r">{{stability.100.q|.4f}}</td><td class="r">{{stability.100.mlp|.4f}}</td></tr>
+<tr><td class="r">150</td><td class="r">{{stability.150.q|.4f}}</td><td class="r">{{stability.150.mlp|.4f}}</td></tr>
+<tr><td class="r">250</td><td class="r">{{stability.250.q|.4f}}</td><td class="r">{{stability.250.mlp|.4f}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::cv::stability.png" alt="stability curve">
+  <figcaption>클립을 25배 늘려도 Q 중첩은 81%에서 94%까지만 오른다. 점선은 카드만 바꿨을 때의
+  중첩으로, 추출 차이가 카드 차이보다 훨씬 크다는 것을 보여준다.</figcaption>
+</figure>
+
+<h2><span class="num">5</span>중첩률은 손해를 예측하지 못한다</h2>
+
+<p>
+직관적으로는 <code>calib_100</code>과 많이 겹치는 선택일수록 손해가 작아야 한다. 그렇지 않다.
+</p>
+
+<ul>
+<li>카드만 바꾼 arm은 중첩 {{overlap.card_only|.1%}}에 손해 {{gates.G0b_card.median|+.4f}}(n.s.)</li>
+<li>하드풀 블록 a와 c는 <strong>중첩률이 0.9108로 동일</strong>한데 손해가
+    {{vs_baseline.tr_a.test.median|+.4f}} vs {{vs_baseline.tr_c.test.median|+.4f}}</li>
+</ul>
+
+<p>
+같은 중첩률에서 이만큼 벌어지므로 중첩률은 캘리브레이션 품질의 대리 지표가 될 수 없다.
+2026-08-19 §3.5는 "상관 0.91–0.97인데 선택은 12–17% 다르다"고 지적했는데, 그 반대편 —
+<strong>선택이 달라도 손해는 같을 수 있다</strong> — 도 성립한다.
+</p>
+
+<p>
+여섯 추출의 15개 쌍에 대해 정식으로 재면 spearman(중첩률, |Δ|) =
+<strong>{{gates.G4_overlap_vs_delta.spearman|+.3f}}</strong>
+(p={{gates.G4_overlap_vs_delta.p|.2f}}, n={{gates.G4_overlap_vs_delta.n}}) — <strong>무상관이다.</strong>
+</p>
+
+<h3>측정 가능한 어떤 성질도 예측하지 못했다</h3>
+
+<p>
+추출이 왜 이렇게 다른지 설명할 후보를 넷 시험했고, 넷 다 실패했다:
+</p>
+
+<table>
+<thead><tr><th>후보</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>6속성 분포 (국가·플랫폼·주야·계절·월·레이더)</td>
+    <td>설계상 동일 — 여섯 추출의 weighted L1이 0.0306으로 16자리까지 일치</td></tr>
+<tr><td>캘리브레이션 클립의 난이도 (<code>fm_loss</code>)</td>
+    <td>pearson −0.145 (p=0.82), 부호도 반대. 가장 어려운 블록이 가장 손해가 작았다</td></tr>
+<tr><td>시나리오 구성 (turn / stop / accel / cruise)</td>
+    <td>블록 간 turn+stop 비중 폭이 두 계열 모두 0.080으로 동일</td></tr>
+<tr><td>유지집합 중첩률</td>
+    <td>spearman {{gates.G4_overlap_vs_delta.spearman|+.3f}} (p={{gates.G4_overlap_vs_delta.p|.2f}})</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>이것은 실패가 아니라 결론이다.</strong> 캘리브레이션 세트를 <em>검사해서</em> 좋은지
+나쁜지 미리 걸러낼 수 없다 — 평가해 봐야 안다. 6속성 그리디 매칭이 하는 일이 바로 "검사해서
+고르기"인데, 그 매칭이 완벽해도(여섯 추출이 16자리까지 동일) 결과는 0.82만큼 퍼진다.
+그래서 §5의 권고가 유일하게 남는 방어책이다 — <strong>고르지 말고 늘려라.</strong></p>
+</div>
+
+<h2><span class="num">6</span>부수 결과: 하드 클립으로 캘리브레이션하면</h2>
+
+<p>
+이 실험의 1차 시도는 이미 캐시된 <code>pre_processed/train</code> 풀에서 블록을 뽑았다. 그 캐시는
+회복 학습용 <code>train_official_50000.parquet</code>에서 만들어졌고, 그것은 시나리오를 정확히
+20%씩 균형 맞추고 <strong>자체 기록 minADE가 2.20</strong>(자연 주행 0.84의 2.6배)인
+하드 케이스 셋이다. 6속성 매칭은 난이도를 맞추지 않으므로 이 교락은 매칭으로 지워지지 않는다.
+</p>
+
+<p>
+설계로서는 실패지만 결과로서는 읽을 만하다 — <strong>in-distribution 공식 train 클립</strong>으로만
+캘리브레이션했는데 OOD 캘리브레이션과 같은 손해가 난다:
+</p>
+
+<table>
+<thead><tr><th>캘리브레이션 (n=100)</th><th class="r">test500 minADE@6</th><th class="r">Δ vs 무압축</th></tr></thead>
+<tbody>
+<tr><td><code>calib_100</code></td><td class="r">{{absolute.calib_100.test|.4f}}</td>
+    <td class="r">{{vs_baseline.calib_100.test.median|+.4f}}</td></tr>
+<tr><td><code>calib_val100</code></td><td class="r">{{absolute.calib_val100.test|.4f}}</td>
+    <td class="r up">{{vs_baseline.calib_val100.test.median|+.4f}}</td></tr>
+<tr><td><strong>하드풀 5블록 평균</strong></td><td class="r"><strong>{{gates.H5_hard_pool.mean|.4f}}</strong>
+    (SD {{gates.H5_hard_pool.sd|.4f}})</td><td class="r up">—</td></tr>
+<tr><td><code>calib_ood_100</code> (OOD)</td><td class="r">{{gates.H5_hard_pool.ood_arm|.4f}}</td>
+    <td class="r up">{{vs_baseline.calib_ood100.test.median|+.4f}}</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>기전은 입증되지 않았다.</strong> "어려워서 나쁘다"가 맞다면 풀 안에서도 성립해야 하는데,
+블록별 <code>fm_loss</code>와 손해의 상관은 −0.145 (p=0.82)로 관계가 없고 부호도 반대다. 가장
+어려운 블록(c)이 가장 손해가 작다. 확실한 것은 풀 수준의 두 사실 — 회복 풀의 minADE가 2.6배이고,
+그 풀의 다섯 블록이 전부 OOD 수준의 손해를 낸다 — 뿐이다. 난이도는 <em>가장 유력한 설명</em>이지
+측정된 기전이 아니다.</p>
+</div>
+
+<h2><span class="num">7</span>한계</h2>
+
+<ul>
+<li><strong>기준 하나, 개루프만.</strong> <code>dual</code>만 측정했고 폐루프는 없다.
+    추출 분산이 폐루프 주행 점수로 전이되는지는 별건이다.</li>
+<li><strong>블록 다섯 개는 SD의 점추정이다.</strong> n=5의 표본 SD 자체가 넓은 신뢰구간을 갖는다.
+    다만 이 문서의 주장은 "SD가 정확히 0.36"이 아니라 "쌍대조 15개 중 11개가 압축 대가보다 크다"이고,
+    후자는 SD 추정의 정밀도에 의존하지 않는다.</li>
+<li><strong>n=500 권고는 사다리 한 줄에 기댄다.</strong> 사다리는 누적 합집합이라 각 단이 서로 다른
+    블록을 포함하고, n=500 점은 하나뿐이다. 서로소 500클립 추출 두세 개로 재확인해야 이 권고가
+    구간을 얻는다 (추출당 약 1.2 GPU-시간 + 평가 2.7).</li>
+<li><strong>하드풀은 난이도와 시나리오 균형이 함께 움직인다.</strong> 두 요인은 분리되지 않았다.</li>
+<li><strong>사다리는 누적 합집합이다.</strong> 각 단이 서로 다른 블록을 포함하므로, 단 간 차이에는
+    n의 효과와 블록 구성의 효과가 섞여 있다.</li>
+</ul>
+
+<h2><span class="num">8</span>권고</h2>
+
+<ul>
+<li>캘리브레이션 세트를 고정한다. 이 요인은 기준 효과보다 크므로, 캘리브레이션이 다른 두 기준을
+    비교하면 기준 차이를 볼 수 없다. 지금까지의 모든 기준 비교가 <code>calib_100</code>을 공유한
+    것은 결과적으로 옳은 설계였다.</li>
+<li><strong>캘리브레이션 풀의 출처를 확인한다.</strong> 이미 캐시된 클립 목록이 곧 자연 분포라고
+    가정하면 안 된다. 이 실험의 1차 시도가 정확히 그 함정에 빠졌고, 들여온 교락이 측정하려던
+    효과보다 컸다.</li>
+<li>유지집합 중첩률을 품질 지표로 인용하지 않는다. 손해와 무관하다.</li>
+<li>절대 수치를 인용할 때 추출 의존성을 함께 적는다.</li>
+</ul>
+
+<h2><span class="num">9</span>재현</h2>
+
+<pre><code>python experiments/evaluation/make_calib_blocks.py --pool split --blocks 5 --block-size 100 --prefix calib_nt
+python experiments/evaluation/build_cache.py --manifest outputs/eval_sets/calib_nt500.parquet --cache calib_nt
+bash experiments/head_analysis/run_retry_host.sh 120 experiments/head_analysis/run_importance.py \
+    --calib-manifest calib_nt500 --cache calib_nt --num-clips 500 --exp-id importance_nt500
+python experiments/evaluation/make_block_importance.py --importance importance_nt500 --manifest calib_nt500
+IMP=importance_nt500 TAG=dual_nt bash experiments/evaluation/launch_calib_arms.sh build
+IMP=importance_nt500 TAG=dual_nt bash experiments/evaluation/launch_calib_arms.sh queue
+python experiments/evaluation/analyze_calib_variance.py --importance importance_nt500</code></pre>
+
+<footer>
+계획·사전 등록 게이트: <code>plans/2026-09-03_calib-draw-variance.md</code> ·
+수치는 <code>outputs/calib_variance/metrics.json</code>에서 <code>fill_template.py</code>로 렌더됨
+(보고서에 손으로 옮겨 적은 숫자 없음).
+</footer>
+
+</div>
+</body>
+</html>
