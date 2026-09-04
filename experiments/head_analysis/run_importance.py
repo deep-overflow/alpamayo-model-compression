@@ -161,6 +161,13 @@ def main():
                     help="comma-separated card ids to restrict the scan, e.g. '0' or '0,1'")
     ap.add_argument("--checkpoint", action="store_true",
                     help="see note below; incompatible with use_cache, off by default")
+    ap.add_argument("--shard", type=int, default=0,
+                    help="this shard's index; the calib list is split round-robin so a "
+                         "shard is a distribution-matched sample of the whole rather "
+                         "than a contiguous slice. Seeds come from the clip id, so "
+                         "sharding cannot change any clip's score -- merge with "
+                         "merge_importance.py")
+    ap.add_argument("--n-shards", type=int, default=1)
     ap.add_argument("--mask", type=str, default=None,
                     help="npz with q_mask/mlp_mask (L,H)/(L,I) 0-1 keep masks: score the "
                          "VLM with these units removed. The mask hooks are installed "
@@ -171,6 +178,9 @@ def main():
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     calib = sc.calib_samples(REPO, args.calib_manifest)[: args.num_clips]
+    if args.n_shards > 1:
+        calib = calib[args.shard::args.n_shards]
+        print(f"shard {args.shard}/{args.n_shards}: {len(calib)} clips", flush=True)
 
     devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
     device = reserve_gpu(args.reserve_gb, devices=devices)
