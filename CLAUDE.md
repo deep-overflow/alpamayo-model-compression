@@ -164,6 +164,19 @@ Shared libraries:
   and runs `num_key_value_groups=1`; `bind_identity()` puts the unpruned model on that same path
   for honest paired latency. Checkpoints are `torch.save` state_dicts + `slim_meta.json` of kept
   indices (`save_pretrained` cannot round-trip non-uniform layer shapes); reload with `load_slim()`.
+- `run_streamprop.py` / `analyze_streamprop.py` (2026-09-04) — the same decomposition on the
+  **propagated** quantities: accumulated hidden state and the per-layer KV cache the expert
+  reads, both models teacher-forced on the dense model's rollout so positions align (shapes
+  match because pruning is within-layer and k/v projections are never touched). Three results
+  that should stop anyone selecting a reconstruction arm by its fit error: local error predicts
+  propagated divergence only moderately (o_proj rho +0.66, down_proj +0.28 n.s.); the
+  energy-weighted verdict on a Hessian change can have the **opposite sign** locally and
+  propagated (the CoC trade: +0.0098 local loss, -0.0010 propagated gain); and neither predicts
+  capability -- `dualr_wl` is furthest from dense on all five metrics yet leads LingoQA by
+  20.4pp, while the best-preserving arm (`dualr_w`) is worst on val500. Local errors always
+  partially cancel on the way out (propagated/local ratio 0.04-0.68). Energy shares differ per
+  quantity: sink is 6.25% of hidden energy but 0.02% of o_proj's, and CoC is 0.01% of hidden
+  but 0.98% of cache V -- CoC reaches the expert through V, not through hidden-state norm.
 - `run_streamerr.py` / `analyze_streamerr.py` (2026-09-04) — `recon_error` decomposed by
   token type (vision / prompt_text / hist / sink / own-CoC) instead of racfit's V/T/D, on
   held-out clips. Two things to keep straight: the metric is the change in a **sublayer's
@@ -540,6 +553,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 | `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
+| `2026-09-04_propagated-divergence.html` | `head_analysis/streamprop_report_template.html` | 같은 분해를 누적 hidden state와 KV cache에서: 국소 판정과 부호가 반대(+0.0098 손해 → −0.0010 이득), 국소→전파 ρ=+0.66(down_proj +0.28 n.s.), 그리고 보존은 국소·전파 어느 쪽도 능력을 예측하지 못함 |
 | `2026-09-04_stream-error-decomposition.html` | `head_analysis/streamerr_report_template.html` | 재구성 오차를 5개 토큰 타입으로 분해: CoC를 Hessian에 16% 넣는 거래는 에너지 가중 순손실(+0.0098); 오차는 fit 가중치를 따르지 않고 스트림 고유 난이도가 지배 |
 | `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 전체·꼬리 모두 동급 (초판의 꼬리 이득 주장은 선택 편향이라 철회) |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |

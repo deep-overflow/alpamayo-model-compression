@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>국소 오차는 전파되지 않는다: hidden state와 KV cache의 토큰 타입별 분해</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>국소 오차는 전파되지 않는다: hidden state와 KV cache의 토큰 타입별 분해</h1>
+  <div class="meta">
+    2026-09-04 · <code>nvidia/Alpamayo-1.5-10B</code> 24% 압축 + OSSCAR 재구성 4종 ·
+    held-out 40클립 · 36층 × {hidden, cache K, cache V} × 5 토큰 타입
+  </div>
+</header>
+
+<p class="lede">
+앞선 보고서는 <strong>국소</strong> 오차 &mdash; 층 하나·서브블록 하나의 출력 변화 &mdash; 를
+토큰 타입별로 쪼개어, CoC를 Hessian에 넣는 거래가 에너지 가중으로 <strong>순손실</strong>이라고
+결론지었다. 같은 분해를 실제로 전파되는 양(누적 hidden state, expert가 읽는 KV cache)에서
+반복하자 <strong>그 부호가 뒤집힌다</strong>. 그리고 어느 쪽도 능력을 예측하지 못한다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">국소 판정</span><span class="v">+0.0098</span>손해</div>
+  <div><span class="k">전파 판정</span><span class="v">&minus;0.0010</span>이득 (부호 반전)</div>
+  <div><span class="k">국소→전파 ρ</span><span class="v">+0.66</span>down_proj는 +0.28 n.s.</div>
+  <div><span class="k">증폭률</span><span class="v">&lt; 1</span>항상 상쇄된다</div>
+  <div><span class="k">능력 예측</span><span class="v">실패</span>최대 발산 = 최고 LingoQA</div>
+</div>
+
+<h2><span class="num">1</span>왜 전파량을 따로 재야 하는가</h2>
+
+<p>
+<code>tyr_lib.recon_error</code>는 <strong>국소</strong> 지표다: 층 <em>l</em>의
+<code>o_proj</code> / <code>down_proj</code>가 <strong>dense 입력</strong>에서 내는 출력이
+얼마나 달라졌는가. 층마다 독립이고 오차가 누적되지 않는다. 반면 모델이 실제로 쓰는 것은
+누적된 residual stream과, expert가 읽는 층별 KV cache다. 국소 오차는 전파되면서
+<strong>상쇄되거나 증폭될 수 있다</strong> &mdash; 그래서 국소 오차 순위와 능력 순위가 어긋날 수
+있다는 것이 앞 보고서의 마지막 문장이었다. 이 보고서가 그것을 측정한다.
+</p>
+
+<table>
+<thead><tr><th>양</th><th>정의</th><th>모양</th></tr></thead>
+<tbody>
+<tr><td>국소 (앞 보고서)</td><td>‖(W − Ŵ)X‖ / ‖WX‖, X는 그 서브블록 입력</td><td>층 36 × 2 모듈</td></tr>
+<tr><td><strong>hidden</strong></td><td>‖h<sub>l</sub>(arm) − h<sub>l</sub>(dense)‖ / ‖h<sub>l</sub>(dense)‖</td><td>층 37 × (T, 4096)</td></tr>
+<tr><td><strong>cache K / V</strong></td><td>같은 식을 층별 KV 캐시에</td><td>층 36 × (1, 8, T, 128)</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p>
+<strong>정렬</strong>: 두 모델을 <strong>같은 시퀀스</strong>(프롬프트 + <em>dense</em> 모델의
+롤아웃)로 teacher-forcing한다. arm이 자기 롤아웃을 쓰면 토큰이 어긋나 위치별 차이가 의미를 잃는다.
+<strong>모양</strong>은 구조적으로 일치한다 &mdash; 프루닝은 층 내부(헤드·채널)라 hidden_size는
+4096 그대로이고, k/v projection은 절대 건드리지 않으므로 캐시는 (1, 8, T, 128)로 동일하다.
+dense와 arm은 서로 다른 GPU에 올린다(<code>load_slim</code>이 수술 전 골격을 먼저 만들어
+한 장이면 순간 44 GB가 필요하다).
+</p>
+</div>
+
+<h2><span class="num">2</span>타입별 전파 발산</h2>
+
+<table>
+<thead><tr><th>양</th><th>arm</th><th class="r">vision</th><th class="r">prompt_text</th><th class="r">hist</th><th class="r">sink</th><th class="r">coc</th></tr></thead>
+<tbody>
+<tr><td rowspan="4">hidden</td><td><code>dualr</code></td><td class="r">0.1075</td><td class="r">0.1084</td><td class="r">0.1304</td><td class="r">0.0181</td><td class="r">0.3496</td></tr>
+<tr><td><code>dualr_rep</code></td><td class="r">0.1069</td><td class="r">0.0977</td><td class="r">0.1303</td><td class="r">0.0181</td><td class="r">0.3518</td></tr>
+<tr><td><code>dualr_w</code></td><td class="r">0.1080</td><td class="r"><strong>0.0468</strong></td><td class="r">0.1141</td><td class="r">0.0045</td><td class="r"><strong>0.1794</strong></td></tr>
+<tr><td><code>dualr_wl</code></td><td class="r">0.1222</td><td class="r">0.1054</td><td class="r">0.1352</td><td class="r">0.0181</td><td class="r">0.2175</td></tr>
+<tr><td rowspan="4">cache K</td><td><code>dualr</code></td><td class="r">0.1763</td><td class="r">0.1970</td><td class="r">0.1825</td><td class="r">0.0035</td><td class="r">0.3549</td></tr>
+<tr><td><code>dualr_rep</code></td><td class="r">0.1763</td><td class="r">0.1962</td><td class="r">0.1823</td><td class="r">0.0032</td><td class="r">0.3544</td></tr>
+<tr><td><code>dualr_w</code></td><td class="r">0.1783</td><td class="r"><strong>0.1604</strong></td><td class="r">0.1559</td><td class="r">0.0020</td><td class="r"><strong>0.2160</strong></td></tr>
+<tr><td><code>dualr_wl</code></td><td class="r">0.1877</td><td class="r">0.1962</td><td class="r">0.1898</td><td class="r">0.0031</td><td class="r">0.2482</td></tr>
+<tr><td rowspan="4">cache V</td><td><code>dualr</code></td><td class="r">0.2707</td><td class="r">0.2366</td><td class="r">0.2882</td><td class="r">0.0073</td><td class="r">0.4729</td></tr>
+<tr><td><code>dualr_rep</code></td><td class="r">0.2706</td><td class="r">0.2329</td><td class="r">0.2872</td><td class="r">0.0073</td><td class="r">0.4727</td></tr>
+<tr><td><code>dualr_w</code></td><td class="r">0.2728</td><td class="r"><strong>0.1872</strong></td><td class="r">0.2505</td><td class="r">0.0039</td><td class="r"><strong>0.3056</strong></td></tr>
+<tr><td><code>dualr_wl</code></td><td class="r">0.2850</td><td class="r">0.2359</td><td class="r">0.2983</td><td class="r">0.0049</td><td class="r">0.3430</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::sp::prop_layers.png" alt="층별 전파 발산">
+  <figcaption>
+    행은 hidden / cache K / cache V, 열은 토큰 타입. <code>dualr</code>과
+    <code>dualr_rep</code>은 거의 모든 칸에서 겹친다 &mdash; expert 어텐션 가중만으로는
+    전파량이 바뀌지 않는다. <code>sink</code>는 어느 arm에서도 발산이 0에 가깝다(0.002~0.018):
+    어텐션 싱크는 노름이 압도적으로 커서 상대 오차가 구조적으로 작다.
+  </figcaption>
+</figure>
+
+<h2><span class="num">3</span>P1: 국소 오차는 전파를 절반만 설명한다</h2>
+
+<p>
+arm × 스트림 20칸에서 국소 오차와 전파 발산의 순위 상관은 <code>o_proj</code>가
+<strong>ρ = +0.657</strong> (p=0.0016), <code>down_proj</code>는 <strong>ρ = +0.284</strong>
+(p=0.22, 유의하지 않다). <strong>MLP의 국소 오차는 전파 발산을 사실상 예측하지 못한다.</strong>
+</p>
+
+<figure>
+  <img src="PLOT::sp::local_vs_prop.png" alt="국소 대 전파, 그리고 판정 부호 반전">
+  <figcaption>
+    왼쪽: 20칸 모두 <code>y = x</code> 아래에 있다 &mdash; 전파되면서 <strong>항상 상쇄</strong>된다.
+    증폭률(전파/국소)은 0.04~0.68이고 <code>sink</code>에서 가장 작다.
+    오른쪽: CoC 거래의 에너지 가중 순변화. 국소(주황)는 손해, 전파(초록)는 이득이다.
+    두 축의 절대 크기는 서로 다른 척도이므로 <strong>부호만</strong> 비교해야 한다.
+  </figcaption>
+</figure>
+
+<h2><span class="num">4</span>P2: 판정의 부호가 뒤집힌다 (앞 보고서의 결론 정정)</h2>
+
+<table>
+<thead><tr><th>측정 대상</th><th class="r">에너지 가중 순변화 (dualr_w − dualr_rep)</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><code>o_proj</code> (국소)</td><td class="r">+0.009820</td><td>손해</td></tr>
+<tr><td><code>down_proj</code> (국소)</td><td class="r">+0.001535</td><td>손해</td></tr>
+<tr><td><strong>hidden</strong></td><td class="r"><strong>&minus;0.000174</strong></td><td>이득</td></tr>
+<tr><td><strong>cache K</strong></td><td class="r"><strong>&minus;0.000479</strong></td><td>이득</td></tr>
+<tr><td><strong>cache V</strong></td><td class="r"><strong>&minus;0.000959</strong></td><td>이득</td></tr>
+</tbody>
+</table>
+
+<p>
+이유는 두 항이 서로 다르게 전파되기 때문이다. vision의 손해는 국소 +0.0114에서 전파
+<strong>+0.0012</strong>로 거의 10배 줄어드는데, coc의 이득은 국소 &minus;0.1215에서 전파
+<strong>&minus;0.168</strong>로 오히려 커진다. 국소 단계에서 vision이 지불한 대부분은
+전파 과정에서 상쇄된다.
+</p>
+
+<div class="callout warn">
+<p>
+<strong>앞 보고서(같은 날 오전)의 &ldquo;CoC를 사는 거래는 순손실&rdquo;은 국소 지표에 한정된
+진술로 축소한다.</strong> 모델이 실제로 들고 다니는 상태(hidden, KV cache)에서는 작지만 이득이다.
+국소 지표는 그 거래가 상태에 무엇을 하는지에 대해 <strong>부호조차 맞히지 못한다</strong>.
+</p>
+</div>
+
+<h3>에너지 몫도 양마다 다르다</h3>
+
+<table>
+<thead><tr><th>양</th><th class="r">vision</th><th class="r">prompt_text</th><th class="r">hist</th><th class="r">sink</th><th class="r">coc</th></tr></thead>
+<tbody>
+<tr><td>hidden</td><td class="r">88.75%</td><td class="r">4.99%</td><td class="r">0.01%</td><td class="r"><strong>6.25%</strong></td><td class="r">0.01%</td></tr>
+<tr><td>cache K</td><td class="r">92.84%</td><td class="r">5.02%</td><td class="r">1.65%</td><td class="r">0.04%</td><td class="r">0.46%</td></tr>
+<tr><td>cache V</td><td class="r">95.01%</td><td class="r">2.57%</td><td class="r">1.44%</td><td class="r">0.00%</td><td class="r"><strong>0.98%</strong></td></tr>
+<tr><td><code>o_proj</code> (국소)</td><td class="r">91.80%</td><td class="r">5.05%</td><td class="r">1.49%</td><td class="r">0.02%</td><td class="r">1.64%</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>sink</code>는 토큰의 0.03%인데 <strong>hidden 에너지의 6.25%</strong>를 차지한다
+(<code>o_proj</code> 국소에서는 0.02%였다). 어텐션 싱크는 residual stream에서 노름이
+압도적으로 크다는 알려진 현상이 여기서 숫자로 나온다. 반대로 <code>coc</code>는 hidden
+에너지의 0.01%밖에 안 되지만 <strong>cache V에서는 0.98%</strong>로 100배 커진다 &mdash;
+CoC 토큰이 expert에게 전달되는 통로는 hidden 노름이 아니라 <strong>V 캐시</strong>다.
+</p>
+
+<h2><span class="num">5</span>P3: 어느 지표도 능력을 예측하지 못한다</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">val500 minADE@6</th><th class="r">LingoQA</th><th class="r">hidden</th><th class="r">cache K</th><th class="r">cache V</th><th class="r">o_proj</th><th class="r">down_proj</th></tr></thead>
+<tbody>
+<tr><td><code>dualr</code></td><td class="r"><strong>0.8143</strong></td><td class="r">41.8%</td><td class="r">0.1042</td><td class="r">0.1787</td><td class="r">0.2728</td><td class="r">0.2860</td><td class="r">0.3133</td></tr>
+<tr><td><code>dualr_rep</code></td><td class="r">0.8437</td><td class="r">52.2%</td><td class="r">0.1032</td><td class="r">0.1786</td><td class="r">0.2727</td><td class="r"><strong>0.2775</strong></td><td class="r">0.3133</td></tr>
+<tr><td><code>dualr_w</code></td><td class="r">0.8702</td><td class="r">49.0%</td><td class="r"><strong>0.1023</strong></td><td class="r"><strong>0.1772</strong></td><td class="r"><strong>0.2709</strong></td><td class="r">0.2947</td><td class="r">0.3157</td></tr>
+<tr><td><code>dualr_wl</code></td><td class="r">0.8271</td><td class="r"><strong>72.6%</strong></td><td class="r">0.1176</td><td class="r">0.1885</td><td class="r">0.2847</td><td class="r">0.2996</td><td class="r">0.3277</td></tr>
+</tbody>
+</table>
+
+<p class="meta">굵게 = 그 열의 최선. 발산 열은 에너지 가중 종합값이며 낮을수록 dense에 가깝다.</p>
+
+<figure>
+  <img src="PLOT::sp::capability.png" alt="발산 대 능력">
+  <figcaption>
+    가로축은 에너지 가중 hidden 발산, 세로축은 능력. 두 패널 모두 단조 관계가 없다.
+  </figcaption>
+</figure>
+
+<div class="callout warn">
+<p>
+<strong><code>dualr_wl</code>은 다섯 개 지표 <em>전부</em>에서 dense로부터 가장 멀다.</strong>
+그런데 LingoQA는 72.6%로 2등보다 <strong>20.4pp 높다</strong>. 그리고 상태를 가장 잘 보존한
+<code>dualr_w</code>(hidden·K·V 모두 최저 발산)는 val500이 가장 나쁘다(0.8702).
+이건 상관계수의 문제가 아니라 <strong>반례</strong>다 &mdash; n=4라 Spearman(val500 &minus;0.80,
+LingoQA &minus;0.40~&minus;0.80)은 읽지 말고 순서만 보면 된다.
+</p>
+</div>
+
+<p>
+즉 <strong>출력 보존은 &mdash; 국소든 전파든, 어느 입도에서든 &mdash; 능력의 대리 지표가 아니다.</strong>
+재구성 계열이 최소화해 온 목적함수는 우리가 원하는 것과 직교한다. <code>dualr_wl</code>이
+LingoQA를 되찾은 것은 상태를 잘 보존해서가 아니라 <strong>그 능력의 데이터를 fit에 넣었기
+때문</strong>이고, 그 대가로 상태는 오히려 더 많이 움직였다. 앞선 &ldquo;능력 보존 = 그 능력의
+데이터를 fit에&rdquo;라는 결론은 유지되며, 이제 그것이 <strong>보존과 무관한 경로</strong>임이
+확인됐다.
+</p>
+
+<h2><span class="num">6</span>결론</h2>
+
+<ul>
+<li><strong>국소 재구성 오차로 arm을 고르지 않는다.</strong> 전파 발산과의 순위 상관이
+    <code>o_proj</code> +0.66, <code>down_proj</code> +0.28(n.s.)이고, 에너지 가중 판정은
+    <strong>부호가 반대</strong>다.</li>
+<li><strong>전파 발산으로도 고르지 않는다.</strong> 상태를 가장 잘 보존한 arm이 궤적에서 가장
+    나쁘고, 가장 많이 흔든 arm이 추론에서 가장 좋다.</li>
+<li><strong>국소 오차는 전파되며 항상 상쇄된다</strong>(증폭률 0.04~0.68). 재구성이 층마다
+    지역적으로 잘해도 그것이 전체 상태 보존으로 이어진다는 보장은 없고, 실제로 이어지지 않는다.</li>
+<li><strong>다음.</strong> 남은 유일한 인과 경로는 &ldquo;fit 데이터 → 능력&rdquo;이다.
+    보존을 목적함수로 두는 대신, 되찾고 싶은 능력의 데이터를 Hessian에 넣는 것이 무엇을 하는지
+    직접 재는 쪽이 정보가 많다.</li>
+</ul>
+
+<footer>
+  <code>experiments/head_analysis/run_streamprop.py</code> ·
+  <code>analyze_streamprop.py</code> ·
+  데이터 <code>outputs/streamprop_v1/</code> ·
+  계획 <code>plans/2026-09-04_stream-error-decomposition.md</code> ·
+  선행 <code>2026-09-04_stream-error-decomposition.html</code> (이 보고서가 그 §4 판정을 국소에 한정시킨다) ·
+  held-out 40클립 (<code>indist_500</code>), 2026-09-04
+</footer>
+
+</div>
+</body>
+</html>
