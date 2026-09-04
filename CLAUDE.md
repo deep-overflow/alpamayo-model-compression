@@ -164,6 +164,17 @@ Shared libraries:
   and runs `num_key_value_groups=1`; `bind_identity()` puts the unpruned model on that same path
   for honest paired latency. Checkpoints are `torch.save` state_dicts + `slim_meta.json` of kept
   indices (`save_pretrained` cannot round-trip non-uniform layer shapes); reload with `load_slim()`.
+- `run_streamerr.py` / `analyze_streamerr.py` (2026-09-04) — `recon_error` decomposed by
+  token type (vision / prompt_text / hist / sink / own-CoC) instead of racfit's V/T/D, on
+  held-out clips. Two things to keep straight: the metric is the change in a **sublayer's
+  write into the residual stream** at those positions -- not the KV cache (layer l's write
+  only reaches it through layer l+1's k/v_proj) and not the accumulated hidden state (each
+  layer is measured independently on dense inputs); and a single-stream error curve is
+  uninformative, because the least-squares refit minimises exactly what `H_fit` weights.
+  Compare arms on the streams they did **not** buy, weighted by each stream's share of the
+  dense output **energy** (which is not its token share: sink is 0.03% of tokens but 4.14%
+  of down_proj energy). Hessians are never formed -- the hook already has `y = Wx`, so
+  scalar `Σ‖y-ŷ‖²` per stream gives the same ratio in constant memory.
 - `tyr_lib.py` — layer-output **reconstruction**, ported from Týr-the-Pruner / OSSCAR
   (`local_prune_core`, math unchanged). `HessianHook` accumulates `H = Σ x xᵀ` at an o_proj /
   down_proj input; `prune_levels` does second-order group removal **plus** the least-squares
@@ -529,13 +540,14 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 | `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
-| `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 동급이고 꼬리 10%에서만 이득 |
+| `2026-09-04_stream-error-decomposition.html` | `head_analysis/streamerr_report_template.html` | 재구성 오차를 5개 토큰 타입으로 분해: CoC를 Hessian에 16% 넣는 거래는 에너지 가중 순손실(+0.0098); 오차는 fit 가중치를 따르지 않고 스트림 고유 난이도가 지배 |
+| `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 전체·꼬리 모두 동급 (초판의 꼬리 이득 주장은 선택 편향이라 철회) |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (38 files as of 2026-09-03).
+`ls reports/evaluation/` is the full set (39 files as of 2026-09-04).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
