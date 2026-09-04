@@ -263,6 +263,8 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `znorm11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 z-score 평균 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `dualfix_u40_v2` | dual, 상수 half는 `max`에서 −inf로 배제 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `dual_ada_u40_v2` | dual, `importance_v2_ada`로 재빌드 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `maxstep11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 랭크의 **최댓값** | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `meandual_u40_v2` | dual의 두 half를 z-score **평균**으로 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -297,6 +299,19 @@ clips produce bit-identical CoC text), so the shipped checkpoint stands. `znorm1
 each objective's top units survive. `dual_ada` exists because the per-step file is Ada-only while
 shipped `dual` came from Blackwell `importance_v2`; the rebuild itself is a no-op (median |0.003|,
 p>=0.68), which also settles that the importance run's architecture does not matter.
+
+`maxstep11` / `meandual` (2026-09-04) close the 2x2 that `znorm11` collapsed -- operator
+(`max` union vs `mean`) x arity (2 losses vs 11). Neither factor moves anything alone
+(`meandual - dualfix` +0.0058 p=0.50; `maxstep11 - dualfix` -0.0033 / -0.0115 / +0.0011 across
+val/test/OOD, all n.s.), yet both together cost +0.173. The earlier attribution of `znorm11`'s
+damage to "the mean operator" is therefore **wrong**: it is a pure interaction. Mechanism: the ten
+FM steps rank alike (within-layer pairwise Spearman +0.920), so under a mean their shared component
+carries 10/11 of the weight and CoC's share drops from 1/2 to 1/11; `max` has no weights, so extra
+duplicated terms cost CoC nothing. `maxstep11` differs from `dualfix` only in the hard tail
+(top-10% mean -0.36 to -0.62, replicated on all three sets) while the overall paired delta stays
+n.s. -- a closed-loop suite of hard scenes is where that would show, if it is real. Caveat: the
+2x2's rows differ in normalisation too (`max` rows use `rank_norm`, `mean` rows z-scores), so
+"mean vs z-score" is not yet separated; a `mean of 11 rank_norm` arm would do it.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -509,6 +524,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_cot-reconstruction.html` | `head_analysis/racfit_report_template.html` | per-layer output-preservation limits, and why the prefill-only reconstruction Hessian damages the decode path |
 | `2026-08-25_pathway-map.html` | `head_analysis/pathway_report_template.html` | stage 1, expert<-cache-span attention knockout: CoC is 43x more causally dense per token than prompt text |
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
+| `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 동급이고 꼬리 10%에서만 이득 |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |

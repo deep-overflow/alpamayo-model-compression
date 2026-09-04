@@ -198,6 +198,14 @@ ARMS = {
     "znorm11": {"indist": ("znorm11_u40_v2_indist", False),
                 "test": ("znorm11_u40_v2_test", False),
                 "oodval": ("znorm11_u40_v2_oodval", False)},
+    # the union/operator 2x2 (plans/2026-09-03_union-step-criterion.md); test/oodval
+    # are queued but not run, so those rows report as missing until they land
+    "maxstep11": {"indist": ("maxstep11_u40_v2_indist", False),
+                  "test": ("maxstep11_u40_v2_test", False),
+                  "oodval": ("maxstep11_u40_v2_oodval", False)},
+    "meandual": {"indist": ("meandual_u40_v2_indist", False),
+                 "test": ("meandual_u40_v2_test", False),
+                 "oodval": ("meandual_u40_v2_oodval", False)},
     "dualfix": {"indist": ("dualfix_u40_v2_indist", False),
                 "test": ("dualfix_u40_v2_test", False),
                 "oodval": ("dualfix_u40_v2_oodval", False)},
