@@ -407,6 +407,35 @@ Four things about this that will bite again:
   exceed its deadline; the run aborted with renderer exit 137, which looks like OOM but is the
   SIGKILL after the cascade. Relaunch that shard with `ONLY_SHARDS=<i>` (same k-way split).
 
+### Running an arbitrary scene set (2026-09-03)
+
+`launch_alpasim_shards.sh` took the suite's first N and nothing else. It now also accepts
+`SCENES_CSV=<path>`, an explicit `(scene_id, uuid)` list that replaces that selection, plus
+`PARENT_SUITE` (default `public_2601`) naming the release the uuids must belong to — every uuid
+is checked against it, so a 26.04 render cannot slip in for the 159 ids that exist in both. Set
+`PREFIX` so the log dirs do not collide with the matrix, and `DRY_RUN=1` to write the per-shard
+suites and print the plan without starting a container. A rejected scene list now aborts the
+script instead of falling through to an unbound-variable error several lines later.
+
+`make_hard_suite.py` writes such a list: it drops the matrix's first 150 scenes (and
+cross-checks that exclusion against a real run dir, refusing to proceed if they disagree), drops
+GT-path < 5 m scenes, ranks the rest by `hard_score`, and asserts the result is disjoint from the
+150 before writing. `--band 80 100` draws from the saturation plateau instead of the extreme tail,
+which is what to use when N grows past ~100.
+
+```bash
+python experiments/head_analysis/make_hard_suite.py \
+    --out outputs/scene_difficulty/hard100_suite.csv \
+    --exclude-runs /home/cvlab21/project/chan/alpasim-runs/m2601_merged_baseline
+SUITE=public_2601_hard100 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
+SCENES_CSV=$PWD/outputs/scene_difficulty/hard100_suite.csv \
+  bash experiments/head_analysis/launch_alpasim_shards.sh <config> 100 2 "4 5 6 7"
+```
+
+Plan and pre-registered gates: `plans/2026-09-03_hard100-closedloop.md`. The hard100 set's
+expected unpruned score is already known — 0.499 from sangoh's 913-scene run — so a baseline
+landing outside 0.42–0.58 means the setup is wrong, not the scenes.
+
 ### Scene suites
 
 `public_2601` (913 scenes) and `public_2604` (1,606) share 159 scene_ids but **zero artifact
@@ -418,12 +447,41 @@ scenes while 2601 was fully local; its 913 usdz are hardlinked into our cache (f
 filesystem, but `du` on that directory now double-counts).
 
 Scene selection is `sorted(artifacts, key=scene_id)[:N]`. scene_id is `clipgt-<UUID>`, so that is an
-unbiased random draw, deterministic, and **nested** — raising N extends the same sample. There is no
-scenario metadata to stratify on (`sim_suites.csv` has only test_suite_id/scene_id/uuid), and only
-~22% of scene ids join the PhysicalAI-AV clip index. Power: the per-scene paired delta has
-σ ≈ 0.32, so N=30 resolves 0.179 (which is why the 2026-07 matrix was uniformly non-significant),
-N=150 resolves 0.080, N=250 resolves 0.062. Half the scenes score exactly 1.0 for the baseline, so
-report the bootstrap mean CI as primary and Wilcoxon as secondary.
+unbiased draw *in expectation*, deterministic, and **nested** — raising N extends the same sample.
+**The realized first-150 sample is nevertheless easier than the suite** (measured 2026-09-03 against
+sangoh's 913-scene unpruned run, below): 0.742 vs 0.660 on the other 763, Mann-Whitney p=0.039, with
+offroad 9.3% vs 13.0% and **at-fault collision 2.0% vs 5.5%**. Paired arm-vs-arm deltas are barely
+affected, but every *absolute* closed-loop number this repo reports — collision rates above all — is
+optimistic relative to the suite. Say so when quoting one.
+
+There is no scenario metadata to stratify on (`sim_suites.csv` has only test_suite_id/scene_id/uuid)
+and only ~22% of scene ids join the PhysicalAI-AV clip index, but **difficulty can be scored offline
+from the usdz** — see `outputs/scene_difficulty/` (`extract_scene_feats.py`, 913 scenes in 39 s):
+a usdz is a ZIP, so `rig_trajectories.usda` (68 KB, ego GT pose at 10 Hz) and
+`sequence_tracks.json` are read by random access without touching the 400 MB meshes. The parse is
+verified — path length matches the sim's `gt_dist_traveled_m` at r=1.00000. `hard_score =
+z(v_mean) + z(yaw_total_deg)` holds up **out-of-sample** on the 763 never-run scenes (ρ=−0.293,
+p=1.5e-16; hard100 scores 0.499 vs easy100 0.826) and **saturates above the 80th percentile** —
+the 80–90% and 90–100% bands both sit at ≈0.50, so the whole 80–100% band (183 scenes) is equally
+hard and there is no reason to cut higher. Agent density does *not* predict difficulty (ρ=+0.02);
+ego kinematics do. The score is uncorrelated with at-fault collisions (ρ=+0.008), so it selects for
+progress/lane-keeping stress, not safety stress.
+
+**A full-suite unpruned baseline already exists**:
+`/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5` — all 913 `public_2601` scenes,
+`nvidia/Alpamayo-1.5-10B`, 1 rollout each. It agrees with our own baseline on the shared 150
+(Wilcoxon p=0.697, r=0.630) *above* that run's own rollout1↔rollout2 ceiling of 0.592. It was
+launched with `scene_ids` rather than a suite, so it was exposed to the 26.04 render swap, but no
+2604 artifact uuid appears in its logs and the 30 at-risk scenes we can check behave like the rest
+(p=0.33). Use it before spending GPU hours on a new scene-selection probe.
+
+Power: the per-scene paired delta has σ ≈ 0.32, so N=30 resolves 0.179 (which is why the 2026-07
+matrix was uniformly non-significant), N=150 resolves 0.080, N=250 resolves 0.062. Half the scenes
+score exactly 1.0 for the baseline, so report the bootstrap mean CI as primary and Wilcoxon as
+secondary. Selecting hard scenes by `hard_score` raises the effect size ~1.55× against a 1.12× rise
+in σ, i.e. **half the scenes for the same power** — but never select on the baseline's *own* score:
+grouping on it and reading a delta against that same baseline flipped the sign of 11 of 17 arms in
+the easy stratum (`reports/evaluation/2026-09-03_difficulty-stratified-arms.html`).
 
 Throughput on this box, `OMP_NUM_THREADS=8`, four stacks: 12.5 min/scene unpruned, 11.6 min/scene
 for an 8.4B slim model — 150 scenes over 4 GPUs is ~8 h per config. Open-loop, for contrast, is
@@ -469,9 +527,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 동급이고 꼬리 10%에서만 이득 |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
+| `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (23 files as of 2026-08-25).
+`ls reports/evaluation/` is the full set (38 files as of 2026-09-03).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
