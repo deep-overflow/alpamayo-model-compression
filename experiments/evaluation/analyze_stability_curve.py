@@ -96,6 +96,10 @@ def curve(per, sel, n_clips, sizes, draws, seed):
             m.append(float((a[1] * b[1]).sum() / a[1].sum()))
         out[n] = {"q": float(np.mean(q)), "q_sd": float(np.std(q)),
                   "mlp": float(np.mean(m)), "mlp_sd": float(np.std(m)),
+                  # the fraction that DISagrees is what the fit and the report read;
+                  # stored rather than recomputed so both say the same thing
+                  "q_disagree": float(1 - np.mean(q)),
+                  "mlp_disagree": float(1 - np.mean(m)),
                   "draws": len(q)}
         print(f"  n={n:5d}  Q {np.mean(q):.4f}+-{np.std(q):.4f}   "
               f"MLP {np.mean(m):.4f}+-{np.std(m):.4f}", flush=True)
