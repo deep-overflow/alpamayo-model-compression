@@ -146,7 +146,10 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
-    uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
+    # the optional _qcut<N> trades Q heads for MLP channels at the SAME parameter
+    # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
+    # the difference into channels (plans/2026-09-05_axis-allocation.md)
+    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
@@ -437,6 +440,30 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             # the sweep points mean exactly what their name says
             rq = np.full(tc.num_hidden_layers, pct / 100)
             rm = np.full(tc.num_hidden_layers, pct / 100)
+
+        if uni.group(3) is not None:
+            # Same removed-parameter total, different split between the axes. One Q head
+            # costs 2*head_dim*hidden (q_proj rows + o_proj cols); one MLP channel costs
+            # 3*hidden (gate/up rows + down col), so a head is worth 85.33 channels here.
+            # The channel count is DERIVED from whatever budget rq/rm just set rather than
+            # written down, and the assert refuses anything that does not divide evenly --
+            # a config that is "almost" the same size would silently stop being a
+            # one-factor comparison, which is the whole point of this arm.
+            n_q = int(uni.group(3))
+            attn_cost = 2 * tc.head_dim * tc.hidden_size
+            mlp_cost = 3 * tc.hidden_size
+            per_layer = (round(rq[0] * tc.num_attention_heads) * attn_cost
+                         + round(rm[0] * tc.intermediate_size) * mlp_cost)
+            n_m, rem = divmod(per_layer - n_q * attn_cost, mlp_cost)
+            assert rem == 0, (
+                f"_qcut{n_q} leaves {rem} parameters over; only cuts that divide evenly "
+                f"keep the budget identical")
+            assert 0 <= n_q < tc.num_attention_heads and 0 < n_m < tc.intermediate_size
+            rq = np.full(tc.num_hidden_layers, n_q / tc.num_attention_heads)
+            rm = np.full(tc.num_hidden_layers, n_m / tc.intermediate_size)
+            print(f"qcut{n_q}: cut {n_q}/{tc.num_attention_heads} heads and "
+                  f"{n_m}/{tc.intermediate_size} channels per layer "
+                  f"({per_layer:,} params, unchanged)", flush=True)
 
         def half(name):
             if name == "traj":
