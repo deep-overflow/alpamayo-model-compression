@@ -472,6 +472,15 @@ SCENES_CSV=$PWD/outputs/scene_difficulty/hard100_suite.csv \
   bash experiments/head_analysis/launch_alpasim_shards.sh <config> 100 2 "4 5 6 7"
 ```
 
+`run_hard100.sh` (baseline→dual), `run_hard100_tyr.sh`, `run_hard100_lp.sh` chain the arms:
+each waits for the previous run's completion line, then for **Ada 4–7 to be free for 3 consecutive
+minutes** before launching. That gate earned its keep on 2026-09-05, when another lab member held
+the cards for 6 h 13 m and they briefly freed mid-job — the streak counter reset instead of firing.
+`watchdog_arm.sh <config> <log> <done-string> [waiter]` monitors one arm; it separates "running but
+stalled" (45 min without a new rollout) from "waiting while someone else holds the cards" (never an
+alarm), a distinction the first version lacked and which cost a false alarm. Live copies sit in
+`alpasim-runs/hard100/` so a worktree removal cannot disturb a run in flight.
+
 Plan and pre-registered gates: `plans/2026-09-03_hard100-closedloop.md`. The hard100 set's
 expected unpruned score is already known — 0.499 from sangoh's 913-scene run — so a baseline
 landing outside 0.42–0.58 means the setup is wrong, not the scenes.
@@ -585,9 +594,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
+| `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률 |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (39 files as of 2026-09-04).
+`ls reports/evaluation/` is the full set (44 entries as of 2026-09-05: 42 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
