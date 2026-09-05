@@ -80,6 +80,8 @@ export HF_HUB_OFFLINE=\${HF_HUB_OFFLINE:-1}
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export ALPAMAYO_REPO=$REPO
+export LINGOQA_DATA=$SCRATCH/datasets/lingoqa
+export LINGOQA_BENCH=$SCRATCH/project/LingoQA/benchmark
 ENVEOF
 cat "$REPO/env.sh"
 

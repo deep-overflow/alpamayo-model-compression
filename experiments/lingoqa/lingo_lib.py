@@ -25,6 +25,7 @@ questions) and `images/val/<segment_id>/{0..4}.jpg` at 2048x1280.
 """
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,9 @@ import pandas as pd
 import torch
 from PIL import Image
 
-DATA = Path("/mnt/nvme1n1/ad_vla/data/lingoqa")
+# LINGOQA_DATA so the same code runs off-box (NEURON puts it under /scratch); the
+# default is this box's copy, so nothing here changes.
+DATA = Path(os.environ.get("LINGOQA_DATA", "/mnt/nvme1n1/ad_vla/data/lingoqa"))
 
 # LingoQA ships a forward-facing camera; camera index 1 is "Front camera" in
 # helper.CAMERA_DISPLAY_NAMES, which is the name the model saw in training.

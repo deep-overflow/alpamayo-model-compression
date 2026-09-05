@@ -9,6 +9,12 @@
 #   Tiers:  code data weights recipes   (default: all four)
 #           resume   the whole run dir of $RESUME_RUNS, to continue an interrupted run
 #           cosmos   the Cosmos-Reason2-8B safetensors, which `weights` skips
+#           oodval   the 262 OOD-val clips (1.5 GB). The `data` tier ships the whole
+#                    8.5 GB ood namespace because training needs its other half; this
+#                    sends only the clips the open-loop protocol evaluates.
+#           lingoqa  the LingoQA val set (448 MB), the LingoQA repo's benchmark/ dir
+#                    (judge.py, which lives outside this repo) and the Lingo-Judge
+#                    weights (1.4 GB). Needed for the LingoQA arm of an on-NEURON run.
 #           evalsets val_500 + test_500 caches and the importance files an on-NEURON
 #                    criterion comparison needs. Evaluation normally stays on Ada -- send
 #                    this ONLY for a self-contained comparison whose reference arms are
@@ -53,6 +59,8 @@ OUT=$(readlink -f "$CODE_SRC/outputs")
 PY=${PUSH_PY-$CODE_SRC/.venv/bin/python}
 MODEL_REV=$(grep -oP 'MODEL_REV = "\K[0-9a-f]+' "$CODE_SRC/experiments/head_analysis/slim_lib.py")
 RESUME_RUNS=${RESUME_RUNS-recover_coc_u55}
+LINGO_DATA=${LINGO_DATA-$SRC/data/lingoqa}
+LINGO_BENCH=${LINGO_BENCH-/home/cvlab21/project/chan/LingoQA/benchmark}
 TRAIN_CONFIGS=${TRAIN_CONFIGS-}   # empty = every slim_* recipe (51 of them, 160 MB)
 
 TMP=$(mktemp -d)
@@ -124,7 +132,10 @@ if has code; then
   REPO_WT=$(cd "$HERE/../.." && pwd)
   PATCHED=(experiments/evaluation/sample_cache.py
            experiments/head_analysis/run_retry_host.sh
-           experiments/recovery/run_ddp_retry.sh)
+           experiments/recovery/run_ddp_retry.sh
+           experiments/lingoqa/lingo_lib.py
+           experiments/lingoqa/score_lingo_vqa.py
+           experiments/lingoqa/run_lingo_judge.py)
   echo "  overlaying ${#PATCHED[@]} portability patches from $REPO_WT"
   ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative "${PATCHED[@]/#/./}" \
       "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
@@ -167,6 +178,39 @@ if has evalsets; then
   echo "  $(du -shL "$OUT/importance_v2_ada" "$OUT/importance_stepvlm_v1" | tr '\n' ' ')"
   run "${RSYNC[@]}" "$OUT/importance_v2_ada" "$OUT/importance_stepvlm_v1" \
       "$OUT/importance_v2" "$OUT/slim_integrated_mag" "$HOST:$SCRATCH/outputs/"
+fi
+
+if has oodval; then
+  step "OOD-val 262 caches -> $SCRATCH/datasets/physicalai_av/pre_processed"
+  # The open-loop protocol's third set. `data` would bring these too, but only as part
+  # of the whole ood namespace (8.5 GB) whose other 1,271 clips are the OOD-train half.
+  sample_list ood "$OUT/eval_sets/ood_val.parquet" > "$TMP/oodval.txt"
+  echo "  $(wc -l < "$TMP/oodval.txt") files, $(total_of "$PRE" "$TMP/oodval.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/oodval.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+fi
+
+if has lingoqa; then
+  step "LingoQA val set -> $SCRATCH/datasets/lingoqa"
+  # images/ is the unpacked images.zip; sending both would double the volume for
+  # nothing, and lingo_lib reads the directory.
+  echo "  $(du -shL --exclude=images.zip "$LINGO_DATA" | cut -f1) (images.zip excluded)"
+  run "${RSYNC[@]}" --exclude images.zip "$LINGO_DATA/" \
+      "$HOST:$SCRATCH/datasets/lingoqa/"
+
+  step "LingoQA benchmark package -> $SCRATCH/project/LingoQA/benchmark"
+  # judge.py lives in LingoQA's own repo, not in ours -- score_lingo_vqa.py and
+  # run_lingo_judge.py sys.path-insert it. Without this the LingoQA arm cannot score.
+  # rsync creates only the LAST path component, and this one is two levels below
+  # $SCRATCH/project, so make the parent first rather than relying on --mkpath.
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/project/LingoQA"
+  echo "  $(du -shL "$LINGO_BENCH" | cut -f1)"
+  run "${RSYNC[@]}" "$LINGO_BENCH/" "$HOST:$SCRATCH/project/LingoQA/benchmark/"
+
+  step "Lingo-Judge weights -> $SCRATCH/checkpoints/hub"
+  judge_list > "$TMP/judge.txt"
+  echo "  $(wc -l < "$TMP/judge.txt") files, $(total_of "$HUB" "$TMP/judge.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/judge.txt" "$HUB/" "$HOST:$SCRATCH/checkpoints/hub/"
 fi
 
 if has weights; then
