@@ -154,7 +154,54 @@
   minADE에 영향이 없음이 측정돼 있다({{g0b_cost}}). 곡선이 그 선에 닿는 지점이 "충분한 n"이다.</figcaption>
 </figure>
 
-<h2><span class="num">3</span>수렴은 매우 느리다</h2>
+<h2><span class="num">3</span>H1은 반증됐다 — 곡선이 꺾인다</h2>
+
+<div class="callout good">
+<p><strong>사전 등록한 H1("멱법칙이 n=2,000까지 유지된다")은 기각된다.</strong> n&le;250만 보고
+외삽한 이전 추정은 큰 n에서 <strong>일관되게 비관적</strong>이었다 — 실측 중첩이 예측보다 Q는
++0.009~+0.011, MLP는 +0.012~+0.022 높다. 오차가 n이 커질수록 벌어지므로 우연이 아니라
+<strong>곡선이 실제로 꺾이고 있다</strong>.</p>
+</div>
+
+<table>
+<thead><tr><th class="r">n</th><th class="r">Q 예측</th><th class="r">Q 실측</th><th class="r">차이</th>
+<th class="r">MLP 예측</th><th class="r">MLP 실측</th><th class="r">차이</th></tr></thead>
+<tbody>
+<tr><td class="r">400</td><td class="r">0.9385</td><td class="r">0.9477</td><td class="r down">+0.0092</td>
+    <td class="r">0.9007</td><td class="r">0.9122</td><td class="r down">+0.0115</td></tr>
+<tr><td class="r">600</td><td class="r">0.9455</td><td class="r">0.9558</td><td class="r down">+0.0102</td>
+    <td class="r">0.9108</td><td class="r">0.9262</td><td class="r down">+0.0155</td></tr>
+<tr><td class="r">1000</td><td class="r">0.9532</td><td class="r">0.9634</td><td class="r down">+0.0101</td>
+    <td class="r">0.9220</td><td class="r">0.9406</td><td class="r down">+0.0186</td></tr>
+<tr><td class="r">2000</td><td class="r">0.9620</td><td class="r">0.9708</td><td class="r down">+0.0088</td>
+    <td class="r">0.9350</td><td class="r">0.9568</td><td class="r down">+0.0218</td></tr>
+</tbody>
+</table>
+
+<p>
+그 결과 <strong>필요한 클립 수 추정이 자릿수로 줄었다</strong>:
+</p>
+
+<table>
+<thead><tr><th>축</th><th class="r">옛 예측 (n&le;250 외삽)</th><th class="r">실측 기반 (전체)</th>
+<th class="r">실측 기반 (n&ge;250)</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">5,683</td>
+    <td class="r"><strong>{{fits.q.n_for_g0b_churn|,.0f}}</strong></td>
+    <td class="r">{{fits.q_large_n.n_for_g0b_churn|,.0f}}</td></tr>
+<tr><td>MLP 채널</td><td class="r">55,336</td>
+    <td class="r"><strong>{{fits.mlp.n_for_g0b_churn|,.0f}}</strong></td>
+    <td class="r">{{fits.mlp_large_n.n_for_g0b_churn|,.0f}}</td></tr>
+</tbody>
+</table>
+
+<p>
+MLP는 <strong>55,336 &rarr; 6,125</strong>(n&ge;250 적합)로 9배 줄었다. 공식 train 전체가
+153,625클립이므로, 옛 추정에서는 "MLP 1% 수렴에 110만 클립"이라 <em>데이터 자체가 부족</em>했지만
+지금은 <strong>현실적인 범위 안에 들어온다</strong>.
+</p>
+
+<h2><span class="num">4</span>그래도 수렴은 느리다</h2>
 
 <p>
 불일치율을 멱법칙으로 적합하면:
@@ -181,7 +228,7 @@
 "상관 0.91–0.97인데 선택은 12–17% 다르다"고 지적한 것과 같은 구조다.
 </p>
 
-<h2><span class="num">4</span>축이 비대칭이다</h2>
+<h2><span class="num">5</span>축이 비대칭이다</h2>
 
 <p>
 <strong>MLP가 Q head보다 일관되게 느리다.</strong> 12,288개 채널에서 7,390개를 고르는 쪽이,
@@ -194,7 +241,7 @@
 충분한 n이 MLP에는 한참 모자란다.
 </p>
 
-<h2><span class="num">5</span>한계</h2>
+<h2><span class="num">6</span>한계</h2>
 
 <ul>
 <li><strong>보수적 기준이다.</strong> 선택이 멈추는 n은 상한이고, 성능이 안정되는 n은 더 작을 수
@@ -210,7 +257,7 @@
     유효하다.</li>
 </ul>
 
-<h2><span class="num">6</span>재현</h2>
+<h2><span class="num">7</span>재현</h2>
 
 <pre><code>python experiments/evaluation/make_calib_blocks.py --pool split --blocks 1 --block-size 4000 --prefix calib_st
 python experiments/evaluation/build_cache.py --manifest outputs/eval_sets/calib_st4000.parquet --cache calib_st
