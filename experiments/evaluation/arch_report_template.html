@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프루닝 비용은 카드를 갈아도 같다: Ada와 A100의 완전 재측정</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>프루닝 비용은 카드를 갈아도 같다: Ada와 A100의 완전 재측정</h1>
+  <div class="meta">
+    2026-09-05 · <code>nvidia/Alpamayo-1.5-10B</code> baseline + <code>dual_u40_v2</code>(−24.0%) ·
+    val 500 + test 500 + OOD-val 262 · minADE@6 + LingoQA 500문항 ·
+    RTX 5880 Ada ↔ A100-SXM4-80GB (KISTI NEURON)
+  </div>
+</header>
+
+<p class="lede">
+이 저장소의 모든 결과는 &ldquo;페어드 비교는 한 아키텍처 안에서만 유효하다&rdquo;는 규칙 위에
+서 있다. 그 규칙은 클립 몇 개에서 추론해 전면 적용한 것이고, <strong>결과를 보고하는
+규모에서 측정된 적이 없었다.</strong> NEURON 이전 과정에서 그 측정이 가능해졌다 &mdash;
+같은 두 모델을 A100에서 세 세트 전부 다시 돌렸다. 답은
+<strong>프루닝 비용은 아키텍처에 의존하지 않는다</strong>이고, 규칙이 실제로 필요한 곳은
+따로 있다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">프루닝 비용 차이</span><span class="v">≤0.011</span>세 세트, Ada vs A100</div>
+  <div><span class="k">Ada 값이 A100 CI 안</span><span class="v">3/3</span>모든 세트</div>
+  <div><span class="k">클립별 상관</span><span class="v">0.9971</span>val500 baseline</div>
+  <div><span class="k">CoC 텍스트 동일</span><span class="v">95~98%</span>클립 기준</div>
+  <div><span class="k">재측정 규모</span><span class="v">5,048</span>클립 (2 arm × 2 카드)</div>
+</div>
+
+<h2><span class="num">1</span>왜 이걸 재야 했나</h2>
+
+<p>
+2026-08-07 이후 이 저장소의 규약은 이렇다: 결정성은 <strong>한 GPU 아키텍처 안에서만</strong>
+비트 단위로 성립하고, 같은 클립·같은 시드가 Ada에서 0.286, Blackwell에서 0.291을 냈으며,
+3~4%의 클립이 아키텍처에 따라 다른 CoC 텍스트를 만든다. 그래서 비교의 모든 arm은 한
+아키텍처에 고정해야 한다.
+</p>
+
+<p>
+이 규칙 자체는 옳다. 문제는 그것이 <strong>얼마나 강한 제약인지</strong>를 아무도 재지 않았다는
+것이다. 클립 단위 차이가 arm 간 <em>차분</em>에도 남는가? 500클립 평균에서도 남는가? 이건
+실무적으로 큰 차이다 &mdash; 만약 남지 않는다면, 다른 기관의 카드에서 잰 결과를 참조값으로 쓸
+수 있고, 사이트 간 협업의 문턱이 크게 낮아진다.
+</p>
+
+<div class="callout">
+<p>
+<strong>왜 지금 답할 수 있게 됐나.</strong> KISTI NEURON으로 평가 파이프라인을 이전하면서
+<code>baseline</code>과 <code>dual_u40_v2</code>를 A100에서 세 세트 전부 재측정했다. 매니페스트,
+클립, 시드 규칙(<code>sha256("42:{clip_id}")</code>)이 모두 동일하므로 <strong>같은 클립을
+같은 시드로 두 카드에서 돌린 완전한 쌍</strong>이 생겼다. 클립 두 개가 아니라 1,262 × 2 arm ×
+2 카드다.
+</p>
+</div>
+
+<h2><span class="num">2</span>Q1 — 프루닝 비용은 아키텍처에 의존하지 않는다</h2>
+
+<p>
+가장 중요한 질문부터. 이 저장소가 실제로 보고하는 값은 절대 성능이 아니라
+<strong><code>dual − baseline</code></strong>이다. 이 차분은 각 아키텍처 <em>안에서</em>
+페어드로 계산되므로, 두 arm을 똑같이 밀어내는 커널 차이는 상쇄된다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th class="r">Ada</th><th class="r">A100</th><th class="r">차이</th><th class="r">A100 부트스트랩 95% CI</th><th class="r">Ada가 CI 안에?</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">+0.0581</td><td class="r">+0.0636</td><td class="r">+0.0055</td><td class="r">[+0.0392, +0.0894]</td><td class="r"><strong>예</strong></td></tr>
+<tr><td>test500</td><td class="r">+0.0524</td><td class="r">+0.0562</td><td class="r">+0.0038</td><td class="r">[+0.0336, +0.0831]</td><td class="r"><strong>예</strong></td></tr>
+<tr><td>OOD-val</td><td class="r">+0.0776</td><td class="r">+0.0668</td><td class="r">−0.0108</td><td class="r">[+0.0328, +0.1201]</td><td class="r"><strong>예</strong></td></tr>
+</tbody>
+</table>
+
+<p class="meta">paired minADE@6 중앙값. A100 쪽은 세 세트 모두 p ≤ 5.4e-05로 0에서 분리된다.</p>
+
+<figure>
+  <img src="PLOT::arch::deltas.png" alt="아키텍처별 프루닝 비용과 절대값">
+  <figcaption>
+    왼쪽: 각 카드 안에서 페어드로 잰 프루닝 비용. 오차 막대는 A100의 부트스트랩 95% CI이고,
+    Ada 막대가 세 세트 모두 그 안에 들어간다. 오른쪽: 절대 minADE@6 평균 (연한 색 = baseline,
+    진한 색 = dual).
+  </figcaption>
+</figure>
+
+<div class="callout good">
+<p>
+<strong>차이가 +0.0055 / +0.0038 / −0.0108이고 부호조차 일정하지 않다.</strong> 프루닝 자체의
+비용이 +0.052~+0.078인 것에 비하면 5~20% 크기의 잡음이며, 세 세트 모두 Ada 값이 A100의 CI
+안에 들어간다. <strong>같은 체크포인트는 카드를 갈아도 같은 대가를 치른다.</strong>
+</p>
+</div>
+
+<h2><span class="num">3</span>Q2 — 절대값도 사실상 일치한다</h2>
+
+<p>
+차분이 일치하는 것은 커널 차이가 두 arm에서 상쇄됐기 때문일 수도 있다. 그렇다면 절대값은
+어긋나야 한다. 그런데 어긋나지 않는다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th>arm</th><th class="r">Ada</th><th class="r">A100</th><th class="r">차이</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">val500</td><td>baseline</td><td class="r">0.8236</td><td class="r">0.8196</td><td class="r">−0.0040</td></tr>
+<tr><td>dual</td><td class="r">0.8904</td><td class="r">0.9214</td><td class="r">+0.0310</td></tr>
+<tr><td rowspan="2">test500</td><td>baseline</td><td class="r">0.8417</td><td class="r">0.8444</td><td class="r">+0.0027</td></tr>
+<tr><td>dual</td><td class="r">0.9498</td><td class="r">0.9597</td><td class="r">+0.0100</td></tr>
+<tr><td rowspan="2">OOD-val</td><td>baseline</td><td class="r">0.9995</td><td class="r">1.0006</td><td class="r">+0.0011</td></tr>
+<tr><td>dual</td><td class="r">1.1192</td><td class="r">1.1013</td><td class="r">−0.0179</td></tr>
+</tbody>
+</table>
+
+<p>
+baseline은 세 세트에서 <strong>0.004 이하</strong>로 일치한다 &mdash; 소수점 둘째 자리까지 같다.
+dual은 조금 더 흔들리는데(최대 0.031), 이는 프루닝된 모델이 수치적으로 더 예민하다는 것과
+일관된다. 어느 쪽이든 클립별 페어링 없이도 <strong>500클립 평균은 서로 다른 기관의 카드에서
+재현된다.</strong>
+</p>
+
+<h2><span class="num">4</span>Q3 — 그렇다면 아키텍처는 어디에 나타나는가</h2>
+
+<p>
+사라진 것이 아니다. 클립 단위로 내려가면 즉시 보인다.
+</p>
+
+<figure>
+  <img src="PLOT::arch::perclip.png" alt="클립 단위 대조">
+  <figcaption>
+    왼쪽: val500 baseline의 클립별 산점도, 상관 <strong>r = 0.9971</strong>. 오른쪽: 클립별 차이의
+    분포(log 축). <strong>비트 단위로 같은 클립은 0.0%</strong>이지만 대부분이 0 근처에 몰려 있고,
+    |Δ| &gt; 0.05인 클립은 3.6%뿐이다.
+  </figcaption>
+</figure>
+
+<table>
+<thead><tr><th>세트</th><th>arm</th><th class="r">중앙값 |Δ|</th><th class="r">CoC 텍스트 동일</th><th class="r">|Δ| &gt; 0.05</th><th class="r">부호 편향 p</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">val500</td><td>baseline</td><td class="r">0.0041</td><td class="r">97.2%</td><td class="r">3.6%</td><td class="r">0.57</td></tr>
+<tr><td>dual</td><td class="r">0.0059</td><td class="r">95.8%</td><td class="r">4.8%</td><td class="r">0.96</td></tr>
+<tr><td rowspan="2">test500</td><td>baseline</td><td class="r">0.0037</td><td class="r">97.6%</td><td class="r">3.4%</td><td class="r">0.37</td></tr>
+<tr><td>dual</td><td class="r">0.0057</td><td class="r">95.8%</td><td class="r">4.2%</td><td class="r">0.68</td></tr>
+<tr><td rowspan="2">OOD-val</td><td>baseline</td><td class="r">0.0044</td><td class="r">96.6%</td><td class="r">4.2%</td><td class="r">0.58</td></tr>
+<tr><td>dual</td><td class="r">0.0068</td><td class="r">95.0%</td><td class="r">5.7%</td><td class="r">0.75</td></tr>
+</tbody>
+</table>
+
+<p>
+클립별 차이는 <strong>방향이 없다</strong> &mdash; Wilcoxon p가 0.37~0.96으로 어느 카드도
+체계적으로 낫지 않다. 그래서 평균에서 상쇄된다. 그리고 3~4%가 다른 CoC 텍스트를 낸다는 기존
+관측이 <strong>정확히 재현된다</strong>(동일 95.0~97.6%). 프루닝된 모델에서 불일치가 조금 더
+크다는 것도 일관된 패턴이다.
+</p>
+
+<h3>이산 지표는 다르다</h3>
+
+<figure>
+  <img src="PLOT::arch::degen.png" alt="CoC 퇴화율">
+  <figcaption>
+    CoC 퇴화율은 임계값을 넘는지로 판정하는 이산 지표라, 연속 지표와 달리 아키텍처에 따라
+    눈에 띄게 흔들린다.
+  </figcaption>
+</figure>
+
+<p>
+dual의 퇴화율이 Ada에서 1.4 / 3.0 / 3.4%인데 A100에서 1.6 / 3.4 / 4.2%로 <strong>일관되게
+높다</strong>. baseline도 0.8 / 0.6 / 0.0% → 0.2 / 1.0 / 0.4%로 흔들리는데 방향이 일정하지 않다.
+클립 3~4%가 다른 텍스트를 내는 상황에서, 퇴화 여부는 그 텍스트가 임계값의 어느 쪽에 떨어지는지로
+갈리므로 <strong>연속 지표보다 훨씬 민감하다</strong>. 0.4%p 차이는 262클립에서 클립 한 개다.
+</p>
+
+<h3>LingoQA</h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">Ada</th><th class="r">A100</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">73.2%</td><td class="r">72.6%</td></tr>
+<tr><td>dual</td><td class="r">68.8%</td><td class="r">66.6%</td></tr>
+<tr><td><strong>dual − baseline</strong></td><td class="r"><strong>−4.4pp</strong></td><td class="r"><strong>−6.0pp</strong></td></tr>
+<tr><td>dual 답변 길이 / 128토큰 잘림</td><td class="r">35단어 / 34.4%</td><td class="r">35단어 / 33.4%</td></tr>
+</tbody>
+</table>
+
+<p>
+방향과 크기는 재현되지만 궤적보다 흔들림이 크다(−4.4 vs −6.0pp). LingoQA 점수도
+&ldquo;judge logit &gt; 0&rdquo;이라는 <strong>임계값 판정</strong>이라 위의 퇴화율과 같은 이유로
+민감하다. 다만 dual의 답변 길이 35단어와 잘림 비율(34.4% vs 33.4%)이 거의 정확히 일치하는 것은
+주목할 만하다 &mdash; <strong>프루닝이 만든 행동 변화(장황해짐)는 카드와 무관하게 같다.</strong>
+</p>
+
+<h2><span class="num">5</span>결론과, 규칙을 어떻게 고칠 것인가</h2>
+
+<ul>
+<li><strong>프루닝 비용은 아키텍처 불변이다.</strong> 세 세트에서 차이 ≤0.011, Ada 값이 모두
+    A100의 CI 안. 이 저장소가 보고하는 값의 종류는 카드를 옮겨도 같다.</li>
+<li><strong>500클립 평균은 기관을 넘어 재현된다.</strong> baseline 절대값이 0.004 이하로 일치한다.
+    다른 사이트에서 잰 baseline을 참조값으로 쓰는 것이 가능하다.</li>
+<li><strong>기존 규칙은 폐기가 아니라 정밀화 대상이다.</strong> 클립 단위 페어링은 여전히 무효고
+    (비트 동일 클립 0.0%), <strong>이산·임계값 지표</strong>(CoC 퇴화율, LingoQA judge 판정)는
+    아키텍처에 민감하다. 반면 <strong>연속 지표의 집계값과 arm 간 차분</strong>은 안전하다.</li>
+</ul>
+
+<div class="callout warn">
+<p>
+<strong>그래도 한 비교의 모든 arm은 한 아키텍처에 고정하는 것이 맞다.</strong> 이 결과는
+&ldquo;섞어도 된다&rdquo;가 아니라 &ldquo;섞였을 때 얼마나 틀리는지 이제 안다&rdquo;는 것이다.
+연속 지표에서 그 오차는 0.01 m 수준이고, 이 연구가 판정하는 효과 크기(0.05 m 게이트)의 5분의 1
+이하다. 새 arm을 굳이 다른 카드에서 재야 할 이유는 없지만, <strong>어쩔 수 없이 그렇게 됐을 때
+결과를 버릴 필요는 없다.</strong>
+</p>
+</div>
+
+<footer>
+  <code>experiments/evaluation/analyze_arch.py</code> ·
+  데이터 <code>outputs/arch_invariance/</code>, 원본 <code>outputs/neuron_pull/</code> ·
+  NEURON 실행 <code>experiments/transfer/{eval_arms,lingo_arms}.sbatch</code> (PR #39) ·
+  A100 잡 903620(개루프 2h56m) / 903652(LingoQA 35m), 노드 gpu38 ·
+  Ada 값은 기존 published 실행에서 그대로 가져왔다
+</footer>
+
+</div>
+</body>
+</html>

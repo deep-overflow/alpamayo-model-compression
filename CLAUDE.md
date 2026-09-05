@@ -262,6 +262,17 @@ text across architectures. Keep every arm of a comparison on one architecture an
 Ada−Blackwell difference turned out to be +0.0000 / +0.0001, p=0.82, but that was not knowable
 in advance).
 
+**Measured at scale on 2026-09-05** (`reports/evaluation/2026-09-05_architecture-invariance.html`):
+`baseline` and `dual_u40_v2` were re-run on A100 (KISTI NEURON) over all three sets. The pruning
+cost is architecture-invariant -- `dual - baseline` differs by ≤0.011 m and Ada's median sits
+inside the A100 bootstrap CI on every set -- and even the absolute 500-clip baseline means agree
+to ≤0.004. What does move is (a) per-clip values (no clip is bit-identical, though |Δ|>0.05 on
+only 3.4-5.7% and the sign is unbiased, p≥0.37) and (b) **discrete threshold metrics**: CoC
+degeneracy runs consistently higher on A100 (dual 1.4/3.0/3.4% -> 1.6/3.4/4.2%) and LingoQA's
+judge verdict shifts -4.4pp -> -6.0pp. So keep every arm of a comparison on one architecture, but
+a continuous aggregate measured elsewhere is usable: the error is ~0.01 m, a fifth of the 0.05 m
+gate this work decides on.
+
 Output convention: every run writes `outputs/<exp_id>/` containing `config.json`, `metrics.json`,
 `summary.txt`, and `plots/*.png`. Large rebuildable artifacts are gitignored: `slim_state.pt`
 (15–17 GB each, rebuildable from `slim_meta.json`) and `jlens_vectors.pt` (~600 MB).
@@ -569,6 +580,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-25_pathway-map-stage2.html` | `head_analysis/pathway2_report_template.html` | stage 2, VLM-internal edge knockout by layer band: reasoning and trajectory dissociate one-directionally |
 | `2026-09-04_propagated-divergence.html` | `head_analysis/streamprop_report_template.html` | 같은 분해를 누적 hidden state와 KV cache에서: 국소 판정과 부호가 반대(+0.0098 손해 → −0.0010 이득), 국소→전파 ρ=+0.66(down_proj +0.28 n.s.), 그리고 보존은 국소·전파 어느 쪽도 능력을 예측하지 못함 |
 | `2026-09-04_stream-error-decomposition.html` | `head_analysis/streamerr_report_template.html` | 재구성 오차를 5개 토큰 타입으로 분해: CoC를 Hessian에 16% 넣는 거래는 에너지 가중 순손실(+0.0098); 오차는 fit 가중치를 따르지 않고 스트림 고유 난이도가 지배 |
+| `2026-09-05_architecture-invariance.html` | `evaluation/arch_report_template.html` | Ada와 A100에서 baseline+dual 전 세트 재측정: 프루닝 비용 차이 ≤0.011로 Ada 값이 모두 A100 CI 안, baseline 절대값도 0.004 이하 일치; 아키텍처가 실제로 문제되는 곳은 클립 단위 페어링과 이산·임계값 지표(CoC 퇴화율·LingoQA judge) |
 | `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 전체·꼬리 모두 동급 (초판의 꼬리 이득 주장은 선택 편향이라 철회) |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
