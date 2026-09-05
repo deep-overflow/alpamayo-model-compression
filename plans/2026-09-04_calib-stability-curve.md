@@ -135,3 +135,22 @@ MLP가 일관되게 1.5~1.7배 더 흔들린다. 12,288채널에서 7,390개를 
   착각했을 상황이다.
 - `importance_perclip.npz`가 **23.7 GB**다(클립당 5.9 MB × 4,000). 4.7 GB로 어림잡았던 것은
   틀렸고, 병합에 47 GB RSS와 15분이 걸렸다.
+
+## 부수: cvlab20 대조 검증 (2026-09-05 21:52 KST)
+
+이 실험을 cvlab20으로 옮기면서, 그 서버의 평가 결과를 cvlab21 결과와 섞어 써도 되는지 확인했다.
+무압축 baseline을 test500에서 재측정해 `baseline_ada_ps_test`와 클립 단위로 대조:
+
+```
+minADE@6        양쪽 0.841711   페어드 차이 +0.000000
+차이 나는 클립   0 / 500         max |diff| 0.000e+00
+CoC 텍스트       100.0% 일치
+-> PASS (비트 동일)
+```
+
+Ada↔Blackwell은 같은 클립이 0.286 vs 0.291이고 텍스트도 3–4% 달랐다. cvlab20은 같은
+RTX 5880 Ada에 드라이버 570.133.07 / CUDA 12.8 / 동일 패키지 버전이라 한 글자도 다르지 않다.
+
+**범위**: baseline 경로만이다. slim 체크포인트는 `slim_lib`의 다른 attention forward를 타므로
+(kept Q head마다 K/V gather, `num_key_value_groups=1`), 프루닝 arm을 cvlab20에서 돌려 이쪽 표에
+넣으려면 `dual` 대조가 한 번 더 필요하다. 사용자 판단으로 이번에는 하지 않았다.
