@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hard100 &mdash; 어려운 씬에서 방법 간 차이가 사라진다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem;
+    overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.9rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--text-muted); font-size: 0.86em; font-weight: 400; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .warn {
+    background: #FFF8E6; border-left: 4px solid #eda100;
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.95rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  .pass { background: #E4F0E4; color: #2C6E2C; }
+  .fail { background: #F6E3D8; color: var(--accent-dark); }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 160px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 폐루프 평가</div>
+  <h1>hard100 &mdash; 어려운 씬에서 방법 간 차이가 사라진다</h1>
+  <div class="meta">
+    2026-09-05 &middot; alpasim <code>public_2601_hard100</code> 100씬 &times; 2 rollout
+    &middot; 드라이버 전부 Ada 4&ndash;7, <code>OMP_NUM_THREADS=8</code>
+    &middot; 씬 집합 <code>make_hard_suite.py</code> (기존 150씬과 교집합 0)
+    &middot; 분석 <code>analyze_hard100.py</code> &middot; 산출물 <code>outputs/hard100_eval/</code>
+    &middot; 계획 <code>plans/2026-09-03_hard100-closedloop.md</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>요약</h2>
+
+<div class="callout">
+  <p><strong>결론 1 &mdash; 압축이 비압축을 이긴다는 결과는 살아남았다.</strong>
+  150씬에서 <code>dual_u40_v2</code>가 baseline 대비 +0.079였는데, 훨씬 가혹한 hard100 에서
+  <strong>+0.085 (p=0.0016)</strong>로 유지된다. 사전등록 게이트 <strong>G1 통과</strong>.
+  <code>tyr_u40_r</code>도 +0.075 (p=0.0026)로 같다.</p>
+  <p><strong>결론 2 &mdash; 그러나 압축 방법들 사이의 서열은 무너진다.</strong>
+  150씬에서 dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786 으로 서열이 있었다. hard100 에서는
+  0.595 / 0.575 / 0.586 이고 <strong>어떤 쌍도 구분되지 않는다</strong>
+  (dual&ndash;tyr p=0.55, dual&ndash;lp p=0.38, tyr&ndash;lp p=0.80).
+  같은 예산에서 <em>고르기</em>(Taylor)와 <em>다시 쓰기</em>(재구성), 그리고 외부 방법
+  (LLM-Pruner)이 어려운 씬에서는 한 덩어리다.</p>
+  <p style="margin-bottom:0"><strong>결론 3 &mdash; 외부 baseline 이 더 많이 잘라내고도 동률이다.</strong>
+  순수 LLM-Pruner(<code>lp_r50</code>)는 25.0% 를 제거해 우리 24.0% 보다 공격적인데
+  dual 과 &minus;0.020 (p=0.38) 로 구분되지 않는다. <strong>이 씬 집합에서 우리 방법의 우위는
+  주장할 수 없다.</strong> 다만 LP 만 baseline 대비 유의하지 않고(+0.065, p=0.074) 씬별 편차가
+  크다(SE 0.039 vs 우리 0.025&ndash;0.029).</p>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="v">+0.085</div><div class="l">dual − baseline (p=0.0016) — G1 통과</div></div>
+  <div class="kpi"><div class="v">p=0.38</div><div class="l">lp_r50 − dual — 외부 방법과 동률</div></div>
+  <div class="kpi"><div class="v">3/3</div><div class="l">압축 arm 쌍 중 구분되는 쌍</div></div>
+  <div class="kpi"><div class="v">3.8배</div><div class="l">도로 이탈률, 150씬 대비 hard100</div></div>
+</div>
+
+<h2><span class="num">2.</span>왜 새 씬 집합이 필요했나</h2>
+
+<p>지금까지의 모든 폐루프 결론은 <code>public_2601</code>의 첫 150씬에서 나왔다. 그런데 그 표본은
+자기가 뽑혀 나온 스위트보다 <strong>유의하게 쉽다</strong>. sangoh 님이 913씬 전부를 비압축
+모델로 돌린 런(<code>eval2601_a1_5</code>)으로 재면 첫 150씬 0.742 vs 나머지 763씬 0.660
+(Mann-Whitney p=0.039), 도로 이탈 9.3% vs 13.0%, 과실 충돌 2.0% vs 5.5%다.</p>
+
+<p>그래서 두 가지가 미지수였다. <strong>(1)</strong> 150씬에서 얻은 arm 서열이 더 어려운 조건에서도
+유지되는가. <strong>(2)</strong> 150씬에서 바닥 효과로 검정력이 없던 과실 충돌 축이, 더 어려운
+씬에서는 갈리는가.</p>
+
+<h3>씬 선별</h3>
+
+<p><code>hard_score = z(평균속도) + z(누적 선회각)</code>를 usdz 의 에고 GT 궤적만으로 913씬 전부에
+매기고 &mdash; <strong>모델을 전혀 돌리지 않는다</strong> &mdash; 이미 평가한 150씬과 GT 주행 5 m
+미만 씬을 제외한 755개 풀에서 상위 100개를 뽑았다. 이 순위는 사후 검증을 통과했다: 한 번도 돌린 적
+없는 763씬에서 Spearman &rho;=&minus;0.293 (p=1.5e-16), hard100 구간 실측 0.499 vs 하위 100개
+0.826 (자세한 내용은 <code>2026-09-03_difficulty-stratified-arms.html</code>).</p>
+
+<h2><span class="num">3.</span>셋업 검증 <span class="tag pass">S1 통과</span></h2>
+
+<p>이 실험의 1단계는 결과 해석이 아니라 <strong>셋업이 맞는지</strong> 확인하는 것이다. 계획서에
+사전등록한 게이트 S1 은 baseline 이 0.42&ndash;0.58 밖이면 씬이 아니라 셋업을 의심하라고 정해
+두었고, 사전 예측 0.499 는 sangoh 님 913씬 런에서 이 100씬만 뽑은 실측이다.</p>
+
+<table>
+<thead><tr><th>검증 항목</th><th>기준</th><th class="r">실측</th></tr></thead>
+<tbody>
+<tr><td><strong>S1</strong> baseline 점수</td><td>0.42&ndash;0.58 (예측 0.499)</td><td class="r"><strong>0.510</strong> 통과</td></tr>
+<tr><td>씬 집합</td><td>스위트와 완전 일치</td><td class="r">100/100</td></tr>
+<tr><td>rollout</td><td>씬당 2개</td><td class="r">100씬 모두 2개</td></tr>
+<tr><td><code>img_is_black</code></td><td>0 이어야 정상</td><td class="r">0/200</td></tr>
+<tr><td>sangoh 913씬 런과 대조</td><td>같은 100씬</td><td class="r">0.499 vs 0.510, p=0.827</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <strong>예측이 거의 정확히 맞았다.</strong> 완전히 다른 시점, 다른 rollout 수(1 vs 2), 다른
+  실행 주체의 두 런이 같은 100씬에서 0.499 와 0.510 을 냈고 페어드 Wilcoxon p=0.827 이다.
+  셋업이 정상이고 씬 선별이 재현 가능하다는 뜻이다. 씬 단위 상관은 r=0.723 인데, 이는 폐루프
+  rollout 노이즈 때문이지 셋업 문제가 아니다 &mdash; 우리 150씬 런 <em>내부</em>의
+  rollout1&harr;rollout2 상관도 0.592 에 불과했다.
+</div>
+
+<h2><span class="num">4.</span>hard100 은 실제로 더 어렵다</h2>
+
+<table>
+<thead><tr><th>지표 (비압축 baseline)</th><th class="r">150씬</th><th class="r">hard100</th><th class="r">비</th></tr></thead>
+<tbody>
+<!--TABLE_VS150-->
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::h100::score_dist.png" alt="점수 분포">
+  <figcaption>비압축 baseline 의 씬 점수 분포. hard100 은 만점 씬이 49%&rarr;20% 로 줄고 0점이
+  26씬이다. 파선은 사전 예측 0.499.</figcaption>
+</figure>
+
+<div class="warn">
+  <p style="margin-bottom:0"><strong>다만 어려워진 축은 하나뿐이다.</strong> 도로 이탈은 3.8배가
+  됐지만 <strong>과실 충돌은 오히려 줄었다</strong>(4.0% &rarr; 3.0%). 이는 계획서에 미리 적어둔
+  대로다 &mdash; 정적 난이도는 과실 충돌과 &rho;=+0.008 로 <em>무관</em>하고, "빠르고 많이 도는"
+  씬을 고르면 progress 와 차선 유지가 스트레스를 받지 충돌 회피가 받지는 않는다. 실제로 쉬운 씬이
+  주변 차량은 더 많았다(정체 상황). <strong>2번 미지수는 답을 얻지 못했다.</strong></p>
+</div>
+
+<h2><span class="num">5.</span>arm 비교</h2>
+
+<table>
+<thead><tr>
+  <th>arm</th><th class="r">제거</th><th>계열</th><th class="r">점수</th><th class="r">중앙값</th>
+  <th class="r">&lt;0.7</th><th class="r">만점</th><th class="r">이탈</th><th class="r">과실충돌</th>
+  <th class="r">150씬</th>
+</tr></thead>
+<tbody>
+<!--TABLE_ARMS-->
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::h100::arms.png" alt="arm 비교">
+  <figcaption>왼쪽: hard100 점수, 파선은 같은 arm 의 150씬 실측. 오른쪽: 과실 충돌률과 Wilson 95%
+  구간. 구간이 크게 겹치고 사건이 4&ndash;8건뿐이라 이 축은 어느 방향도 지지하지 않는다.</figcaption>
+</figure>
+
+<h3>페어드 비교</h3>
+
+<table>
+<thead><tr>
+  <th>비교</th><th class="r">&Delta; ± SE</th><th class="r">Wilcoxon p</th>
+  <th class="r">개선/악화/동일</th><th class="r">과실충돌</th><th class="r">OR</th><th class="r">Fisher p</th>
+</tr></thead>
+<tbody>
+<!--TABLE_PAIRS-->
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::h100::paired_delta.png" alt="페어드 델타">
+  <figcaption>씬별 점수 차를 정렬한 것. 동일(&Delta;=0)이 35&ndash;38씬인데, 대부분 양쪽 arm 이
+  똑같이 만점이거나 똑같이 0점인 씬이다.</figcaption>
+</figure>
+
+<h2><span class="num">6.</span>사전등록 게이트 판정</h2>
+
+<table>
+<thead><tr><th>게이트</th><th>기준</th><th class="r">실측</th><th class="r">판정</th></tr></thead>
+<tbody>
+<tr><td><strong>S1</strong> 셋업</td><td>baseline 0.42&ndash;0.58</td><td class="r">0.510</td>
+    <td class="r"><span class="tag pass">통과</span></td></tr>
+<tr><td><strong>G1</strong> 순위 보존</td><td>dual &minus; baseline &ge; 0</td>
+    <td class="r">+0.085 (p=0.0016)</td><td class="r"><span class="tag pass">통과</span></td></tr>
+<tr><td><strong>G2</strong> 안전</td><td>과실 충돌 OR(dual/baseline) &le; 1.0</td>
+    <td class="r">1.35 (p=0.787)</td><td class="r"><span class="tag fail">실패</span></td></tr>
+</tbody>
+</table>
+
+<p><strong>G2 는 형식상 실패이나 아무것도 말하지 않는다.</strong> 6건 vs 8건, p=0.787 이다.
+"dual 이 더 위험하다"는 증거가 아니라 <em>구분할 수 없다</em>는 뜻이다. 정직하게 말하면
+150씬의 "dual 이 충돌을 절반으로 줄인다"(2.3% vs 4.0%)는 서술도 같은 이유로 약했다 &mdash;
+그때도 p=0.351 이었다. 두 결과를 합치면 이 축에서는 어느 방향도 지지되지 않으며, 계획서대로
+결론은 <code>analyze_longitudinal.py</code> 의 연속 대리지표(G3)로 넘어간다.</p>
+
+<h2><span class="num">7.</span>해석 <span class="tag">의견</span></h2>
+
+<h3>무너진 것은 방법 간 서열이지, 압축의 효과가 아니다</h3>
+
+<table>
+<thead><tr><th>비교</th><th class="r">150씬</th><th class="r">hard100</th><th class="r">hard100 p</th></tr></thead>
+<tbody>
+<tr><td>dual &minus; baseline</td><td class="r">+0.079</td><td class="r">+0.085</td><td class="r">0.0016</td></tr>
+<tr><td>tyr_r &minus; baseline</td><td class="r">+0.037</td><td class="r">+0.075</td><td class="r">0.0026</td></tr>
+<tr><td>lp_r50 &minus; baseline</td><td class="r">+0.060</td><td class="r">+0.065</td><td class="r">0.074</td></tr>
+<tr><td><strong>dual &minus; tyr_r</strong></td><td class="r">+0.042</td><td class="r">+0.010</td><td class="r">0.55</td></tr>
+<tr><td><strong>dual &minus; lp_r50</strong></td><td class="r">+0.018</td><td class="r">+0.020</td><td class="r">0.38</td></tr>
+<tr><td><strong>lp_r50 &minus; tyr_r</strong></td><td class="r">+0.024</td><td class="r">&minus;0.010</td><td class="r">0.80</td></tr>
+</tbody>
+</table>
+
+<p>"압축 arm 이 baseline 보다 낫다"는 우리 두 arm 에서 확고하다(p=0.0016 / 0.0026). 무너진 것은
+<strong>압축 방법들 사이의 서열</strong>이다. 세 쌍 어디에서도 유의한 차이가 없고, 점수 폭도
+0.575&ndash;0.595 로 0.02 안에 모여 있다.</p>
+
+<p>150씬에서 tyr 는 dual 의 절반 정도 이득만 냈는데(+0.037 vs +0.079) hard100 에서는 거의
+따라붙는다(+0.075 vs +0.085). <strong>150씬에서 관측된 criterion 간 격차의 상당 부분은 쉬운
+씬에서 생긴 것</strong>이고, 조건이 가혹해지면 방법 선택보다 "압축을 했다"는 사실 자체가
+지배적이 된다. 압축 criterion 을 비교하는 연구에서 쉬운 평가 세트를 쓰면 실제보다 큰 차이를
+보게 된다는 뜻이다.</p>
+
+<h3>외부 baseline 이 동률이라는 사실을 그대로 보고한다</h3>
+
+<p>순수 LLM-Pruner 는 우리보다 <strong>111M 을 더 잘라내고도</strong>(2,768,240,640 = 25.0% vs
+2,657,452,032 = 24.0%) dual 과 구분되지 않는다(&minus;0.020, p=0.38). 예산 차이가 LP 에 불리한
+방향이므로 이 동률은 보수적인 판정이다. <strong>이 씬 집합에서 우리 방법의 우위는 주장할 수
+없다.</strong></p>
+
+<p>다만 LP 에는 우리 arm 에 없는 약점이 둘 있다.</p>
+
+<ul>
+  <li><strong>baseline 대비 유의하지 않다</strong> (+0.065, p=0.074). 개선 42 / 악화 34 로 씬별
+  편차가 크고 SE 가 0.039 로 우리 arm(0.025&ndash;0.029)보다 크다. 평균은 비슷해도 "압축이 도움이
+  된다"가 LP 에서는 확립되지 않는다.</li>
+  <li><strong>1.70배 느리다.</strong> 씬당 20.4분으로 baseline 11.9분, dual 11.8분, tyr 12.1분과
+  크게 다르다(표본 42개 간격, 로딩 제외). 층 4&ndash;33 만 50% 자르고 0&ndash;3&middot;34&ndash;35 를
+  온전히 남기는 구조 때문으로 보인다 &mdash; 6개 층이 원본 폭 그대로이고, 층마다 형상이 크게
+  달라져 <code>slim_lib</code> 의 per-head K/V gather 경로가 불리해진다. 점수와 무관한 별개
+  사실이지만 배포 관점에서는 중요하다.</li>
+</ul>
+
+<h3>이득의 실체는 도로 이탈 감소다 &mdash; 다만 LP 는 예외다</h3>
+
+<p>hard100 의 지배적 실패 모드는 도로 이탈이다(baseline 26.5%, 150씬의 3.8배). 세 압축 arm 모두
+그걸 줄인다 &mdash; lp_r50 16.0%, dual 19.0%, tyr 21.5%.</p>
+
+<div class="warn">
+  <p style="margin-bottom:0"><strong>이탈 순서와 점수 순서가 반대다.</strong> LP 는 이탈을 가장
+  많이 줄였는데(26.5&rarr;16.0%) 점수는 가장 낮다(0.575). 게이트를 덜 밟은 만큼 progress 에서
+  잃었다는 뜻이다 &mdash; 씬 점수는 이탈&middot;충돌을 하드 게이트로 쓰고 나머지를 progress 로
+  매기므로, "덜 이탈하지만 덜 나아가는" 정책이 이런 조합을 만든다. 우리 arm 은 반대로 이탈을
+  덜 줄이면서 progress 를 더 벌었다. 어느 쪽이 바람직한지는 씬 점수가 답하지 않는다.</p>
+</div>
+
+<div class="note">
+  왜 압축 모델이 비압축보다 덜 이탈하는지는 이 실험이 답하지 않는다. 2026-08 매트릭스에서
+  <code>dual_uniform</code>이 &minus;24%로 baseline 을 이겼을 때와 같은 미해결 관찰이며,
+  당시 기록된 가설(과적합된 경로 추종이 프루닝으로 완화된다)은 여전히 검증되지 않았다.
+</div>
+
+
+<h2><span class="num">8.</span>한계</h2>
+
+<ul>
+  <li><strong>과실 충돌 축은 이 씬 집합으로 답할 수 없다.</strong> 사건이 arm 당 4&ndash;8건이다.
+  정적 난이도가 충돌과 무관(&rho;=+0.008)해 hard100 은 이 축을 겨냥하지 않는다. 충돌을 직접
+  겨냥한 씬 선별 기준은 아직 없다.</li>
+  <li><strong>&Delta;=0 인 씬이 35&ndash;38개다.</strong> 양쪽이 똑같이 만점이거나 똑같이 0점인
+  경우로, Wilcoxon 에서 정보를 주지 않는다. 유효 표본은 100씬보다 작다.</li>
+  <li><strong>폐루프에서 압축의 속도 이득은 측정되지 않는다.</strong> dual 은 씬당 11.8분으로
+  baseline 11.9분의 0.99배였다. 씬 시간은 드라이버 모델만이 아니라 같은 카드에서 도는
+  renderer&middot;physics&middot;trafficsim 이 함께 결정한다. CLAUDE.md 의 "slim 은 0.93배"는
+  서비스를 여러 카드에 분산한 matrix 런처 기준이며 이 샤드 구성에는 적용되지 않는다.</li>
+  <li>씬 점수는 progress 가중이고 offroad&middot;at-fault 를 하드 게이트로 쓴다. 게이트에 걸린
+  rollout 은 예외 없이 0점이다(baseline 200 rollout 중 게이트 통과 실패분 전부 확인).</li>
+</ul>
+
+<h2><span class="num">9.</span>재현</h2>
+
+<pre><code># 씬 집합 (겹침 0 재확인 포함)
+python experiments/head_analysis/make_hard_suite.py \
+    --out outputs/scene_difficulty/hard100_suite.csv \
+    --exclude-runs /home/cvlab21/project/chan/alpasim-runs/m2601_merged_baseline
+
+# arm 실행 (arm 당 약 5시간, Ada 4장)
+SUITE=public_2601_hard100 PARENT_SUITE=public_2601 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
+SCENES_CSV=$PWD/outputs/scene_difficulty/hard100_suite.csv \
+  bash experiments/head_analysis/launch_alpasim_shards.sh &lt;config&gt; 100 2 "4 5 6 7"
+python experiments/head_analysis/merge_alpasim_shards.py \
+    --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    --shards h100_&lt;cfg&gt;_sh0 h100_&lt;cfg&gt;_sh1 h100_&lt;cfg&gt;_sh2 h100_&lt;cfg&gt;_sh3 \
+    --out h100_merged_&lt;cfg&gt; --expect-scenes 100
+
+# 분석 + 리포트
+python experiments/head_analysis/analyze_hard100.py --out outputs/hard100_eval
+python experiments/head_analysis/build_report.py \
+    experiments/head_analysis/hard100_report_template.html \
+    reports/evaluation/2026-09-05_hard100-closedloop.html \
+    h100=$PWD/outputs/hard100_eval/plots</code></pre>
+
+<p class="note" style="margin-top:1.5rem">실행은 <code>alpasim-runs/hard100/</code> 의
+<code>run_hard100.sh</code>(baseline&rarr;dual), <code>run_tyr.sh</code>, <code>run_lp.sh</code> 가
+순차로 이어받았다. 각 스크립트는 앞선 런의 완료 로그를 기다린 뒤 <strong>Ada 4&ndash;7 이 3분 연속
+비어 있는지</strong> 확인하고 시작한다. 이 게이트는 실제로 값을 했다 &mdash; 09-05 새벽 다른 랩
+멤버가 카드를 6시간 13분 점유했고, 중간에 잠시 비었을 때 발사하지 않고 카운터를 초기화한 뒤
+진짜로 빈 시점에 시작했다.</p>
+
+</div>
+</body>
+</html>
