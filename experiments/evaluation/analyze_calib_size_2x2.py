@@ -24,8 +24,21 @@ import glob
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import spearmanr, wilcoxon
+
+BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
+C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"
+plt.rcParams.update({
+    "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
+    "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
+    "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
+})
 
 REPO = Path(__file__).resolve().parents[2]
 O = REPO / "outputs"
@@ -173,6 +186,65 @@ def union_diversity(m):
         print(f"  {k:22s} {v['mean_pairwise_rho']:+10.4f} {v['union_size']:8.3f}x")
 
 
+def plots(m, out):
+    """Two figures carry the argument.
+
+    (1) st2000 against the DRAW DISTRIBUTION rather than against calib_100 alone -- the
+        pre-registered control is the best of six, so the single comparison reads as a
+        loss while the distribution reads as a median.
+    (2) the union collapse that explains why maxstep11 loses four times as much."""
+    out.mkdir(parents=True, exist_ok=True)
+    dc = {k: v for k, v in m.get("draw_context", {}).items() if not k.startswith("_")}
+    if dc:
+        fig, ax = plt.subplots(figsize=(6.4, 4.0))
+        n100 = [v["minADE6"] for v in dc.values() if v["n"] == 100]
+        lad = sorted([(v["n"], v["minADE6"]) for k, v in dc.items()
+                      if k.startswith("nt_c")] + [(100, dc["nt_c"]["minADE6"])])
+        ax.scatter([100] * len(n100), n100, s=46, color=C3, zorder=3,
+                   label=f"{len(n100)} draws at n=100 (SD {np.std(n100, ddof=1):.3f})")
+        ax.plot([x for x, _ in lad], [y for _, y in lad], "-o", color=C1, lw=1.6, ms=5,
+                zorder=4, label="nested ladder (nt_c extended)")
+        if "calib_100" in dc:
+            ax.scatter([100], [dc["calib_100"]["minADE6"]], s=90, marker="*",
+                       color=C2, zorder=5, label="calib_100 (best of six)")
+        if "st2000" in dc:
+            ax.scatter([2000], [dc["st2000"]["minADE6"]], s=90, marker="D",
+                       color=C4, zorder=5, label="st2000")
+        ax.axhline(np.mean(n100), color=MUTED, ls=":", lw=1)
+        ax.text(2050, np.mean(n100), " mean of n=100", va="center", color=MUTED, fontsize=8)
+        ax.set_xscale("log")
+        ax.set_xlabel("calibration clips")
+        ax.set_ylabel("test500 minADE@6")
+        ax.set_title("same criterion (dual), calibration set varied")
+        ax.legend(fontsize=8, frameon=False)
+        fig.tight_layout()
+        fig.savefig(out / "draw_vs_size.png", dpi=150)
+        plt.close(fig)
+
+    ud = m.get("union_diversity", {})
+    if ud:
+        fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.6))
+        for ax, axis in zip(axes, ("q", "mlp")):
+            for i, crit in enumerate(("dual", "maxstep11")):
+                ys = [ud.get(f"{crit}_{c}_{axis}", {}).get("union_size", np.nan)
+                      for c in ("calib_100", "st2000")]
+                ax.plot([0, 1], ys, "-o", color=(C1, C4)[i], lw=2, ms=6, label=crit)
+                for x, y in zip((0, 1), ys):
+                    if np.isfinite(y):
+                        ax.annotate(f"{y:.3f}x", (x, y), textcoords="offset points",
+                                    xytext=(0, 7), ha="center", fontsize=8)
+            ax.set_xticks([0, 1])
+            ax.set_xticklabels(["calib_100", "st2000"])
+            ax.set_ylabel("union size (x budget)")
+            ax.set_title(f"{axis} axis")
+            ax.legend(fontsize=8, frameon=False)
+        fig.suptitle("max is a union: it collapses as its members converge", y=1.0)
+        fig.tight_layout()
+        fig.savefig(out / "union_collapse.png", dpi=150)
+        plt.close(fig)
+    print("plots ->", out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="outputs/calib_size_2x2")
@@ -239,6 +311,7 @@ def main():
 
     out = REPO / args.out
     out.mkdir(parents=True, exist_ok=True)
+    plots(m, out / "plots")
     (out / "metrics.json").write_text(json.dumps(m, indent=2, ensure_ascii=False))
     print("->", out)
 
