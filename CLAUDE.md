@@ -280,6 +280,39 @@ Output convention: every run writes `outputs/<exp_id>/` containing `config.json`
 2026-08-06 to reclaim space; their `slim_meta.json` is intact, so `make_slim.py` rebuilds them
 in ~1.5 h each.
 
+## LLM-Pruner port (`experiments/llm_pruner/`, from 2026-09-06)
+
+The external baseline `lp_r50` was built in **soowon's** `alpamayo1.5` tree; that port
+(`lp_core.py`, `lp_objectives.py`, `run_lp_importance.py`, `lp_prune.py`) was copied here on
+2026-09-06 so the second-order arm could be run, which never happened there — not for a
+measured reason but because `--objectives coc,traj --second-order` needs an 82 GB host
+accumulator and thrashed the shared box. LLM-Pruner's canonical objective is the single
+language loss, and `--objectives coc --second-order` needs **41.2 GiB**, the size soowon
+already ran. Their vendored `analysis_lib`/`sample_cache`/`expert_per_clip`/`slim_lib` were
+*not* brought back: those were vendored *from this repo*, ours are newer, and the four
+`slim_lib` entry points `lp_prune.py` calls have identical signatures.
+
+**This is a different quantity from `prune_lib.py`'s.** Ours differentiates a multiplicative
+**gate** and takes `E_clip|dL/dg|` — the abs inside each clip. LLM-Pruner differentiates the
+**weights** and keeps the sign while summing over clips, so `param_mix = W⊙g − ½W²⊙E[g²]` is
+a real Taylor expansion. That distinction is why `dual2nd_u40_v2` is not a second-order
+result: with `E|g|` as the first-order term, `E[g²] = (E|g|)² + Var(|g|)` and `(E|g|)²` ranks
+identically to `E|g|`, so the only thing that moved its selection was the across-clip
+**variance** (69–81% of the score). It measured tail-weighting, not curvature, and cost
++0.027 minADE (p=0.00063) on test500. Nobody has measured second-order Taylor on this model.
+
+One `PORT:`-marked fix: upstream computes both Taylor terms on the same per-sample scale, but
+`GradAccumulator` sums signed per-clip gradients, making the first-order term N× too large.
+`param_first` is unaffected (the pipeline is degree-1 homogeneous, so a global factor cannot
+reorder), but `param_mix` collapses onto `param_first` — Spearman 0.979 at N=100. Hence
+`--first-order mean` (default, upstream-faithful); `--first-order sum` reproduces the
+original tree's arrays. `test_lp_formulas.py` re-derives upstream's branches independently
+and agrees to 0.00e+00 on all four variants and six reductions; it runs on CPU in a second.
+
+Order of work: reproduce `coc_param_first` against soowon's `lp_r50` selection **first**,
+then run `param_mix`. Keep `OMP_NUM_THREADS=8` — without it soowon measured other users' jobs
+slowing 11×.
+
 ## Named pruning configs
 
 These names are the vocabulary of `outputs/`, `reports/`, and the alpasim drivers. Built by
