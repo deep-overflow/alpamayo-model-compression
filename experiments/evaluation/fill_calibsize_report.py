@@ -110,9 +110,48 @@ if "st2000_b" in A:
     KPI["KPI_B_VS_A"] = f"{d('st2000_b', 'st2000_a'):+.3f}"
     KPI["KPI_B_VS_A_P"] = f"{d('st2000_b', 'st2000_a', 'wilcoxon_p'):.2g}"
 
+# 개루프 표는 다른 실험의 산출물에서 읽는다 (calib_size_2x2, 2026-09-06). 여기서도 숫자를
+# 손으로 옮기지 않는다 -- 그 파일이 없으면 자리표시자를 비우지 말고 알린다.
+OL = REPO / "outputs/calib_size_2x2/metrics.json"
+TABLE_OPENLOOP = ""
+if OL.exists():
+    o = json.loads(OL.read_text())
+    A_, H1 = o["absolute"], o["H1_size"]
+    SET = {"test": "test 500", "indist": "val 500", "oodval": "OOD"}
+    rows = []
+    for st, label in SET.items():
+        c = A_[f"dual|calib_100|{st}"]
+        t = A_[f"dual|st2000|{st}"]
+        h = H1[f"dual|{st}"]
+        star = " <strong>*</strong>" if h["sig"] else ""
+        rows.append(
+            f"<tr><td>{label} <span class='sub'>n={h['n']}</span></td>"
+            f"<td class='r'>{c['minADE6']:.4f}</td><td class='r'>{t['minADE6']:.4f}</td>"
+            f"<td class='r'><strong>{h['median']:+.4f}</strong></td>"
+            f"<td class='r sub'>[{h['lo']:+.4f}, {h['hi']:+.4f}]{star}</td>"
+            f"<td class='r'>{h['p']:.2g}</td></tr>")
+    TABLE_OPENLOOP = (
+        "<table><thead><tr><th>평가 세트</th><th class='r'>dual @ calib100</th>"
+        "<th class='r'>dual @ st2000</th><th class='r'>차이(중앙값)</th>"
+        "<th class='r'>95% CI</th><th class='r'>p</th></tr></thead><tbody>"
+        + "".join(rows) + "</tbody></table>")
+    dc = o["draw_context"]
+    sm = dc["_summary"]
+    KPI.update({
+        "KPI_N100_MEAN": f"{sm['n100_mean']:.3f}",
+        "KPI_N100_SD": f"{sm['n100_sd']:.3f}",
+        "KPI_ST2000_OL": f"{dc['st2000']['minADE6']:.3f}",
+        "KPI_ST2000_RANK": str(sm["st2000_rank_among_n100"]),
+        "KPI_ST2000_VS_MEAN": f"{sm['st2000_minus_n100_mean']:+.3f}",
+        "KPI_CALIB_OL": f"{dc['calib_100']['minADE6']:.3f}",
+    })
+else:
+    print(f"경고: {OL} 가 없어 개루프 표를 채우지 못합니다", file=sys.stderr)
+
 html = TPL.read_text()
 for name, frag in (("TABLE_ARMS", TABLE_ARMS), ("TABLE_PAIRS", TABLE_PAIRS),
-                   ("TABLE_GATES", TABLE_GATES), ("TABLE_OVERLAP", TABLE_OVERLAP)):
+                   ("TABLE_GATES", TABLE_GATES), ("TABLE_OVERLAP", TABLE_OVERLAP),
+                   ("TABLE_OPENLOOP", TABLE_OPENLOOP)):
     marker = f"<!--{name}-->"
     if marker not in html:
         print(f"경고: 템플릿에 {marker} 가 없습니다", file=sys.stderr)

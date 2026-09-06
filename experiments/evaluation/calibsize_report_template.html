@@ -255,20 +255,57 @@ Wilcoxon은 0을 제외하고 돌렸고, 평균 차이의 CI는 bootstrap이다.
   쉽다(0.742 vs 0.660, p=0.039). 절대값은 낙관적이며, 여기서 읽어야 할 것은 arm 간 페어드 차이다.</li>
 </ul>
 
-<h3>왜 이런 일이 생기나 &mdash; 해석(의견)</h3>
-<p>가능한 설명은 둘이다. 하나는 <code>calib_100</code>의 선택이 우연히 이 씬 집합의 주행에
-유리한 유닛을 남겼다는 것(선택 잡음이 도움이 된 경우). 다른 하나는 dual 기준이 최적화하는
-양(CoC NLL과 flow-matching MSE의 랭크 합집합)이 폐루프 주행 점수와 어긋나 있어서, 그 기준을
-<em>더 정확히</em> 따를수록 주행에서 멀어진다는 것이다. 두 설명 모두 &ldquo;기준을 더 잘 추정하면
-더 좋아진다&rdquo;는 전제를 부정하며, 후자라면 문제는 캘리브레이션이 아니라 목적 함수에 있다.
-지금 데이터로는 둘을 가를 수 없다.</p>
+<h3>왜 이런 일이 생기나 &mdash; 개루프가 후보 하나를 지운다</h3>
+
+<p>설명 후보는 둘이었다. <strong>(A)</strong> <code>calib_100</code>의 선택 잡음이 우연히 좋은
+유닛을 남겼다. <strong>(B)</strong> dual 기준이 최적화하는 양이 폐루프 주행과 어긋나 있어,
+그 기준을 <em>더 정확히</em> 따를수록 주행에서 멀어진다. (B)라면 문제는 캘리브레이션이 아니라
+목적 함수에 있다.</p>
+
+<p>(B)는 검증 가능한 예측을 한다: 캘리브레이션을 늘리면 <em>개루프</em>는 좋아지고 폐루프만
+나빠져야 한다. 같은 두 체크포인트의 개루프 측정이 이미 있고(<code>outputs/calib_size_2x2</code>,
+2026-09-06), <strong>그 예측은 빗나간다</strong>.</p>
+
+<!--TABLE_OPENLOOP-->
+
+<div class="callout">
+  <p><strong>(B) 기각.</strong> st2000은 개루프에서도 세 세트 모두 유의하게 나쁘다. 폐루프만
+  나빠진 것이 아니라 <strong>측정한 모든 지표가 같은 방향으로 움직인다</strong>. 그러므로
+  &ldquo;기준이 최적화하는 것은 개선됐는데 주행만 손해&rdquo;가 아니다 &mdash; dual Taylor 점수는
+  <em>잘 추정될수록</em> 남길 유닛을 더 잘 고르지 못한다.</p>
+</div>
+
+<p>추출 사다리 위에 얹으면 그림이 완성된다. 100클립 추출 6개의 test500 minADE 평균은
+<!--KPI_N100_MEAN--> (표준편차 <!--KPI_N100_SD-->)이고, st2000(n=2,000)은 <!--KPI_ST2000_OL-->로
+그 6개 중 <!--KPI_ST2000_RANK-->위, 평균보다 <!--KPI_ST2000_VS_MEAN--> 좋다. 그런데
+<code>calib_100</code>은 <!--KPI_CALIB_OL-->로 6개 중 1위다. 즉 <strong>클립을 모으면 &lsquo;평범한
+추출&rsquo; 수준으로 수렴하고, <code>calib_100</code>은 그 위 꼬리에 떠 있다.</strong> 남는 설명은
+(A)다.</p>
+
+<div class="warn">
+  <p><strong>덤으로 나온 경고 &mdash; 기준 비교가 캘리브레이션 크기에 따라 뒤집힌다.</strong>
+  같은 2&times;2의 다른 행에서, <code>maxstep11</code>은 <code>calib_100</code>에서 dual과
+  구분되지 않다가(test500 중앙값 차 &minus;0.004, p=0.28) st2000에서는 dual에 크게 진다
+  (+0.422, p=5e-53). <strong>n=100에서 내린 기준 비교 결론은 그대로 옮겨지지 않는다</strong> &mdash;
+  이 리포의 기준 비교가 대부분 <code>calib_100</code> 한 추출 위에서 이루어졌다는 점과 함께
+  읽어야 한다.</p>
+</div>
+
+<p><strong>남는 질문.</strong> (A)가 맞다면 &ldquo;<code>calib_100</code>급 추출이 얼마나 드문가&rdquo;가
+다음 질문이다. 개루프 6개 중 1위라는 것은 알지만, 개루프 순위가 폐루프 순위로 옮겨진다는 보장은
+이 프로젝트에서 여러 번 깨졌으므로, 그 답은 개루프 사다리만으로 확정되지 않는다.</p>
 
 <h2><span class="num">7.</span>다음 단계</h2>
 <ul>
-  <li><strong>같은 풀에서 100클립을 여러 번</strong> 뽑아 폐루프를 돌리면 위 두 설명을 가를 수
-  있다. <code>calib_100</code>급 성능이 100클립 추출에서 흔하면 &ldquo;선택 잡음이 도움&rdquo;이
-  아니라 &ldquo;<code>calib_st4000</code> 풀이 문제&rdquo;라는 뜻이 된다. 개루프로 먼저 거르면
-  폐루프 비용의 1/10로 후보를 좁힐 수 있다.</li>
+  <li><strong>100클립 추출을 폐루프로 몇 개 더</strong> 돌리는 것이 남은 질문(&ldquo;
+  <code>calib_100</code>급이 얼마나 드문가&rdquo;)에 직접 답한다. 체크포인트는 이미 선택까지 끝나
+  있어(<code>slim_dual_nt_a</code>&hellip;<code>_e</code>의 <code>slim_meta.json</code>) 재빌드가
+  1분이고, 비용은 순수하게 폐루프 GPU 시간이다. 다만 개루프 사다리가 이미 6점을 주고 있어
+  <em>급한</em> 실험은 아니다.</li>
+  <li><strong>기준 비교를 다시 볼 것.</strong> 위 경고대로 <code>maxstep11</code>&ndash;dual 판정이
+  캘리브레이션 크기에 따라 뒤집혔다. 이 리포의 기준 비교는 거의 전부
+  <code>calib_100</code> 한 추출 위에서 이루어졌으므로, 결론을 옮기기 전에 최소한 한 번은 다른
+  캘리브레이션에서 재확인하는 것이 안전하다.</li>
   <li><strong>출하본을 그대로 둘지</strong>는 별개 문제다. 이 리포트는 <code>dual_u40_v2</code>가
   이 씬 집합에서 실제로 잘 달린다는 사실을 뒤집지 않는다. 뒤집는 것은 그 성능의 <em>귀인</em>이다.</li>
 </ul>
