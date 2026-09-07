@@ -185,7 +185,7 @@ cvlab21에서만 측정된 진짜 추출 손상 arm들이 같은 곡선 위에 �
 <figure>
   <img src="PLOT::sz::draw_vs_size.png" alt="캘리브레이션 크기와 추출">
   <figcaption>같은 기준(<code>dual</code>), 같은 예산, 캘리브레이션만 다름. 분홍 = n=100 여섯 추출,
-  별 = 그 중 1위인 <code>calib_100</code>, 파랑 = 같은 블록을 확장한 중첩 사다리,
+  별 = 그 중 1위인 <code>calib_100</code>, 파랑 = 블록 a부터 누적한 중첩 사다리,
   주황 = <code>st2000</code>. 점선은 n=100의 평균.</figcaption>
 </figure>
 
@@ -194,7 +194,7 @@ cvlab21에서만 측정된 진짜 추출 손상 arm들이 같은 곡선 위에 �
 <tbody>
 <tr><td>n=100 자연 추출 6개</td><td class="r">100</td><td class="r">평균 <strong>1.3119</strong>, SD 0.3629, 범위 0.950–1.774</td></tr>
 <tr><td><code>calib_100</code> (그 중 1위)</td><td class="r">100</td><td class="r">0.9498</td></tr>
-<tr><td>중첩 사다리 <code>nt_c</code> → +400</td><td class="r">100→500</td><td class="r">1.348 → 1.131 → 1.061 → <strong>1.047</strong></td></tr>
+<tr><td>중첩 사다리 (블록 a부터 누적)</td><td class="r">100→500</td><td class="r">1.022 → 1.131 → 1.061 → <strong>1.047</strong></td></tr>
 <tr><td><code>st2000</code></td><td class="r">2000</td><td class="r"><strong>1.2015</strong> (6개 중 3개보다 나쁨 = 중앙값)</td></tr>
 </tbody></table>
 
@@ -208,8 +208,8 @@ H1 역전의 절반을 설명한다.</p>
 <h2><span class="num">4</span>진짜 결과 — 선택은 수렴하는데 성능은 수렴하지 않는다</h2>
 
 <p>
-나머지 절반은 설명되지 않는다. 같은 자연 풀·같은 기준의 중첩 사다리는 n=500에서
-<strong>1.047</strong>에 도달하는데, 4배 큰 <code>st2000</code>은
+나머지 절반은 설명되지 않는다. 같은 자연 풀·같은 기준의 중첩 사다리(블록 a부터 누적)는 1.022 → 1.131 → 1.061 →
+<strong>1.047</strong>로 단조가 아니라 ~1.05로 수렴하는데, 4배 큰 <code>st2000</code>은
 <strong>1.2015</strong>로 <strong>+0.154 나쁘다.</strong> 둘 다 공식 train에서 분포매칭으로
 뽑은 큰 캘리브레이션이다.
 </p>

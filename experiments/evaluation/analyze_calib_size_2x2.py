@@ -98,9 +98,11 @@ DRAWS = {
     "dual_nt_c_test": ("nt_c", 100, "natural"),
     "dual_nt_d_test": ("nt_d", 100, "natural"),
     "dual_nt_e_test": ("nt_e", 100, "natural"),
-    "dual_nt_c200_test": ("nt_c+100", 200, "natural"),
-    "dual_nt_c300_test": ("nt_c+200", 300, "natural"),
-    "dual_nt_c500_test": ("nt_c+400", 500, "natural"),
+    # the c in c200/c300/c500 is CUMULATIVE, not block c: verified against the manifest
+    # as a+b, a+b+c and a..e. The ladder's n=100 rung is therefore block a, not block c.
+    "dual_nt_c200_test": ("cum a+b", 200, "natural"),
+    "dual_nt_c300_test": ("cum a+b+c", 300, "natural"),
+    "dual_nt_c500_test": ("cum a..e", 500, "natural"),
     "dual_u40_st2000_test": ("st2000", 2000, "natural"),
 }
 
@@ -199,11 +201,11 @@ def plots(m, out):
         fig, ax = plt.subplots(figsize=(6.4, 4.0))
         n100 = [v["minADE6"] for v in dc.values() if v["n"] == 100]
         lad = sorted([(v["n"], v["minADE6"]) for k, v in dc.items()
-                      if k.startswith("nt_c")] + [(100, dc["nt_c"]["minADE6"])])
+                      if k.startswith("cum ")] + [(100, dc["nt_a"]["minADE6"])])
         ax.scatter([100] * len(n100), n100, s=46, color=C3, zorder=3,
                    label=f"{len(n100)} draws at n=100 (SD {np.std(n100, ddof=1):.3f})")
         ax.plot([x for x, _ in lad], [y for _, y in lad], "-o", color=C1, lw=1.6, ms=5,
-                zorder=4, label="nested ladder (nt_c extended)")
+                zorder=4, label="nested ladder (cumulative from block a)")
         if "calib_100" in dc:
             ax.scatter([100], [dc["calib_100"]["minADE6"]], s=90, marker="*",
                        color=C2, zorder=5, label="calib_100 (best of six)")
