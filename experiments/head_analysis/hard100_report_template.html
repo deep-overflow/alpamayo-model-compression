@@ -129,6 +129,12 @@
   (dual&ndash;tyr p=0.55, dual&ndash;lp p=0.38, tyr&ndash;lp p=0.80).
   같은 예산에서 <em>고르기</em>(Taylor)와 <em>다시 쓰기</em>(재구성), 그리고 외부 방법
   (LLM-Pruner)이 어려운 씬에서는 한 덩어리다.</p>
+  <p><strong>결론 3 &mdash; 다만 점수가 못 보는 축에는 서열이 있다.</strong>
+  같은 rollout 을 연속 대리지표로 다시 읽으면(7절), 근접 시 제동 비율이
+  <strong>baseline 0.251 &gt; dual 0.168 &gt; tyr_r 0.146 &gt; lp_r50 0.123</strong> 으로
+  단조롭게 줄고 셋 다 baseline 대비 유의하다(p&le;0.0017). 점수로는 구분되지 않던 arm 들이
+  안전 여유에서는 갈리며, 가장 공격적인 것은 외부 <code>lp_r50</code> 이다
+  (선행차 TTC&lt;2s 0.55% &rarr; 3.86%).</p>
   <p style="margin-bottom:0"><strong>결론 3 &mdash; 외부 baseline 이 더 많이 잘라내고도 동률이다.</strong>
   순수 LLM-Pruner(<code>lp_r50</code>)는 25.0% 를 제거해 우리 24.0% 보다 공격적인데
   dual 과 &minus;0.020 (p=0.38) 로 구분되지 않는다. <strong>이 씬 집합에서 우리 방법의 우위는
@@ -265,9 +271,53 @@
 "dual 이 더 위험하다"는 증거가 아니라 <em>구분할 수 없다</em>는 뜻이다. 정직하게 말하면
 150씬의 "dual 이 충돌을 절반으로 줄인다"(2.3% vs 4.0%)는 서술도 같은 이유로 약했다 &mdash;
 그때도 p=0.351 이었다. 두 결과를 합치면 이 축에서는 어느 방향도 지지되지 않으며, 계획서대로
-결론은 <code>analyze_longitudinal.py</code> 의 연속 대리지표(G3)로 넘어간다.</p>
+결론은 <code>analyze_longitudinal.py</code> 의 연속 대리지표(G3)로 넘어간다 &mdash; <strong>7절</strong>.</p>
 
-<h2><span class="num">7.</span>해석 <span class="tag">의견</span></h2>
+<h2><span class="num">7.</span>G3 &mdash; 점수가 못 보는 축</h2>
+
+<p>G2 가 답하지 못한 자리를 계획서는 연속 대리지표로 넘겼다. at-fault 충돌은 200 rollout 에
+4&ndash;8 건이라 셀 수 없지만, <strong>그 충돌이 일어나기까지 얼마나 여유를 두고 달렸는지</strong>는
+같은 rollout 에서 연속량으로 읽을 수 있다. <code>analyze_longitudinal.py</code> 가 ASL 을 다시
+읽어 96 씬 &times; 2 rollout 에서 계산한다 (근접 6 m, 주행 1 m/s, 전방 1 s).</p>
+
+<!--TABLE_LONG-->
+
+<figure>
+  <img src="PLOT::long::braking_response.png" alt="제동 반응">
+  <figcaption>근접 상황에서의 제동. 압축 arm 세 개 모두 baseline 보다 덜, 그리고 단조롭게 덜
+  밟는다.</figcaption>
+</figure>
+
+<figure>
+  <img src="PLOT::long::headway_tail.png" alt="차간시간 꼬리">
+  <figcaption>차간시간(THW) 분포의 꼬리. 점수가 구분하지 못한 arm 들이 여기서는 갈린다.</figcaption>
+</figure>
+
+<h3>baseline 대비 페어드 차이</h3>
+
+<!--TABLE_LONG_PAIRED-->
+
+<div class="callout">
+  <p><strong>점수는 동률인데 안전 여유에는 서열이 있다.</strong> 5절에서 세 압축 arm 은 어떤 쌍도
+  구분되지 않았다(p=0.38&ndash;0.80). 그런데 근접 시 제동 비율은
+  <strong>baseline 0.251 &gt; dual 0.168 &gt; tyr_r 0.146 &gt; lp_r50 0.123</strong> 으로 단조롭게
+  줄고, 세 arm 모두 baseline 대비 유의하다(p&le;0.0017). 즉 압축 모델들은 <em>덜 밟고 더 빨리</em>
+  지나간다.</p>
+  <p><strong>가장 공격적인 것은 외부 방법이다.</strong> <code>lp_r50</code> 은 제동 빈도가
+  baseline 의 절반 이하이고(&minus;0.129, p&lt;1e-4), 차간시간 하위 5%가 가장 짧으며
+  (&minus;0.086, p=0.0014), 선행차 TTC&lt;2s 비율이 0.55% &rarr; <strong>3.86%</strong> 로 7배다.
+  4절의 게이트 표에서 <code>lp_r50</code> 이 offroad 는 가장 적으면서(16.0%) 전체 충돌은 가장
+  많았던 것(16.0%)과 같은 그림이다 &mdash; 경로는 잘 지키되 여유를 깎는다.</p>
+</div>
+
+<div class="warn">
+  <p><strong>이것은 안전 판정이 아니다.</strong> 여유가 줄었다는 것과 사고가 는다는 것은 다른
+  주장이고, 이 표본으로는 후자를 검정할 수 없다(G2 가 실패한 이유 그대로다). 여기서 말할 수 있는
+  것은 <strong>점수 하나로 arm 을 고르면 이 축이 통째로 보이지 않는다</strong>는 것뿐이다.
+  실제로 5절의 점수만 보면 네 arm 중 무엇을 골라도 같아 보인다.</p>
+</div>
+
+<h2><span class="num">8.</span>해석 <span class="tag">의견</span></h2>
 
 <h3>무너진 것은 방법 간 서열이지, 압축의 효과가 아니다</h3>
 
@@ -333,7 +383,7 @@
 </div>
 
 
-<h2><span class="num">8.</span>한계</h2>
+<h2><span class="num">9.</span>한계</h2>
 
 <ul>
   <li><strong>과실 충돌 축은 이 씬 집합으로 답할 수 없다.</strong> 사건이 arm 당 4&ndash;8건이다.
@@ -349,7 +399,7 @@
   rollout 은 예외 없이 0점이다(baseline 200 rollout 중 게이트 통과 실패분 전부 확인).</li>
 </ul>
 
-<h2><span class="num">9.</span>재현</h2>
+<h2><span class="num">10.</span>재현</h2>
 
 <pre><code># 씬 집합 (겹침 0 재확인 포함)
 python experiments/head_analysis/make_hard_suite.py \
