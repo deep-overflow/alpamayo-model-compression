@@ -58,9 +58,56 @@ row_af = (f"<tr><td>과실 충돌률</td><td class='r'>{af['pct_150']:.1f}%</td>
           f"<td class='r'>{af['pct_hard100'] / af['pct_150']:.2f}배</td></tr>")
 vs150 = [row_score, row_off, row_af]
 
+# G3 (종방향 대리지표) 는 별도 실행의 산출물에서 읽는다. 없으면 조용히 비우지 말고 멈춘다 --
+# 7절이 그 표를 전제로 서술돼 있어서, 빈 채로 나가면 리포트가 거짓말이 된다.
+LONG = Path("/home/cvlab21/project/chan/alpamayo-model-compression/"
+            "outputs/hard100_longitudinal/metrics.json")
+LNAME = {"baseline": "baseline <span class='sub'>비압축</span>",
+         "slim_dual_u40_v2": "<code>dual_u40_v2</code>",
+         "slim_tyr_u40_r": "<code>tyr_u40_r</code>",
+         "lp_r50": "<code>lp_r50</code> <span class='sub'>LLM-Pruner</span>"}
+# (키, 표기, 소수자리, 낮을수록 여유가 큰가)
+LCOLS = [("brake_frac_when_close", "근접 시 제동비율", 3),
+         ("mean_speed_when_close", "근접 시 평균속도 (m/s)", 2),
+         ("thw_p05", "THW p05 (s)", 2),
+         ("frac_thw_below_1s", "THW&lt;1s 비율", 3),
+         ("lead_ttc_p05", "선행차 TTC p05 (s)", 2),
+         ("lead_frac_ttc_below_2s", "선행차 TTC&lt;2s 비율", 4)]
+
+if not LONG.exists():
+    sys.exit(f"{LONG} 가 없습니다 -- 7절(G3)이 채워지지 않습니다")
+L = json.loads(LONG.read_text())
+lorder = [c for c in ("baseline", "slim_dual_u40_v2", "slim_tyr_u40_r", "lp_r50")
+          if c in L["configs"]]
+rows = []
+for c in lorder:
+    cells = "".join(f"<td class='r'>{L['configs'][c][k]['mean']:.{d}f}</td>"
+                    for k, _, d in LCOLS)
+    rows.append(f"<tr><td>{LNAME[c]}</td>{cells}</tr>")
+TABLE_LONG = ("<table><thead><tr><th>arm</th>"
+              + "".join(f"<th class='r'>{lab}</th>" for _, lab, _ in LCOLS)
+              + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
+
+prows = []
+for c in lorder[1:]:
+    for k, lab, d in LCOLS:
+        v = L["paired_vs_baseline"][c][k]
+        sig = " <strong>*</strong>" if (v["ci_lo"] > 0 or v["ci_hi"] < 0) else ""
+        prows.append(
+            f"<tr><td>{LNAME[c]}</td><td>{lab}</td>"
+            f"<td class='r'><strong>{v['delta']:+.{d}f}</strong></td>"
+            f"<td class='r sub'>[{v['ci_lo']:+.{d}f}, {v['ci_hi']:+.{d}f}]{sig}</td>"
+            f"<td class='r'>{v['wilcoxon_p']:.4f}</td></tr>")
+TABLE_LONG_PAIRED = ("<table><thead><tr><th>arm</th><th>지표</th>"
+                     "<th class='r'>baseline 대비</th><th class='r'>95% CI</th>"
+                     "<th class='r'>Wilcoxon p</th></tr></thead><tbody>"
+                     + "".join(prows) + "</tbody></table>")
+
 html = TPL.read_text()
 for marker, rows in [("<!--TABLE_ARMS-->", arms), ("<!--TABLE_PAIRS-->", pairs),
-                     ("<!--TABLE_VS150-->", vs150)]:
+                     ("<!--TABLE_VS150-->", vs150),
+                     ("<!--TABLE_LONG-->", [TABLE_LONG]),
+                     ("<!--TABLE_LONG_PAIRED-->", [TABLE_LONG_PAIRED])]:
     if marker not in html:
         sys.exit(f"템플릿에 {marker} 가 없습니다")
     html = html.replace(marker, "\n".join(rows))
