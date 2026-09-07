@@ -148,6 +148,12 @@ def table(arms, cols, base_label="baseline"):
     return "\n".join(out)
 
 
+def pooled_arms(m):
+    """`both` with `score_pooled` renamed to `score`, so the pooled set goes through the
+    same table() as the two suites and the three read as one shape."""
+    return {n: dict(a, score=a["score_pooled"]) for n, a in m["both"]["arms"].items()}
+
+
 def both_score_table(m):
     """Levels and ranks side by side -- the ranks are the point: they disagree."""
     b = m["both"]
@@ -312,23 +318,42 @@ def build(m, out_dir, date):
 <p>검산도 여기서 나온다. 게이트 실패율(<code>offroad_or_collision_at_fault</code>)은
 0점 rollout 비율과 정확히 같아야 하고, 150씬에서는 21 arm 전부 일치한다.</p>
 
-<h2><span class="num">2.</span>150씬 (<code>public_2601</code> 앞 150개)</h2>
-<h3>표 1 &mdash; 주요 지표 (점수와 그 입력)</h3>
-{table(a150, HEAD)}
-<p class="note">색: baseline 대비 좋아지면 초록, 나빠지면 주황. <code>p</code>는 씬 단위 페어드
-Wilcoxon(양측), 0.05 미만이면 초록. Δ는 씬별 평균 점수의 페어드 차이.
-<code>제거%</code>는 전체 11.08B 대비.</p>
+<h2><span class="num">2.</span>주요 지표 &mdash; score / progress / 과실충돌 / 이탈</h2>
+<p>세 집합을 같은 모양의 표로 싣는다. 열은 어디서나 동일하므로 한 arm을 세 표에서 세로로
+읽으면 된다. 색은 baseline 대비 &mdash; 좋아지면 초록, 나빠지면 주황.
+<code>p</code>는 씬 단위 페어드 Wilcoxon(양측)이고 0.05 미만이면 초록,
+Δ는 씬별 평균 점수의 페어드 차이, <code>제거%</code>는 전체 11.08B 대비다.</p>
 
-<h3>표 2 &mdash; 점수가 보지 못하는 지표</h3>
-{table(a150, SECOND)}
-<p class="note">전체충돌 = 과실 여부 무관 모든 충돌, 후미추돌 = 뒤에서 받힌 경우.
+<h3>2.1 &nbsp;150씬 &mdash; <code>public_2601</code> 앞 150개, {len(a150)}개 arm</h3>
+{table(a150, HEAD)}
+
+<h3>2.2 &nbsp;hard100 &mdash; 난이도 80&ndash;100 백분위, 150씬과 교집합 0, {len(ah)}개 arm</h3>
+{table(ah, HEAD)}
+
+<h3>2.3 &nbsp;합산 (pooled, n={b['n_scenes']}씬) &mdash; 두 집합에 다 있는 {len(b['arms'])}개 arm</h3>
+{table(pooled_arms(m), HEAD)}
+<p class="note">합산 표의 <code>score</code>는 <strong>pooled</strong>, 즉 250씬 각각을 한 번씩
+센 평균이다(150씬이 60% 가중). 두 스위트 평균의 단순평균인 <strong>macro</strong>와
+스위트별 순위, 방법 간 쌍 비교는 4절에 있다.</p>
+
+<h2><span class="num">3.</span>점수가 보지 못하는 지표</h2>
+<p>2절의 네 열은 서로 독립이 아니다(1절). 여기가 새 정보다.
+전체충돌 = 과실 여부 무관 모든 충돌, 후미추돌 = 뒤에서 받힌 경우.
 CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자 초과), 임계값은
 <code>analyze_alpasim.coc_stats</code>와 동일. d2GT = GT 궤적까지 거리.
 반복잡음 = 같은 씬 두 rollout 점수차의 절댓값 평균.</p>
 
-<h2><span class="num">3.</span>hard100 (난이도 80&ndash;100 백분위, 150씬과 교집합 0)</h2>
-{table(ah, HEAD)}
+<h3>3.1 &nbsp;150씬</h3>
+{table(a150, SECOND)}
+
+<h3>3.2 &nbsp;hard100</h3>
 {table(ah, SECOND)}
+
+<h3>3.3 &nbsp;합산 (pooled, rollout {b['arms']['baseline']['n_rollouts']}개)</h3>
+{table(pooled_arms(m), SECOND)}
+<p class="note">CoC 퇴화율만은 rollout 수가 아니라 <strong>실제로 텍스트를 낸 rollout 수</strong>로
+가중평균했다 &mdash; hard100에서 arm마다 4개가 CoC를 하나도 남기지 않았기 때문에
+전체 rollout으로 나누면 그만큼 희석된다.</p>
 
 <figure>
   <img src="data:image/png;base64,{fig}" alt="두 스위트 점수 대응과 arm별 CoC 퇴화율">
@@ -345,7 +370,7 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
   </figcaption>
 </figure>
 
-<h2><span class="num">4.</span>두 스위트 모두 있는 arm &mdash; 합산</h2>
+<h2><span class="num">4.</span>합산을 어떻게 읽나</h2>
 <p>네 arm(<code>baseline</code>, <code>dual_u40_v2</code>, <code>tyr_u40_r</code>,
 <code>lp_r50</code>)만 두 스위트에 다 있다. 두 집합은 서로소이므로 합치는 건 그냥 씬 250개의
 평균이지만, 가중을 주는 방식이 둘이고 <strong>서로 다른 질문에 답한다</strong>.</p>
@@ -388,23 +413,23 @@ pooled 옆 대괄호는 부트스트랩 95% CI(씬 단위 재표본, 10,000회)�
   {b['pairs']['tyr_u40_r-dual_u40_v2']['hi']:+.3f}]로 0을 넘는다.</p>
 </div>
 
-<h3>4.4 지표 전체 (pooled, rollout {b['arms']['baseline']['n_rollouts']}개 기준)</h3>
-{both_metric_table(m)}
-<p class="note">왼쪽 네 칸은 1절의 항등식 &mdash; score와 그 세 입력이라 서로 독립이 아니다.
-오른쪽이 새 정보이고, <strong>여기서는 실제로 갈린다</strong>:
-<code>lp_r50</code>은 종합 점수가 <code>tyr_u40_r</code>보다 높은데
+<h3>4.4 점수가 못 보는 축에서는 갈린다</h3>
+<p>종합 점수로 세 방법이 동률이라고 해서 셋이 같은 모델이라는 뜻은 아니다.
+표 3.3에서 <code>lp_r50</code>은 종합 점수가 <code>tyr_u40_r</code>보다 높은데
 전체 충돌이 {b['arms']['lp_r50']['collision_any']:.1f}% 대
 {b['arms']['tyr_u40_r']['collision_any']:.1f}%, 후미추돌이
 {b['arms']['lp_r50']['collision_rear']:.1f}% 대
 {b['arms']['tyr_u40_r']['collision_rear']:.1f}%로 오히려 나쁘다 &mdash;
-과실 열만 보면 안 보이는 차이다. 그리고 세 압축 arm 전부 baseline보다 반복 잡음이
+점수는 <em>과실</em> 충돌만 세므로 과실 열만 보면 안 보이는 차이다.
+그리고 세 압축 arm 전부 baseline보다 반복 잡음이
 작다({b['arms']['baseline']['repeat_abs_diff']:.3f} 대
 {min(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}&ndash;
 {max(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}),
 즉 압축이 폐루프 거동을 더 재현 가능하게 만든다.</p>
-<p class="note">CoC 퇴화율만은 rollout 수가 아니라 <strong>실제로 텍스트를 낸 rollout 수</strong>로
-가중평균했다 &mdash; hard100에서 arm마다 4개가 CoC를 하나도 남기지 않았기 때문에
-전체 rollout으로 나누면 퇴화율이 그만큼 희석된다.</p>
+<h3>4.5 지표 전체 한 장에 (pooled)</h3>
+{both_metric_table(m)}
+<p class="note">2.3과 3.3을 한 표로 붙인 것. 왼쪽 네 칸이 1절의 항등식(score와 그 세 입력),
+오른쪽이 새 정보다.</p>
 
 <h2><span class="num">5.</span>읽을 때 조심할 것</h2>
 <div class="warn">
