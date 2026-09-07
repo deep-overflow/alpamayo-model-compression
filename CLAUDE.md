@@ -253,6 +253,14 @@ avoid repeating that.
 - `analyze_baseline.py` (one model, `--compare` for a second), `analyze_arms.py` (three arms +
   pre-registered gates).
 - `run_depth_ablation.py` / `analyze_depth_ablation.py` — per-layer kv-only ablation.
+- `analyze_calibsize.py` / `fill_calibsize_report.py` (2026-09-06) — the closed-loop arm-vs-arm
+  matrix `analyze_alpasim.py` cannot produce: it compares every config against `baseline` only, so
+  a question like "do two 2,000-clip calibration draws differ from each other?" has no comparison
+  to read. This one takes any set of merged runs, emits **all pairwise** paired deltas (bootstrap
+  CI + Wilcoxon), gate rates with Wilson CIs and pairwise Fisher, and the kept-unit overlap matrix
+  read straight from each arm's `slim_meta.json`. It runs under this repo's `.venv` — CoC
+  degeneracy is read from an `analyze_alpasim.py` `metrics.json` rather than re-parsed from the
+  ASL, so alpasim's venv is not needed.
 
 Determinism: `CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA init, `use_deterministic_algorithms`,
 cudnn deterministic, TF32 off. Two runs agree bitwise **within one GPU architecture** — the same
@@ -428,7 +436,7 @@ hardlinking the per-rollout dirs). Scores are copied verbatim, never recomputed;
 `aggregate/` is refused rather than salvaged. Verified by merging a stored 30-scene run and
 reproducing its published numbers exactly.
 
-Four things about this that will bite again:
+Five things about this that will bite again:
 
 - **Never shard with `scenes.scene_ids`.** 159 of `public_2601`'s scene_ids also exist in the 26.04
   release and `query_by_scene_ids` resolves a bare scene_id to the *newer* uuid — it silently swaps
@@ -446,6 +454,22 @@ Four things about this that will bite again:
 - **Startup is racy.** Four stacks coming up inside ~70 s made one runtime's gRPC version probe
   exceed its deadline; the run aborted with renderer exit 137, which looks like OOM but is the
   SIGKILL after the cascade. Relaunch that shard with `ONLY_SHARDS=<i>` (same k-way split).
+- **Docker runs out of network subnets** (2026-09-06). Each shard's compose stack creates its own
+  bridge network and never removes it, while docker's default address pool holds ~32; when it fills,
+  a shard dies with `all predefined address pools have been fully subnetted` *before any container
+  starts*, which reads like a GPU problem but is not — the cards are idle because nothing launched.
+  32 networks with only 3 in use is what it looked like the first time. Sweep the dead ones before
+  launching, matching **our own** run prefixes so another member's stack is never touched:
+
+  ```bash
+  for n in $(docker network ls --format '{{.Name}}' | grep -E '^(h100_|m2601_|cl150_|fmp_)'); do
+    [ "$(docker network inspect "$n" --format '{{len .Containers}}')" = 0 ] && docker network rm "$n"
+  done
+  ```
+
+  Recovery for a run already in flight is `ONLY_SHARDS="2 3"` after the sweep — but then the shard
+  launcher's exit is no longer the completion signal for the whole config, so wait on the artifacts
+  (all four `aggregate/results-summary.json`) before merging, not on the process.
 
 ### Running an arbitrary scene set (2026-09-03)
 
@@ -595,9 +619,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
 | `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률 |
+| `2026-09-06_calibration-size-closedloop.html` | `evaluation/calibsize_report_template.html` | 같은 dual 기준을 100클립 대신 2,000클립으로 추정한 두 **서로소** 추출의 폐루프 150씬: 둘 다 출하본 대비 −0.112 / −0.115 (p<1e-4)이고 서로는 −0.003 (p=0.33)로 구분 불가 → 손해는 한 번의 불운이 아니라 **수렴한 선택의 성질**이고 `calib_100`이 운 좋은 추출; 두 arm 모두 baseline을 못 이기므로 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다 |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (44 entries as of 2026-09-05: 42 html + 2 tex).
+`ls reports/evaluation/` is the full set (45 entries as of 2026-09-06: 43 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
