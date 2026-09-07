@@ -149,26 +149,55 @@ def table(arms, cols, base_label="baseline"):
 
 
 def both_score_table(m):
-    """Per-suite scores next to the two pooled readings, best pooled first."""
+    """Levels and ranks side by side -- the ranks are the point: they disagree."""
     b = m["both"]
-    cols = ["150씬", "hard100", "pooled (n=250)", "macro (50/50)",
-            "Δ pooled", "95% CI", "p", "승/패"]
-    out = ['<div class="scroll"><table><thead><tr><th>arm</th>']
-    out += [f"<th>{html.escape(c)}</th>" for c in cols]
-    out.append("</tr></thead><tbody>")
+    head = ('<tr><th rowspan="2">arm</th>'
+            '<th colspan="2" style="text-align:center">스위트별 (순위)</th>'
+            '<th colspan="2" style="text-align:center">합산</th></tr>'
+            "<tr><th>150씬</th><th>hard100</th>"
+            "<th>pooled  n=250</th><th>macro  50/50</th></tr>")
+    out = [f'<div class="scroll"><table><thead>{head}</thead><tbody>']
     for n, a in sorted(b["arms"].items(), key=lambda x: -x[1]["score_pooled"]):
         base = n == "baseline"
-        d = ('<td class="dim">&mdash;</td>' * 4 if base else
-             f'<td class="{"good" if a["d_score"] > 0 else "bad"}">{a["d_score"]:+.3f}</td>'
-             f'<td>[{a["d_lo"]:+.3f}, {a["d_hi"]:+.3f}]</td>'
-             f'<td class="{"good" if a["d_p"] < 0.05 else ""}">{a["d_p"]:.4f}</td>'
-             f'<td>{a["wins"]}/{a["losses"]}</td>')
+        r = a["rank_by_suite"]
         out.append(
             f'<tr{" class=\"base\"" if base else ""}><td>{html.escape(n)}</td>'
-            f'<td>{a["by_suite"]["s150"]:.3f}</td><td>{a["by_suite"]["hard100"]:.3f}</td>'
+            f'<td>{a["by_suite"]["s150"]:.3f} '
+            f'<span class="dim">({r["s150"]}위)</span></td>'
+            f'<td>{a["by_suite"]["hard100"]:.3f} '
+            f'<span class="dim">({r["hard100"]}위)</span></td>'
             f'<td><strong>{a["score_pooled"]:.3f}</strong> '
             f'<span class="dim">[{a["score_ci_lo"]:.3f}, {a["score_ci_hi"]:.3f}]</span></td>'
-            f'<td>{a["score_macro"]:.3f}</td>{d}</tr>')
+            f'<td>{a["score_macro"]:.3f}</td></tr>')
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
+
+def both_delta_table(m):
+    """baseline 대비 Δ: per-suite next to pooled, so the reader sees the pooled number is
+    not a new claim -- it is the same effect measured with more scenes."""
+    b = m["both"]
+    head = ('<tr><th rowspan="2">arm</th>'
+            '<th colspan="2" style="text-align:center">스위트별 Δ (p)</th>'
+            '<th colspan="4" style="text-align:center">합산 Δ</th></tr>'
+            "<tr><th>150씬</th><th>hard100</th>"
+            "<th>pooled</th><th>95% CI</th><th>p</th><th>승/패</th></tr>")
+    out = [f'<div class="scroll"><table><thead>{head}</thead><tbody>']
+    for n, a in sorted(b["arms"].items(), key=lambda x: -x[1]["score_pooled"]):
+        if n == "baseline":
+            continue
+        per = "".join(
+            f'<td class="{"good" if a["d_by_suite"][s] > 0 else "bad"}">'
+            f'{a["d_by_suite"][s]:+.3f} '
+            f'<span class="dim">({a["p_by_suite"][s]:.3f})</span></td>'
+            for s in ("s150", "hard100"))
+        out.append(
+            f"<tr><td>{html.escape(n)}</td>{per}"
+            f'<td class="{"good" if a["d_score"] > 0 else "bad"}">'
+            f'<strong>{a["d_score"]:+.3f}</strong></td>'
+            f'<td>[{a["d_lo"]:+.3f}, {a["d_hi"]:+.3f}]</td>'
+            f'<td class="{"good" if a["d_p"] < 0.05 else ""}">{a["d_p"]:.4f}</td>'
+            f'<td>{a["wins"]}/{a["losses"]}</td></tr>')
     out.append("</tbody></table></div>")
     return "\n".join(out)
 
@@ -191,18 +220,32 @@ def both_pairs_table(m):
     return "\n".join(out)
 
 
-def both_second_table(m):
+# the score's own three inputs, then everything outside it.  Splitting them in the header
+# is the whole argument of section 1 made visible in one table.
+INPUTS = [("progress_clipped_rel", "progress", "{:.3f}", True),
+          ("collision_at_fault", "과실충돌%", "{:.1f}", False),
+          ("offroad", "이탈%", "{:.1f}", False)]
+
+
+def both_metric_table(m):
     arms = m["both"]["arms"]
     base = arms["baseline"]
-    cols = [c for c in SECOND if c[0] != "params_pct"]
-    out = ['<div class="scroll"><table><thead><tr><th>arm</th>']
-    out += [f"<th>{html.escape(h)}</th>" for _, h, _, _ in cols]
-    out.append("</tr></thead><tbody>")
+    outside = [c for c in SECOND if c[0] != "params_pct"]
+    head = (f'<tr><th rowspan="2">arm</th>'
+            f'<th colspan="{len(INPUTS) + 1}" style="text-align:center">'
+            f"점수와 그 입력 &mdash; 새 정보 없음</th>"
+            f'<th colspan="{len(outside)}" style="text-align:center">'
+            f"점수 밖 &mdash; 여기서만 보이는 것</th></tr><tr><th>score</th>"
+            + "".join(f"<th>{html.escape(h)}</th>" for _, h, _, _ in INPUTS + outside)
+            + "</tr>")
+    out = [f'<div class="scroll"><table><thead>{head}</thead><tbody>']
     for n, a in sorted(arms.items(), key=lambda x: -x[1]["score_pooled"]):
-        row = "".join(cell(a, k, s, bt, None if n == "baseline" else base)
-                      for k, _, s, bt in cols)
+        b = None if n == "baseline" else base
+        row = "".join(cell(a, k, s, bt, b) for k, _, s, bt in INPUTS + outside)
+        sc = cell(dict(a, score=a["score_pooled"]), "score", "{:.3f}", True,
+                  None if b is None else dict(base, score=base["score_pooled"]))
         out.append(f'<tr{" class=\"base\"" if n == "baseline" else ""}>'
-                   f"<td>{html.escape(n)}</td>{row}</tr>")
+                   f"<td>{html.escape(n)}</td>{sc}{row}</tr>")
     out.append("</tbody></table></div>")
     return "\n".join(out)
 
@@ -315,20 +358,40 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
 </ul>
 <p class="note">둘 다 913씬 전체 스위트의 점수 추정치가 <em>아니다</em>. 숫자를 인용할 때
 어느 쪽인지 밝혀야 한다.</p>
+
+<h3>4.1 점수와 서열</h3>
 {both_score_table(m)}
+<p class="note">순위는 두 스위트 사이에서 <strong>바뀐다</strong> &mdash; 150씬에서는
+2위 <code>lp_r50</code> / 3위 <code>tyr_u40_r</code>인데 hard100에서는 뒤집힌다.
+pooled 옆 대괄호는 부트스트랩 95% CI(씬 단위 재표본, 10,000회)이고,
+네 arm의 CI가 서로 크게 겹친다는 점을 4.3이 검정으로 확인한다.</p>
+
+<h3>4.2 baseline 대비 Δ</h3>
+{both_delta_table(m)}
 <div class="callout">
-  <p><strong>세 압축 arm 모두 무압축을 이긴다</strong> &mdash; n=250에서 Δ가 각각
+  <p><strong>세 압축 arm 모두 무압축을 이긴다.</strong> n=250에서 Δ가 각각
   {b['arms']['dual_u40_v2']['d_score']:+.3f} / {b['arms']['lp_r50']['d_score']:+.3f} /
-  {b['arms']['tyr_u40_r']['d_score']:+.3f}이고 세 CI 모두 0을 포함하지 않는다.</p>
-  <p><strong>그런데 방법끼리는 어느 쌍도 갈리지 않는다.</strong> 이건 hard100만의
-  검정력 문제가 아니었다 &mdash; 이 데이터로 낼 수 있는 최대 표본인 250씬에서도 세 쌍 전부
-  CI가 0을 가로지른다. 150씬의 서열(dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786)은
-  애초에 해상도 밖이었다는 뜻이다.</p>
+  {b['arms']['tyr_u40_r']['d_score']:+.3f}이고 세 CI 모두 0을 포함하지 않는다.
+  스위트별 Δ와 방향·크기가 같으므로 pooled는 새 주장이 아니라 같은 효과를 씬을 더 써서
+  잰 것이다.</p>
 </div>
+
+<h3>4.3 방법끼리는 갈리는가</h3>
 {both_pairs_table(m)}
-<h3>점수 밖 지표 (pooled, rollout {b['arms']['baseline']['n_rollouts']}개 기준)</h3>
-{both_second_table(m)}
-<p class="note">여기서는 점수가 못 보는 축이 실제로 arm을 가른다.
+<div class="callout">
+  <p><strong>어느 쌍도 갈리지 않는다.</strong> hard100만의 검정력 문제가 아니었다 &mdash;
+  이 데이터로 낼 수 있는 최대 표본인 250씬에서도 세 쌍 전부 CI가 0을 가로지르고, 승/패도
+  반반에 가깝다. 150씬의 서열(dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786)은 애초에
+  해상도 밖이었다는 뜻이다. 가장 가까운 쌍조차
+  <code>tyr_u40_r</code>&minus;<code>dual_u40_v2</code>의
+  [{b['pairs']['tyr_u40_r-dual_u40_v2']['lo']:+.3f},
+  {b['pairs']['tyr_u40_r-dual_u40_v2']['hi']:+.3f}]로 0을 넘는다.</p>
+</div>
+
+<h3>4.4 지표 전체 (pooled, rollout {b['arms']['baseline']['n_rollouts']}개 기준)</h3>
+{both_metric_table(m)}
+<p class="note">왼쪽 네 칸은 1절의 항등식 &mdash; score와 그 세 입력이라 서로 독립이 아니다.
+오른쪽이 새 정보이고, <strong>여기서는 실제로 갈린다</strong>:
 <code>lp_r50</code>은 종합 점수가 <code>tyr_u40_r</code>보다 높은데
 전체 충돌이 {b['arms']['lp_r50']['collision_any']:.1f}% 대
 {b['arms']['tyr_u40_r']['collision_any']:.1f}%, 후미추돌이
@@ -337,7 +400,11 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
 과실 열만 보면 안 보이는 차이다. 그리고 세 압축 arm 전부 baseline보다 반복 잡음이
 작다({b['arms']['baseline']['repeat_abs_diff']:.3f} 대
 {min(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}&ndash;
-{max(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}).</p>
+{max(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}),
+즉 압축이 폐루프 거동을 더 재현 가능하게 만든다.</p>
+<p class="note">CoC 퇴화율만은 rollout 수가 아니라 <strong>실제로 텍스트를 낸 rollout 수</strong>로
+가중평균했다 &mdash; hard100에서 arm마다 4개가 CoC를 하나도 남기지 않았기 때문에
+전체 rollout으로 나누면 퇴화율이 그만큼 희석된다.</p>
 
 <h2><span class="num">5.</span>읽을 때 조심할 것</h2>
 <div class="warn">

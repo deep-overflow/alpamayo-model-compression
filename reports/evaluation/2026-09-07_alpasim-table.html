@@ -280,30 +280,34 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
 </ul>
 <p class="note">둘 다 913씬 전체 스위트의 점수 추정치가 <em>아니다</em>. 숫자를 인용할 때
 어느 쪽인지 밝혀야 한다.</p>
-<div class="scroll"><table><thead><tr><th>arm</th>
-<th>150씬</th>
-<th>hard100</th>
-<th>pooled (n=250)</th>
-<th>macro (50/50)</th>
-<th>Δ pooled</th>
-<th>95% CI</th>
-<th>p</th>
-<th>승/패</th>
-</tr></thead><tbody>
-<tr><td>dual_u40_v2</td><td>0.828</td><td>0.595</td><td><strong>0.735</strong> <span class="dim">[0.689, 0.779]</span></td><td>0.712</td><td class="good">+0.081</td><td>[+0.047, +0.116]</td><td class="good">0.0000</td><td>97/41</td></tr>
-<tr><td>lp_r50</td><td>0.810</td><td>0.575</td><td><strong>0.716</strong> <span class="dim">[0.672, 0.760]</span></td><td>0.693</td><td class="good">+0.062</td><td>[+0.022, +0.105]</td><td class="good">0.0010</td><td>98/64</td></tr>
-<tr><td>tyr_u40_r</td><td>0.786</td><td>0.586</td><td><strong>0.706</strong> <span class="dim">[0.659, 0.752]</span></td><td>0.686</td><td class="good">+0.052</td><td>[+0.018, +0.087]</td><td class="good">0.0000</td><td>98/46</td></tr>
-<tr class="base"><td>baseline</td><td>0.750</td><td>0.510</td><td><strong>0.654</strong> <span class="dim">[0.607, 0.698]</span></td><td>0.630</td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td class="dim">&mdash;</td></tr>
+
+<h3>4.1 점수와 서열</h3>
+<div class="scroll"><table><thead><tr><th rowspan="2">arm</th><th colspan="2" style="text-align:center">스위트별 (순위)</th><th colspan="2" style="text-align:center">합산</th></tr><tr><th>150씬</th><th>hard100</th><th>pooled  n=250</th><th>macro  50/50</th></tr></thead><tbody>
+<tr><td>dual_u40_v2</td><td>0.828 <span class="dim">(1위)</span></td><td>0.595 <span class="dim">(1위)</span></td><td><strong>0.735</strong> <span class="dim">[0.689, 0.779]</span></td><td>0.712</td></tr>
+<tr><td>lp_r50</td><td>0.810 <span class="dim">(2위)</span></td><td>0.575 <span class="dim">(3위)</span></td><td><strong>0.716</strong> <span class="dim">[0.672, 0.760]</span></td><td>0.693</td></tr>
+<tr><td>tyr_u40_r</td><td>0.786 <span class="dim">(3위)</span></td><td>0.586 <span class="dim">(2위)</span></td><td><strong>0.706</strong> <span class="dim">[0.659, 0.752]</span></td><td>0.686</td></tr>
+<tr class="base"><td>baseline</td><td>0.750 <span class="dim">(4위)</span></td><td>0.510 <span class="dim">(4위)</span></td><td><strong>0.654</strong> <span class="dim">[0.607, 0.698]</span></td><td>0.630</td></tr>
+</tbody></table></div>
+<p class="note">순위는 두 스위트 사이에서 <strong>바뀐다</strong> &mdash; 150씬에서는
+2위 <code>lp_r50</code> / 3위 <code>tyr_u40_r</code>인데 hard100에서는 뒤집힌다.
+pooled 옆 대괄호는 부트스트랩 95% CI(씬 단위 재표본, 10,000회)이고,
+네 arm의 CI가 서로 크게 겹친다는 점을 4.3이 검정으로 확인한다.</p>
+
+<h3>4.2 baseline 대비 Δ</h3>
+<div class="scroll"><table><thead><tr><th rowspan="2">arm</th><th colspan="2" style="text-align:center">스위트별 Δ (p)</th><th colspan="4" style="text-align:center">합산 Δ</th></tr><tr><th>150씬</th><th>hard100</th><th>pooled</th><th>95% CI</th><th>p</th><th>승/패</th></tr></thead><tbody>
+<tr><td>dual_u40_v2</td><td class="good">+0.079 <span class="dim">(0.000)</span></td><td class="good">+0.085 <span class="dim">(0.002)</span></td><td class="good"><strong>+0.081</strong></td><td>[+0.047, +0.116]</td><td class="good">0.0000</td><td>97/41</td></tr>
+<tr><td>lp_r50</td><td class="good">+0.061 <span class="dim">(0.005)</span></td><td class="good">+0.065 <span class="dim">(0.074)</span></td><td class="good"><strong>+0.062</strong></td><td>[+0.022, +0.105]</td><td class="good">0.0010</td><td>98/64</td></tr>
+<tr><td>tyr_u40_r</td><td class="good">+0.037 <span class="dim">(0.007)</span></td><td class="good">+0.075 <span class="dim">(0.003)</span></td><td class="good"><strong>+0.052</strong></td><td>[+0.018, +0.087]</td><td class="good">0.0000</td><td>98/46</td></tr>
 </tbody></table></div>
 <div class="callout">
-  <p><strong>세 압축 arm 모두 무압축을 이긴다</strong> &mdash; n=250에서 Δ가 각각
+  <p><strong>세 압축 arm 모두 무압축을 이긴다.</strong> n=250에서 Δ가 각각
   +0.081 / +0.062 /
-  +0.052이고 세 CI 모두 0을 포함하지 않는다.</p>
-  <p><strong>그런데 방법끼리는 어느 쌍도 갈리지 않는다.</strong> 이건 hard100만의
-  검정력 문제가 아니었다 &mdash; 이 데이터로 낼 수 있는 최대 표본인 250씬에서도 세 쌍 전부
-  CI가 0을 가로지른다. 150씬의 서열(dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786)은
-  애초에 해상도 밖이었다는 뜻이다.</p>
+  +0.052이고 세 CI 모두 0을 포함하지 않는다.
+  스위트별 Δ와 방향·크기가 같으므로 pooled는 새 주장이 아니라 같은 효과를 씬을 더 써서
+  잰 것이다.</p>
 </div>
+
+<h3>4.3 방법끼리는 갈리는가</h3>
 <div class="scroll"><table><thead><tr><th>쌍 (pooled, n=250)</th><th>Δ</th><th>95% CI</th><th>p</th><th>승/패</th><th>판정</th></tr></thead><tbody>
 <tr><td>dual_u40_v2 &minus; baseline</td><td class="good">+0.081</td><td>[+0.047, +0.116]</td><td>0.0000</td><td>97/41</td><td style="text-align:center">구분됨</td></tr>
 <tr><td>lp_r50 &minus; baseline</td><td class="good">+0.062</td><td>[+0.022, +0.105]</td><td>0.0010</td><td>98/64</td><td style="text-align:center">구분됨</td></tr>
@@ -312,25 +316,25 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
 <tr><td>tyr_u40_r &minus; dual_u40_v2</td><td class="">-0.029</td><td>[-0.063, +0.006]</td><td>0.1224</td><td>58/70</td><td style="text-align:center">구분 안 됨</td></tr>
 <tr><td>tyr_u40_r &minus; lp_r50</td><td class="">-0.010</td><td>[-0.052, +0.032]</td><td>0.6990</td><td>73/76</td><td style="text-align:center">구분 안 됨</td></tr>
 </tbody></table></div>
-<h3>점수 밖 지표 (pooled, rollout 500개 기준)</h3>
-<div class="scroll"><table><thead><tr><th>arm</th>
-<th>전체충돌%</th>
-<th>후미추돌%</th>
-<th>차선이탈%</th>
-<th>CoC퇴화%</th>
-<th>d2GT m</th>
-<th>최소장애물 m</th>
-<th>plan편차</th>
-<th>만점%</th>
-<th>영점%</th>
-<th>반복잡음</th>
-</tr></thead><tbody>
-<tr><td>dual_u40_v2</td><td class="good">8.3</td><td class="good">5.3</td><td class="bad">26.8</td><td class="bad">3.1</td><td>3.21</td><td class="good">4.44</td><td class="bad">0.383</td><td class="good">56.0</td><td class="good">16.2</td><td>0.072</td></tr>
-<tr><td>lp_r50</td><td class="bad">16.1</td><td class="bad">11.3</td><td class="bad">27.2</td><td class="bad">3.8</td><td>2.86</td><td class="bad">3.85</td><td class="bad">0.440</td><td class="good">50.6</td><td class="good">14.2</td><td>0.094</td></tr>
-<tr><td>tyr_u40_r</td><td class="good">9.7</td><td class="good">7.1</td><td class="bad">25.2</td><td class="bad">6.1</td><td>3.02</td><td class="good">4.21</td><td class="good">0.300</td><td class="good">49.8</td><td class="good">17.2</td><td>0.074</td></tr>
-<tr class="base"><td>baseline</td><td>12.3</td><td>8.7</td><td>22.8</td><td>0.7</td><td>2.89</td><td>4.09</td><td>0.337</td><td>44.8</td><td>19.2</td><td>0.131</td></tr>
+<div class="callout">
+  <p><strong>어느 쌍도 갈리지 않는다.</strong> hard100만의 검정력 문제가 아니었다 &mdash;
+  이 데이터로 낼 수 있는 최대 표본인 250씬에서도 세 쌍 전부 CI가 0을 가로지르고, 승/패도
+  반반에 가깝다. 150씬의 서열(dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786)은 애초에
+  해상도 밖이었다는 뜻이다. 가장 가까운 쌍조차
+  <code>tyr_u40_r</code>&minus;<code>dual_u40_v2</code>의
+  [-0.063,
+  +0.006]로 0을 넘는다.</p>
+</div>
+
+<h3>4.4 지표 전체 (pooled, rollout 500개 기준)</h3>
+<div class="scroll"><table><thead><tr><th rowspan="2">arm</th><th colspan="4" style="text-align:center">점수와 그 입력 &mdash; 새 정보 없음</th><th colspan="10" style="text-align:center">점수 밖 &mdash; 여기서만 보이는 것</th></tr><tr><th>score</th><th>progress</th><th>과실충돌%</th><th>이탈%</th><th>전체충돌%</th><th>후미추돌%</th><th>차선이탈%</th><th>CoC퇴화%</th><th>d2GT m</th><th>최소장애물 m</th><th>plan편차</th><th>만점%</th><th>영점%</th><th>반복잡음</th></tr></thead><tbody>
+<tr><td>dual_u40_v2</td><td class="good">0.735</td><td class="good">0.758</td><td class="good">3.0</td><td class="good">11.8</td><td class="good">8.3</td><td class="good">5.3</td><td class="bad">26.8</td><td class="bad">3.1</td><td>3.21</td><td class="good">4.44</td><td class="bad">0.383</td><td class="good">56.0</td><td class="good">16.2</td><td>0.072</td></tr>
+<tr><td>lp_r50</td><td class="good">0.716</td><td class="good">0.720</td><td class="bad">4.8</td><td class="good">8.7</td><td class="bad">16.1</td><td class="bad">11.3</td><td class="bad">27.2</td><td class="bad">3.8</td><td>2.86</td><td class="bad">3.85</td><td class="bad">0.440</td><td class="good">50.6</td><td class="good">14.2</td><td>0.094</td></tr>
+<tr><td>tyr_u40_r</td><td class="good">0.706</td><td class="good">0.728</td><td class="good">2.6</td><td class="good">13.9</td><td class="good">9.7</td><td class="good">7.1</td><td class="bad">25.2</td><td class="bad">6.1</td><td>3.02</td><td class="good">4.21</td><td class="good">0.300</td><td class="good">49.8</td><td class="good">17.2</td><td>0.074</td></tr>
+<tr class="base"><td>baseline</td><td>0.654</td><td>0.675</td><td>3.6</td><td>14.9</td><td>12.3</td><td>8.7</td><td>22.8</td><td>0.7</td><td>2.89</td><td>4.09</td><td>0.337</td><td>44.8</td><td>19.2</td><td>0.131</td></tr>
 </tbody></table></div>
-<p class="note">여기서는 점수가 못 보는 축이 실제로 arm을 가른다.
+<p class="note">왼쪽 네 칸은 1절의 항등식 &mdash; score와 그 세 입력이라 서로 독립이 아니다.
+오른쪽이 새 정보이고, <strong>여기서는 실제로 갈린다</strong>:
 <code>lp_r50</code>은 종합 점수가 <code>tyr_u40_r</code>보다 높은데
 전체 충돌이 16.1% 대
 9.7%, 후미추돌이
@@ -339,7 +343,11 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
 과실 열만 보면 안 보이는 차이다. 그리고 세 압축 arm 전부 baseline보다 반복 잡음이
 작다(0.131 대
 0.072&ndash;
-0.094).</p>
+0.094),
+즉 압축이 폐루프 거동을 더 재현 가능하게 만든다.</p>
+<p class="note">CoC 퇴화율만은 rollout 수가 아니라 <strong>실제로 텍스트를 낸 rollout 수</strong>로
+가중평균했다 &mdash; hard100에서 arm마다 4개가 CoC를 하나도 남기지 않았기 때문에
+전체 rollout으로 나누면 퇴화율이 그만큼 희석된다.</p>
 
 <h2><span class="num">5.</span>읽을 때 조심할 것</h2>
 <div class="warn">

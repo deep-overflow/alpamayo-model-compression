@@ -229,7 +229,10 @@ def pooled(keep_rows, metrics):
         per = [metrics["suites"][s]["arms"][label] for s in suites]
         a = {"n_scenes": len(scenes), "n_rollouts": len(rows),
              "params": per[0]["params"],
-             "by_suite": {s: metrics["suites"][s]["arms"][label]["score"] for s in suites}}
+             "by_suite": {s: metrics["suites"][s]["arms"][label]["score"] for s in suites},
+             "rank_by_suite": {s: 1 + sorted(
+                 (metrics["suites"][s]["arms"][x]["score"] for x in both), reverse=True
+             ).index(metrics["suites"][s]["arms"][label]["score"]) for s in suites}}
         m, lo, hi = boot_ci([sc[t] for t in scenes])
         a["score_pooled"], a["score_ci_lo"], a["score_ci_hi"] = m, lo, hi
         a["score_macro"] = float(np.mean([v for v in a["by_suite"].values()]))
@@ -240,8 +243,11 @@ def pooled(keep_rows, metrics):
             a["d_p"] = wilcoxon_p(d)
             a["wins"] = int(np.sum(np.asarray(d) > 0))
             a["losses"] = int(np.sum(np.asarray(d) < 0))
-            a["d_macro"] = float(np.mean(
-                [metrics["suites"][s]["arms"][label]["d_score"] for s in suites]))
+            a["d_by_suite"] = {s: metrics["suites"][s]["arms"][label]["d_score"]
+                               for s in suites}
+            a["p_by_suite"] = {s: metrics["suites"][s]["arms"][label]["d_p"]
+                               for s in suites}
+            a["d_macro"] = float(np.mean(list(a["d_by_suite"].values())))
         for k in RATE:
             v = [r[k] for r in rows if r.get(k) is not None]
             a[k] = float(100 * np.nanmean(v)) if v else None
