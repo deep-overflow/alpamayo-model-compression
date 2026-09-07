@@ -1,0 +1,396 @@
+<title>캘리브레이션 세트 인벤토리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #FAF9F5; --card: #FFFFFF; --code: #F0EEE6; --ink: #29261B;
+    --muted: #6B6555; --accent: #C15F3C; --accent-soft: #D97757;
+    --border: #E8E6DC; --stripe: #F5F4EF;
+    --ok: #2F6B34; --warn: #A8730B; --bad: #A63A2A;
+    --bar-track: #EDEAE0; --bar-fill: #C15F3C; --bar-ref: #B3AC9B;
+  }
+  :root:not([data-theme="light"]) { }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17150F; --card: #201D16; --code: #262219; --ink: #EBE7DB;
+      --muted: #A29A87; --accent: #E29070; --accent-soft: #D97757;
+      --border: #35301F; --stripe: #1C1912;
+      --ok: #7FBF7A; --warn: #E3B45C; --bad: #E58A76;
+      --bar-track: #2C2719; --bar-fill: #E29070; --bar-ref: #6A6350;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17150F; --card: #201D16; --code: #262219; --ink: #EBE7DB;
+    --muted: #A29A87; --accent: #E29070; --accent-soft: #D97757;
+    --border: #35301F; --stripe: #1C1912;
+    --ok: #7FBF7A; --warn: #E3B45C; --bad: #E58A76;
+    --bar-track: #2C2719; --bar-fill: #E29070; --bar-ref: #6A6350;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); margin: 0;
+    font-family: "Noto Sans KR", "Pretendard", -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.75; padding: 3rem 1.5rem 5rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 1.4rem; margin-bottom: 2.5rem; }
+  .eyebrow {
+    color: var(--accent); font-size: 0.74rem; font-weight: 700;
+    letter-spacing: 0.11em; text-transform: uppercase; margin-bottom: 0.55rem;
+  }
+  h1 {
+    font-family: "Noto Serif KR", Georgia, serif; font-weight: 600;
+    font-size: 2.05rem; line-height: 1.28; margin: 0 0 0.7rem; text-wrap: balance;
+  }
+  .meta { color: var(--muted); font-size: 0.88rem; }
+  .lede { font-size: 1.04rem; max-width: 66ch; }
+  .lede strong { color: var(--accent); }
+
+  h2 {
+    font-family: "Noto Serif KR", Georgia, serif; font-weight: 600;
+    font-size: 1.32rem; margin: 3rem 0 0.5rem; display: flex; gap: 0.55rem;
+    align-items: baseline; text-wrap: balance;
+  }
+  h2 .n {
+    font-family: "JetBrains Mono", monospace; font-size: 0.82rem; font-weight: 600;
+    color: var(--accent); letter-spacing: 0;
+  }
+  h2 + p { margin-top: 0.35rem; }
+  h3 { font-size: 1rem; font-weight: 700; margin: 1.9rem 0 0.5rem; }
+  p { margin: 0.85rem 0; max-width: 72ch; }
+
+  code, .num {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  code { font-size: 0.84em; background: var(--code); padding: 0.1em 0.36em; border-radius: 4px; }
+
+  .scroll { overflow-x: auto; margin: 1.15rem 0 1.6rem; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 0.87rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden;
+  }
+  th {
+    background: var(--code); text-align: left; font-weight: 700; font-size: 0.78rem;
+    letter-spacing: 0.03em; padding: 0.55rem 0.75rem; white-space: nowrap;
+    border-bottom: 2px solid var(--border);
+  }
+  td { padding: 0.48rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:nth-child(even) { background: var(--stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+  td.name { font-family: "JetBrains Mono", monospace; font-size: 0.82rem; white-space: nowrap; }
+
+  .pill {
+    display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.1rem 0.5rem;
+    border-radius: 999px; white-space: nowrap; border: 1px solid currentColor;
+  }
+  .pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+
+  .bar { display: flex; align-items: center; gap: 0.5rem; min-width: 150px; }
+  .bar .track {
+    position: relative; flex: 1; height: 7px; background: var(--bar-track);
+    border-radius: 999px; overflow: hidden;
+  }
+  .bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--bar-fill); border-radius: 999px; }
+  .bar .ref { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--bar-ref); }
+
+  .note {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    padding: 0.9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note.warn { border-left-color: var(--warn); }
+  .note.ok { border-left-color: var(--ok); }
+  .note p:first-child { margin-top: 0; } .note p:last-child { margin-bottom: 0; }
+  .note .h { font-weight: 700; }
+
+  ul { padding-left: 1.15rem; max-width: 72ch; } li { margin: 0.42rem 0; }
+
+  footer {
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 0.82rem;
+  }
+  footer code { background: none; padding: 0; }
+  a { color: var(--accent); }
+  a:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>캘리브레이션 세트 인벤토리</h1>
+  <div class="meta">
+    2026-09-07 기준 · 매니페스트 17종(별칭 1 포함 18개 파일) · 중요도 실행 42개 ·
+    이를 쓴 slim arm 106개 · cvlab21 + cvlab20
+  </div>
+</header>
+
+<p class="lede">
+캘리브레이션은 이 연구에서 <strong>압축 자체보다 큰 요인</strong>이다 — 같은 방식으로 뽑은
+n=100 여섯 추출의 test500 minADE@6가 SD <span class="num">0.363</span>으로 흩어지는 반면
+24% 압축의 비용은 <span class="num">+0.052</span>다. 그래서 &ldquo;어떤 클립으로 쟀는가&rdquo;는
+부수 정보가 아니라 결과의 일부다. 이 문서는 지금 존재하는 모든 캘리브레이션 세트와,
+각각이 어떤 중요도 실행을 거쳐 어떤 arm이 됐는지를 정리한다.
+</p>
+
+<h2><span class="n">01</span>지금 쓰고 있는 것</h2>
+
+<p>
+현재 진행 중이거나 최근 결과를 낸 작업이 실제로 참조하는 세트는 넷이다. 나머지는 종료된
+실험의 기록이다.
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr>
+  <th>세트</th><th class="r">n</th><th>풀</th><th>쓰이는 곳</th><th>상태</th>
+</tr></thead>
+<tbody>
+<tr><td class="name">calib_100</td><td class="r">100</td><td>공식 train</td>
+    <td>기준선. 대부분의 shipped arm(<code>dual_u40_v2</code> 등 60개)이 여기서 나온 <code>importance_v2</code>를 씀</td>
+    <td><span class="pill ok">기준</span></td></tr>
+<tr><td class="name">calib_st4000</td><td class="r">4000</td><td>공식 train</td>
+    <td>앞 500·1000·2000 prefix로 크기 사다리. <code>slim_dual_u40_st2000</code>, <code>maxstep11_u40_st2000</code></td>
+    <td><span class="pill ok">진행</span></td></tr>
+<tr><td class="name">calib_nt500</td><td class="r">500</td><td>공식 train</td>
+    <td>서로소 블록 a–e(각 100) + 중첩 사다리. 추출 분산 측정의 본체</td>
+    <td><span class="pill ok">완료</span></td></tr>
+<tr><td class="name">calib_tr500</td><td class="r">500</td><td>pre_processed/train</td>
+    <td>같은 구조의 대조군. 롱테일 클립으로 캘리브레이션하면 무엇이 달라지는가</td>
+    <td><span class="pill warn">주의</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note ok">
+<p><span class="h">모든 캘리브레이션 세트는 <code>calib_100</code>과 겹치지 않는다</span> —
+실측 결과 겹침 0. 평가 세트(val500 / test500 / OOD-val)와도 설계상 서로소이므로,
+어떤 조합으로 비교하든 캘리브레이션 클립이 평가에 새지 않는다.</p>
+</div>
+
+<h2><span class="n">02</span>매니페스트 전수와 층화 품질</h2>
+
+<p>
+그리디 분포매칭이 최소화하는 목적함수(6속성 weighted L1: country 4.0 / platform_class 2.0 /
+time_of_day 2.0 / season 1.5 / month 1.0 / radar_config 1.0)를 각 세트에 대해 다시 계산했다.
+막대는 <strong>같은 크기 무작위 추출 대비</strong> 위치이고, 회색 선이 그 무작위 기준값이다 —
+막대가 짧을수록 잘 맞춰진 것이다.
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr>
+  <th>매니페스트</th><th class="r">n</th><th>풀</th><th>블록</th><th>t0 변동</th>
+  <th class="r">weighted L1</th><th>무작위 대비</th><th>판정</th>
+</tr></thead>
+<tbody>
+<tr><td class="name">calib_st4000</td><td class="r">4000</td><td>공식 train</td><td>a</td><td>아니오</td>
+    <td class="r">0.0007</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:2.7%"></div><div class="ref" style="left:100%"></div></div></div></td>
+    <td><span class="pill ok">매칭됨</span></td></tr>
+<tr><td class="name">calib_100</td><td class="r">100</td><td>공식 train</td><td>—</td><td>아니오</td>
+    <td class="r">0.0306</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:17.1%"></div><div class="ref" style="left:100%"></div></div></div></td>
+    <td><span class="pill ok">매칭됨</span></td></tr>
+<tr><td class="name">calib_nt500</td><td class="r">500</td><td>공식 train</td><td>a–e</td><td>아니오</td>
+    <td class="r">0.0306</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:38.8%"></div><div class="ref" style="left:100%"></div></div></div></td>
+    <td><span class="pill warn">부분적</span></td></tr>
+<tr><td class="name">calib_tr500</td><td class="r">500</td><td>pre_processed/train</td><td>a–e</td><td>예</td>
+    <td class="r">0.0331</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:42.0%"></div><div class="ref" style="left:100%"></div></div></div></td>
+    <td><span class="pill warn">부분적</span></td></tr>
+<tr><td class="name">calib_val100</td><td class="r">100</td><td>공식 <strong>val</strong></td><td>—</td><td>아니오</td>
+    <td class="r">0.1959</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:100%"></div><div class="ref" style="left:91%"></div></div></div></td>
+    <td><span class="pill bad">무작위 수준</span></td></tr>
+<tr><td class="name">calib_train500</td><td class="r">480</td><td>공식 train</td><td>—</td><td>예</td>
+    <td class="r">0.2405</td>
+    <td><div class="bar"><div class="track"><div class="fill" style="width:100%"></div><div class="ref" style="left:34%"></div></div></div></td>
+    <td><span class="pill bad">무작위 수준</span></td></tr>
+<tr><td class="name">calib_ood_100</td><td class="r">100</td><td>OOD 풀</td><td>—</td><td>예</td>
+    <td class="r">—</td><td><span class="meta">부모 split 없음</span></td>
+    <td><span class="pill warn">해당 없음</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="meta">
+블록 세트(<code>calib_nt100_a…e</code>, <code>calib_tr100_a…e</code>)는 각각
+<code>calib_nt500</code> / <code>calib_tr500</code>의 100클립 조각이라 위 표에 개별로 적지 않았다.
+<code>calib_st4000_a</code>는 <code>calib_st4000</code>과 <strong>클립 순서까지 동일한 별칭</strong>이다.
+&ldquo;부분적&rdquo;은 500개 전체는 잘 맞지만 100개 블록 단위로는 무작위에 가깝다는 뜻이다 —
+블록 설계가 <em>추출 분산을 측정하기 위한</em> 것이므로 의도된 성질이다.
+</p>
+
+<div class="note warn">
+<p><span class="h">두 세트는 층화 추출이 아니다.</span>
+<code>calib_val100</code>은 weighted L1 <span class="num">0.1959</span>로 같은 크기 무작위
+(<span class="num">0.1783</span>)<strong>보다도 나쁘다.</strong> 이 세트는 2026-08-19
+캘리브레이션 출처 실험의 앵커였으므로, 그 실험의 &ldquo;val로 캘리브레이션하면 나쁘다&rdquo;는
+결론에는 <em>분포매칭 부재</em>가 교락돼 있다. 여섯 추출의 SD 0.363은 전부 매칭된 세트끼리의
+비교라 이 교락과 무관하다.</p>
+<p><code>calib_train500</code>은 6속성 열 자체가 없고 480행뿐이며, 무엇으로 뽑았는지 기록이 없다.
+<strong>새 실험에 쓰지 말 것.</strong></p>
+</div>
+
+<h2><span class="n">03</span>st4000 사다리 — 매칭 품질이 n을 따라간다</h2>
+
+<p>
+현재 진행 중인 중첩 사다리는 <code>calib_st4000</code>의 앞 500 / 1000 / 2000이다. 그리디
+순서의 prefix이므로 <strong>추출이 고정되고 n만 변한다</strong> — 이것이 설계의 전부다.
+다만 prefix가 길수록 매칭이 저절로 좋아지므로, <strong>n과 매칭 품질은 분리되지 않는다.</strong>
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr>
+  <th>rung</th><th class="r">n</th><th class="r">weighted L1</th>
+  <th class="r">같은 크기 무작위</th><th class="r">무작위 대비</th><th>중요도 실행</th>
+</tr></thead>
+<tbody>
+<tr><td>앞 500</td><td class="r">500</td><td class="r">0.0063</td><td class="r">0.0788</td>
+    <td class="r">8.0%</td><td class="name">importance_st4000_c500</td></tr>
+<tr><td>앞 1000</td><td class="r">1000</td><td class="r">0.0034</td><td class="r">0.0610</td>
+    <td class="r">5.6%</td><td class="name">importance_st4000_c1000</td></tr>
+<tr><td>앞 2000</td><td class="r">2000</td><td class="r">0.0015</td><td class="r">0.0396</td>
+    <td class="r">3.8%</td><td class="name">importance_st4000_c2000</td></tr>
+<tr><td>전체</td><td class="r">4000</td><td class="r">0.0007</td><td class="r">0.0264</td>
+    <td class="r">2.7%</td><td class="name">importance_st4000_a</td></tr>
+<tr><td>뒤 2000 <span class="meta">(서로소)</span></td><td class="r">2000</td>
+    <td class="r">—</td><td class="r">—</td><td class="r">—</td>
+    <td class="name">importance_st4000_b2000</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+마지막 행이 중요하다. <code>importance_st4000_b2000</code>은 클립 2000–3999, 즉
+<code>c2000</code>과 <strong>완전히 서로소인 같은 크기 추출</strong>이고
+<code>slim_dual_st2000b</code>가 여기서 만들어져 있다. 크기를 고정한 채 추출만 바꾸는 대조가
+이미 재료 단계까지 준비돼 있다는 뜻이다.
+</p>
+
+<h2><span class="n">04</span>중요도 실행 — 재사용 가능한 자산이 무엇인가</h2>
+
+<p>
+중요도 실행 42개 중 대부분은 <span class="num">6–12 MB</span>짜리 집계본이다. 값나가는 것은
+<strong>per-clip 배열을 보존한 다섯 개</strong>뿐이다. per-clip이 있으면 그 실행의 어떤
+부분집합에 대한 중요도든 <strong>GPU 없이</strong> 파생할 수 있다
+(<code>mean(per-clip) == importance.npz</code>가 <span class="num">0.000e+00</span>로 성립).
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr>
+  <th>실행</th><th class="r">클립</th><th class="r">크기</th><th>위치</th><th>여기서 파생된 것</th>
+</tr></thead>
+<tbody>
+<tr><td class="name">importance_st4000</td><td class="r">4000</td><td class="r">23.7 GB</td>
+    <td>cvlab20만</td><td><code>_c500</code> <code>_c1000</code> <code>_c2000</code> <code>_b2000</code> <code>_a</code></td></tr>
+<tr><td class="name">importance_nt500</td><td class="r">500</td><td class="r">2.98 GB</td>
+    <td>cvlab21</td><td>블록 <code>_a…_e</code> + <code>_c200</code> <code>_c300</code> <code>_c500</code></td></tr>
+<tr><td class="name">importance_tr500</td><td class="r">500</td><td class="r">2.98 GB</td>
+    <td>cvlab21</td><td>블록 <code>_a…_e</code> + <code>_c200</code> <code>_c300</code> <code>_c500</code></td></tr>
+<tr><td class="name">importance_v2</td><td class="r">100</td><td class="r">605 MB</td>
+    <td>양쪽</td><td>—  (arm 60개의 출처)</td></tr>
+<tr><td class="name">importance_tr100_a_solo</td><td class="r">100</td><td class="r">605 MB</td>
+    <td>cvlab21</td><td>—  (파생 항등식 검증용 대조)</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<p><span class="h">주의 — 스텝 중요도는 파생할 수 없다.</span>
+<code>run_step_importance_vlm</code>은 클립 축을 보존하지 않으므로
+<code>importance_stepvlm_st2000</code>(2,000클립, 6.7 GPU-h)은 <strong>다시 측정하는 수밖에
+없다.</strong> <code>maxstep11</code> 계열의 사다리를 만들려면 rung마다 그 비용이 든다.</p>
+</div>
+
+<h2><span class="n">05</span>어떤 캘리브레이션이 어떤 arm이 됐나</h2>
+
+<div class="scroll">
+<table>
+<thead><tr><th>중요도 실행</th><th class="r">arm 수</th><th>대표 arm</th></tr></thead>
+<tbody>
+<tr><td class="name">importance_v2 <span class="meta">(calib_100)</span></td><td class="r">60</td>
+    <td><code>dual_u40_v2</code>, <code>jtraj_u40_v2</code>, <code>dualr*</code> 전 계열</td></tr>
+<tr><td class="name">importance_v2_ada <span class="meta">(calib_100, Ada 재측정)</span></td><td class="r">7</td>
+    <td><code>maxstep11_u40_v2</code>, <code>dualfix_u40_v2</code>, <code>meandual_u40_v2</code></td></tr>
+<tr><td class="name">importance_stepexp_* <span class="meta">(calib_100)</span></td><td class="r">9</td>
+    <td><code>expert_znorm_r25</code>, <code>dualexp_u40_e25</code></td></tr>
+<tr><td class="name">importance_v1 <span class="meta">(50클립, 초기)</span></td><td class="r">5</td>
+    <td><code>integrated_mag</code>, <code>cocsafe_r20/r30</code>, <code>dual_uniform</code></td></tr>
+<tr><td class="name">importance_nt500_* <span class="meta">(자연 블록)</span></td><td class="r">8</td>
+    <td><code>dual_nt_a…e</code>, <code>dual_nt_c200/300/500</code></td></tr>
+<tr><td class="name">importance_tr500_* <span class="meta">(롱테일 블록)</span></td><td class="r">8</td>
+    <td><code>dual_tr_a…e</code>, <code>dual_tr_c200/300/500</code></td></tr>
+<tr><td class="name">importance_st4000_c2000</td><td class="r">2</td>
+    <td><code>dual_u40_st2000</code>(cvlab20/21), <code>dual_st2000</code></td></tr>
+<tr><td class="name">importance_st4000_b2000</td><td class="r">1</td>
+    <td><code>dual_st2000b</code> <span class="meta">— 서로소 대조</span></td></tr>
+<tr><td class="name">importance_val100 / _ood / _mix</td><td class="r">3</td>
+    <td><code>dual_u40_ctl</code>, <code>dual_u40_ood</code>, <code>dual_u40_mix</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2><span class="n">06</span>다시 밟기 쉬운 함정</h2>
+
+<ul>
+<li><span class="h">두 풀은 이름이 비슷하지만 전혀 다르다.</span>
+    <code>nt</code>는 공식 train(자연 주행, minADE 0.84), <code>tr</code>은
+    <code>pre_processed/train</code> — 시나리오 버킷당 정확히 20%로 맞춘 <em>회복 학습용
+    난이도 혼합</em>(minADE 2.20)이다. <code>tr</code> 계열은 원래 설계 오류로 만들어졌고,
+    &ldquo;롱테일로 캘리브레이션하면 어떻게 되는가&rdquo;라는 <em>다른 질문</em>의 답으로
+    남겨둔 것이지 추출 반복이 아니다.</li>
+<li><span class="h">겹침은 0이 아니다.</span> <code>nt500 ∩ st4000</code> = 134/500,
+    <code>tr500 ∩ st4000</code> = 41/500. 둘 다 같은 분포에 매칭됐기 때문이며,
+    <code>nt</code> 사다리와 <code>st</code> 사다리를 &ldquo;독립 추출&rdquo;로 부르면 안 된다.</li>
+<li><span class="h">t0가 흔들리는 세트가 있다.</span> <code>tr</code> 계열,
+    <code>calib_ood_100</code>, <code>calib_train500</code>은 클립당 시작 시각이 제각각이다.
+    t0 자체는 선택에 영향이 없는 것으로 측정됐지만(spearman −0.044), 클립 중복이 섞이면
+    한 클립이 여러 번 세어진다. <code>nt</code>·<code>st</code> 계열은 클립당 하나로 고정했다.</li>
+<li><span class="h">per-clip 파일은 한쪽 서버에만 있다.</span> 23.7 GB짜리
+    <code>importance_st4000/importance_perclip.npz</code>는 <strong>cvlab20에만</strong> 있다.
+    cvlab21에서 새 rung을 파생하려면 먼저 옮겨야 한다.</li>
+<li><span class="h">파생은 fp64로 해야 한다.</span> 기울기가 <span class="num">1e-7</span>
+    근처라 fp32 합산은 선택이 볼 수 있는 자릿수를 잃는다.
+    <code>make_block_importance.py</code>는 fp64로 누적한다.</li>
+</ul>
+
+<h2><span class="n">07</span>어디에 있나</h2>
+
+<div class="scroll">
+<table>
+<thead><tr><th>대상</th><th>cvlab21</th><th>cvlab20</th></tr></thead>
+<tbody>
+<tr><td>매니페스트 (18 파일)</td>
+    <td class="name">/mnt/nvme1n1/ad_vla/outputs/chan/eval_sets/</td>
+    <td class="name">/mnt/dataset1/chan/outputs/eval_sets/</td></tr>
+<tr><td>중요도 실행</td>
+    <td class="name">…/outputs/chan/importance_*  <span class="meta">(42개, 7.6 GB)</span></td>
+    <td class="name">…/chan/outputs/importance_*  <span class="meta">(9개, 23.8 GB)</span></td></tr>
+<tr><td>재현 문서</td>
+    <td class="name">…/eval_sets/EVAL_SETS.md</td><td>동일</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+매니페스트 생성 <code>experiments/evaluation/make_eval_sets.py</code> ·
+블록/사다리 <code>make_calib_blocks.py</code> ·
+GPU 없는 파생 <code>make_block_importance.py</code> ·
+층화 감사 <code>check_stratification.py</code> ·
+사다리 게이트 <code>verify_ladder_rungs.py</code> ·
+브랜치 <code>worktree-calib-stability-curve</code>
+</footer>
+
+</div>
