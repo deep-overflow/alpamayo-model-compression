@@ -44,8 +44,10 @@ for arm in $ARMS; do
     CUDA_VISIBLE_DEVICES=$gpu "$PY" experiments/lingoqa/run_lingo_vqa.py \
         --arm "${MODEL[$arm]}" --exp-id "$run" --gpu 0 --reserve-gb 40 \
         > "logs/lingo_${arm}_answer.log" 2>&1
+    # `lingo_vqa_scores_*` is the name collect_results.py globs for; anything else is
+    # invisible to the results sheet
     CUDA_VISIBLE_DEVICES=$gpu "$PY" experiments/lingoqa/score_lingo_vqa.py \
-        --runs "$run" --exp-id "lingo_scores_$arm" --gpu 0 \
+        --runs "$run" --exp-id "lingo_vqa_scores_$arm" --gpu 0 \
         > "logs/lingo_${arm}_score.log" 2>&1
   ) &
   pids+=($!)
