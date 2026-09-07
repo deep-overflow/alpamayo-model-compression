@@ -282,7 +282,9 @@ time_of_day 2.0 / season 1.5 / month 1.0 / radar_config 1.0)를 각 세트에 �
 
 <p>
 중요도 실행 42개 중 대부분은 <span class="num">6–12 MB</span>짜리 집계본이다. 값나가는 것은
-<strong>per-clip 배열을 보존한 다섯 개</strong>뿐이다. per-clip이 있으면 그 실행의 어떤
+per-clip 배열을 보존한 실행인데, <strong>2026-09-07 02:43(UTC)에 디스크 정리로 세 개가
+지워졌다</strong> — 지금 남은 것은 <code>importance_v2</code>(cvlab21)와
+<code>importance_st4000</code>(cvlab20) 둘뿐이다. per-clip이 있으면 그 실행의 어떤
 부분집합에 대한 중요도든 <strong>GPU 없이</strong> 파생할 수 있다
 (<code>mean(per-clip) == importance.npz</code>가 <span class="num">0.000e+00</span>로 성립).
 </p>
@@ -295,14 +297,16 @@ time_of_day 2.0 / season 1.5 / month 1.0 / radar_config 1.0)를 각 세트에 �
 <tbody>
 <tr><td class="name">importance_st4000</td><td class="r">4000</td><td class="r">23.7 GB</td>
     <td>cvlab20만</td><td><code>_c500</code> <code>_c1000</code> <code>_c2000</code> <code>_b2000</code> <code>_a</code></td></tr>
-<tr><td class="name">importance_nt500</td><td class="r">500</td><td class="r">2.98 GB</td>
-    <td>cvlab21</td><td>블록 <code>_a…_e</code> + <code>_c200</code> <code>_c300</code> <code>_c500</code></td></tr>
-<tr><td class="name">importance_tr500</td><td class="r">500</td><td class="r">2.98 GB</td>
-    <td>cvlab21</td><td>블록 <code>_a…_e</code> + <code>_c200</code> <code>_c300</code> <code>_c500</code></td></tr>
-<tr><td class="name">importance_v2</td><td class="r">100</td><td class="r">605 MB</td>
-    <td>양쪽</td><td>—  (arm 60개의 출처)</td></tr>
-<tr><td class="name">importance_tr100_a_solo</td><td class="r">100</td><td class="r">605 MB</td>
-    <td>cvlab21</td><td>—  (파생 항등식 검증용 대조)</td></tr>
+<tr><td class="name">importance_v2</td><td class="r">100</td><td class="r">567 MB</td>
+    <td>cvlab21</td><td>—  (arm 60개의 출처)</td></tr>
+<tr><td class="name">importance_nt500</td><td class="r">500</td>
+    <td class="r"><span class="pill bad">삭제됨</span></td>
+    <td>—</td><td>블록 <code>_a…_e</code> + 누적 <code>_c200</code> <code>_c300</code> <code>_c500</code> (집계본은 남음)</td></tr>
+<tr><td class="name">importance_tr500</td><td class="r">500</td>
+    <td class="r"><span class="pill bad">삭제됨</span></td>
+    <td>—</td><td>블록 <code>_a…_e</code> + 누적 3개 (집계본은 남음)</td></tr>
+<tr><td class="name">importance_tr100_a_solo</td><td class="r">100</td>
+    <td class="r"><span class="pill bad">삭제됨</span></td><td>—</td><td>—</td></tr>
 </tbody>
 </table>
 </div>
