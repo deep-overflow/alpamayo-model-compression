@@ -148,6 +148,65 @@ def table(arms, cols, base_label="baseline"):
     return "\n".join(out)
 
 
+def both_score_table(m):
+    """Per-suite scores next to the two pooled readings, best pooled first."""
+    b = m["both"]
+    cols = ["150씬", "hard100", "pooled (n=250)", "macro (50/50)",
+            "Δ pooled", "95% CI", "p", "승/패"]
+    out = ['<div class="scroll"><table><thead><tr><th>arm</th>']
+    out += [f"<th>{html.escape(c)}</th>" for c in cols]
+    out.append("</tr></thead><tbody>")
+    for n, a in sorted(b["arms"].items(), key=lambda x: -x[1]["score_pooled"]):
+        base = n == "baseline"
+        d = ('<td class="dim">&mdash;</td>' * 4 if base else
+             f'<td class="{"good" if a["d_score"] > 0 else "bad"}">{a["d_score"]:+.3f}</td>'
+             f'<td>[{a["d_lo"]:+.3f}, {a["d_hi"]:+.3f}]</td>'
+             f'<td class="{"good" if a["d_p"] < 0.05 else ""}">{a["d_p"]:.4f}</td>'
+             f'<td>{a["wins"]}/{a["losses"]}</td>')
+        out.append(
+            f'<tr{" class=\"base\"" if base else ""}><td>{html.escape(n)}</td>'
+            f'<td>{a["by_suite"]["s150"]:.3f}</td><td>{a["by_suite"]["hard100"]:.3f}</td>'
+            f'<td><strong>{a["score_pooled"]:.3f}</strong> '
+            f'<span class="dim">[{a["score_ci_lo"]:.3f}, {a["score_ci_hi"]:.3f}]</span></td>'
+            f'<td>{a["score_macro"]:.3f}</td>{d}</tr>')
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
+
+def both_pairs_table(m):
+    out = [('<div class="scroll"><table><thead><tr><th>쌍 (pooled, n=250)</th>'
+            "<th>Δ</th><th>95% CI</th><th>p</th><th>승/패</th><th>판정</th>"
+            "</tr></thead><tbody>")]
+    for k, v in m["both"]["pairs"].items():
+        sig = v["lo"] > 0 or v["hi"] < 0
+        y, x = k.split("-", 1)
+        out.append(
+            f"<tr><td>{html.escape(y)} &minus; {html.escape(x)}</td>"
+            f'<td class="{"good" if sig and v["delta"] > 0 else "bad" if sig else ""}">'
+            f'{v["delta"]:+.3f}</td>'
+            f'<td>[{v["lo"]:+.3f}, {v["hi"]:+.3f}]</td><td>{v["p"]:.4f}</td>'
+            f'<td>{v["wins"]}/{v["losses"]}</td>'
+            f'<td style="text-align:center">{"구분됨" if sig else "구분 안 됨"}</td></tr>')
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
+
+def both_second_table(m):
+    arms = m["both"]["arms"]
+    base = arms["baseline"]
+    cols = [c for c in SECOND if c[0] != "params_pct"]
+    out = ['<div class="scroll"><table><thead><tr><th>arm</th>']
+    out += [f"<th>{html.escape(h)}</th>" for _, h, _, _ in cols]
+    out.append("</tr></thead><tbody>")
+    for n, a in sorted(arms.items(), key=lambda x: -x[1]["score_pooled"]):
+        row = "".join(cell(a, k, s, bt, None if n == "baseline" else base)
+                      for k, _, s, bt in cols)
+        out.append(f'<tr{" class=\"base\"" if n == "baseline" else ""}>'
+                   f"<td>{html.escape(n)}</td>{row}</tr>")
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
+
 def b64(p):
     return base64.b64encode(Path(p).read_bytes()).decode()
 
@@ -155,6 +214,7 @@ def b64(p):
 def build(m, out_dir, date):
     s150, hard = m["suites"]["s150"], m["suites"]["hard100"]
     a150, ah = s150["arms"], hard["arms"]
+    b = m["both"]
     dead = hard["unscorable_scenes"]
     dead_all = sorted(set.intersection(*(set(v["own_unscorable_scenes"])
                                          for v in ah.values())))
@@ -242,7 +302,44 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
   </figcaption>
 </figure>
 
-<h2><span class="num">4.</span>읽을 때 조심할 것</h2>
+<h2><span class="num">4.</span>두 스위트 모두 있는 arm &mdash; 합산</h2>
+<p>네 arm(<code>baseline</code>, <code>dual_u40_v2</code>, <code>tyr_u40_r</code>,
+<code>lp_r50</code>)만 두 스위트에 다 있다. 두 집합은 서로소이므로 합치는 건 그냥 씬 250개의
+평균이지만, 가중을 주는 방식이 둘이고 <strong>서로 다른 질문에 답한다</strong>.</p>
+<ul>
+  <li><strong>pooled</strong> (n=250) &mdash; 씬 하나가 한 번씩. 150씬이 60% 가중을 갖는다.
+  가장 검정력이 높은 추정이고, 아래 Δ &middot; CI &middot; Wilcoxon은 전부 이걸로 계산했다.</li>
+  <li><strong>macro</strong> &mdash; 두 스위트 평균의 단순평균. 쉬움과 어려움이 50/50.
+  어느 쪽도 <code>public_2601</code> 전체의 표본이 아니므로(하나는 쉬운 앞부분, 하나는
+  난이도 80&ndash;100% 구간) &ldquo;난이도 구간별로 한 숫자씩&rdquo;이라는 읽기다.</li>
+</ul>
+<p class="note">둘 다 913씬 전체 스위트의 점수 추정치가 <em>아니다</em>. 숫자를 인용할 때
+어느 쪽인지 밝혀야 한다.</p>
+{both_score_table(m)}
+<div class="callout">
+  <p><strong>세 압축 arm 모두 무압축을 이긴다</strong> &mdash; n=250에서 Δ가 각각
+  {b['arms']['dual_u40_v2']['d_score']:+.3f} / {b['arms']['lp_r50']['d_score']:+.3f} /
+  {b['arms']['tyr_u40_r']['d_score']:+.3f}이고 세 CI 모두 0을 포함하지 않는다.</p>
+  <p><strong>그런데 방법끼리는 어느 쌍도 갈리지 않는다.</strong> 이건 hard100만의
+  검정력 문제가 아니었다 &mdash; 이 데이터로 낼 수 있는 최대 표본인 250씬에서도 세 쌍 전부
+  CI가 0을 가로지른다. 150씬의 서열(dual 0.828 &gt; lp_r50 0.810 &gt; tyr 0.786)은
+  애초에 해상도 밖이었다는 뜻이다.</p>
+</div>
+{both_pairs_table(m)}
+<h3>점수 밖 지표 (pooled, rollout {b['arms']['baseline']['n_rollouts']}개 기준)</h3>
+{both_second_table(m)}
+<p class="note">여기서는 점수가 못 보는 축이 실제로 arm을 가른다.
+<code>lp_r50</code>은 종합 점수가 <code>tyr_u40_r</code>보다 높은데
+전체 충돌이 {b['arms']['lp_r50']['collision_any']:.1f}% 대
+{b['arms']['tyr_u40_r']['collision_any']:.1f}%, 후미추돌이
+{b['arms']['lp_r50']['collision_rear']:.1f}% 대
+{b['arms']['tyr_u40_r']['collision_rear']:.1f}%로 오히려 나쁘다 &mdash;
+과실 열만 보면 안 보이는 차이다. 그리고 세 압축 arm 전부 baseline보다 반복 잡음이
+작다({b['arms']['baseline']['repeat_abs_diff']:.3f} 대
+{min(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}&ndash;
+{max(v['repeat_abs_diff'] for k, v in b['arms'].items() if k != 'baseline'):.3f}).</p>
+
+<h2><span class="num">5.</span>읽을 때 조심할 것</h2>
 <div class="warn">
   <p><strong>1. 절대값은 낙관적이다.</strong> 150씬은 <code>public_2601</code>의
   scene_id 정렬 앞 150개인데, 실측상 나머지 763씬보다 쉽다(0.742 대 0.660, Mann&ndash;Whitney
@@ -272,7 +369,7 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
   <code>j_u40_v2</code>에서 0.893으로 <em>가장 높다</em> &mdash; 살아남은 rollout만 평균하기 때문이다.</p>
 </div>
 
-<h2><span class="num">5.</span>추가로 넣을 만한 지표</h2>
+<h2><span class="num">6.</span>추가로 넣을 만한 지표</h2>
 <p>아래는 실제로 이 데이터에서 arm을 갈라놓는지 확인한 뒤 고른 것이다.</p>
 """)
 
@@ -349,7 +446,7 @@ CoC퇴화 = 빈 출력 또는 soup(비ASCII&gt;5% / 고유어비&lt;0.5 / 300자
     p.append("</tbody></table></div>")
 
     p.append(f"""
-<h2><span class="num">6.</span>재현</h2>
+<h2><span class="num">7.</span>재현</h2>
 <pre><code>cd /home/cvlab21/project/chan/alpasim &amp;&amp; uv run python \\
     $REPO/experiments/head_analysis/collect_alpasim_table.py \\
     --out $REPO/outputs/alpasim_table --workers 12

@@ -196,6 +196,97 @@ def params_of(driver):
     return {"removed": int(p["removed"]), "pct": 100.0 * p["removed"] / full}
 
 
+def pooled(keep_rows, metrics):
+    """Arms measured on BOTH suites, combined.
+
+    The suites are disjoint, so combining is just a mean over the union of scenes -- but
+    there are two defensible ways to weight it and they answer different questions:
+
+    - `score_pooled` (n=250): every scene counts once, so the 150 carries 60% of the
+      weight.  This is the highest-powered estimate of an arm's effect and is what the
+      paired delta, its CI and the Wilcoxon are computed on.
+    - `score_macro`: the unweighted mean of the two suite means, i.e. easy and hard count
+      50/50.  Neither is a sample of `public_2601` (one is its easy prefix, the other its
+      80-100th difficulty band), so this is the "one number per difficulty regime" reading.
+
+    Neither is an estimate of the arm's score on the full 913-scene suite; say which one a
+    quoted number is.  Rates are pooled over rollouts, and CoC over the rollouts that
+    actually produced text (n_rollouts - coc_missing), which is not all of them.
+    """
+    suites = list(keep_rows)
+    both = sorted(set.intersection(*(set(k) for k in keep_rows.values())))
+    base = {s: per_scene(keep_rows[s]["baseline"], "score") for s in suites}
+    out = {"suites": suites, "arms": {},
+           "n_scenes": sum(metrics["suites"][s]["n_scenes"] for s in suites)}
+
+    for label in both:
+        rows = [r for s in suites for r in keep_rows[s][label]]
+        sc, bs = {}, {}
+        for s in suites:
+            sc.update(per_scene(keep_rows[s][label], "score"))
+            bs.update(base[s])
+        scenes = sorted(sc)
+        per = [metrics["suites"][s]["arms"][label] for s in suites]
+        a = {"n_scenes": len(scenes), "n_rollouts": len(rows),
+             "params": per[0]["params"],
+             "by_suite": {s: metrics["suites"][s]["arms"][label]["score"] for s in suites}}
+        m, lo, hi = boot_ci([sc[t] for t in scenes])
+        a["score_pooled"], a["score_ci_lo"], a["score_ci_hi"] = m, lo, hi
+        a["score_macro"] = float(np.mean([v for v in a["by_suite"].values()]))
+        if label != "baseline":
+            d = [sc[t] - bs[t] for t in scenes]
+            dm, dlo, dhi = boot_ci(d)
+            a["d_score"], a["d_lo"], a["d_hi"] = dm, dlo, dhi
+            a["d_p"] = wilcoxon_p(d)
+            a["wins"] = int(np.sum(np.asarray(d) > 0))
+            a["losses"] = int(np.sum(np.asarray(d) < 0))
+            a["d_macro"] = float(np.mean(
+                [metrics["suites"][s]["arms"][label]["d_score"] for s in suites]))
+        for k in RATE:
+            v = [r[k] for r in rows if r.get(k) is not None]
+            a[k] = float(100 * np.nanmean(v)) if v else None
+            a[k + "_n"] = int(np.nansum(v)) if v else None
+        for k in MEAN:
+            v = [r[k] for r in rows if r.get(k) is not None]
+            a[k] = float(np.nanmean(v)) if v else None
+        allsc = np.asarray([r["score"] for r in rows], float)
+        a["perfect_pct"] = float(100 * np.mean(allsc >= 0.999))
+        a["zero_pct"] = float(100 * np.mean(allsc <= 0.001))
+        by = {}
+        for r in rows:
+            by.setdefault(r["scene"], []).append(r["score"])
+        rep = [abs(v[0] - v[1]) for v in by.values() if len(v) >= 2]
+        a["repeat_abs_diff"] = float(np.nanmean(rep)) if rep else None
+        # CoC fractions are means over the rollouts that produced text, so pool by that
+        # count -- weighting by n_rollouts would silently include the ones that produced none
+        w = [p["n_rollouts"] - p["coc_missing"] for p in per]
+        for k in ("coc_degenerate_frac", "coc_empty_frac", "coc_soup_frac", "coc_mean_len"):
+            a[k] = float(np.average([p[k] for p in per], weights=w))
+        a["coc_missing"] = int(sum(p["coc_missing"] for p in per))
+        out["arms"][label] = a
+
+    # the two suites disagreed on the ranking (150: dual > lp > tyr; hard100: dual > tyr >
+    # lp), so the question pooling exists to answer is whether n=250 separates any pair at
+    # all.  Every pair, not just vs baseline.
+    sc_all = {}
+    for label in both:
+        d = {}
+        for s in suites:
+            d.update(per_scene(keep_rows[s][label], "score"))
+        sc_all[label] = d
+    scenes = sorted(sc_all[both[0]])
+    out["pairs"] = {}
+    for i, x in enumerate(both):
+        for y in both[i + 1:]:
+            d = [sc_all[y][t] - sc_all[x][t] for t in scenes]
+            dm, dlo, dhi = boot_ci(d)
+            out["pairs"][f"{y}-{x}"] = {
+                "delta": dm, "lo": dlo, "hi": dhi, "p": wilcoxon_p(d),
+                "wins": int(np.sum(np.asarray(d) > 0)),
+                "losses": int(np.sum(np.asarray(d) < 0))}
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
@@ -217,8 +308,10 @@ def main():
                 for a, v in d["arms"].items()}
         print(f"reusing CoC for {len(prev)} arm-suites from {args.coc_from}")
 
+    keep_rows = {}
     for suite, arms in runs.items():
         rows_by = {label: load_rollouts(run) for label, run in sorted(arms.items())}
+        keep_rows[suite] = rows_by
         base_rows = rows_by["baseline"]
         base_scene = per_scene(base_rows, "score")
         scenes = sorted(base_scene)
@@ -303,6 +396,7 @@ def main():
     ov = all_scenes["s150"] & all_scenes["hard100"]
     metrics["suite_overlap"] = len(ov)
     assert not ov, f"suites overlap in {len(ov)} scenes -- they are not independent"
+    metrics["both"] = pooled(keep_rows, metrics)
     (args.out / "metrics.json").write_text(json.dumps(metrics, indent=2, default=float))
     print(f"\nwrote {args.out / 'metrics.json'}  (suite overlap {len(ov)} scenes)")
 

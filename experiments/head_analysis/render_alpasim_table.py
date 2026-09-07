@@ -176,6 +176,19 @@ def main():
                                                  "collision_at_fault_p",
                                                  "offroad_or", "offroad_p")],
                             *[a.get(k) for k in keys]])
+        # the pooled rows carry suite="both"; score lands in the `score` column so a
+        # reader filtering on suite gets a directly comparable column across all three
+        for arm, a in sorted(m["both"]["arms"].items()):
+            row = dict(a, score=a["score_pooled"])
+            w.writerow(["both", arm, a["params"]["removed"], a["params"]["pct"],
+                        a["n_scenes"], a["n_rollouts"],
+                        *[row.get(k) for k in ("score_ci_lo", "score_ci_hi",
+                                               "score_median", "d_lo", "d_hi",
+                                               "wins", "losses",
+                                               "collision_at_fault_or",
+                                               "collision_at_fault_p",
+                                               "offroad_or", "offroad_p")],
+                        *[row.get(k) for k in keys]])
 
     with (args.out / "summary.txt").open("w") as f:
         f.write("alpasim 폐루프 통합 표 — 두 스위트는 서로소 "
@@ -206,6 +219,34 @@ def main():
                             f"= {gate + dead:3d}  vs 0점 {zero:3d}  "
                             f"{'OK' if ok else '불일치'}\n")
             f.write(f"  {suite}: 불일치 {n_bad}개 / {len(d['arms'])} arm\n")
+
+        b = m["both"]
+        f.write(f"\n두 스위트 모두 측정된 arm ({' + '.join(b['suites'])}, "
+                f"n={b['n_scenes']}씬)\n")
+        hdr = ("arm".ljust(16) + "".join(h.rjust(11) for h in
+               ("150씬", "hard100", "pooled", "macro", "Δpooled", "CI저", "CI고",
+                "p", "승", "패")))
+        f.write(hdr + "\n" + "-" * 126 + "\n")
+        for a, v in sorted(b["arms"].items(), key=lambda x: -x[1]["score_pooled"]):
+            f.write(f"{a[:15]:16s}{v['by_suite']['s150']:11.3f}"
+                    f"{v['by_suite']['hard100']:11.3f}{v['score_pooled']:11.3f}"
+                    f"{v['score_macro']:11.3f}"
+                    + ("".join(x.rjust(11) for x in ("--",) * 6) if "d_score" not in v
+                       else f"{v['d_score']:+11.3f}{v['d_lo']:+11.3f}{v['d_hi']:+11.3f}"
+                            f"{v['d_p']:11.4f}{v['wins']:11d}{v['losses']:11d}") + "\n")
+        f.write("\n  pooled = 250씬 각각 1회씩(150씬이 60% 가중), macro = 두 스위트 평균의 "
+                "단순평균(50/50)\n")
+        f.write("\n  쌍 비교 (pooled, 씬 단위 페어드)\n")
+        for k, v in b["pairs"].items():
+            f.write(f"    {k:30s} Δ{v['delta']:+.3f} [{v['lo']:+.3f}, {v['hi']:+.3f}]  "
+                    f"p={v['p']:.4f}  {v['wins']}승 {v['losses']}패\n")
+
+        f.write("\n  점수 밖 지표 (pooled, rollout 기준)\n")
+        hdr = "arm".ljust(16) + "".join(c[1].rjust(11) for c in SECOND)
+        f.write("  " + hdr + "\n  " + "-" * 124 + "\n")
+        for a, v in sorted(b["arms"].items(), key=lambda x: -x[1]["score_pooled"]):
+            f.write("  " + a[:15].ljust(16)
+                    + "".join(fmt(v.get(k), s).rjust(11) for k, _, s in SECOND) + "\n")
 
         f.write("\n[맵 결함 씬 제외] 어느 arm에서든 채점 불가였던 씬을 전 arm에서 제거\n")
         for suite, d in m["suites"].items():
