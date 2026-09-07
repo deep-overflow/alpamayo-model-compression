@@ -83,6 +83,10 @@ def main():
                          "every draw to the same attribute profile (all six L1s at their "
                          "n=100 discreteness floor), which makes its draws non-"
                          "exchangeable in a way random ones are not.")
+    ap.add_argument("--exclude", nargs="*", default=[],
+                    help="extra manifest stems whose clips are also held out, on top of "
+                         "calib_100 and the OOD pool. Use it to keep a new draw "
+                         "independent of every set already measured.")
     ap.add_argument("--exp-id", default="eval_sets")
     ap.add_argument("--prefix", default="calib_tr")
     args = ap.parse_args()
@@ -94,6 +98,8 @@ def main():
     dc = pd.read_parquet(AV / "metadata" / "data_collection.parquet")
     ood = set(pd.read_parquet(AV / "reasoning" / "ood_reasoning.parquet").index.astype(str))
     prior = set(pd.read_parquet(out_dir / "calib_100.parquet")["clip_id"])
+    for stem in args.exclude:
+        prior |= set(pd.read_parquet(out_dir / f"{stem}.parquet")["clip_id"])
 
     full = derive(ci[ci.split == "train"], dc)          # target: the whole official split
     if args.pool == "cache":
@@ -112,7 +118,7 @@ def main():
     pool = pool[~pool.index.isin(ood) & ~pool.index.isin(prior)]
     need = args.blocks * args.block_size
     print(f"official train {len(full):,}  pool={args.pool} {n_cached:,}  "
-          f"-OOD/-calib_100 {n_cached - len(pool)}  -> pool {len(pool):,}  need {need}",
+          f"-OOD/-제외 {n_cached - len(pool)}  -> pool {len(pool):,}  need {need}",
           flush=True)
     assert len(pool) >= need, f"pool {len(pool)} < {need}"
 
