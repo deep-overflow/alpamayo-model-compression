@@ -54,6 +54,15 @@ def main():
         want += [str(c) for c in man.clip_id]
         chunks |= {int(c) for c in man.chunk}
     want = sorted(set(want))
+    # not every clip has this feature -- 96% of the evaluation sets do. metadata says so
+    # up front, so the missing ones are skipped rather than discovered as a KeyError per
+    # clip after paying for the request.
+    fp = DATA / "metadata" / "feature_presence.parquet"
+    if fp.exists():
+        pres = pd.read_parquet(fp).reindex(want)["obstacle.offline"].fillna(False)
+        absent = [c for c in want if not pres.get(c, False)]
+        want = [c for c in want if pres.get(c, False)]
+        print(f"라벨 없는 클립 {len(absent)}개 제외", flush=True)
     if args.limit:
         want = want[:args.limit]
         chunks = set()
