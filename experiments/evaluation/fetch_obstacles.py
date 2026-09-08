@@ -86,7 +86,7 @@ def main():
                 print(f"  [{j + 1}/{len(missing)}]", flush=True)
         print("vehicle_dimensions 완료", flush=True)
 
-    ok = skip = err = 0
+    ok = skip = err = absent_late = 0
     t0 = time.time()
     for i, clip_id in enumerate(want):
         p = OUT / f"{clip_id}.parquet"
@@ -95,6 +95,12 @@ def main():
             continue
         try:
             d = avdi.get_clip_feature(clip_id, "obstacle.offline", maybe_stream=True)
+        except KeyError:
+            # the member is not in the chunk: the dataset has no labels for this clip.
+            # A normal state, not a failure -- 4% of the evaluation sets are like this,
+            # and conflating it with a real error makes the exit code useless to a caller.
+            absent_late += 1
+            continue
         except Exception as e:  # noqa: BLE001  per-clip failures are recorded, not fatal
             err += 1
             print(f"  ERROR {clip_id[:8]} {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -112,7 +118,8 @@ def main():
                   flush=True)
 
     size = sum(f.stat().st_size for f in OUT.glob("*.parquet")) / 1e6
-    print(f"\n완료: 받음 {ok} 건너뜀 {skip} 실패 {err} / {len(want)}")
+    print(f"\n완료: 받음 {ok} 건너뜀 {skip} 라벨없음 {absent_late} 실패 {err}"
+          f" / {len(want)}")
     print(f"저장 위치 {OUT}  총 {size:.0f} MB")
     if err:
         sys.exit(1)
