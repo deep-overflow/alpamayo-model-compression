@@ -13,12 +13,23 @@ CARDS=${CARDS:-"0 1 2 3"}
 NSH=${NSH:-4}
 REM=/home/cvlab20/project/chan
 CHAN=/mnt/dataset1/chan
-cd $REM/alpamayo-model-compression || exit 1
+# Our own checkout, not the shared one under $HOME. The account is shared with the whole
+# lab and so is /home/cvlab20/project/chan/alpamayo-model-compression: another session
+# rsynced its tree over that path mid-run, run_baseline.py lost --save-pred, and eight of
+# twelve shards died on "unrecognized arguments" while the four that had already started
+# finished fine.
+REPO_DIR=${REPO_DIR:-/mnt/dataset1/chan/repo}
+cd "$REPO_DIR" || exit 1
 . $REM/cvlab20-server/env.sh
+export ALPAMAYO_REPO="$REPO_DIR"
 mkdir -p "$CHAN/logs"
 
+# SETS lets a partial re-run skip sets that already finished -- test500's four shards
+# survived the shared-checkout overwrite and re-running them would cost 18 minutes for
+# rows that are already on disk.
+SETS=${SETS:-"test indist oodval"}
 JOBS=()
-for s in test indist oodval; do
+for s in $SETS; do
   for i in $(seq 0 $((NSH - 1))); do JOBS+=("$s $i"); done
 done
 Q=$CHAN/logs/${ARM}_queue.txt
@@ -35,16 +46,12 @@ worker() {
           [ "$i" -lt "$n" ] && echo $((i+1)) > '"$CUR"'; echo $i')
     [ "$idx" -ge "${#JOBS[@]}" ] && break
     read -r set_name shard <<<"${JOBS[$idx]}"
-    # Headroom, not emptiness. A "completely idle card" rule cannot be satisfied here:
-    # one member's process holds 352 MiB on ALL EIGHT cards, so `used <= 16` waits
-    # forever while the cards sit unused. The repo's own runner (run_importance_st.sh)
-    # already gates on free memory, which is the quantity that actually decides whether
-    # a run fits and whether it would crowd anyone: 30 GB reservation + margin.
-    local used total free
-    until read -r used total <<<"$(nvidia-smi --query-gpu=memory.used,memory.total \
-              --format=csv,noheader,nounits -i "$gpu" 2>/dev/null | tr ',' ' ')"
-          [ -n "$used" ] && free=$((total - used)) && [ "$free" -ge 36000 ]; do
-      echo "$(date -u '+%H:%M') gpu$gpu 여유 ${free:-?} MiB < 36000, waiting for $set_name.$shard"
+    # Empty, not merely roomy. "Free memory is enough" has put a run on a card another
+    # member was using before; the standing rule on this shared box is an empty card.
+    local used
+    until used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -i "$gpu" 2>/dev/null);
+          [ -n "$used" ] && [ "$used" -le 16 ]; do
+      echo "$(date -u '+%H:%M') gpu$gpu busy (${used:-?} MiB), waiting for $set_name.$shard"
       sleep 300
     done
     case $set_name in
@@ -58,7 +65,12 @@ worker() {
       --shard "$shard" --n-shards "$NSH" \
       --gpu "$gpu" --reserve-gb 30 \
       >>"$CHAN/logs/${ARM}_${set_name}_sh${shard}.log" 2>&1
-    echo "$(date -u '+%H:%M') gpu$gpu $set_name.$shard exit=$?"
+    # capture before anything else runs: in `echo "$(date) ... exit=$?"` the command
+    # substitution executes first, so $? is date's status and every job reports exit=0.
+    # That is how eight failed shards were reported as successes.
+    local rc=$?
+    echo "$(date -u '+%H:%M') gpu$gpu $set_name.$shard exit=$rc"
+    [ "$rc" -eq 0 ] || echo "  FAILED: $(tail -1 "$CHAN/logs/${ARM}_${set_name}_sh${shard}.log")"
   done
   echo "$(date -u '+%H:%M') gpu$gpu done"
 }
@@ -66,7 +78,7 @@ worker() {
 for g in $CARDS; do worker "$g" & sleep 5; done
 wait
 
-for s in test indist oodval; do
+for s in $SETS; do
   dst=$CHAN/outputs/${ARM}_${s}
   mkdir -p "$dst"
   for i in $(seq 0 $((NSH - 1))); do

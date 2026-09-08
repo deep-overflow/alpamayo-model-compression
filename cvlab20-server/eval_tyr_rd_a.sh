@@ -66,7 +66,10 @@ worker() {
       "${sargs[@]}" --model "outputs/slim_$ARM" --exp-id "${ARM}_${set_name}" \
       --gpu "$gpu" --reserve-gb 26 \
       >>"$CHAN/logs/${ARM}_${set_name}.log" 2>&1
-    echo "$(date -u '+%H:%M') gpu$gpu $set_name exit=$?"
+    # capture before anything else runs: in `echo "$(date) ... exit=$?"` the command
+    # substitution executes first, so $? is date's status, not the run's
+    local rc=$?
+    echo "$(date -u '+%H:%M') gpu$gpu $set_name exit=$rc"
   done
   echo "$(date -u '+%H:%M') gpu$gpu done"
 }

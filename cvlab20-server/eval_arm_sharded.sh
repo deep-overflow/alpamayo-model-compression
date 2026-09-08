@@ -59,7 +59,11 @@ worker() {
       --shard "$shard" --n-shards "$NSH" \
       --gpu "$gpu" --reserve-gb 26 \
       >>"$CHAN/logs/${ARM}_${set_name}_sh${shard}.log" 2>&1
-    echo "$(date -u '+%H:%M') gpu$gpu $set_name.$shard exit=$?"
+    # capture before anything else runs: in `echo "$(date) ... exit=$?"` the command
+    # substitution executes first, so $? is date's status and every job reports exit=0
+    local rc=$?
+    echo "$(date -u '+%H:%M') gpu$gpu $set_name.$shard exit=$rc"
+    [ "$rc" -eq 0 ] || echo "  FAILED: $(tail -1 "$CHAN/logs/${ARM}_${set_name}_sh${shard}.log")"
   done
   echo "$(date -u '+%H:%M') gpu$gpu done"
 }
