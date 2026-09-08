@@ -46,7 +46,9 @@ from scipy import stats
 
 warnings.filterwarnings("ignore")
 REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "outputs" / "paper_figs"
+# figures/ is tracked, unlike outputs/ -- these are paper artifacts, not run output, and
+# they have to survive with the manuscript rather than with the experiment directories
+OUT = REPO / "figures"
 IMP = REPO / "outputs" / "importance_v2" / "importance.npz"
 STEP = REPO / "outputs" / "stepimp_fm_perstep_v2" / "step_importance.npz"
 
