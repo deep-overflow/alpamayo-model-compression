@@ -126,27 +126,42 @@ def obb_overlap(a, b):
     return True
 
 
-def obstacles_at(obs, t_us):
-    """Each track's box interpolated to `t_us`, in the rig frame of that instant.
+def obstacles_over_time(obs, times_us):
+    """All tracks interpolated onto `times_us` at once -> list per timestep.
 
-    A track is only used when `t_us` falls inside its observed span -- extrapolating an
+    Built once per clip and shared by every path scored on it. The first version
+    interpolated inside the per-step loop of every path, so one clip did 9 paths x 64
+    steps = 576 groupbys over the same DataFrame and 20 clips took over ten minutes.
+    Here the grouping happens once and np.interp is vectorised over the timesteps.
+
+    A track only contributes at times inside its observed span -- extrapolating an
     autolabelled track past its last sighting invents obstacles.
     """
-    out = []
-    for tid, g in obs.groupby("track_id"):
+    t = np.asarray(times_us, float)
+    out = [[] for _ in range(len(t))]
+    for tid, g in obs.groupby("track_id", sort=False):
         g = g.sort_values("timestamp_us")
         ts = g.timestamp_us.to_numpy(float)
-        if t_us < ts[0] or t_us > ts[-1]:
+        inside = (t >= ts[0]) & (t <= ts[-1])
+        if not inside.any():
             continue
-        x = np.interp(t_us, ts, g.center_x.to_numpy(float))
-        y = np.interp(t_us, ts, g.center_y.to_numpy(float))
-        sx = float(np.interp(t_us, ts, g.size_x.to_numpy(float)))
-        sy = float(np.interp(t_us, ts, g.size_y.to_numpy(float)))
-        qz = np.interp(t_us, ts, g.orientation_z.to_numpy(float))
-        qw = np.interp(t_us, ts, g.orientation_w.to_numpy(float))
+        ti = t[inside]
+        x = np.interp(ti, ts, g.center_x.to_numpy(float))
+        y = np.interp(ti, ts, g.center_y.to_numpy(float))
+        sx = np.interp(ti, ts, g.size_x.to_numpy(float))
+        sy = np.interp(ti, ts, g.size_y.to_numpy(float))
+        qz = np.interp(ti, ts, g.orientation_z.to_numpy(float))
+        qw = np.interp(ti, ts, g.orientation_w.to_numpy(float))
         yaw = 2.0 * np.arctan2(qz, qw)
-        out.append((x, y, yaw, sx, sy, str(g.label_class.iloc[0]), int(tid)))
+        cls = str(g.label_class.iloc[0])
+        for j, i in enumerate(np.flatnonzero(inside)):
+            out[i].append((x[j], y[j], yaw[j], sx[j], sy[j], cls, int(tid)))
     return out
+
+
+def obstacles_at(obs, t_us):
+    """Single-timestep convenience wrapper over `obstacles_over_time`."""
+    return obstacles_over_time(obs, [t_us])[0]
 
 
 def ego_self_tracks(obs, t0_us, ego_size):
@@ -170,15 +185,43 @@ def ego_self_tracks(obs, t0_us, ego_size):
     return bad
 
 
+def prepare_clip(obs, ego_future_xyz, ego_future_rot, t0_us, T, dt_us=100_000,
+                 drop_tracks=()):
+    """Per-clip work that every path scored on this clip shares.
+
+    Interpolating the tracks and transforming them into the t0 frame depends only on the
+    clip, not on the path being scored, so it is done once for all 9 (GT + k samples).
+    """
+    times = [t0_us + dt_us * i for i in range(T)]
+    per_step = obstacles_over_time(obs, times)
+    boxes = []
+    for i, items in enumerate(per_step):
+        R_i, p_i, yr = ego_future_rot[i], ego_future_xyz[i], yaw_of(ego_future_rot[i])
+        step = []
+        for (ox, oy, oyaw, sx, sy, cls, tid) in items:
+            if tid in drop_tracks:
+                continue
+            c = R_i @ np.array([ox, oy, 0.0]) + p_i
+            box = corners(np.array([c[0]]), np.array([c[1]]),
+                          np.array([oyaw + yr]), sx, sy)[0]
+            step.append((c[0], c[1], box, cls))
+        boxes.append(step)
+    return boxes
+
+
 def score_path(xy, ego_future_xyz, ego_future_rot, obs, t0_us, ego_size,
-               dt_us=100_000, yaw0=0.0, drop_tracks=()):
+               dt_us=100_000, yaw0=0.0, drop_tracks=(), prepared=None):
     """Collision statistics for one 2D path in the t0 rig frame.
 
     `xy` is (T, 2); the GT future pose arrays are (T, 3) / (T, 3, 3) and supply both the
-    obstacle transform and, for the GT path itself, the exact heading.
+    obstacle transform and, for the GT path itself, the exact heading. Pass `prepared`
+    from `prepare_clip` when scoring several paths on one clip.
     """
     length, width, rear_to_c = ego_size
     T = len(xy)
+    if prepared is None:
+        prepared = prepare_clip(obs, ego_future_xyz, ego_future_rot, t0_us, T,
+                                dt_us, drop_tracks)
     yaws = path_headings(xy, yaw0)
     # the box is centred ahead of the rear axle, which is where the trajectory is anchored
     cx = xy[:, 0] + rear_to_c * np.cos(yaws)
@@ -187,19 +230,12 @@ def score_path(xy, ego_future_xyz, ego_future_rot, obs, t0_us, ego_size,
 
     hit_step, hit_class, min_dist = None, None, np.inf
     for i in range(T):
-        t_us = t0_us + dt_us * i
-        R_i, p_i = ego_future_rot[i], ego_future_xyz[i]
-        for (ox, oy, oyaw, sx, sy, cls, tid) in obstacles_at(obs, t_us):
-            if tid in drop_tracks:
-                continue
-            # rig-at-t_i -> rig-at-t0
-            c = R_i @ np.array([ox, oy, 0.0]) + p_i
-            oyaw_t0 = oyaw + yaw_of(R_i)
-            box = corners(np.array([c[0]]), np.array([c[1]]),
-                          np.array([oyaw_t0]), sx, sy)[0]
-            d = float(np.hypot(c[0] - cx[i], c[1] - cy[i]))
+        for (bx, by, box, cls) in prepared[i]:
+            d = float(np.hypot(bx - cx[i], by - cy[i]))
             min_dist = min(min_dist, d)
-            if hit_step is None and obb_overlap(ego[i], box):
+            # the separating-axis test is the expensive part; a box whose centre is
+            # further than the two half-diagonals cannot overlap, so skip it
+            if hit_step is None and d < 12.0 and obb_overlap(ego[i], box):
                 hit_step, hit_class = i, cls
     return {"collide": hit_step is not None,
             "hit_step": hit_step, "hit_class": hit_class,
