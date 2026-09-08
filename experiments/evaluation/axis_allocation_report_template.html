@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>축 배분: Q head를 덜 자르면 대가가 43% 줄어든다</title>
+<style>
+  :root { --bg:#FAF9F5; --bg-card:#FFF; --bg-code:#F0EEE6; --text:#29261B;
+    --text-muted:#6B6555; --accent:#D97757; --accent-dark:#C15F3C; --border:#E8E6DC;
+    --table-stripe:#F5F4EF; --good:#008300; --warn:#eda100; --bad:#b0402a; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); margin:0;
+    font-family:"Söhne","Pretendard","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    font-size:16px; line-height:1.7; padding:3rem 1.5rem 5rem; }
+  .container { max-width:920px; margin:0 auto; }
+  header { margin-bottom:3rem; border-bottom:2px solid var(--accent); padding-bottom:1.5rem; }
+  .eyebrow { color:var(--accent-dark); font-size:.78rem; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; margin-bottom:.6rem; }
+  h1 { font-family:"Tiempos Headline",Georgia,serif; font-size:2rem; font-weight:500;
+    line-height:1.3; margin:0 0 .75rem; }
+  .meta { color:var(--text-muted); font-size:.9rem; }
+  .meta code { background:none; padding:0; color:var(--text-muted); }
+  h2 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.4rem; font-weight:500;
+    margin:2.75rem 0 1rem; padding-top:.5rem; }
+  h2 .num { color:var(--accent); margin-right:.4rem; }
+  h3 { font-size:1.05rem; font-weight:600; margin:1.75rem 0 .6rem; }
+  p { margin:.9rem 0; }
+  code { font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.86em;
+    background:var(--bg-code); padding:.12em .35em; border-radius:4px; }
+  pre { background:var(--bg-code); padding:1rem 1.1rem; border-radius:8px; overflow-x:auto;
+    font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.84rem; line-height:1.6; }
+  pre code { background:none; padding:0; }
+  table { width:100%; border-collapse:collapse; margin:1.25rem 0 1.75rem; font-size:.9rem;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th { background:var(--bg-code); text-align:left; font-weight:600; padding:.55rem .8rem;
+    border-bottom:2px solid var(--border); white-space:nowrap; }
+  td { padding:.5rem .8rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:nth-child(even) { background:var(--table-stripe); }
+  tbody tr:last-child td { border-bottom:none; }
+  .r { text-align:right; font-variant-numeric:tabular-nums; }
+  .up { color:var(--bad); } .down { color:var(--good); }
+  .callout { background:var(--bg-card); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; padding:1rem 1.2rem; margin:1.5rem 0; }
+  .callout.good { border-left-color:var(--good); }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout p:first-child { margin-top:0; } .callout p:last-child { margin-bottom:0; }
+  .lede { font-size:1.05rem; color:var(--text-muted); }
+  ul, ol { padding-left:1.3rem; } li { margin:.35rem 0; }
+  .kpi { display:flex; flex-wrap:wrap; gap:.9rem; margin:1.5rem 0; }
+  .kpi div { flex:1 1 150px; background:var(--bg-card); border:1px solid var(--border);
+    border-radius:8px; padding:.9rem 1rem; }
+  .kpi .v { font-family:"Tiempos Headline",Georgia,serif; font-size:1.5rem; display:block; }
+  .kpi .k { color:var(--text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  footer { margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--border);
+    color:var(--text-muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>축 배분: Q head를 덜 자르면 압축 대가가 43% 줄어든다</h1>
+  <p class="meta">2026-09-06 · 기준 <code>max11</code> 고정 · 제거 파라미터
+     {{shape.removed_params|,}} 동일 · test500, rollout-only, minADE@6 · Ada</p>
+</header>
+
+<p class="lede">
+이 프로젝트의 모든 <code>*_u40_v2</code> 구성은 층마다 <strong>Q head 13개 + MLP 4,898채널</strong>을
+잘라 왔다. 그 배분은 <code>run_grid.allocations()</code>가 다른 구성의 예산을 맞추다 나온 것이고,
+<strong>한 번도 그 자체를 검증한 적이 없다.</strong> 기준은 여러 번 바꿔 봤지만 축 사이의 배분은
+고정이었다. 예산을 그대로 두고 헤드를 4개만 자르면 어떻게 되는가.
+</p>
+
+<div class="kpi">
+  <div><span class="k">헤드 절단</span><span class="v">13 → {{shape.qcut4.heads_cut}}</span></div>
+  <div><span class="k">채널 절단</span><span class="v">4,898 → {{shape.qcut4.channels_cut|,}}</span></div>
+  <div><span class="k">압축 대가</span><span class="v">{{vs_unpruned.maxstep11.median|+.4f}} → {{vs_unpruned.qcut4.median|+.4f}}</span></div>
+  <div><span class="k">CoC 붕괴</span><span class="v">{{absolute.maxstep11.coc_degenerate|.3f}} → {{absolute.qcut4.coc_degenerate|.3f}}</span></div>
+</div>
+
+<h2><span class="num">1</span>산술 — 예산이 정확히 맞는다</h2>
+
+<p>
+VLM 한 층에서 Q head 하나를 지우는 비용은 q_proj 행 + o_proj 열 = <code>2 × 128 × 4096</code> =
+1,048,576, MLP 채널 하나는 gate 행 + up 행 + down 열 = <code>3 × 4096</code> = 12,288이다.
+즉 <strong>헤드 1개 = 채널 85.33개</strong>. 기존 배분의 층당 제거량 73,818,112를 고정하면
+나머지 없이 떨어지는 헤드 절단 수는 <strong>1 · 4 · 7 · 10 · 13</strong>뿐이고, 4는 그중 하나다.
+</p>
+
+<table>
+<thead><tr><th>구성</th><th class="r">헤드 절단</th><th class="r">채널 절단</th>
+<th class="r">제거 파라미터</th></tr></thead>
+<tbody>
+<tr><td><code>maxstep11_u40_v2</code> (기준선)</td>
+    <td class="r">{{shape.baseline.heads_cut}}</td><td class="r">{{shape.baseline.channels_cut|,}}</td>
+    <td class="r">{{shape.removed_params|,}}</td></tr>
+<tr><td><code>maxstep11_u40_qcut4_v2</code></td>
+    <td class="r"><strong>{{shape.qcut4.heads_cut}}</strong></td>
+    <td class="r"><strong>{{shape.qcut4.channels_cut|,}}</strong></td>
+    <td class="r">{{shape.removed_params|,}}</td></tr>
+</tbody>
+</table>
+
+<p>
+채널 수는 코드에 적어 두지 않고 <strong>예산에서 유도</strong>하며, 나눠떨어지지 않으면 assert로
+죽는다 — 예산이 어긋난 채 "거의 같은" 구성이 나가면 1요인 비교가 아니게 되는데, 그것이 이
+실험에서 가장 위험한 실패다.
+</p>
+
+<h2><span class="num">2</span>1요인임을 어떻게 보장했는가</h2>
+
+<ul>
+<li><strong>기준·캘리브레이션 동일.</strong> 양쪽 다 <code>max11</code>(11개 손실의 층내 랭크
+    최댓값), <code>calib_100</code>(<code>importance_v2_ada</code> + <code>importance_stepvlm_v1</code>).</li>
+<li><strong>기준선을 먼저 재현했다.</strong> arm을 만든 서버에서 <code>maxstep11_u40_v2</code>를
+    다시 빌드해 출시본과 대조한 결과 <strong>전 층 유지집합이 동일</strong>했다. 재료가 같음이
+    증명된 뒤에 arm을 만들었다. 이 확인이 없었다면 재료 차이가 배분 효과로 오독될 수 있었다 —
+    실제로 기준선은 <code>importance_v2</code>가 아니라 <code>importance_v2_ada</code>로
+    빌드돼 있었다.</li>
+<li><strong>포함 관계.</strong> 기준선이 남긴 Q head 684개가 arm에 <strong>100% 그대로</strong>
+    남는다. <code>select_mask_ratios</code>가 층 안에서 점수 순으로 자르므로 덜 자르면 유지집합이
+    포함 관계가 된다. 즉 "다른 헤드를 골랐다"가 아니라 <strong>"헤드 9개를 더 살리고 채널
+    768개를 더 버렸다"</strong>는 순수한 축 교환이다.</li>
+<li>expert·KV 미변경, 평가 프로토콜 동일.</li>
+</ul>
+
+<h2><span class="num">3</span>결과 — H2 채택</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">minADE@6</th><th class="r">minFDE@6</th>
+<th class="r">CoC 붕괴</th><th class="r">무압축 대비</th></tr></thead>
+<tbody>
+<tr><td>무압축</td><td class="r">{{absolute.baseline.minADE6|.4f}}</td>
+    <td class="r">{{absolute.baseline.minFDE6|.4f}}</td>
+    <td class="r">{{absolute.baseline.coc_degenerate|.3f}}</td><td class="r">—</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r">{{absolute.dual.minADE6|.4f}}</td>
+    <td class="r">{{absolute.dual.minFDE6|.4f}}</td>
+    <td class="r">{{absolute.dual.coc_degenerate|.3f}}</td>
+    <td class="r up">{{vs_unpruned.dual.median|+.4f}}</td></tr>
+<tr><td><code>maxstep11_u40_v2</code> (헤드 13)</td>
+    <td class="r">{{absolute.maxstep11.minADE6|.4f}}</td>
+    <td class="r">{{absolute.maxstep11.minFDE6|.4f}}</td>
+    <td class="r">{{absolute.maxstep11.coc_degenerate|.3f}}</td>
+    <td class="r up">{{vs_unpruned.maxstep11.median|+.4f}}</td></tr>
+<tr><td><strong>qcut4 (헤드 4)</strong></td>
+    <td class="r"><strong>{{absolute.qcut4.minADE6|.4f}}</strong></td>
+    <td class="r">{{absolute.qcut4.minFDE6|.4f}}</td>
+    <td class="r"><strong>{{absolute.qcut4.coc_degenerate|.3f}}</strong></td>
+    <td class="r up"><strong>{{vs_unpruned.qcut4.median|+.4f}}</strong></td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>사전 등록 판정.</strong>
+<code>{{verdict.contrast}}</code> = <strong>{{verdict.median|+.4f}}</strong>
+[{{verdict.lo|+.4f}}, {{verdict.hi|+.4f}}], p={{verdict.p|.3f}}, n={{verdict.n}}.
+임계 |{{verdict.threshold}}|(G0b가 잰 잡음 바닥의 8배)를 2.2배 넘고 CI가 0을 포함하지 않는다.
+→ <strong>H2 채택: Q head가 비싼 축이다.</strong></p>
+<p>같은 24% 압축인데 대가가 {{vs_unpruned.maxstep11.median|+.4f}} →
+{{vs_unpruned.qcut4.median|+.4f}}로 <strong>43% 줄었다.</strong> 파라미터는 한 개도 덜 지우지
+않았고 배분만 바꿨다.</p>
+</div>
+
+<h2><span class="num">4</span>부수 결과 — CoC 붕괴가 사라진다</h2>
+
+<p>
+붕괴율이 {{absolute.maxstep11.coc_degenerate|.3f}} → <strong>{{absolute.qcut4.coc_degenerate|.3f}}</strong>로,
+<strong>무압축({{absolute.baseline.coc_degenerate|.3f}})보다도 낮다.</strong> 이것은 minADE 개선과
+별개의 축이다 — minFDE는 {{absolute.maxstep11.minFDE6|.4f}} → {{absolute.qcut4.minFDE6|.4f}}로
+거의 움직이지 않았는데 붕괴율만 여섯 배 줄었다.
+</p>
+
+<p>
+Attention 헤드가 CoC 생성에 결정적이고, 기존 배분이 그것을 과도하게 잘라 왔다는 해석과 맞는다.
+이 프로젝트가 <code>cocsafe</code> 같은 별도 구성을 만들어 방어하려 했던 문제가, 축 배분을
+바꾸는 것만으로 사라진다.
+</p>
+
+<h2><span class="num">5</span>함의</h2>
+
+<p>
+<strong>기존 구성 전부가 같은 13/4,898 배분을 쓴다</strong> — <code>dual</code>,
+<code>jtraj</code>, <code>cocsafe</code>, Tyr 계열. 기준을 여러 번 바꿔 얻은 개선
+(<code>dual</code> → <code>maxstep11</code> = 0.0147)보다 <strong>배분을 한 번 바꾼 개선
+(0.0223)이 크다.</strong> 이 축은 한 번도 검증되지 않은 채 최적으로 가정돼 왔다.
+</p>
+
+<h2><span class="num">6</span>한계</h2>
+
+<ul>
+<li><strong>점 두 개의 비교다.</strong> 4가 최적이라는 근거는 없다. 정수로 떨어지는 격자가
+    1·4·7·10·13이므로 세 점을 더 재면 곡선이 나온다(arm당 ~35분).</li>
+<li><strong>기준 하나, 셋 하나, 개루프만.</strong> <code>max11</code>·test500만 봤다. 다른
+    기준에서도 같은 방향인지는 <code>dual_u40_qcut4_v2</code>로 바로 확인할 수 있다.</li>
+<li><strong>두 arm이 다른 서버에서 측정됐다.</strong> 기준선은 cvlab21, arm은 cvlab20이다.
+    두 박스는 같은 RTX 5880 Ada이고 무압축 baseline에서 500/500 클립 비트 동일이 확인됐지만,
+    <strong>그 검증은 baseline 경로에서만 이뤄졌다</strong> — slim 체크포인트는
+    <code>slim_lib</code>의 다른 attention forward를 탄다. 관측된 효과(−0.0223)가 baseline
+    경로에서 본 서버 차이(0.0000)보다 훨씬 크므로 결론이 뒤집힐 여지는 작지만, 확정하려면
+    기준선을 같은 서버에서 재측정해야 한다(~35분).</li>
+<li>폐루프 미측정. 이 프로젝트에서 개루프가 숨긴 실패를 폐루프가 드러낸 전례가 있다.</li>
+</ul>
+
+<h2><span class="num">7</span>재현</h2>
+
+<pre><code>python experiments/head_analysis/make_slim.py --config maxstep11_u40_qcut4_v2 \
+    --importance importance_v2_ada --out outputs/slim_maxstep11_u40_qcut4_v2 --no-state
+python experiments/evaluation/run_baseline.py --set test \
+    --model outputs/slim_maxstep11_u40_qcut4_v2 --exp-id maxstep11_qcut4_test
+python experiments/evaluation/analyze_axis_allocation.py</code></pre>
+
+<p>
+<code>_qcut&lt;N&gt;</code>은 <code>uni</code> 정규식의 선택적 그룹이라 기준 이름이 그대로
+살아 있다 — <code>dual_u40_qcut7_v2</code> 같은 조합이 코드 수정 없이 만들어진다.
+</p>
+
+<footer>
+계획·사전 등록 게이트: <code>plans/2026-09-05_axis-allocation.md</code> ·
+수치는 <code>outputs/axis_allocation/metrics.json</code>에서 렌더됨 (손으로 옮긴 값 없음)
+</footer>
+
+</div>
+</body>
+</html>

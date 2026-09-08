@@ -166,11 +166,27 @@ def main():
     ap.add_argument("--fm-steps", type=int, default=10)
     ap.add_argument("--reserve-gb", type=float, default=44.0)
     ap.add_argument("--gpu", type=str, default=None)
+    ap.add_argument("--shard", type=int, default=0,
+                    help="round-robin shard index. Seeds come from the clip id, so a "
+                         "clip's score does not depend on which shard measured it; the "
+                         "accumulated means merge with merge_step_importance.py")
+    ap.add_argument("--n-shards", type=int, default=1)
+    ap.add_argument("--no-perclip", action="store_true",
+                    help="skip step_importance_vlm_perclip.npz. It holds "
+                         "(10, 36, 12288) fp32 PER CLIP -- 16.9 MB each, so 4,000 clips "
+                         "would be 70 GB on disk and the same again in RAM at every "
+                         "checkpoint save. The accumulated file is 42.6 MB whatever the "
+                         "clip count. Only drop it when no subset analysis is planned: "
+                         "unlike run_importance, this script cannot reconstruct a subset "
+                         "afterwards.")
     args = ap.parse_args()
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     calib = sc.calib_samples(REPO, args.calib_manifest)[: args.num_clips]
+    if args.n_shards > 1:
+        calib = calib[args.shard::args.n_shards]
+        print(f"shard {args.shard}/{args.n_shards}: {len(calib)} clips", flush=True)
 
     devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
     device = reserve_gpu(args.reserve_gb, devices=devices)
@@ -225,10 +241,13 @@ def main():
             acc[f"{k}_shipped"] += np.abs(g[k].sum(0))
         acc["seedz_q"] += g["seedz_q"]
         acc["seedz_mlp"] += g["seedz_mlp"]
-        per_clip["q_abs_step"].append(np.abs(g["q"]).astype(np.float32))
-        per_clip["q_shipped"].append(np.abs(g["q"].sum(0)).astype(np.float32))
-        per_clip["mlp_abs_step"].append(np.abs(g["mlp"]).astype(np.float32))
-        per_clip["mlp_shipped"].append(np.abs(g["mlp"].sum(0)).astype(np.float32))
+        if not args.no_perclip:
+            # (10, 36, 12288) fp32 per clip -- 16.9 MB each, so this list is the RAM half
+            # of what --no-perclip exists to avoid, not just the file
+            per_clip["q_abs_step"].append(np.abs(g["q"]).astype(np.float32))
+            per_clip["q_shipped"].append(np.abs(g["q"].sum(0)).astype(np.float32))
+            per_clip["mlp_abs_step"].append(np.abs(g["mlp"]).astype(np.float32))
+            per_clip["mlp_shipped"].append(np.abs(g["mlp"].sum(0)).astype(np.float32))
         rec["clip_id"] = clip_id
         records.append(rec)
         del g
@@ -236,16 +255,19 @@ def main():
               f"fm={rec['fm_loss']:.4f} peak={rec['peak_gb']:.1f}GB "
               f"({time.time() - t0:.0f}s)", flush=True)
         if (ci + 1) % 10 == 0 or ci + 1 == len(calib):
-            save(out_dir, acc, per_clip, records, ci + 1)
-    save(out_dir, acc, per_clip, records, len(records))
+            save(out_dir, acc, per_clip, records, ci + 1,
+                 perclip=not args.no_perclip)
+    save(out_dir, acc, per_clip, records, len(records),
+         perclip=not args.no_perclip)
     print("saved ->", out_dir, flush=True)
 
 
-def save(out_dir, acc, per_clip, records, n):
+def save(out_dir, acc, per_clip, records, n, perclip=True):
     np.savez(out_dir / "step_importance_vlm.npz",
              **{k: v / max(n, 1) for k, v in acc.items()})
-    np.savez(out_dir / "step_importance_vlm_perclip.npz",
-             **{k: np.stack(v) for k, v in per_clip.items() if v})
+    if perclip:
+        np.savez(out_dir / "step_importance_vlm_perclip.npz",
+                 **{k: np.stack(v) for k, v in per_clip.items() if v})
     (out_dir / "metrics.json").write_text(json.dumps({"n_clips": n, "per_clip": records},
                                                      indent=2))
 

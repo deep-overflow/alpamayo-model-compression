@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>선택은 수렴했는데 성능은 수렴하지 않는다: 캘리브레이션 크기 × 기준의 2×2</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>선택은 수렴했는데 성능은 수렴하지 않는다: 캘리브레이션 크기 × 기준의 2×2</h1>
+  <div class="meta">
+    2026-09-06 · <code>nvidia/Alpamayo-1.5-10B</code> 24.0% 압축 4종 ·
+    val 500 + test 500 + OOD-val 262 · minADE@6 · RTX 5880 Ada (cvlab20 / cvlab21)
+  </div>
+</header>
+
+<p class="lede">
+캘리브레이션 추출은 압축 자체보다 큰 요인이었고(n=100 여섯 추출 SD 0.363), 안정성 곡선은
+n=2,000이면 유지집합이 잡음 바닥까지 수렴한다고 말했다. 그래서 <strong>클립을 20배로 늘리면
+추출 문제가 사라질 것</strong>이라 예상했다. 사라지지 않는다. 유지집합은 예상대로 수렴하는데
+<strong>성능은 여전히 0.154 벌어진다.</strong> 선택 안정성으로 성능 안정성을 살 수 없다.
+</p>
+
+<div class="kpi">
+  <div><span class="k">H1 크기 효과</span><span class="v">역전</span>st2000이 +0.116 나쁨</div>
+  <div><span class="k">H2 기준 효과</span><span class="v">역전</span>n=2,000에서 dual이 +0.422 우세</div>
+  <div><span class="k">H3 상호작용</span><span class="v">채택</span>maxstep11이 4.4배 더 다침</div>
+  <div><span class="k">서버 교차 대조</span><span class="v">0.0000</span>slim 경로 비트 동일</div>
+  <div><span class="k">평가 규모</span><span class="v">2,524</span>클립 (신규)</div>
+</div>
+
+<h2><span class="num">1</span>설계와 판정</h2>
+
+<p>
+네 arm은 층당 19 Q head / 7,390 MLP 채널, 제거 <code>2,657,452,032</code> 파라미터,
+expert·KV 미변경으로 <strong>완전히 동일</strong>하다. 바뀌는 것은 기준(<code>dual</code> vs
+<code>maxstep11</code>)과 캘리브레이션 크기(100 vs 2,000) 둘뿐이다. 사전등록 판정셋은
+test500, 임계 0.01(G0b 잡음 바닥의 8배).
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">test500</th><th class="r">val500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code> @ calib_100</td><td class="r">0.9498</td><td class="r">0.8904</td><td class="r">1.0417</td></tr>
+<tr><td><code>dual</code> @ st2000</td><td class="r"><strong>1.2015</strong></td><td class="r">1.1960</td><td class="r">1.2282</td></tr>
+<tr><td><code>maxstep11</code> @ calib_100</td><td class="r">0.9351</td><td class="r">0.8915</td><td class="r">1.1039</td></tr>
+<tr><td><code>maxstep11</code> @ st2000</td><td class="r"><strong>1.9843</strong></td><td class="r">1.9693</td><td class="r">1.6302</td></tr>
+</tbody></table>
+
+<p>페어드 중앙값 ΔminADE@6, 부트스트랩 95% CI, Wilcoxon:</p>
+
+<table>
+<thead><tr><th>가설</th><th>대조</th><th class="r">test500</th><th class="r">val500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">H1 크기</td><td><code>dual</code>: st2000 − calib_100</td>
+    <td class="r">+0.1157*</td><td class="r">+0.1105*</td><td class="r">+0.0892*</td></tr>
+<tr><td><code>maxstep11</code>: st2000 − calib_100</td>
+    <td class="r">+0.5043*</td><td class="r">+0.5217*</td><td class="r">+0.3516*</td></tr>
+<tr><td rowspan="2">H2 기준</td><td>@ calib_100: maxstep11 − dual</td>
+    <td class="r">−0.0041</td><td class="r">−0.0117</td><td class="r">−0.0079</td></tr>
+<tr><td>@ st2000: maxstep11 − dual</td>
+    <td class="r">+0.4217*</td><td class="r">+0.3849*</td><td class="r">+0.2858*</td></tr>
+</tbody></table>
+
+<p class="meta">* 부트스트랩 CI가 0을 포함하지 않음. calib_100 행은 셋 다 p≥0.15로 애초에 유의하지 않았다.</p>
+
+<div class="callout warn">
+<p><strong>H1 기각(역전), H2 기각(역전), H3 채택.</strong> 세 세트가 방향과 크기를 모두 복제한다
+(H1 dual +0.116/+0.111/+0.089). 개별 세트의 우연이 아니다.</p>
+</div>
+
+<h2><span class="num">2</span>먼저 배제한 것 — 서버도, 재료도 아니다</h2>
+
+<p>
+<code>maxstep11</code> @ st2000의 1.984는 이 저장소에서 측정된 어떤 캘리브레이션 arm보다도
+나빴다(직전 최악이 <code>dual_nt_d</code> 1.774). 게다가 calib_100 arm 둘은 cvlab21에서,
+st2000 arm 둘은 cvlab20에서 측정됐다. 계획서가 스스로 적어둔 한계 —
+&ldquo;slim 경로의 서버 간 비트 동일성은 미검증&rdquo; — 을 먼저 채웠다.
+기존 대조 검증은 <strong>무압축 baseline에서만</strong> 이뤄졌고, slim 체크포인트는
+<code>slim_lib</code>의 다른 attention forward(Q head별 K/V gather,
+<code>num_key_value_groups=1</code>)를 타기 때문이다.
+</p>
+
+<p>cvlab21에서 이미 측정된 calib_100 arm 둘을 cvlab20에서 같은 50 test 클립으로 재측정했다:</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">cvlab20</th><th class="r">cvlab21</th><th class="r">페어드 차이</th><th>일치</th></tr></thead>
+<tbody>
+<tr><td><code>maxstep11_u40_v2</code></td><td class="r">0.9612</td><td class="r">0.9612</td>
+    <td class="r">0.0000</td><td>50/50 클립, CoC 100%</td></tr>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0.9407</td><td class="r">0.9407</td>
+    <td class="r">0.0000</td><td>50/50 클립, CoC 100%</td></tr>
+</tbody></table>
+
+<div class="callout good">
+<p><strong>slim 경로도 두 서버에서 비트 동일하다.</strong> H1의 서버 교차 한계는 해소됐고,
+이 결과는 앞으로 두 서버에 걸친 모든 비교에 재사용된다.</p>
+</div>
+
+<p>재료도 전수 검사했다:</p>
+<ul>
+<li><code>importance_st4000_c2000</code>의 12개 배열 전부 <code>importance_v2</code> 대비
+    spearman +0.90~+0.998, NaN 0, 크기 동일 자릿수.
+    (<code>coc_exp_*</code>가 0인 것은 CoC 목적이 expert를 채점하지 않는 구조적 성질이다.)</li>
+<li>스텝 배열은 v1 대비 +0.9888(<code>q_abs_step</code>) / +0.9865(<code>mlp_abs_step</code>).</li>
+<li>expert 축은 네 arm 모두 <strong>해시까지 동일</strong>(576 head / 297,216 채널 전부 유지).</li>
+<li>층별 유지집합에 병리 없음(중첩 0.84~1.00), 층 35의 <code>rank_norm</code> 상수 함정도 아님.</li>
+<li>CoC도 건강하다 — <code>maxstep11</code> @ st2000의 degeneracy 0.034, empty 0.000
+    (calib_100판 0.026 / 0.000). <strong>궤적만 나쁘다.</strong></li>
+</ul>
+
+<p>
+&ldquo;쉬운 클립까지 균일하게 밀리니 계통 오류&rdquo;라는 의심도 데이터로 기각했다.
+cvlab21에서만 측정된 진짜 추출 손상 arm들이 같은 곡선 위에 있다 —
+<code>dual_nt_e</code>는 p10 0.396 / p50 1.205 / p90 2.050, <code>dual_nt_d</code>는
+0.396 / 1.293 / 2.226, <code>maxstep11</code> @ st2000은 0.369 / 1.393 / 2.425.
+<strong>균일한 곱셈적 이동이 이 모델에서 캘리브레이션 손상의 정상 모양이다.</strong>
+</p>
+
+<h2><span class="num">3</span>H1은 운 좋은 대조군을 상대했다</h2>
+
+<p>
+<code>calib_100</code>은 같은 풀에서 뽑은 <strong>여섯 추출 중 1위</strong>였다. 그 한 점 대신
+분포 전체와 비교하면 부호가 뒤집힌다.
+</p>
+
+<figure>
+  <img src="PLOT::sz::draw_vs_size.png" alt="캘리브레이션 크기와 추출">
+  <figcaption>같은 기준(<code>dual</code>), 같은 예산, 캘리브레이션만 다름. 분홍 = n=100 여섯 추출,
+  별 = 그 중 1위인 <code>calib_100</code>, 파랑 = 블록 a부터 누적한 중첩 사다리,
+  주황 = <code>st2000</code>. 점선은 n=100의 평균.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>캘리브레이션</th><th class="r">n</th><th class="r">test500 minADE@6</th></tr></thead>
+<tbody>
+<tr><td>n=100 자연 추출 6개</td><td class="r">100</td><td class="r">평균 <strong>1.3119</strong>, SD 0.3629, 범위 0.950–1.774</td></tr>
+<tr><td><code>calib_100</code> (그 중 1위)</td><td class="r">100</td><td class="r">0.9498</td></tr>
+<tr><td>중첩 사다리 (블록 a부터 누적)</td><td class="r">100→500</td><td class="r">1.022 → 1.131 → 1.061 → <strong>1.047</strong></td></tr>
+<tr><td><code>st2000</code></td><td class="r">2000</td><td class="r"><strong>1.2015</strong> (6개 중 3개보다 나쁨 = 중앙값)</td></tr>
+</tbody></table>
+
+<div class="callout">
+<p><code>st2000</code>은 <strong>전형적인 n=100 추출보다 0.110 좋다.</strong>
+&ldquo;n을 늘리면 나빠진다&rdquo;가 아니라 <strong>&ldquo;n을 늘려도 운 좋은 추출을 못
+이긴다&rdquo;</strong>가 정확한 진술이다. 사전등록 대조군이 분포의 최상단이었던 것이
+H1 역전의 절반을 설명한다.</p>
+</div>
+
+<h2><span class="num">4</span>진짜 결과 — 선택은 수렴하는데 성능은 수렴하지 않는다</h2>
+
+<p>
+나머지 절반은 설명되지 않는다. 같은 자연 풀·같은 기준의 중첩 사다리(블록 a부터 누적)는 1.022 → 1.131 → 1.061 →
+<strong>1.047</strong>로 단조가 아니라 ~1.05로 수렴하는데, 4배 큰 <code>st2000</code>은
+<strong>1.2015</strong>로 <strong>+0.154 나쁘다.</strong> 둘 다 공식 train에서 분포매칭으로
+뽑은 큰 캘리브레이션이다.
+</p>
+
+<p>
+그런데 안정성 곡선에 따르면 <strong>n=2,000에서 서로소 추출 두 개의 유지집합 일치율은
+Q 97.08% / MLP 95.68%</strong>로, G0b가 무해하다고 <em>실측</em>한 잡음 바닥
+(Q 97.22%, 그 churn의 비용은 +0.0012, p=0.68)에 도달한다.
+</p>
+
+<table>
+<thead><tr><th class="r">n</th><th class="r">Q 일치</th><th class="r">MLP 일치</th></tr></thead>
+<tbody>
+<tr><td class="r">100</td><td class="r">0.9134</td><td class="r">0.8530</td></tr>
+<tr><td class="r">400</td><td class="r">0.9477</td><td class="r">0.9122</td></tr>
+<tr><td class="r">600</td><td class="r">0.9558</td><td class="r">0.9262</td></tr>
+<tr><td class="r">1000</td><td class="r">0.9634</td><td class="r">0.9406</td></tr>
+<tr><td class="r">2000</td><td class="r"><strong>0.9708</strong></td><td class="r"><strong>0.9568</strong></td></tr>
+<tr><td class="r">G0b 잡음 바닥</td><td class="r">0.9722</td><td class="r">0.9729</td></tr>
+</tbody></table>
+
+<div class="callout warn">
+<p><strong>선택 안정성은 성능 안정성을 사주지 않는다.</strong> 유지집합은 잡음 바닥까지
+수렴했는데 두 큰 캘리브레이션의 성능은 0.154 벌어진다. G4가 n=100에서 관측한 것
+(중첩률이 손해를 예측하지 못함, spearman +0.068)이 n=2,000에서도 그대로다.</p>
+<p><strong>실무적 함의</strong>: &ldquo;캘리브레이션을 키워 추출 분산을 없앤다&rdquo;는 방향은
+막혔다. 남는 잔차 4~5%가 성능 분산의 대부분을 지고 있거나, 성능 분산이 애초에 유지집합으로
+설명되지 않는다. 어느 쪽이든 <strong>크기를 늘리는 것으로는 해결되지 않는다.</strong></p>
+</div>
+
+<h2><span class="num">5</span>maxstep11이 4.4배 더 다치는 이유 — 합집합의 붕괴</h2>
+
+<p>
+<code>max</code>는 합집합이고, 합집합은 구성원이 <strong>서로 다를 때만</strong> 값을 번다.
+클립을 늘리면 10개 스텝 기울기가 공통 신호로 수렴해 서로 닮아진다.
+</p>
+
+<figure>
+  <img src="PLOT::sz::union_collapse.png" alt="합집합 붕괴">
+  <figcaption>각 기준의 구성원들이 각자 뽑은 상위-k의 합집합 크기(예산 대비).
+  1.0이면 구성원 전부가 같은 유닛을 고른다는 뜻이다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>기준 · 축</th><th class="r">구성원 간 평균 상관</th><th class="r">합집합 크기</th></tr></thead>
+<tbody>
+<tr><td><code>maxstep11</code> @ calib_100, MLP</td><td class="r">+0.7850</td><td class="r"><strong>1.722×</strong></td></tr>
+<tr><td><code>maxstep11</code> @ st2000, MLP</td><td class="r"><strong>+0.9022</strong></td><td class="r"><strong>1.454×</strong></td></tr>
+<tr><td><code>dual</code> @ calib_100, MLP</td><td class="r">+0.5995</td><td class="r">1.324×</td></tr>
+<tr><td><code>dual</code> @ st2000, MLP</td><td class="r">+0.7419</td><td class="r">1.235×</td></tr>
+</tbody></table>
+
+<p>
+<code>maxstep11</code>의 합집합은 16% 붕괴하는데 <code>dual</code>은 거의 그대로다.
+<code>dual</code>의 두 구성원은 궤적과 추론이라는 <strong>서로 다른 목적</strong>이라 불일치가
+구조적이지만, <code>maxstep11</code>의 열 구성원은 <strong>같은 것을 열 번 본 것</strong>이라
+그 불일치가 상당 부분 잡음이었다는 뜻이다.
+</p>
+
+<div class="callout">
+<p><strong>n=100에서 <code>maxstep11</code>이 좋아 보였던 것은 잡음이 다양화 정규화로 작동한
+결과일 수 있다.</strong> 그 &ldquo;이득&rdquo;은 애초에 세 세트 모두에서 유의하지 않았고
+(p=0.28 / 0.15 / 0.58), 잡음을 걷어내자 <strong>큰 손해로 바뀐다.</strong></p>
+<p>이는 <code>znorm11</code>(스텝을 z-score 평균으로 합침) 1.390이 왜 나빴는지와 같은 축이다.
+평균은 중복 항의 개수에 취약하고, <code>max</code>는 구성원의 <em>독립성</em>에 의존한다 —
+두 실패는 같은 성질의 양면이다.</p>
+</div>
+
+<h2><span class="num">6</span>한계와 다음</h2>
+
+<ul>
+<li><strong>개루프만.</strong> 폐루프(alpasim)는 <code>dual</code> @ st2000으로 별도 세션에서
+    진행 중이다.</li>
+<li><strong>크기와 추출이 아직 완전히 분리되지 않았다.</strong> <code>st2000</code>이 1.2015인
+    것이 <em>n=2,000의 성질</em>인지 <em>이 추출의 성질</em>인지 구분되지 않는다.
+    <code>calib_st4000</code>의 앞 500·1000으로 <strong>중첩</strong> 사다리를 만들면
+    (per-clip 평균으로 GPU 없이 파생 가능) 갈린다. 빌드 2개 + test500 2개 ≈ 2 GPU-h.</li>
+<li><strong>분포매칭의 정도 자체가 변수다.</strong> <code>st2000</code>은 weighted L1
+    <strong>0.0015</strong>로 이 저장소의 어떤 캘리브레이션보다 공식 train 주변분포에 가깝다
+    (<code>calib_100</code>은 0.0306). train에 더 충실한 것이 test에 더 좋다는 보장은 없으므로,
+    &ldquo;과도한 매칭&rdquo; 자체가 후보 원인이다. 아직 검정하지 않았다.</li>
+<li><code>maxstep11</code>은 n=100에서도 유의한 이득이 없었으므로, 이 보고서는 그 기준을
+    <strong>기각</strong>한다기보다 <strong>애초에 채택할 근거가 없었음</strong>을 확인한다.</li>
+</ul>
+
+<footer>
+계획서 <code>plans/2026-09-06_calibration-size-2x2.md</code> ·
+분석 <code>experiments/evaluation/analyze_calib_size_2x2.py</code> ·
+결과 <code>outputs/calib_size_2x2/</code> ·
+빌드 <code>make_slim.py --config {dual,maxstep11}_u40_st2000</code> ·
+브랜치 <code>worktree-calib-stability-curve</code>
+</footer>
+
+</div>
+</body></html>

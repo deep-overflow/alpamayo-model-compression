@@ -118,6 +118,18 @@
 추출(+0.0941)과 압축(+0.0955)이 비슷했는데, @6에서는 추출이 압축보다 크다.
 </p>
 
+<div class="callout warn">
+<p><strong>이 행들은 순수한 추출 효과가 아니다 (2026-09-06 확인).</strong>
+<code>calib_val100</code>은 <code>make_eval_sets.py</code>의 그리디 층화 매처를 거치지 않았다 —
+매니페스트에 6속성 중 둘만 있고, 6속성 weighted L1이 <strong>0.1959</strong>로 무작위 추출
+(0.1783)과 같다. <code>calib_100</code>은 0.0306이다. 따라서 2026-08-19의 대조는 split
+(train→val)·<strong>층화(매칭→무작위)</strong>·추출 운 <strong>세 가지</strong>가 함께 바뀐
+것이고, +0.0941과 위의 +0.0590은 모두 순수 추출 효과의 <em>상한</em>으로 읽어야 한다.</p>
+<p>아래 §4의 여섯 추출은 이 문제가 없다 — <code>calib_100</code>과 블록 a–e가 <strong>전부
+같은 매처로 뽑혔고 L1이 모두 0.0306</strong>이다. 이 문서의 1차 주장은 층화가 완전히 통제된
+상태에서 나온 것이다. 확인: <code>experiments/evaluation/check_stratification.py</code>.</p>
+</div>
+
 <h2><span class="num">2</span>설계: 무엇을 고정했는가</h2>
 
 <p>
