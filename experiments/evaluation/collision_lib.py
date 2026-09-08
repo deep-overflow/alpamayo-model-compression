@@ -40,7 +40,15 @@ MIN_SPEED = 0.5  # m/s below which a path tangent is too noisy to use as a headi
 
 
 def load_obstacles(clip_id, chunk):
-    """-> DataFrame of that clip's tracks, or None when the chunk was never downloaded."""
+    """-> DataFrame of that clip's tracks, or None when the labels are not local.
+
+    Two sources, per-clip first: `fetch_obstacles.py` streams single clips into
+    labels/obstacle_perclip/ because the evaluation sets span chunks that were never
+    downloaded, while the calibration chunks are present as whole zips.
+    """
+    p = DATA / "labels" / "obstacle_perclip" / f"{clip_id}.parquet"
+    if p.exists():
+        return pd.read_parquet(p).pipe(lambda d: d[d.label_class.isin(CLASSES)])
     z = DATA / "labels" / "obstacle.offline" / f"obstacle.offline.chunk_{chunk:04d}.zip"
     if not z.exists():
         return None
