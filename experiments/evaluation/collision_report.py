@@ -383,17 +383,23 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
 기제는 가중 함수가 아니라 표본 크기였다: Kish ESS가 100 &rarr; 70.8로 떨어지고, 손해가 그냥 다른
 캘리브레이션 클립을 뽑은 것과 구분되지 않는다. 그런데 <strong>유지집합은 dual과 94.0%(Q) /
 92.6%(MLP)나 겹친다</strong>.</p>
-<p>그런데 "유지집합이 흔들리면 비싸다"로 읽으면 틀린다. 같은 계열에서 세 arm의
-<strong>변위 대 비용</strong>을 나란히 놓으면 관계가 뒤집혀 있다.</p>
-<div class="scroll"><table><thead><tr><th>세 번째 max 항</th>
-<th>유지집합 변위</th><th>기존 항과의 ρ</th><th>비용 (minADE)</th></tr></thead><tbody>
-<tr><td>maxstep11 (FM 10스텝)</td><td>7.0&ndash;9.7%</td><td>+0.92</td>
-    <td class="good">&minus;0.0033 (n.s.)</td></tr>
-<tr><td>dualsafe (클립 재가중)</td><td><strong>6.0%</strong></td><td>&mdash;</td>
-    <td class="bad"><strong>+0.1945</strong></td></tr>
-<tr><td>J-lens</td><td>12.7&ndash;13.7%</td><td>+0.21&ndash;0.28</td>
-    <td class="dim">미측정</td></tr>
+<p>그런데 "유지집합이 흔들리면 비싸다"로 읽으면 틀린다. 출하본 <code>dual</code>을 공통 기준으로
+네 arm의 <strong>변위 대 비용</strong>을 나란히 놓으면 관계가 사라진다 (val500, n=500).</p>
+<div class="scroll"><table><thead><tr><th>arm</th><th>Q 겹침</th><th>MLP 겹침</th>
+<th>중앙값 Δ</th><th>평균 Δ</th><th>Wilcoxon p</th></tr></thead><tbody>
+<tr><td>dualfix</td><td>96.6%</td><td>96.6%</td><td>&minus;0.0013</td>
+    <td class="dim">+0.0375</td><td>0.93</td></tr>
+<tr><td>maxstep11</td><td>92.5%</td><td>89.7%</td><td class="good">&minus;0.0133</td>
+    <td class="dim">&minus;0.0196</td><td>0.11</td></tr>
+<tr><td>dual_st2000</td><td><strong>92.1%</strong></td><td>87.4%</td>
+    <td class="bad"><strong>+0.0994</strong></td><td class="dim">+0.3101</td>
+    <td><strong>2.4e-21</strong></td></tr>
+<tr><td>dualsafe</td><td>94.0%</td><td>92.6%</td><td class="bad"><strong>+0.1945</strong></td>
+    <td class="dim">&mdash;</td><td>4.7e-32</td></tr>
 </tbody></table></div>
+<p><strong>결정적인 쌍은 상관계수가 필요 없다.</strong> <code>dual_st2000</code>(92.1%)과
+<code>maxstep11</code>(92.5%)은 <em>같은 만큼</em> 유지집합을 갈아치우고 정반대 판정에 도달한다 &mdash;
+하나는 p=2.4e-21로 이 표에서 가장 유의한 손해, 하나는 p=0.11로 유의하지 않다.</p>
 <div class="callout">
   <p><strong>유지집합을 가장 적게 움직인 arm이 30배 비쌌다.</strong> 불안정성 자체는 싸다 &mdash;
   <code>maxstep11</code>은 7&ndash;10%를 갈아치우고도 공짜다. 비싼 것은
@@ -403,13 +409,20 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
   선택의 잡음은 압축 비용을 넘어선다 &mdash; <strong>24%에서 구속하는 것은 기준이 아니라
   캘리브레이션이다.</strong> 이는 캘리브레이션 크기 연구가 도달한 "선택 안정성이 성능 안정성을
   사주지 않는다"의 반대편 절반이다.</p>
-  <p class="note" style="margin:.75rem 0 0">이 프레이밍과 위 표는 안전 가중 실험을 돌린 쪽에서
-  왔다(<code>2026-09-08_criterion-augmentation.html</code> §3.6). 두 실험은
-  <code>collision_lib</code>을 공유하되 독립 수행됐고, 그쪽 G0 재현(1/93, clearance 중앙값
-  5.85 m)이 이 보고서의 1/96과 일치한다. 표의 <code>maxstep11</code> 행은 이 저장소 기록과
-  대조했다 &mdash; Q 일치 0.9254(변위 7.5%)는 <code>plans/2026-09-03_union-step-criterion.md</code>,
-  비용 &minus;0.0033은 <code>CLAUDE.md</code>와 일치한다. <code>dualsafe</code> 행은
-  그쪽 측정이며 이 세션에서 재현하지 않았다.</p>
+  <p class="note" style="margin:.75rem 0 0"><strong>출처와 검증.</strong> 프레이밍과 겹침 수치는
+  안전 가중 실험을 돌린 쪽에서 왔다(<code>2026-09-08_criterion-augmentation.html</code> §3.6).
+  비용 열은 <strong>앞의 세 행을 이 세션에서 직접 재측정</strong>했고
+  (<code>arm_table.py --ref dual_u40_v2_ps</code>, 같은 500클립 페어드), 중앙값이 그쪽 값과
+  0.01 이내로 일치한다. <code>dualsafe</code> 행만 그쪽 측정이며 여기서 재현하지 않았다.
+  <code>maxstep11</code>의 겹침은 두 가지 다른 구성으로 교차 확인된다 &mdash; 그쪽의
+  <code>slim_meta.json</code> 92.5%와 <code>plans/2026-09-03_union-step-criterion.md</code>의
+  Q 일치 0.9254가 0.05pp 이내로 맞는다.</p>
+  <p class="note" style="margin:.5rem 0 0"><strong>중앙값과 평균이 크게 갈리는 것 자체가 정보다.</strong>
+  <code>dual_st2000</code>은 중앙값 +0.0994인데 평균이 +0.3101로 3배다. 손해가 전 클립에 고르게
+  퍼진 것이 아니라 <em>꼬리에 몰려 있다</em>는 뜻이다. 이 저장소가 중앙값·Wilcoxon을 1차 판정으로
+  삼는 이유이고, 초판이 이 표에 &minus;0.0033(<code>dualfix</code> 대비 중앙값)과
+  +0.1945(<code>dual</code> 대비 중앙값)를 섞어 실은 것은 오류였다 &mdash; 지금은 기준과 통계가
+  전부 통일돼 있다.</p>
 </div>
 
 <h2><span class="num">5.</span>주장하지 않는 것</h2>
