@@ -261,6 +261,27 @@ avoid repeating that.
   read straight from each arm's `slim_meta.json`. It runs under this repo's `.venv` — CoC
   degeneracy is read from an `analyze_alpasim.py` `metrics.json` rather than re-parsed from the
   ASL, so alpasim's venv is not needed.
+- `calib_clearance.py` (2026-09-08) — per-clip GT-path clearance over `calib_100`, so importance
+  can be risk-weighted. Uses the peer session's `collision_lib.py` (autolabelled obstacle tracks +
+  SAT overlap); the quantity taken is `score_path(...)["min_center_dist"]`, which is **continuous**
+  and therefore usable where the binary collision flag is not. Measured on the **GT** path so the
+  weight is a property of the clip, not of any arm. 93/100 clips are labelled; the other 7 get the
+  median weight rather than being dropped. See `dualsafe` above for what came of it.
+- `coc_action_consistency.py` / `analyze_criterion_aug.py` (2026-09-08) — the Alpamayo-R1 RL
+  consistency reward (arXiv 2511.00088 S5.3), reproduced from stored rollouts with **no GPU**.
+  Two facts make that possible: the released 10B has no meta-action tokens at all
+  (`token_utils.extract_text_tokens` looks for `<|meta_action_start|>` but `base_model`'s
+  `SPECIAL_TOKENS_KEYS` has no such key — those slots are `_padding_0..8` — so the extractor
+  returns `""` always, and a "meta-action segment NLL" objective has nothing to attach to); and it
+  does not need them, because the CoC is one templated sentence whose **head clause is the
+  meta-action** (36 distinct 2-word heads over 1,000 rollouts, 90.1% in the top 15). Waypoints are
+  not stored, so `--mode agree` substitutes the GT-derived `bucket` for the model's own trajectory
+  — that makes it reasoning *accuracy*, not the paper's self-consistency; for the exact metric add
+  `el.bucket(pred_k[j])` to `run_baseline.py`'s record (`pred_k` is already in scope, so it costs
+  no compute). Score unmapped heads as misses (`--score uncond`, the paper's rule) — conditioning
+  on the mapped subset flatters a collapsing arm, because its degenerate CoCs leave that subset.
+  `--mode couple` groups by whether the CoC text differs from the reference arm's, a property of
+  the pair rather than of either arm's own score.
 
 Determinism: `CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA init, `use_deterministic_algorithms`,
 cudnn deterministic, TF32 off. Two runs agree bitwise **within one GPU architecture** — the same
@@ -341,6 +362,7 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `dual_ada_u40_v2` | dual, `importance_v2_ada`로 재빌드 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `maxstep11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 랭크의 **최댓값** | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `meandual_u40_v2` | dual의 두 half를 z-score **평균**으로 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `dualsafe_u40_v2` | dual, `I_traj` half를 GT 경로 여유거리로 클립 가중 (`w=exp(-d/5)`) | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) — **REJECT** |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -393,6 +415,21 @@ reproduce the bias, not the effect; when a subgroup is defined by one arm's own 
 re-select by the other arm and by a third variable before believing it. Caveat: the
 2x2's rows differ in normalisation too (`max` rows use `rank_norm`, `mean` rows z-scores), so
 "mean vs z-score" is not yet separated; a `mean of 11 rank_norm` arm would do it.
+
+`dualsafe` (2026-09-08) is the same question on the **clip** axis rather than the objective
+axis: keep `max(rank I_traj, rank I_CoC)` but weight each calibration clip by how close the GT
+path comes to a labelled obstacle (`collision_lib.score_path`'s `min_center_dist`, continuous, so
+it needs no gradient — it enters as `w = exp(-d/5)` on the per-clip `I_traj` accumulation). It is
+**REJECTed**: val500 `dualsafe - dual` is +0.1945 (mean +0.4649, p=4.7e-32), **3.3x the +0.0581
+that the 24% pruning itself costs**, with CoC degeneracy unchanged at 1.4% — pure trajectory loss,
+not a reasoning collapse. Two things to carry forward. First, the mechanism is sample size, not
+the weight function: Kish ESS falls 100 -> 70.8, and the damage is indistinguishable from simply
+drawing different calibration clips (`dual_nt_a..e` cost +0.029 / +0.041 / +0.214 / +0.451 /
++0.381 on the same set), which is the `calib_100`-is-a-lucky-draw result again. So a safety signal
+belongs in **how the calibration set is drawn**, not in a weight over a set of 100. Second, and
+more useful as a rule of thumb: **kept-set overlap is not a safety gate**. `dualsafe` keeps 94.0%
+of dual's Q heads and 92.6% of its MLP channels and still loses 0.19 m, with minADE changed on
+100.0% of clips. Overlap answers "is there anything to measure", never "is this safe".
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -654,9 +691,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
 | `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률. 7절(G3, 2026-09-07 추가)은 그 소멸이 지표 탓임을 보인다 — 같은 rollout의 연속 대리지표에서 근접 시 제동비율이 baseline 0.251 > dual 0.168 > tyr_r 0.146 > lp_r50 0.123으로 단조 감소(셋 다 p≤0.0017)하고, lp_r50은 선행차 TTC<2s가 0.55%→3.86% |
 | `2026-09-06_calibration-size-closedloop.html` | `evaluation/calibsize_report_template.html` | 같은 dual 기준을 100클립 대신 2,000클립으로 추정한 두 **서로소** 추출의 폐루프 150씬: 둘 다 출하본 대비 −0.112 / −0.115 (p<1e-4)이고 서로는 −0.003 (p=0.33)로 구분 불가 → 손해는 한 번의 불운이 아니라 **수렴한 선택의 성질**이고 `calib_100`이 운 좋은 추출; 두 arm 모두 baseline을 못 이기므로 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다 |
+| `2026-09-08_criterion-augmentation.html` | `evaluation/criterion_aug_report_template.html` | dual 기준에 신호를 더하는 두 축. 클립 축 — `dualsafe`(GT 경로 여유거리로 `w=exp(-d/5)` 가중)는 유효 표본을 100→70.8로 줄이고 유지집합은 94.0%나 유지하는데도 val500에서 **+0.1945 (p=4.7e-32)**, 24% 프루닝 자체(+0.0581)의 3.3배 — 다른 100클립 추출을 뽑은 것과 구별되지 않는다. 목적 축 — 논문의 `r_consistency`는 릴리스 체크포인트에 meta-action 토큰이 없어(`SPECIAL_TOKENS_KEYS`에 키 부재) 토큰 NLL로 못 붙지만 CoC 머리 어절이 곧 meta-action(36종, 상위 15종 90.1%)이라 재현 가능; 그 결과 **`I_CoC`가 이미 4.0pp 중 2.4pp를 회수**하고 `dual`의 잔차 −1.6pp는 분해능(≈2.5pp) 아래이며, 건강한 arm에서 CoC 드리프트와 궤적 손상은 무관(p=0.33–0.85) |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (45 entries as of 2026-09-06: 43 html + 2 tex).
+`ls reports/evaluation/` is the full set (51 entries as of 2026-09-08: 49 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
