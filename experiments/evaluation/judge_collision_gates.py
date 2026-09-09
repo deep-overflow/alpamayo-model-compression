@@ -26,6 +26,9 @@ from pathlib import Path
 import numpy as np
 
 O = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
+# @6 counts SAMPLES, not seconds. The stored `minADE_rollout` is the min over all 8
+# and is off-protocol; the frozen protocol is the min over the first 6.
+K = 6
 SETS = ["test500", "val500", "OOD-val"]
 SUFFIX = {"test500": "test", "val500": "indist", "OOD-val": "oodval"}
 
@@ -40,7 +43,7 @@ def load_minade(arm, suffix):
     rows = {}
     for f in sorted(d.glob("*_s*of*.json")):
         for r in json.loads(f.read_text()):
-            rows[r["clip_id"]] = r["minADE_rollout"]
+            rows[r["clip_id"]] = min(r["ade_rollout_k"][:K])
     return rows
 
 

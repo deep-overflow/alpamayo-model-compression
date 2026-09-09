@@ -1,8 +1,9 @@
 """Mean minADE@6 / minFDE@6 for a set of arms, paired against one reference.
 
-Both metrics are over the full 6.4 s / 64-waypoint horizon and take the min over the 8
-sampled rollouts -- `minADE_rollout` / `minFDE_rollout` in run_baseline's per-clip rows,
-which is what its own summary line reports.
+Both metrics are over the full 6.4 s / 64-waypoint horizon; the `@6` counts SAMPLES, so
+they take the min over the FIRST 6 of the 8 sampled rollouts. run_baseline stores the
+per-sample arrays (`ade_rollout_k` / `fde_rollout_k`) precisely so any K' <= k is a
+prefix; its own `minADE_rollout` field is the min over all 8 and is off-protocol.
 
 The inference matches the statistic. A paired MEAN difference is tested with the
 bootstrap CI over per-clip differences; Wilcoxon is a test on the median and is reported
@@ -22,7 +23,13 @@ import numpy as np
 
 O = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
 SETS = [("test", "test500"), ("indist", "val500"), ("oodval", "OOD-val")]
-METRICS = [("minADE_rollout", "minADE@6"), ("minFDE_rollout", "minFDE@6")]
+# The frozen protocol is minADE@6 / minFDE@6, and the @6 counts SAMPLES, not seconds:
+# run_baseline stores the per-sample arrays precisely so "minADE@K' for any K' <= k is a
+# prefix of these". The stored `minADE_rollout` is the min over all 8, i.e. @8, and using
+# it puts every absolute number off-protocol -- dual on val500 reads 0.7766 instead of the
+# 0.8904 the reports carry. Recompute from the arrays instead.
+K = 6
+METRICS = [("ade_rollout_k", "minADE@6"), ("fde_rollout_k", "minFDE@6")]
 
 
 def load(stem, suffix):
@@ -69,8 +76,8 @@ def collect(arms, ref):
             common = sorted(set(A) & set(R))
             e = {"n": len(common)}
             for key, mname in METRICS:
-                a = np.array([A[c][key] for c in common], float)
-                r = np.array([R[c][key] for c in common], float)
+                a = np.array([min(A[c][key][:K]) for c in common], float)
+                r = np.array([min(R[c][key][:K]) for c in common], float)
                 d = a - r
                 e[mname] = {
                     "mean": float(a.mean()), "ref_mean": float(r.mean()),

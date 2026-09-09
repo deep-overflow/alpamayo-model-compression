@@ -59,8 +59,17 @@ def wilcoxon_p(d):
     return float(wilcoxon(d).pvalue) if len(d) >= 5 else None
 
 
-def stats(rows, key="minADE_rollout"):
-    v = np.asarray([r[key] for r in rows.values()], float)
+# @6 counts SAMPLES, not seconds. `minADE_rollout` is the min over all 8 and reads
+# off-protocol -- dual on val500 is 0.7766 at K=8 against the 0.8904 the reports carry.
+K = 6
+
+
+def minade(r):
+    return min(r["ade_rollout_k"][:K])
+
+
+def stats(rows, key=None):
+    v = np.asarray([minade(r) for r in rows.values()], float)
     return {"n": len(v), "mean": float(v.mean()), "median": float(np.median(v)),
             "coc_degen": float(100 * np.mean([r["coc_degenerate"] for r in rows.values()]))}
 
@@ -85,7 +94,7 @@ def main():
             common = sorted(set(a) & set(r))
             row["ref"] = stats({k: r[k] for k in common})
             row["arm_common"] = stats({k: a[k] for k in common})
-            d = [a[k]["minADE_rollout"] - r[k]["minADE_rollout"] for k in common]
+            d = [minade(a[k]) - minade(r[k]) for k in common]
             dm, lo, hi = boot(d)
             row["paired"] = {
                 "n": len(common), "d_mean": dm, "lo": lo, "hi": hi,
@@ -100,7 +109,7 @@ def main():
             b = load(f"{args.base}_{suffix}")
             if b is not None:
                 common = sorted(set(a) & set(b))
-                db = [a[k]["minADE_rollout"] - b[k]["minADE_rollout"] for k in common]
+                db = [minade(a[k]) - minade(b[k]) for k in common]
                 row["vs_base"] = {"n": len(common), "d_mean": float(np.mean(db)),
                                   "base_mean": stats({k: b[k] for k in common})["mean"]}
         report.append(row)

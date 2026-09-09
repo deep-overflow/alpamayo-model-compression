@@ -21,6 +21,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 O = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
+# @6 counts SAMPLES, not seconds. The stored `minADE_rollout` is the min over all 8
+# and is off-protocol; the frozen protocol is the min over the first 6.
+K = 6
 ARMS = ["baseline_pred", "dual_u40_v2_pred", "tyr_u40_r_pred", "tyrK_pred"]
 SHORT = {"baseline_pred": "baseline", "dual_u40_v2_pred": "dual_u40_v2",
          "tyr_u40_r_pred": "tyr_u40_r", "tyrK_pred": "tyrK"}
@@ -49,7 +52,7 @@ def minade(arm, suffix):
     rows = {}
     for f in sorted((O / f"{arm}_{suffix}").glob("*_s*of*.json")):
         for r in json.loads(f.read_text()):
-            rows[r["clip_id"]] = r["minADE_rollout"]
+            rows[r["clip_id"]] = min(r["ade_rollout_k"][:K])
     return rows
 
 
@@ -70,7 +73,7 @@ def plots(coll, gates, out_dir):
         ax[k].set_xticklabels([SHORT[a] for a in ARMS], rotation=30, ha="right", fontsize=8)
         ax[k].set_title(f"{s}  (n={coll['baseline_pred'][s]['n']})", fontsize=10)
         if k == 0:
-            ax[k].set_ylabel("clips where any of 8 samples collides (%)")
+            ax[k].set_ylabel("clips where any of 6 samples collides (%)")
     fig.tight_layout()
     fig.savefig(out_dir / "rates.png", dpi=150)
     plt.close(fig)
@@ -273,6 +276,7 @@ def build(coll, gates, geom, plot_dir, date):
     <code>judge_collision_gates.py</code>
     &middot; 계획 <code>plans/2026-09-08_openloop-collision-proxy.md</code>
     &middot; 실행 cvlab20 Ada 0&ndash;3, 채점 cvlab21 CPU
+    &middot; 샘플 <strong>K=6</strong> (개루프 프로토콜 minADE@6의 6은 지평 초가 아니라 샘플 개수)
   </div>
 </header>
 
@@ -321,27 +325,46 @@ def build(coll, gates, geom, plot_dir, date):
 
 <h2><span class="num">3.</span>결과 (사실)</h2>
 <h3>3.1 충돌률</h3>
-<p><code>any</code> = 8개 샘플 중 하나라도 충돌한 클립 비율, <code>frac</code> = 충돌한 샘플의
-평균 비율, <code>best</code> = minADE가 가장 낮은 샘플(실제로 고를 궤적)의 충돌 여부.
+<p>채점 대상은 <strong>앞 6개 샘플</strong>이다 &mdash; 개루프 프로토콜이
+minADE@6이고 그 6은 지평 초가 아니라 샘플 개수다(<code>run_baseline</code>이 샘플별 배열을
+저장하는 이유가 바로 임의의 K&nbsp;&le;&nbsp;k를 접두로 잘라 쓰기 위함이다).
+<code>any</code> = 6개 중 하나라도 충돌한 클립 비율, <code>frac</code> = 충돌한 샘플의
+평균 비율, <code>best</code> = 그 6개 중 minADE가 가장 낮은 샘플(실제로 고를 궤적)의 충돌 여부.
 색은 baseline 대비.</p>
 {rate_table(coll)}
 <figure><img src="data:image/png;base64,{b64(plot_dir / 'rates.png')}"
   alt="arm과 세트별 충돌률, GT 바닥선 표시">
 <figcaption>세 압축 arm이 세 세트 모두에서 무압축보다 높고, <strong>서로는 거의 같다</strong>
-(test500 18.8&ndash;19.6%). 빨간 점선이 GT 궤적의 충돌률로, 이 지표의 잡음 바닥이다.</figcaption>
+(test500 17.2&ndash;17.8%). 빨간 점선이 GT 궤적의 충돌률로, 이 지표의 잡음 바닥이다.</figcaption>
 </figure>
 
 <h3>3.2 G2 &mdash; 충돌은 minADE의 재표현인가</h3>
 {g2_table(gates)}
-<p class="note">사전등록한 G2는 <strong>arm 수준</strong> Spearman |ρ|&lt;0.7이다. 실측은
+<div class="warn">
+<p><strong>사전등록한 G2는 FAIL이다.</strong> 문구는 <strong>arm 수준</strong> Spearman
+|ρ|&lt;0.7이었고, 실측은
 {t['arm_level']['spearman_rho']:+.2f} / {gates['sets']['val500']['arm_level']['spearman_rho']:+.2f} /
-{gates['sets']['OOD-val']['arm_level']['spearman_rho']:+.2f}이지만 <strong>n=4라 검정력이 없다</strong>
-(|ρ|=0.8이 p=0.33). 그 통계만으로 PASS를 주장하는 건 정직하지 않으므로, 위 표의 클립 수준
-읽기가 실질적 근거다.</p>
+{gates['sets']['OOD-val']['arm_level']['spearman_rho']:+.2f}(test500 / val500 / OOD-val)로
+세 세트 모두 문턱을 넘는다. 초판은 이 자리에 <strong>+0.40 / +0.80 / +0.20</strong>을 싣고
+PASS라 적었는데, 그 값은 min을 <strong>8개 샘플 전부</strong>에 대해 잡은 off-protocol 계산이었다
+(<code>@6</code>의 6은 지평 초가 아니라 샘플 개수다). 같은 데이터에서 K만 8&rarr;6으로
+되돌리자 판정이 뒤집혔다.</p>
+<p><strong>그 뒤집힘 자체가 이 통계에 대한 판결이다.</strong> arm 4개 위의 Spearman은
+값을 몇 개밖에 못 가지고(n=4에서 |ρ|=0.8이 p=0.33), 프로토콜을 한 칸 고쳤을 뿐인데
++0.40에서 +0.80으로 뛴다. 이 게이트는 애초에 어느 방향으로도 결론을 낼 검정력이 없었다 &mdash;
+초판의 PASS도 지금의 FAIL도 신뢰할 수 없다. 사전등록을 잘못 고른 쪽이 우리다.</p>
+<p><strong>왜 순위 상관 자체가 여기서 무의미한가.</strong> 이건 사후 변명이 아니라
+아래 G3가 독립적으로 확립하는 사실이다: 압축 arm 세 개는 충돌로도 minADE로도
+<strong>서로 구분되지 않는다</strong>(모든 쌍 p&ge;0.11). 순위 상관은 네 점을 줄 세우는데
+그 중 셋이 통계적으로 같은 점이므로, 무엇을 줄 세우든 잡음의 순서를 읽는 것이다.
+실질적 근거는 위 표의 <strong>클립 수준</strong> 읽기다 &mdash; n이 240&ndash;489이고
+K를 바꿔도 거의 움직이지 않았다(초판 +0.07&ndash;+0.19 &rarr; 지금 {min(rhos):+.2f}&ndash;{max(rhos):+.2f}).</p>
+</div>
 <figure><img src="data:image/png;base64,{b64(plot_dir / 'g2.png')}"
   alt="충돌 클립과 무충돌 클립의 minADE 분포">
 <figcaption>충돌한 클립의 minADE가 높긴 하지만 분포가 크게 겹친다. 클립 수준 ρ는
-{min(rhos):+.2f}&ndash;{max(rhos):+.2f}로, 충돌의 대부분은 그 클립의 minADE로 설명되지 않는다.</figcaption>
+{min(rhos):+.2f}&ndash;{max(rhos):+.2f}로, minADE가 설명하는 충돌 분산은 1&ndash;3%에 불과하다 &mdash;
+충돌의 대부분은 그 클립의 minADE로 설명되지 않는다.</figcaption>
 </figure>
 
 <h3>3.3 G3 &mdash; arm을 가르는가</h3>
@@ -355,17 +378,22 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
 <h2><span class="num">4.</span>해석 (의견)</h2>
 <div class="callout">
   <p><strong>결론 1 &mdash; 압축은 충돌을 늘린다. minADE가 말하지 않던 것이다.</strong>
-  세 arm 모두, 세 세트 모두 +5&ndash;7pp. minADE는 "GT에서 얼마나 멀어지는가"만 말하는데,
+  세 arm 모두, 세 세트 모두 +3&ndash;6pp. minADE는 "GT에서 얼마나 멀어지는가"만 말하는데,
   그 이탈이 <em>실제로 무언가와 겹치는 방향</em>임이 확인됐다. 서로 다른 기준과 재구성을 쓰는
   세 방법이 거의 같은 폭으로 늘어난다는 것은, 이 손해가 특정 기준의 결함이 아니라
   <strong>24% 압축 자체의 대가</strong>임을 시사한다.</p>
-  <p><strong>결론 2 &mdash; 그러나 방법 선택에는 쓸 수 없다.</strong> minADE가 못 가르는 아홉 쌍을
-  충돌도 하나도 가르지 못했다(G3 FAIL). 폐루프 250씬에서 세 쌍이 모두 구분되지 않았던 것과
+  <p><strong>결론 2 &mdash; 그러나 방법 선택에는 쓸 수 없다.</strong> minADE가 못 가르는 일곱 쌍을
+  충돌도 하나도 가르지 못했다(G3 FAIL). 반대 방향은 두 쌍 있다 &mdash; minADE는 가르는데 충돌은
+  못 가르는 쌍. 충돌 축이 minADE보다 <em>덜</em> 민감하지 더 민감하지 않다는 뜻이다. 폐루프 250씬에서 세 쌍이 모두 구분되지 않았던 것과
   같은 그림이고, 개루프 충돌은 그 벽을 넘지 못했다.</p>
 </div>
-<p><strong>왜 G2는 통과하는데 G3는 실패하는가.</strong> 둘은 모순이 아니다. G2는 "충돌이 minADE와
-다른 것을 잰다"이고 실제로 그렇다(ρ≈0.1). G3는 "그 다른 것이 방법 사이에서 다르다"인데,
-방법들은 <em>그 축에서도</em> 서로 같다. 새 축이긴 한데, 그 축 위에서도 세 방법이 구분되지 않는다.</p>
+<p><strong>G2와 G3를 함께 읽으면.</strong> 사전등록 문구대로는 둘 다 FAIL이지만 같은 이유로
+FAIL이 아니다. G3의 FAIL은 실체가 있다 &mdash; n=240&ndash;489에서 재고도 압축 arm들이 서로
+구분되지 않는다. G2의 FAIL은 통계가 없어서 난 것이다: arm 4개 위의 순위 상관은 검정력이 0에
+가깝고, K를 8에서 6으로 고치자 +0.40&rarr;+0.80으로 뛰었다. 클립 수준에서 실제로 읽히는 것은
+ρ≈0.1&ndash;0.18, 즉 <strong>충돌은 minADE와 상당히 다른 것을 잰다</strong>는 쪽이다.
+그러면서도 <em>그 다른 축 위에서 세 방법이 여전히 구분되지 않는다</em> &mdash; 이 둘은
+모순이 아니라, 새 축을 하나 붙여도 방법 서열은 나오지 않는다는 하나의 결론이다.</p>
 <p><strong>가장 눈에 띄는 것은 <code>best</code>다.</strong> test500에서 <code>any</code>는
 {b['test500']['any_pct']:.1f}&rarr;{d['test500']['any_pct']:.1f}%로 {dpp:.1f}pp 오르는데
 <code>best</code>는 {b['test500']['best_pct']:.1f}&rarr;{d['test500']['best_pct']:.1f}%로
@@ -387,19 +415,19 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
 네 arm의 <strong>변위 대 비용</strong>을 나란히 놓으면 관계가 사라진다 (val500, n=500).</p>
 <div class="scroll"><table><thead><tr><th>arm</th><th>Q 겹침</th><th>MLP 겹침</th>
 <th>중앙값 Δ</th><th>평균 Δ</th><th>Wilcoxon p</th></tr></thead><tbody>
-<tr><td>dualfix</td><td>96.6%</td><td>96.6%</td><td>&minus;0.0013</td>
-    <td class="dim">+0.0375</td><td>0.93</td></tr>
-<tr><td>maxstep11</td><td>92.5%</td><td>89.7%</td><td class="good">&minus;0.0133</td>
-    <td class="dim">&minus;0.0196</td><td>0.11</td></tr>
+<tr><td>dualfix</td><td>96.6%</td><td>96.6%</td><td>+0.0002</td>
+    <td class="dim">+0.0332</td><td>0.96</td></tr>
+<tr><td>maxstep11</td><td>92.5%</td><td>89.7%</td><td class="good">&minus;0.0117</td>
+    <td class="dim">+0.0011</td><td>0.15</td></tr>
 <tr><td>dual_st2000</td><td><strong>92.1%</strong></td><td>87.4%</td>
-    <td class="bad"><strong>+0.0994</strong></td><td class="dim">+0.3101</td>
-    <td><strong>2.4e-21</strong></td></tr>
+    <td class="bad"><strong>+0.1105</strong></td><td class="dim">+0.3056</td>
+    <td><strong>5.8e-22</strong></td></tr>
 <tr><td>dualsafe</td><td>94.0%</td><td>92.6%</td><td class="bad"><strong>+0.1945</strong></td>
-    <td class="dim">&mdash;</td><td>4.7e-32</td></tr>
+    <td class="dim">+0.4649</td><td>4.7e-32</td></tr>
 </tbody></table></div>
 <p><strong>결정적인 쌍은 상관계수가 필요 없다.</strong> <code>dual_st2000</code>(92.1%)과
 <code>maxstep11</code>(92.5%)은 <em>같은 만큼</em> 유지집합을 갈아치우고 정반대 판정에 도달한다 &mdash;
-하나는 p=2.4e-21로 이 표에서 가장 유의한 손해, 하나는 p=0.11로 유의하지 않다.</p>
+하나는 p=5.8e-22로 이 표에서 가장 유의한 손해, 하나는 p=0.15로 유의하지 않다.</p>
 <div class="callout">
   <p><strong>유지집합을 가장 적게 움직인 arm이 30배 비쌌다.</strong> 불안정성 자체는 싸다 &mdash;
   <code>maxstep11</code>은 7&ndash;10%를 갈아치우고도 공짜다. 비싼 것은
@@ -411,9 +439,11 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
   사주지 않는다"의 반대편 절반이다.</p>
   <p class="note" style="margin:.75rem 0 0"><strong>출처와 검증.</strong> 프레이밍과 겹침 수치는
   안전 가중 실험을 돌린 쪽에서 왔다(<code>2026-09-08_criterion-augmentation.html</code> §3.6).
-  비용 열은 <strong>앞의 세 행을 이 세션에서 직접 재측정</strong>했고
-  (<code>arm_table.py --ref dual_u40_v2_ps</code>, 같은 500클립 페어드), 중앙값이 그쪽 값과
-  0.01 이내로 일치한다. <code>dualsafe</code> 행만 그쪽 측정이며 여기서 재현하지 않았다.
+  비용 열은 <strong>네 행 모두 이 세션에서 직접 재측정</strong>했다
+  (<code>arm_table.py --ref dual_u40_v2_ps</code>, 같은 500클립 페어드);
+  <code>dualsafe</code>의 중앙값 +0.1945와 p=4.7e-32는 그쪽 값과 소수점까지 일치한다.
+  <strong>이 열은 초판에서 min을 8개 샘플 전부에 대해 잡은 @8이었고, 지금은 프로토콜대로
+  앞 6개에 대한 @6이다</strong> &mdash; <code>@6</code>의 6은 지평 초가 아니라 샘플 개수다.
   <code>maxstep11</code>의 겹침은 두 가지 다른 구성으로 교차 확인된다 &mdash; 그쪽의
   <code>slim_meta.json</code> 92.5%와 <code>plans/2026-09-03_union-step-criterion.md</code>의
   Q 일치 0.9254가 0.05pp 이내로 맞는다.</p>
@@ -422,7 +452,8 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
   퍼진 것이 아니라 <em>꼬리에 몰려 있다</em>는 뜻이다. 이 저장소가 중앙값·Wilcoxon을 1차 판정으로
   삼는 이유이고, 초판이 이 표에 &minus;0.0033(<code>dualfix</code> 대비 중앙값)과
   +0.1945(<code>dual</code> 대비 중앙값)를 섞어 실은 것은 오류였다 &mdash; 지금은 기준과 통계가
-  전부 통일돼 있다.</p>
+  전부 통일돼 있다. K를 8에서 6으로 되돌려도 이 표의 판정은 하나도 바뀌지 않는다:
+  <code>dual_st2000</code>은 그대로 가장 유의하고 <code>maxstep11</code>은 그대로 무의하다.</p>
 </div>
 
 <h2><span class="num">5.</span>주장하지 않는 것</h2>
@@ -433,9 +464,11 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
   <p><strong>오토라벨이다.</strong> <code>scene:obstacles:autolabels:v2</code>, 사람 검수 없음.
   arm 비교에는 무해하지만 절대값은 라벨 품질에 종속된다. GT 충돌률 {geom['rate_pct']:.1f}%가
   그 잡음 바닥의 실측치다.</p>
-  <p><strong>G2를 사전등록한 형태로 통과했다고 말하지 않는다.</strong> arm 수준 n=4 통계는 세트마다
-  ρ가 +0.20에서 +0.80까지 흔들리고 셋 다 p&gt;0.2다. 근거는 클립 수준 쪽이며, 계획서의 게이트
-  정의가 이 arm 수에 맞지 않았다.</p>
+  <p><strong>G2를 사전등록한 형태로 통과했다고 말하지 않는다 &mdash; 실제로 FAIL이다.</strong>
+  arm 수준 n=4 통계는 K를 8&rarr;6으로 고치는 것만으로 +0.40&rarr;+0.80으로 뛰었고, 초판의 PASS도
+  지금의 FAIL도 검정력이 뒷받침하지 않는다. 계획서의 게이트 정의가 이 arm 수에 맞지 않았고,
+  그것은 사후에 알게 된 것이 아니라 <em>사전등록을 쓸 때 알았어야</em> 하는 것이다.
+  근거로 남는 것은 클립 수준 ρ뿐이며, 이 보고서는 그 이상을 주장하지 않는다.</p>
   <p><strong>heading은 유도값이다.</strong> 경로 접선이므로 저속·정지 구간에서 불안정하다.</p>
   <p><strong>남은 GT 충돌 1건은 진짜가 아닐 가능성이 크다.</strong> 같은 클립 3.5초, 중심거리
   0.21 m &mdash; t0 필터가 못 잡는 두 번째 자차 자기라벨로 보인다. 독립 재현에서도 그 클립이

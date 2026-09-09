@@ -29,6 +29,9 @@ import collision_lib as cl
 import sample_cache as sc
 
 O = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
+# @6 counts SAMPLES: the protocol scores the first 6 of the 8 sampled paths, so the
+# collision statistics are taken over those 6 and `best` is the lowest-ADE of them.
+K = 6
 SETS = [("test", "test_500", "test", "test500"),
         ("indist", "indist_500", "eval", "val500"),
         ("oodval", "ood_val", "ood", "OOD-val")]
@@ -93,9 +96,9 @@ def main():
             gt = cl.score_path(fx[:, :2], fx, fr, obs, int(m.t0_us), size, prepared=prep)
             preds = [cl.score_path(np.asarray(p), fx, fr, obs, int(m.t0_us), size,
                                    prepared=prep)
-                     for p in rows[cid]["pred_xy_k"]]
+                     for p in rows[cid]["pred_xy_k"][:K]]
             hits = [p["collide"] for p in preds]
-            best = int(np.argmin(rows[cid]["ade_rollout_k"]))
+            best = int(np.argmin(rows[cid]["ade_rollout_k"][:K]))
             # a clip can have labels and still have no obstacle inside the 6.4 s window --
             # every track's observed span falls outside it, or the only track was the ego
             # self-label. There is then no distance to report, and it is not a collision.
