@@ -139,7 +139,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 tyr_supernet="tyr_supernet_u40",
                 tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
                 imp_run="importance_v2", cache_imp="cachejlens_v1",
-                expert_imp="importance_stepexp_znorm"):
+                expert_imp="importance_stepexp_znorm",
+                clearance_run="calib_clearance", safe_tau=5.0):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
@@ -494,6 +495,33 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 pre = name[:-1]
                 return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
                         (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
+            if name == "trajsafe":
+                # The trajectory half, re-weighted by how safety-critical each calibration
+                # clip is. Alpamayo-R1's RL trajectory reward is L2 + collision + jerk;
+                # `traj` reads the L2 term alone, and this is the cheapest honest way to
+                # let the collision term in. collision_lib's contact test is a
+                # separating-axis boolean with no gradient, so it cannot be a loss -- but
+                # score_path also returns a continuous clearance, and a per-clip WEIGHT
+                # needs no gradient at all:
+                #     I^safe = sum_c w(d_c)|dFM_c/dg| / sum_c w(d_c),   w = exp(-d/tau)
+                # Clearance is measured on the GT path, so the weight is a property of the
+                # clip, not of the model being pruned.
+                # Clips whose obstacle chunk was never downloaded (7 of 100 here) are
+                # unknown, not obstacle-free, so they take the MEDIAN clip's weight rather
+                # than being dropped -- dropping would silently shrink the calibration set,
+                # and calibration size is one of the few things known to move selection.
+                z = dict(np.load(REPO / "outputs" / imp_run / "importance_perclip.npz"))
+                meta = json.loads(
+                    (REPO / "outputs" / imp_run / "metrics.json").read_text())["per_clip"]
+                clr = json.loads(
+                    (REPO / "outputs" / clearance_run / "clearance.json").read_text())
+                raw = [clr.get(r["clip_id"]) for r in meta]
+                dv = np.array([np.nan if v is None else float(v) for v in raw])
+                dv[np.isnan(dv)] = np.nanmedian(dv)
+                w = np.exp(-dv / safe_tau)
+                w = w / w.sum()
+                return (np.einsum("n,nlu->lu", w, z["traj_vlm_q"]),
+                        np.einsum("n,nlu->lu", w, z["traj_vlm_mlp"]))
             if name == "znorm11":
                 # CoC NLL + the ten flow-matching step losses, each z-scored WITHIN a layer
                 # and averaged with weight 1/11. The per-step VLM gradients come from
@@ -552,6 +580,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             return jl["q_j"], jl["mlp_j"]
 
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
+                 "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
                  "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
