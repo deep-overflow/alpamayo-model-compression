@@ -417,10 +417,33 @@ CoC 드리프트와 궤적 손상은 독립이다(p=0.33~0.85).</li>
 <code>maxstep11</code>은 <code>max</code> 아래 항을 11개로 늘리고도 <code>dualfix</code>와
 구분되지 않았다(−0.0033). <code>max</code>에는 가중치가 없어서 항을 더해도 기존 항의 몫이
 줄지 않는다.</p>
-<p>남는 것은 <b>추측</b> 하나뿐이고, 추측으로 남겨 둔다: <code>maxstep11</code>의 11개 항은
-서로 중복(스텝 간 층내 Spearman +0.920)이라 합집합이 거의 자라지 않았다. 진짜로 비상관인
-항이라면 합집합이 자라 예산이 실제로 <i>변위</i>될 수 있다. 그러나 그 조건에서 손해가 나는지는
-<b>측정된 적이 없고</b>, 위 두 논거는 그것과 무관하게 성립한다.</p>
+<p>그 직관의 <b>선택 쪽 절반은 실제로 잴 수 있다</b> — 빌드도 GPU도 필요 없이 디스크에 있는
+파일만으로. J-lens가 바로 그 비상관 항이다.</p>
+</div>
+
+<table>
+<thead><tr><th>축</th><th class="r">유지</th><th class="r">ρ traj–CoC</th><th class="r">ρ traj–J</th><th class="r">ρ 10 FM 스텝</th><th class="r">J 추가 시 변위</th><th class="r">10스텝 추가 시 변위</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">19 / 32</td><td class="r">+0.605</td><td class="r">+0.211</td><td class="r">+0.923</td><td class="r"><b>12.7%</b></td><td class="r">7.0%</td></tr>
+<tr><td>MLP</td><td class="r">7390 / 12288</td><td class="r">+0.583</td><td class="r">+0.283</td><td class="r">+0.820</td><td class="r"><b>13.7%</b></td><td class="r">9.7%</td></tr>
+</tbody></table>
+
+<p>
+상관이 변위를 지배한다는 절반은 <b>맞다</b> — 비상관 항(ρ≈0.2~0.3)은 중복 항 열 개(ρ≈0.8~0.9)
+보다 거의 두 배를 밀어낸다. 그런데 그 다음이 중요하다.
+</p>
+
+<div class="callout bad">
+<p><b>변위의 크기는 손해를 예측하지 못한다.</b> 나란히 놓으면 이렇다.</p>
+<ul>
+<li><code>maxstep11</code> — 변위 <b>7.0~9.7%</b>, 비용 <b>−0.0033</b> (무해)</li>
+<li><code>dualsafe</code> — 변위 <b>6.0%</b>(Q 유지집합 겹침 94.0%), 비용 <b>+0.1945</b></li>
+<li>J를 세 번째 항으로 — 변위 <b>12.7~13.7%</b>, 비용 <b>미측정</b></li>
+</ul>
+<p>더 적게 밀어낸 쪽이 30배 넘게 비쌌다. 차이는 밀어낸 <i>양</i>이 아니라 밀어낸 <b>근거</b>다 —
+<code>maxstep11</code>의 변위는 실제 신호(다른 스텝에서 상위인 유닛)가 만들었고,
+<code>dualsafe</code>의 변위는 n=100에서 가중이 만든 <b>추출 잡음</b>이 만들었다. 그래서
+J의 12.7%도 그 자체로는 위험 신호가 아니고, 3.4·3.5절의 두 논거와 무관하게 남는다.</p>
 </div>
 
 <p>

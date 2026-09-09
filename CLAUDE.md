@@ -435,6 +435,13 @@ two broke the union on the **objective** axis; `dualsafe` leaves the objective s
 and shrinks the sample on the **clip** axis. The similar damage sizes (+0.14 to +0.20) come from
 both axes moving on the same shallow `calib_100` floor, not from a shared mechanism -- and adding
 terms under `max` is itself harmless, which `maxstep11` settled.
+The sharper form, measured from the shipped importance files with no build (`analyze_criterion_aug.py`
+section C): correlation does govern how much a third `max` term displaces -- adding the J-lens
+(within-layer Spearman to traj +0.211 Q / +0.283 MLP) moves 12.7% / 13.7% of the two-term kept set,
+against 7.0% / 9.7% for the ten FM steps (+0.923 / +0.820) -- but **displacement magnitude does not
+predict damage**. `maxstep11` displaced 7-10% and cost -0.0033; `dualsafe` displaced 6.0% and cost
++0.1945. What separates them is whether the displacement came from signal or from sampling noise,
+so an overlap or displacement figure is never on its own a reason to accept or reject an arm.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so

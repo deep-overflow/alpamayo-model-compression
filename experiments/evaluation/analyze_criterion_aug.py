@@ -47,6 +47,7 @@ from coc_action_consistency import HEAD2BUCKET, at6, head, rows
 OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
 K, BOOT = 6, 10000
 SAFE_TAU = 5.0
+U40_RATIO = 0.3985632694  # run_grid.allocations() matched to slim_integrated_mag
 
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 ORANGE, BLUE, GREEN, RED = "#D97757", "#2a78d6", "#008300", "#b3261e"
@@ -383,6 +384,20 @@ def write_summary(res, path):
         for n, m in c["vs_traj"].items():
             L.append(f"     {n:12s} {m['delta_pp']:+6.1f}pp  p={m['p']:.3g}")
 
+    if "union" in res:
+        L.append("\nC. does a third max term displace, and does correlation govern it?")
+        L.append(f"   {'axis':5s} {'keep':>12s} {'rho traj-coc':>13s} {'rho traj-J':>11s} "
+                 f"{'rho 10 steps':>13s} {'displaced by J':>15s} {'by 10 steps':>12s}")
+        for ax, m in res["union"].items():
+            L.append(f"   {ax:5s} {m['kept']:5d}/{m['units']:<6d} "
+                     f"{m['rho_traj_coc']:+13.3f} {m['rho_traj_j']:+11.3f} "
+                     f"{m['rho_steps']:+13.3f} {100 * m['displaced_by_j']:14.1f}% "
+                     f"{100 * m['displaced_by_steps']:11.1f}%")
+        L.append("   maxstep11 is the 10-step column and cost -0.0033 vs dualfix, so that "
+                 "much displacement is free;")
+        L.append("   dualsafe displaced less (6.0% of Q) and cost +0.1945 -- magnitude "
+                 "does not predict damage.")
+
     L.append("\n   coupling: is the damage larger where the CoC changed?")
     L.append(f"   {'arm':12s} {'n_chg':>6s} {'d|changed':>10s} {'d|same':>9s} "
              f"{'p':>9s} {'base med chg/same':>19s}")
@@ -392,6 +407,54 @@ def write_summary(res, path):
                  f"{m['base_med_changed']:8.3f} /{m['base_med_same']:8.3f}")
     path.write_text("\n".join(L) + "\n")
     print("\n".join(L))
+
+
+# --------------------------------------------------------------------------
+# C. Does a third max term displace, and does the added term's correlation govern it?
+#
+# Selection only -- no build, no GPU, so this settles the *selection* half of the
+# displacement conjecture without settling whether displacement costs anything. The two
+# added terms bracket the correlation range already on disk: the J-lens is the decorrelated
+# one (traj-J rho ~0.2-0.3) and the ten FM steps are the correlated ones (~0.8-0.9), which
+# is exactly the maxstep11 arm whose measured cost is -0.0033 vs dualfix.
+# --------------------------------------------------------------------------
+def union_block(res):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "head_analysis"))
+    import mask_lib as ml
+    from run_cocsafe import rank_norm
+
+    imp = dict(np.load(OUT / "importance_v2" / "importance.npz"))
+    jl = dict(np.load(OUT / "jlens_v2" / "jlens.npz"))
+    step = dict(np.load(OUT / "importance_stepvlm_v1" / "step_importance_vlm.npz"))
+
+    def kept(s):
+        m = ml.select_mask(s, U40_RATIO, list(range(s.shape[0])))
+        return [set(np.flatnonzero(m[i]).tolist()) for i in range(s.shape[0])]
+
+    def displaced(a, b):
+        """Fraction of a's kept units that b drops, averaged over layers."""
+        return float(np.mean([1 - len(x & y) / len(x) for x, y in zip(a, b)]))
+
+    def meanrho(mats):
+        r = [stats.spearmanr(mats[a][i], mats[b][i]).statistic
+             for i in range(mats[0].shape[0])
+             for a in range(len(mats)) for b in range(a + 1, len(mats))]
+        return float(np.nanmean(r))
+
+    res["union"] = {}
+    for axis, key, jkey, skey in (("q", "vlm_q", "q_j", "q_abs_step"),
+                                  ("mlp", "vlm_mlp", "mlp_j", "mlp_abs_step")):
+        t, c = rank_norm(imp[f"traj_{key}"]), rank_norm(imp[f"coc_{key}"])
+        j = rank_norm(jl[jkey])
+        steps = [rank_norm(a.astype(np.float64)) for a in step[skey]]
+        two = kept(np.maximum(t, c))
+        res["union"][axis] = {
+            "units": int(t.shape[1]), "kept": len(two[0]),
+            "rho_traj_coc": meanrho([t, c]), "rho_traj_j": meanrho([t, j]),
+            "rho_steps": meanrho(steps),
+            "displaced_by_j": displaced(two, kept(np.maximum(np.maximum(t, c), j))),
+            "displaced_by_steps": displaced(two, kept(np.maximum.reduce([c, *steps]))),
+        }
 
 
 def main():
@@ -405,6 +468,7 @@ def main():
     res = {}
     dualsafe_block(res, plots)
     consistency_block(res, plots)
+    union_block(res)
 
     (out / "config.json").write_text(json.dumps({
         "purpose": "dual 기준 확장 두 경로: 안전 가중(dualsafe)과 CoC-행동 일관성",
