@@ -442,16 +442,18 @@ against 7.0% / 9.7% for the ten FM steps (+0.923 / +0.820) -- but **displacement
 order the arms at all**. Four built arms, each measured against shipped `dual` on one basis (kept
 sets from `slim_meta.json`, cost paired over the same val500 clips):
 
-| arm | Q overlap | MLP | val500 median vs dual | p |
-|---|---:|---:|---:|---:|
-| `dualfix` | 96.6% | 96.6% | +0.0002 | 0.962 |
-| `maxstep11` | 92.5% | 89.7% | **-0.0117** | 0.152 |
-| `dual_st2000` (n=2,000) | 92.1% | 87.4% | +0.1105 | 5.8e-22 |
-| `dualsafe` | 94.0% | 92.6% | **+0.1945** | 4.7e-32 |
+| arm | Q overlap | MLP | val500 median vs dual | mean | p |
+|---|---:|---:|---:|---:|---:|
+| `dualfix` | 96.6% | 96.6% | +0.0002 | +0.0332 | 0.962 |
+| `maxstep11` | 92.5% | 89.7% | -0.0117 | +0.0011 | 0.152 |
+| `dual_st2000` (n=2,000) | 92.1% | 87.4% | +0.1105 | **+0.3056** | 5.8e-22 |
+| `dualsafe` | 94.0% | 92.6% | **+0.1945** | **+0.4649** | 4.7e-32 |
 
-Spearman(overlap, cost) is +0.000 -- illustrative at n=4, but the decisive pair is not:
+Spearman(overlap, median cost) is +0.000 -- illustrative at n=4, but the decisive pair is not:
 `dual_st2000` at 92.1% and `maxstep11` at 92.5% displace the same amount and land at +0.1105
-(p=6e-22) versus -0.0117 (n.s.). What separates them is where the displacing score came from --
+(p=6e-22) versus -0.0117 (n.s.). Read the mean column with it: both significant arms sit at
+2.4-2.8x their medians, so this damage is a tail of clips rather than a shift of all of them,
+and `maxstep11`'s -0.0117 median is +0.0011 on the mean, i.e. nothing rather than a small win. What separates them is where the displacing score came from --
 signal (a unit genuinely top-ranked at another denoising step) versus a resampling of the same
 100 clips. So an overlap or displacement figure is never on its own a reason to accept or reject
 an arm, in either direction. This is the other end of the calibration-size axis: that study found

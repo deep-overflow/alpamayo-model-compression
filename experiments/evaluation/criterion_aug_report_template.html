@@ -440,21 +440,30 @@ CoC 드리프트와 궤적 손상은 독립이다(p=0.33~0.85).</li>
 </p>
 
 <table>
-<thead><tr><th>arm</th><th class="r">Q 겹침</th><th class="r">MLP 겹침</th><th class="r">val500 중앙값</th><th class="r">95% CI</th><th class="r">p</th></tr></thead>
+<thead><tr><th>arm</th><th class="r">Q 겹침</th><th class="r">MLP 겹침</th><th class="r">중앙값</th><th class="r">평균</th><th class="r">95% CI (중앙값)</th><th class="r">p</th></tr></thead>
 <tbody>
-<tr><td><code>dualfix</code></td><td class="r">96.6%</td><td class="r">96.6%</td><td class="r">+0.0002</td><td class="r">[−0.0060, +0.0055]</td><td class="r ns">0.962</td></tr>
-<tr><td><code>maxstep11</code></td><td class="r">92.5%</td><td class="r">89.7%</td><td class="r"><b>−0.0117</b></td><td class="r">[−0.0281, +0.0037]</td><td class="r ns">0.152</td></tr>
-<tr><td><code>dual_st2000</code> (n=2,000)</td><td class="r">92.1%</td><td class="r">87.4%</td><td class="r">+0.1105</td><td class="r">[+0.0827, +0.1491]</td><td class="r sig">5.8e−22</td></tr>
-<tr><td><code>dualsafe</code></td><td class="r"><b>94.0%</b></td><td class="r">92.6%</td><td class="r"><b>+0.1945</b></td><td class="r">[+0.1505, +0.2483]</td><td class="r sig">4.7e−32</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">96.6%</td><td class="r">96.6%</td><td class="r">+0.0002</td><td class="r">+0.0332</td><td class="r">[−0.0060, +0.0055]</td><td class="r ns">0.962</td></tr>
+<tr><td><code>maxstep11</code></td><td class="r">92.5%</td><td class="r">89.7%</td><td class="r">−0.0117</td><td class="r">+0.0011</td><td class="r">[−0.0281, +0.0037]</td><td class="r ns">0.152</td></tr>
+<tr><td><code>dual_st2000</code> (n=2,000)</td><td class="r">92.1%</td><td class="r">87.4%</td><td class="r">+0.1105</td><td class="r"><b>+0.3056</b></td><td class="r">[+0.0827, +0.1491]</td><td class="r sig">5.8e−22</td></tr>
+<tr><td><code>dualsafe</code></td><td class="r"><b>94.0%</b></td><td class="r">92.6%</td><td class="r"><b>+0.1945</b></td><td class="r"><b>+0.4649</b></td><td class="r">[+0.1505, +0.2483]</td><td class="r sig">4.7e−32</td></tr>
 </tbody></table>
+
+<p>
+평균을 함께 읽어야 한다. 유의한 두 arm은 평균이 중앙값의 <b>2.4~2.8배</b>다 — 손해가 모든
+클립을 고르게 미는 것이 아니라 <b>일부 클립의 꼬리</b>에 몰려 있다는 뜻이고, 중앙값만으로는
+그게 보이지 않는다. 반대로 <code>maxstep11</code>의 중앙값 −0.0117은 평균 +0.0011과 함께
+읽으면 "약간 낫다"가 아니라 <b>정확히 아무것도 아니다</b>로 읽힌다.
+</p>
 
 <div class="callout bad">
 <p><b>겹침 순서는 비용 순서와 무관하다.</b> 가장 적게 밀어낸 <code>dualsafe</code>(다음으로
-높은 겹침 94.0%)가 가장 비쌌고, 두 번째로 많이 밀어낸 <code>maxstep11</code>(92.5%)은 유일하게
-수치상 <code>dual</code>보다 나은 arm이다. 네 arm의 Spearman(겹침, 비용)은 +0.000이다
-— arm이 넷뿐이라 이 상관 자체는 추론이 아니라 예시로 읽어야 하지만, 다음 한 쌍은 그렇지 않다.</p>
+높은 겹침 94.0%)가 가장 비쌌고, 두 번째로 많이 밀어낸 <code>maxstep11</code>(92.5%)은
+중앙값·평균 어느 쪽으로도 <code>dual</code>과 구분되지 않는다. 네 arm의
+Spearman(겹침, 중앙값 비용)은 +0.000이다 — arm이 넷뿐이라 이 상관 자체는 추론이 아니라
+예시로 읽어야 하지만, 다음 한 쌍은 그렇지 않다.</p>
 <p><b>결정적인 대비:</b> <code>dual_st2000</code> 92.1%와 <code>maxstep11</code> 92.5% —
-<b>변위가 사실상 같은데</b> 한쪽은 +0.1105(p=5.8e−22), 다른 쪽은 −0.0117(비유의)다. 차이는
+<b>변위가 사실상 같은데</b> 한쪽은 +0.1105(평균 +0.3056, p=5.8e−22), 다른 쪽은
+−0.0117(평균 +0.0011, 비유의)다. 차이는
 밀어낸 <i>양</i>이 아니라 밀어낸 <b>근거</b>다: <code>maxstep11</code>의 변위는 실제 신호(다른
 스텝에서 상위인 유닛)가, <code>dual_st2000</code>과 <code>dualsafe</code>의 변위는
 <b>표본을 바꾼 것</b>이 만들었다.</p>

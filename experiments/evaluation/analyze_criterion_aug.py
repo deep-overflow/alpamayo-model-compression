@@ -394,18 +394,22 @@ def write_summary(res, path):
                      f"{m['rho_steps']:+13.3f} {100 * m['displaced_by_j']:14.1f}% "
                      f"{100 * m['displaced_by_steps']:11.1f}%")
     if "overlap_vs_cost" in res:
-        L.append("\n   built arms, all measured against shipped dual on the same val500 clips")
-        L.append(f"   {'arm':13s} {'Q overlap':>10s} {'MLP':>7s} {'median':>9s} "
-                 f"{'95% CI':>21s} {'p':>10s}")
+        L.append("\n   built arms, all measured against shipped dual on the same val500 clips"
+                 f" (minADE@{K})")
+        L.append(f"   {'arm':13s} {'Q overlap':>10s} {'MLP':>7s} {'median':>9s} {'mean':>9s} "
+                 f"{'95% CI (med)':>21s} {'p':>10s}")
         for arm, m in res["overlap_vs_cost"].items():
             L.append(f"   {arm:13s} {100 * m['overlap_q']:9.1f}% {100 * m['overlap_mlp']:6.1f}% "
-                     f"{m['median']:+9.4f} [{m['ci'][0]:+.4f},{m['ci'][1]:+.4f}] {m['p']:10.3g}")
+                     f"{m['median']:+9.4f} {m['mean']:+9.4f} "
+                     f"[{m['ci'][0]:+.4f},{m['ci'][1]:+.4f}] {m['p']:10.3g}")
         r = res.get("overlap_vs_cost_rho")
         if r:
-            L.append(f"   Spearman(Q overlap, cost) over {r['n_arms']} arms = "
-                     f"{r['rho']:+.3f} (p={r['p']:.3g}) -- overlap does not order the arms.")
-        L.append("   the sharpest pair is dual_st2000 92.1% / +0.1105 (p=6e-22) against")
-        L.append("   maxstep11 92.5% / -0.0117 (n.s.): same displacement, opposite verdicts.")
+            L.append(f"   Spearman(Q overlap, median cost) over {r['n_arms']} arms = "
+                     f"{r['rho']:+.3f} (p={r['p']:.3g}) -- illustrative at n=4, not inferential.")
+        L.append("   the pair that needs no correlation: dual_st2000 92.1% / +0.1105 (p=6e-22)")
+        L.append("   against maxstep11 92.5% / -0.0117 (n.s.) -- same displacement, opposite")
+        L.append("   verdicts. Read the mean column too: the two significant arms sit at 2.4-2.8x")
+        L.append("   their medians, so the damage is a tail of clips, not a shift of all of them.")
 
     L.append("\n   coupling: is the damage larger where the CoC changed?")
     L.append(f"   {'arm':12s} {'n_chg':>6s} {'d|changed':>10s} {'d|same':>9s} "
@@ -469,9 +473,12 @@ def union_block(res):
         ids = sorted(set(v) & set(dual))
         dd = np.array([at6(v[c]) - at6(dual[c]) for c in ids])
         lo, hi = bootmed(dd)
+        # mean beside the median, per the frozen protocol: minADE deltas are heavy-tailed,
+        # and the ratio is the point -- dual_st2000 is 2.8x its median, i.e. the damage sits
+        # in a tail of clips rather than spread across them, which the median alone hides.
         res["overlap_vs_cost"][arm] = {
-            "n": len(ids), "median": float(np.median(dd)), "ci": [lo, hi],
-            "p": float(stats.wilcoxon(dd).pvalue),
+            "n": len(ids), "median": float(np.median(dd)), "mean": float(dd.mean()),
+            "ci": [lo, hi], "p": float(stats.wilcoxon(dd).pvalue),
             **{f"overlap_{ax}": float(np.mean(
                 [len(set(m["vlm"][i][ax]) & set(base_meta["vlm"][i][ax]))
                  / len(m["vlm"][i][ax]) for i in range(len(m["vlm"]))]))
