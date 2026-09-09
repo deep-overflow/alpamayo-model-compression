@@ -22,6 +22,13 @@ The obstacle labels exist for the calibration chunks only (93/100 clips here); t
 evaluation sets have none locally. That asymmetry is why this can run today: importance is
 measured on calibration clips, so the missing evaluation labels do not block it.
 
+`collision_lib` is NOT vendored here -- it belongs to the open-loop collision track
+(branch `worktree-openloop-collision`) and is still moving, so a copy in this branch would
+go stale and could revert that work on merge. This script needs that branch to have landed
+on main; the four entry points it uses (`load_obstacles`, `load_ego_size`,
+`ego_self_tracks`, `score_path` with its `min_center_dist`) were checked against that
+branch's head on 2026-09-08.
+
 Usage:
   .venv/bin/python experiments/evaluation/calib_clearance.py
   .venv/bin/python experiments/evaluation/calib_clearance.py --manifest calib_100
