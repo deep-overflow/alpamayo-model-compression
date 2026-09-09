@@ -383,16 +383,33 @@ OOD에서는 person과 rider의 비중이 크게 는다.</figcaption>
 기제는 가중 함수가 아니라 표본 크기였다: Kish ESS가 100 &rarr; 70.8로 떨어지고, 손해가 그냥 다른
 캘리브레이션 클립을 뽑은 것과 구분되지 않는다. 그런데 <strong>유지집합은 dual과 94.0%(Q) /
 92.6%(MLP)나 겹친다</strong>.</p>
+<p>그런데 "유지집합이 흔들리면 비싸다"로 읽으면 틀린다. 같은 계열에서 세 arm의
+<strong>변위 대 비용</strong>을 나란히 놓으면 관계가 뒤집혀 있다.</p>
+<div class="scroll"><table><thead><tr><th>세 번째 max 항</th>
+<th>유지집합 변위</th><th>기존 항과의 ρ</th><th>비용 (minADE)</th></tr></thead><tbody>
+<tr><td>maxstep11 (FM 10스텝)</td><td>7.0&ndash;9.7%</td><td>+0.92</td>
+    <td class="good">&minus;0.0033 (n.s.)</td></tr>
+<tr><td>dualsafe (클립 재가중)</td><td><strong>6.0%</strong></td><td>&mdash;</td>
+    <td class="bad"><strong>+0.1945</strong></td></tr>
+<tr><td>J-lens</td><td>12.7&ndash;13.7%</td><td>+0.21&ndash;0.28</td>
+    <td class="dim">미측정</td></tr>
+</tbody></table></div>
 <div class="callout">
-  <p><strong>두 결과를 겹쳐 놓으면 24%에서 무엇이 구속하는지가 보인다 &mdash; 기준이 아니라 예산이다.</strong>
-  한쪽에서는 서로 다른 기준·재구성을 쓰는 세 방법이 minADE로도 충돌로도 구분되지 않는다.
-  다른 쪽에서는 유지집합을 6%만 흔들어도 압축 자체가 물리는 비용에 맞먹는 +0.19 m가 나온다.
-  즉 arm들은 어느 지표로도 분해되지 않을 만큼 서로 가깝지만, 선택 자체는 그 잡음이 압축보다
-  비싼 만큼 불안정하다. 기준을 더 정교하게 만드는 것보다 <em>선택의 분산을 줄이는 것</em>이
-  이 예산에서 먼저다.</p>
-  <p class="note" style="margin:.75rem 0 0">이 프레이밍은 안전 가중 실험을 돌린 쪽에서 제안한
-  것이다. 두 실험은 <code>collision_lib</code>을 공유하되 독립적으로 수행됐고, 그쪽의 G0 재현
-  (1/93, clearance 중앙값 5.85 m)이 이 보고서의 1/96과 일치한다.</p>
+  <p><strong>유지집합을 가장 적게 움직인 arm이 30배 비쌌다.</strong> 불안정성 자체는 싸다 &mdash;
+  <code>maxstep11</code>은 7&ndash;10%를 갈아치우고도 공짜다. 비싼 것은
+  <em>표본 잡음에서 온</em> 불안정성이다. 그러니 "+0.19 m는 선택이 취약하다는 뜻"이 아니라,
+  <strong>n=100에서는 기준이 진짜 재배열과 재표집을 구분하지 못한다</strong>는 뜻이다.</p>
+  <p>여기에 이 보고서의 결과를 얹으면 하나의 진술이 된다. minADE도 충돌도 방법을 가르지 못하는데
+  선택의 잡음은 압축 비용을 넘어선다 &mdash; <strong>24%에서 구속하는 것은 기준이 아니라
+  캘리브레이션이다.</strong> 이는 캘리브레이션 크기 연구가 도달한 "선택 안정성이 성능 안정성을
+  사주지 않는다"의 반대편 절반이다.</p>
+  <p class="note" style="margin:.75rem 0 0">이 프레이밍과 위 표는 안전 가중 실험을 돌린 쪽에서
+  왔다(<code>2026-09-08_criterion-augmentation.html</code> §3.6). 두 실험은
+  <code>collision_lib</code>을 공유하되 독립 수행됐고, 그쪽 G0 재현(1/93, clearance 중앙값
+  5.85 m)이 이 보고서의 1/96과 일치한다. 표의 <code>maxstep11</code> 행은 이 저장소 기록과
+  대조했다 &mdash; Q 일치 0.9254(변위 7.5%)는 <code>plans/2026-09-03_union-step-criterion.md</code>,
+  비용 &minus;0.0033은 <code>CLAUDE.md</code>와 일치한다. <code>dualsafe</code> 행은
+  그쪽 측정이며 이 세션에서 재현하지 않았다.</p>
 </div>
 
 <h2><span class="num">5.</span>주장하지 않는 것</h2>
