@@ -397,6 +397,13 @@ clips produce bit-identical CoC text), so the shipped checkpoint stands. `znorm1
 each objective's top units survive. `dual_ada` exists because the per-step file is Ada-only while
 shipped `dual` came from Blackwell `importance_v2`; the rebuild itself is a no-op (median |0.003|,
 p>=0.68), which also settles that the importance run's architecture does not matter.
+That "no-op" is a median, and the **mean is positive on all three sets** (+0.0339 val500 /
++0.0191 test500 / +0.0236 OOD-val), which looks like a systematic direction until tested: each
+mean's own bootstrap CI includes 0 ([-0.0203,+0.1055], [-0.0092,+0.0529], [-0.0699,+0.1521],
+paired t p=0.30 / 0.23 / 0.68). The structure says why -- **5 clips (1%) carry 95.7% of the val500
+mean**, and among the 267 clips moving more than 0.05 m the split is **133 worse / 134 better**
+(binomial p=1.0). A 97.2% / 97.3% kept-set overlap leaves per-clip noise that happens not to
+cancel, not an architecture effect. Quote the mean's CI, never the median's, when answering this.
 
 `maxstep11` / `meandual` (2026-09-04) close the 2x2 that `znorm11` collapsed -- operator
 (`max` union vs `mean`) x arity (2 losses vs 11). Neither factor moves anything alone
