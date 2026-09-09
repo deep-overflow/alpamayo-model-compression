@@ -30,6 +30,11 @@ Optional arguments: `--importance PATH`, `--step-importance PATH`, and
   Shading identifies layers 22–35. Constant-score layers are omitted because
   their top-k sets are arbitrary; consequently late-layer averages exclude
   layer 35 (Q: 0.676; MLP: 0.688).
+  Caption guard: overlap answers whether the two objectives disagree, not what
+  a wrong choice costs -- it does not order arms by damage. On this same
+  budget dualsafe retains 94.0% of dual's Q heads and costs +0.1945 m on
+  val500, while maxstep11 displaces 7.0-9.7% for -0.0033 m. Do not caption
+  this panel with a claim about the size of a criterion's effect.
 - `fig2_steps_q_head`, `fig2_steps_mlp`: Spearman agreement between denoising
   steps, averaged over expert layers. Both panels use the same 0–1 color
   scale. Off-diagonal summary statistics exclude self-correlation and are reported here,

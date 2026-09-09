@@ -17,6 +17,12 @@ Figure 1 -- the two objectives do not weight the network the same way.
       The same disagreement read as rank correlation and as shared kept sets. These are
       what make the union criterion quantitative rather than illustrative: after layer
       ~22 a single objective discards a third of the other's picks.
+      Overlap says whether the objectives disagree; it does not say what choosing
+      wrong costs, and it does not order arms by damage. Two arms on this same budget
+      make that concrete: dualsafe retains 94.0% of dual's Q heads and still costs
+      +0.1945 m on val500, while maxstep11 displaces 7.0-9.7% of the kept set for
+      -0.0033 m. What separates them is whether the displacement came from signal or
+      from sampling noise, not how large it is.
 
 Figure 2 -- why only the expert's MLP is pruned, never its Q heads.
   fig2_steps_q_head / fig2_steps_mlp
