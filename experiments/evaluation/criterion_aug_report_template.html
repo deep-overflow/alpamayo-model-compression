@@ -433,17 +433,45 @@ CoC 드리프트와 궤적 손상은 독립이다(p=0.33~0.85).</li>
 보다 거의 두 배를 밀어낸다. 그런데 그 다음이 중요하다.
 </p>
 
+<p>
+그런데 <b>변위의 크기는 arm을 전혀 정렬하지 못한다.</b> 실제로 지어진 네 arm을 하나의
+기준으로 — 유지집합은 각자의 <code>slim_meta.json</code>에서 출하 <code>dual</code>과
+비교하고, 비용은 같은 val500 500클립에서 <code>dual</code> 대비 페어드로 — 재면 이렇다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">Q 겹침</th><th class="r">MLP 겹침</th><th class="r">val500 중앙값</th><th class="r">95% CI</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td><code>dualfix</code></td><td class="r">96.6%</td><td class="r">96.6%</td><td class="r">+0.0002</td><td class="r">[−0.0060, +0.0055]</td><td class="r ns">0.962</td></tr>
+<tr><td><code>maxstep11</code></td><td class="r">92.5%</td><td class="r">89.7%</td><td class="r"><b>−0.0117</b></td><td class="r">[−0.0281, +0.0037]</td><td class="r ns">0.152</td></tr>
+<tr><td><code>dual_st2000</code> (n=2,000)</td><td class="r">92.1%</td><td class="r">87.4%</td><td class="r">+0.1105</td><td class="r">[+0.0827, +0.1491]</td><td class="r sig">5.8e−22</td></tr>
+<tr><td><code>dualsafe</code></td><td class="r"><b>94.0%</b></td><td class="r">92.6%</td><td class="r"><b>+0.1945</b></td><td class="r">[+0.1505, +0.2483]</td><td class="r sig">4.7e−32</td></tr>
+</tbody></table>
+
 <div class="callout bad">
-<p><b>변위의 크기는 손해를 예측하지 못한다.</b> 나란히 놓으면 이렇다.</p>
-<ul>
-<li><code>maxstep11</code> — 변위 <b>7.0~9.7%</b>, 비용 <b>−0.0033</b> (무해)</li>
-<li><code>dualsafe</code> — 변위 <b>6.0%</b>(Q 유지집합 겹침 94.0%), 비용 <b>+0.1945</b></li>
-<li>J를 세 번째 항으로 — 변위 <b>12.7~13.7%</b>, 비용 <b>미측정</b></li>
-</ul>
-<p>더 적게 밀어낸 쪽이 30배 넘게 비쌌다. 차이는 밀어낸 <i>양</i>이 아니라 밀어낸 <b>근거</b>다 —
-<code>maxstep11</code>의 변위는 실제 신호(다른 스텝에서 상위인 유닛)가 만들었고,
-<code>dualsafe</code>의 변위는 n=100에서 가중이 만든 <b>추출 잡음</b>이 만들었다. 그래서
-J의 12.7%도 그 자체로는 위험 신호가 아니고, 3.4·3.5절의 두 논거와 무관하게 남는다.</p>
+<p><b>겹침 순서는 비용 순서와 무관하다.</b> 가장 적게 밀어낸 <code>dualsafe</code>(다음으로
+높은 겹침 94.0%)가 가장 비쌌고, 두 번째로 많이 밀어낸 <code>maxstep11</code>(92.5%)은 유일하게
+수치상 <code>dual</code>보다 나은 arm이다. 네 arm의 Spearman(겹침, 비용)은 +0.000이다
+— arm이 넷뿐이라 이 상관 자체는 추론이 아니라 예시로 읽어야 하지만, 다음 한 쌍은 그렇지 않다.</p>
+<p><b>결정적인 대비:</b> <code>dual_st2000</code> 92.1%와 <code>maxstep11</code> 92.5% —
+<b>변위가 사실상 같은데</b> 한쪽은 +0.1105(p=5.8e−22), 다른 쪽은 −0.0117(비유의)다. 차이는
+밀어낸 <i>양</i>이 아니라 밀어낸 <b>근거</b>다: <code>maxstep11</code>의 변위는 실제 신호(다른
+스텝에서 상위인 유닛)가, <code>dual_st2000</code>과 <code>dualsafe</code>의 변위는
+<b>표본을 바꾼 것</b>이 만들었다.</p>
+<p>그래서 J의 12.7%도 그 자체로는 위험 신호가 아니다. 세 번째 항을 짓지 않는 이유는 변위가
+아니라 3.4·3.5절의 두 논거다.</p>
+</div>
+
+<div class="callout">
+<p><b>이것은 캘리브레이션 크기 연구의 반대쪽 끝이다.</b>
+<a href="2026-09-06_calibration-size.html">크기 2×2 보고서</a>는 <b>선택 안정성이 성능
+안정성을 사주지 않는다</b>고 결론냈다 — n=2,000에서 유지집합은 잡음 바닥까지 수렴하는데
+성능은 그대로 뒤처진다(여기서는 출하본 대비 +0.1105). 이 절은 그 역을 말한다 —
+n=100에서는 <b>선택이 6%가 움직인 것이 무엇을 뜻하는지 알 수 있을 만큼도 수렴하지
+않았다</b>. 두 결과는 같은 축의 양 끝이고, 합쳐서 읽으면 24% 예산에서 구속하는 것은
+기준이 아니라 <b>캘리브레이션</b>이다. (충돌 축에서도 같은 그림이 나온다 — 개루프 충돌
+보고서의 네 arm에서 압축은 충돌을 5~7pp 올리지만 minADE가 못 가르는 아홉 쌍을 충돌도
+가르지 못한다.)</p>
 </div>
 
 <p>

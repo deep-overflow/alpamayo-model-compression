@@ -393,10 +393,19 @@ def write_summary(res, path):
                      f"{m['rho_traj_coc']:+13.3f} {m['rho_traj_j']:+11.3f} "
                      f"{m['rho_steps']:+13.3f} {100 * m['displaced_by_j']:14.1f}% "
                      f"{100 * m['displaced_by_steps']:11.1f}%")
-        L.append("   maxstep11 is the 10-step column and cost -0.0033 vs dualfix, so that "
-                 "much displacement is free;")
-        L.append("   dualsafe displaced less (6.0% of Q) and cost +0.1945 -- magnitude "
-                 "does not predict damage.")
+    if "overlap_vs_cost" in res:
+        L.append("\n   built arms, all measured against shipped dual on the same val500 clips")
+        L.append(f"   {'arm':13s} {'Q overlap':>10s} {'MLP':>7s} {'median':>9s} "
+                 f"{'95% CI':>21s} {'p':>10s}")
+        for arm, m in res["overlap_vs_cost"].items():
+            L.append(f"   {arm:13s} {100 * m['overlap_q']:9.1f}% {100 * m['overlap_mlp']:6.1f}% "
+                     f"{m['median']:+9.4f} [{m['ci'][0]:+.4f},{m['ci'][1]:+.4f}] {m['p']:10.3g}")
+        r = res.get("overlap_vs_cost_rho")
+        if r:
+            L.append(f"   Spearman(Q overlap, cost) over {r['n_arms']} arms = "
+                     f"{r['rho']:+.3f} (p={r['p']:.3g}) -- overlap does not order the arms.")
+        L.append("   the sharpest pair is dual_st2000 92.1% / +0.1105 (p=6e-22) against")
+        L.append("   maxstep11 92.5% / -0.0117 (n.s.): same displacement, opposite verdicts.")
 
     L.append("\n   coupling: is the damage larger where the CoC changed?")
     L.append(f"   {'arm':12s} {'n_chg':>6s} {'d|changed':>10s} {'d|same':>9s} "
@@ -440,6 +449,40 @@ def union_block(res):
              for i in range(mats[0].shape[0])
              for a in range(len(mats)) for b in range(a + 1, len(mats))]
         return float(np.nanmean(r))
+
+    # Overlap-vs-cost on ONE basis: every arm is measured against shipped `dual`, kept sets
+    # from slim_meta.json and cost paired over the same val500 clips. Built arms only, so
+    # the third max term is absent here -- this table is about whether the *magnitude* of a
+    # kept-set move orders the arms at all, which the report's J row cannot speak to.
+    base_meta = json.loads((OUT / "slim_dual_u40_v2" / "slim_meta.json").read_text())
+    dual = rows("dual_u40_v2_ps_indist")
+    res["overlap_vs_cost"] = {}
+    for arm, slim, run in (("dualfix", "slim_dualfix_u40_v2", "dualfix_u40_v2_indist"),
+                           ("maxstep11", "slim_maxstep11_u40_v2", "maxstep11_u40_v2_indist"),
+                           ("dual_st2000", "slim_dual_st2000", "dual_u40_st2000_indist"),
+                           ("dualsafe", "slim_dualsafe_u40_v2", "dualsafe_u40_v2_indist")):
+        p = OUT / slim / "slim_meta.json"
+        v = rows(run)
+        if not p.exists() or not v:
+            continue
+        m = json.loads(p.read_text())
+        ids = sorted(set(v) & set(dual))
+        dd = np.array([at6(v[c]) - at6(dual[c]) for c in ids])
+        lo, hi = bootmed(dd)
+        res["overlap_vs_cost"][arm] = {
+            "n": len(ids), "median": float(np.median(dd)), "ci": [lo, hi],
+            "p": float(stats.wilcoxon(dd).pvalue),
+            **{f"overlap_{ax}": float(np.mean(
+                [len(set(m["vlm"][i][ax]) & set(base_meta["vlm"][i][ax]))
+                 / len(m["vlm"][i][ax]) for i in range(len(m["vlm"]))]))
+               for ax in ("q", "mlp")},
+        }
+    ov = [x["overlap_q"] for x in res["overlap_vs_cost"].values()]
+    cost = [x["median"] for x in res["overlap_vs_cost"].values()]
+    if len(ov) > 2:
+        r = stats.spearmanr(ov, cost)
+        res["overlap_vs_cost_rho"] = {"rho": float(r.statistic), "p": float(r.pvalue),
+                                      "n_arms": len(ov)}
 
     res["union"] = {}
     for axis, key, jkey, skey in (("q", "vlm_q", "q_j", "q_abs_step"),
