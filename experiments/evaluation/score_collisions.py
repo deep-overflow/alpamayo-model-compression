@@ -96,14 +96,18 @@ def main():
                      for p in rows[cid]["pred_xy_k"]]
             hits = [p["collide"] for p in preds]
             best = int(np.argmin(rows[cid]["ade_rollout_k"]))
+            # a clip can have labels and still have no obstacle inside the 6.4 s window --
+            # every track's observed span falls outside it, or the only track was the ego
+            # self-label. There is then no distance to report, and it is not a collision.
+            dists = [p["min_center_dist"] for p in preds if p["min_center_dist"] is not None]
             per.append({
                 "clip_id": cid,
                 "gt_collide": gt["collide"],
                 "collide_any": any(hits),
                 "collide_frac": float(np.mean(hits)),
                 "collide_best": hits[best],
-                "min_dist": min(p["min_center_dist"] for p in preds
-                                if p["min_center_dist"] is not None),
+                "min_dist": min(dists) if dists else None,
+                "n_in_window": len(dists),
                 "hit_class": next((p["hit_class"] for p in preds if p["collide"]), None),
             })
             if len(per) % 50 == 0:
@@ -116,7 +120,9 @@ def main():
              "any_pct": 100 * np.mean([x["collide_any"] for x in per]),
              "frac_pct": 100 * np.mean([x["collide_frac"] for x in per]),
              "best_pct": 100 * np.mean([x["collide_best"] for x in per]),
-             "min_dist_median": float(np.median([x["min_dist"] for x in per])),
+             "min_dist_median": float(np.median(
+                 [x["min_dist"] for x in per if x["min_dist"] is not None])),
+             "no_obstacle_in_window": sum(1 for x in per if x["min_dist"] is None),
              "classes": dict(Counter(x["hit_class"] for x in per if x["hit_class"])),
              "rows": per}
         p, n10, n01 = mcnemar([x["collide_any"] for x in per],
@@ -130,7 +136,8 @@ def main():
               f"McNemar p={p:.2e}  (예측만 {n10} / GT만 {n01})")
         print(f"  예측 frac(평균)  {e['frac_pct']:5.1f}%")
         print(f"  예측 best(최저ADE) {e['best_pct']:5.1f}%")
-        print(f"  최소 중심거리 중앙값 {e['min_dist_median']:.2f} m")
+        print(f"  최소 중심거리 중앙값 {e['min_dist_median']:.2f} m"
+              f"  (구간 내 장애물 없음 {e['no_obstacle_in_window']}클립)")
         if e["classes"]:
             print(f"  충돌 클래스 {sorted(e['classes'].items(), key=lambda x: -x[1])[:4]}")
 
