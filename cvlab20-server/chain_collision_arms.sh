@@ -47,13 +47,22 @@ if [ ! -s outputs/slim_tyr_u40_r/slim_state.pt ]; then
   say "build exit=$rc -- $(head -2 outputs/slim_tyr_u40_r/summary.txt 2>/dev/null | tr '\n' ' ')"
   [ "$rc" -eq 0 ] || { say "ABORT: rebuild failed"; exit 1; }
 
-  # the rebuild must reproduce the arm the published numbers came from
+  # The rebuild must reproduce the arm the published numbers came from, and this is a
+  # GATE. The first version only logged the exit code and ran on regardless, so a wrong
+  # path (this script had one) or a genuinely different rebuild would have spent 2.6 GPU
+  # hours evaluating the wrong model with nothing to say so afterwards.
   .venv/bin/python experiments/head_analysis/verify_supernet_u40.py \
     --supernet outputs/tyr_supernet_u40 \
     --levels outputs/tyr_search_u40/final_config.json \
     --reference outputs/slim_tyr_u40_r/slim_meta.json \
     >>"$CHAN/logs/verify_tyr_u40_r.log" 2>&1
-  say "kept-set check exit=$? (0 = reproduces)"
+  vrc=$?
+  say "kept-set check exit=$vrc (0 = reproduces)"
+  if [ "$vrc" -ne 0 ]; then
+    say "ABORT: rebuilt tyr_u40_r does not reproduce the reference kept sets"
+    say "  $(tail -2 "$CHAN/logs/verify_tyr_u40_r.log" | tr '\n' ' ')"
+    exit 1
+  fi
 fi
 
 # ---- the three arms, one after another ------------------------------------------------
