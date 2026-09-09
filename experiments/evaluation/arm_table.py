@@ -29,7 +29,9 @@ SETS = [("test", "test500"), ("indist", "val500"), ("oodval", "OOD-val")]
 # it puts every absolute number off-protocol -- dual on val500 reads 0.7766 instead of the
 # 0.8904 the reports carry. Recompute from the arrays instead.
 K = 6
-METRICS = [("ade_rollout_k", "minADE@6"), ("fde_rollout_k", "minFDE@6")]
+# Every "@K" string derives from K. Two sources for one quantity is how a header comes to
+# disagree with the numbers printed under it.
+METRICS = [("ade_rollout_k", f"minADE@{K}"), ("fde_rollout_k", f"minFDE@{K}")]
 
 
 def load(stem, suffix):
@@ -106,8 +108,8 @@ def main():
     for label, rows in data.items():
         n = next(iter(rows.values()))["n"]
         print(f"\n=== {label}  (n={n}, 참조 {args.ref}) ===")
-        head = (f"{'arm':22s}{'minADE@6':>10s}{'Δ':>9s}{'95% CI':>20s}"
-                f"{'minFDE@6':>10s}{'Δ':>9s}{'95% CI':>20s}{'CoC퇴화':>9s}")
+        head = (f"{'arm':22s}{METRICS[0][1]:>10s}{'Δ':>9s}{'95% CI':>20s}"
+                f"{METRICS[1][1]:>10s}{'Δ':>9s}{'95% CI':>20s}{'CoC퇴화':>9s}")
         print(head)
         print("-" * len(head))
         for arm in arms:

@@ -135,7 +135,7 @@ def main():
 
         print(f"\n=== {label}  (n={n}, 건너뜀 {dict(skipped)}) ===")
         print(f"  GT 궤적          {gt_r:5.1f}%")
-        print(f"  예측 any(8중1)   {e['any_pct']:5.1f}%   "
+        print(f"  예측 any({K}중1)   {e['any_pct']:5.1f}%   "
               f"McNemar p={p:.2e}  (예측만 {n10} / GT만 {n01})")
         print(f"  예측 frac(평균)  {e['frac_pct']:5.1f}%")
         print(f"  예측 best(최저ADE) {e['best_pct']:5.1f}%")
