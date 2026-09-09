@@ -41,10 +41,23 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "outputs" / "balance_stability"
+
+BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
+C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"
+plt.rcParams.update({
+    "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
+    "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
+    "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
+})
 
 DRAWS = ([f"importance_nt500_{s}" for s in "abcde"]
          + [f"importance_tr500_{s}" for s in "abcde"]
@@ -180,6 +193,114 @@ def noise_vs_n(axis, keep, root, knob_at_01):
             "n_for_knob_to_clear": need}
 
 
+FINE = np.round(np.arange(-0.40, 0.401, 0.02), 3)
+
+
+def plots(res, root, out):
+    """Four panels: the knob against the noise floor, its decision share, the
+    leave-one-out curves, and how the floor scales with calibration size."""
+    out.mkdir(parents=True, exist_ok=True)
+    fields = {ax: load(ax, root) for ax in KEEP}
+
+    # displacement and decision share on a fine grid
+    disp, share, loo = {}, {}, {}
+    for ax, (keep, _n) in KEEP.items():
+        f = fields[ax]
+        base = {d: kept(np.maximum(*f[d]), keep) for d in DRAWS}
+        dd, ss = [], []
+        for dl in FINE:
+            ks = {d: kept(np.maximum(f[d][0], f[d][1] - dl), keep) for d in DRAWS}
+            dd.append([1 - ov(base[d], ks[d], keep) for d in DRAWS])
+            ss.append([np.mean([(f[d][1][ll, list(ix)] - dl
+                                 > f[d][0][ll, list(ix)]).mean()
+                                for ll, ix in enumerate(ks[d])]) for d in DRAWS])
+        disp[ax], share[ax] = np.array(dd), np.array(ss)
+        cur = []
+        for d in DRAWS:
+            others = [x for x in DRAWS if x != d]
+            ref = kept(np.maximum(np.mean([f[x][0] for x in others], axis=0),
+                                  np.mean([f[x][1] for x in others], axis=0)), keep)
+            cur.append([ov(kept(np.maximum(f[d][0], f[d][1] - dl), keep), ref, keep)
+                        for dl in FINE])
+        loo[ax] = np.array(cur)
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    for a, col in (("q", C1), ("mlp", C2)):
+        nz = res[a]["draw_displacement_at_delta0"]
+        ax.plot(FINE, disp[a].mean(1) * 100, color=col, lw=1.8,
+                label=f"knob, VLM {'Q head' if a == 'q' else 'MLP channel'}")
+        ax.axhline(nz * 100, color=col, lw=1.1, ls="--")
+        ax.text(0.40 if a == "mlp" else -0.40, nz * 100 + 0.35,
+                f"draw noise floor {nz * 100:.1f}%", color=col, fontsize=8.5,
+                ha="right" if a == "mlp" else "left")
+    ax.set_xlabel("delta   (0 = dual, + favours the trajectory objective)")
+    ax.set_ylabel("retained-set displacement vs delta=0  (%)")
+    ax.set_title("The knob clears its own noise floor only near the single-objective ends")
+    ax.legend(loc="center", frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out / "s1_knob_vs_noise.png", dpi=150)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7.2, 3.6))
+    for a, col in (("q", C1), ("mlp", C2)):
+        m = share[a].mean(1) * 100
+        ax.plot(FINE, m, color=col, lw=1.8,
+                label=f"VLM {'Q head' if a == 'q' else 'MLP channel'}")
+        ax.fill_between(FINE, share[a].min(1) * 100, share[a].max(1) * 100,
+                        color=col, alpha=0.15, lw=0)
+    ax.axvline(0, color=MUTED, lw=0.9, ls=":")
+    ax.axhline(50, color=MUTED, lw=0.9, ls=":")
+    ax.set_xlabel("delta")
+    ax.set_ylabel("retained units decided by the\nreasoning objective  (%)")
+    ax.set_title("delta = 0 puts the two objectives at parity; the band is 11 draws")
+    ax.legend(loc="upper right", frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out / "s2_decision_share.png", dpi=150)
+    plt.close(fig)
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.8))
+    for axx, (a, col) in zip(axes, (("q", C1), ("mlp", C2))):
+        for row in loo[a]:
+            axx.plot(FINE, row * 100, color=col, lw=0.9, alpha=0.55)
+            axx.plot(FINE[row.argmax()], row.max() * 100, "o", color=C3, ms=4)
+        axx.axvline(0, color=MUTED, lw=0.9, ls=":")
+        axx.set_xlabel("delta")
+        axx.set_title(f"VLM {'Q head' if a == 'q' else 'MLP channel'}")
+        axx.set_ylabel("overlap with the leave-one-out\nconsensus of the other ten  (%)")
+    fig.suptitle("Each draw's own optimum lands somewhere different, and never far from 0",
+                 fontsize=11)
+    fig.tight_layout()
+    fig.savefig(out / "s3_loo_curves.png", dpi=150)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    for a, col in (("q", C1), ("mlp", C2)):
+        s = res[a]["scaling"]
+        ns = np.array(sorted(int(k) for k in s["displacement_by_n"]), dtype=float)
+        dv = np.array([s["displacement_by_n"][int(k)] for k in ns]) * 100
+        k01 = max(res[a]["knob_displacement"][0.1],
+                  res[a]["knob_displacement"][-0.1]) * 100
+        grid = np.logspace(2, 3.8, 60)
+        ax.loglog(ns, dv, "o", color=col, ms=6,
+                  label=f"VLM {'Q head' if a == 'q' else 'MLP channel'}")
+        ax.loglog(grid, np.exp(np.log(dv[0]) + s["exponent"] * (np.log(grid)
+                                                               - np.log(ns[0]))),
+                  color=col, lw=1.2, alpha=0.7)
+        ax.axhline(k01, color=col, lw=1.0, ls="--")
+        ax.plot(s["n_for_knob_to_clear"], k01, "*", color=C3, ms=13, zorder=5)
+        ax.text(s["n_for_knob_to_clear"], k01 * 0.78,
+                f"n≈{s['n_for_knob_to_clear']:,.0f}", color=col, fontsize=8.5,
+                ha="center")
+    ax.set_xlabel("calibration clips")
+    ax.set_ylabel("draw-to-draw displacement  (%)")
+    ax.set_title("The floor falls as n^-0.43; dashes are the knob's own size at |delta|=0.1")
+    ax.legend(loc="lower left", frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out / "s4_scaling.png", dpi=150)
+    plt.close(fig)
+    print(f"wrote 4 plots -> {out}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--outputs", type=Path, default=REPO / "outputs")
@@ -245,6 +366,7 @@ def main():
     ]
     (a.out / "summary.txt").write_text("\n".join(lines) + "\n")
     print(f"wrote {a.out}/metrics.json, summary.txt")
+    plots(res, a.outputs, a.out / "plots")
 
 
 if __name__ == "__main__":

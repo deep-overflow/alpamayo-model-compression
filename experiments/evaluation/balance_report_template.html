@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>동등 가중은 임의 선택이 아니다: FM/CE 균형 노브의 학습 가능성</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #C0392B;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--good); font-weight: 600; }
+  .fail { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>동등 가중은 임의 선택이 아니다: FM/CE 균형 노브의 학습 가능성</h1>
+  <div class="meta">
+    2026-09-09 · <code>nvidia/Alpamayo-1.5-10B</code> · 서로소 n=100 캘리브레이션 추출 11개 ·
+    선택(selection) 단계만, 모델 로드·클립 평가 없음 · GPU 0시간
+  </div>
+</header>
+
+<p class="lede">
+출시본 기준 <code>dual = max(rank(I_traj), rank(I_CoC))</code>는 두 목적함수에 <strong>동등한
+발언권</strong>을 준다. 그것이 왜 필요한지(원값으로는 궤적 목적함수가 94~96%를 결정한다)와,
+그 균형을 하이퍼파라미터로 열었을 때 <strong>n=100에서 학습 가능한지</strong>를 잰다.
+결론은 두 방향 모두 유익하다 — 노브의 <strong>실용 구간 전체가</strong> 캘리브레이션 잡음
+아래에 잠겨 있어(잡음 위로 올라오는 곳은 이미 단일 기준에 가까운 |δ|≳0.3뿐이다) 스윕을
+빌드할 근거가 없고, 동시에 <strong>δ=0(동등 가중)이 11개 독립 추출의 최빈 최적점</strong>이라
+출시본의 선택이 경험적으로 뒷받침된다.
+</p>
+
+<div class="kpi">
+  <div><span class="v">6.3–10.5×</span><span class="k">FM / CE 원값 비</span></div>
+  <div><span class="v">93.9 / 96.4%</span><span class="k">max(raw)에서 FM이 결정</span></div>
+  <div><span class="v">1.7–3.8×</span><span class="k">추출 잡음 ÷ 노브 (|δ|=0.1)</span></div>
+  <div><span class="v">δ = 0</span><span class="k">LOO 최빈 최적점 (양 축)</span></div>
+</div>
+
+<h2><span class="num">1</span>배경 — 정규화가 하는 일은 "정규화"가 아니다</h2>
+
+<p>
+두 Taylor 점수는 게이트 <code>g≡1</code>에서의 <code>|∂L/∂g|</code>이므로 <strong>각자 자기 손실의
+단위</strong>를 갖는다. CoC NLL은 nats, 궤적 flow-matching은 action-MSE다. 따라서 둘의 비는
+네트워크의 성질이 아니라 두 손실의 스케일 관례다 — 그런데 그 관례가 크다.
+</p>
+
+<table>
+<thead><tr><th>FM / CE</th><th class="r">mean = sum</th><th class="r">median</th><th class="r">max</th><th class="r">층별 비의 폭</th></tr></thead>
+<tbody>
+<tr><td>VLM Q head</td><td class="r">10.46×</td><td class="r">6.28×</td><td class="r">13.58×</td><td class="r">11.5배 (1.75×@L34 – 20.13×@L19)</td></tr>
+<tr><td>VLM MLP channel</td><td class="r">6.34×</td><td class="r">6.91×</td><td class="r">8.68×</td><td class="r">8.8배 (1.70×@L33 – 14.97×@L17)</td></tr>
+</tbody>
+</table>
+
+<p>
+CE가 FM보다 큰 층은 <strong>35번 하나뿐</strong>이고, 그것은 L35의 <code>I_traj ≡ 0</code>이라는
+구조적 사실 때문이다(그 층의 <code>o_proj</code>/<code>down_proj</code>는 expert가 읽는 KV 캐시에
+도달하지 못한다). 그리고 <strong>전역 상수 하나로는 고칠 수 없다</strong> — CE에 중앙값 배율을
+곱해도 층별 비가 0.15×–1.68×(Q), 0.14×–1.23×(MLP)로 남는다. 정규화가 층 내(per-layer)여야 하는
+이유가 이것이다.
+</p>
+
+<table>
+<thead><tr><th>결합 방식</th><th class="r">CoC가 결정</th><th class="r">FM이 결정</th></tr></thead>
+<tbody>
+<tr><td><code>max(raw)</code> — Q head</td><td class="r">6.1%</td><td class="r">93.9%</td></tr>
+<tr><td><code>max(raw)</code> — MLP</td><td class="r">3.6%</td><td class="r">96.4%</td></tr>
+<tr><td><code>max(rank_norm)</code> — Q head</td><td class="r">46.5%</td><td class="r">53.5%</td></tr>
+<tr><td><code>max(rank_norm)</code> — MLP</td><td class="r">50.6%</td><td class="r">49.4%</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p><strong>사실 → 해석.</strong> 원값으로 합집합을 만들면 <code>dual</code>은 <code>traj</code> 단일
+기준이 된다. 그러므로 <code>rank_norm</code>은 미관상의 정규화가 아니라
+<strong><code>max</code>를 합집합으로 만드는 장치</strong>다. 두 kept set의 겹침은 87.1%(Q) /
+87.0%(MLP)로 우연 수준(59.4 / 60.1%)보다는 훨씬 높지만, 결정 주체는 완전히 다르다.</p>
+</div>
+
+<h2><span class="num">2</span>균형을 노브로 열기</h2>
+
+<p>동등 가중은 선택이지 상수가 아니다. 두 가지 파라미터화가 가능하고, 둘 다 세 개의
+기존 config를 정확히 재현한다:</p>
+
+<pre><code>곱셈형:  max((1-λ)·rank(FM), λ·rank(CE))     λ ∈ [0, 1]
+덧셈형:  max(rank(FM), rank(CE) - δ)        δ ∈ [-1, 1]
+
+λ = 0 / 0.5 / 1   ==  traj_u40_v2 / dual_u40_v2 / coc_u40_v2   (겹침 1.000000)
+δ = +1 / 0 / -1   ==  traj_u40_v2 / dual_u40_v2 / coc_u40_v2   (겹침 1.000000)</code></pre>
+
+<p>
+<code>select_mask_ratios</code>가 층 내 argsort만 하고 양수 상수배는 단조사상이므로 성립한다.
+세 엔드포인트가 이미 빌드·평가돼 있다는 점이 이 스윕을 해석 가능하게 만든다.
+</p>
+
+<div class="callout warn">
+<p><strong>곱셈형은 다이얼이 아니라 스위치다.</strong> rank가 [0,1] 균등이라 비교가
+<code>r_CE/r_FM</code> 대 <code>(1-λ)/λ</code>로 환원되는데, kept set(상위 59%) 안에서 그 비가
+대략 [0.4, 2.5]밖에 안 된다. CE 결정 비율은 λ≤0.2에서 0.0%, λ=0.4에서 10.8%, λ=0.5에서
+46.5%, λ=0.6에서 89.3%, λ≥0.8에서 100%로 <strong>λ ∈ [0.4, 0.6] 밖에서 즉시 포화</strong>한다.
+덧셈형은 균등 분포를 재척도가 아니라 평행이동하므로 δ ∈ [−0.4, +0.4]에서 매끄럽다.
+이하 모든 분석은 덧셈형을 쓴다.</p>
+</div>
+
+<figure>
+  <img src="PLOT::bal::s2_decision_share.png" alt="decision share vs delta">
+  <figcaption>δ에 따른 "추론 목적함수가 결정한 kept 유닛" 비율. 실선은 11개 추출의 평균,
+  띠는 최소–최대. δ=0에서 두 목적함수가 정확히 균형(Q 46.5%, MLP 50.6%)을 이룬다.
+  <strong>띠가 거의 보이지 않는다는 점이 중요하다</strong> — 추출이 달라져도 각 목적함수의
+  <em>지분</em>은 재현되지만, 뒤에서 보듯 그 지분을 <em>어느 유닛</em>이 채우는지는 재현되지
+  않는다. 이 비대칭이 S2는 통과하고 S1·S3는 실패하는 이유다.</figcaption>
+</figure>
+
+<h2><span class="num">3</span>사전 등록 게이트</h2>
+
+<p>스윕을 빌드하기 전에, 노브가 캘리브레이션 추출이 이미 만드는 흔들림보다 큰 무언가를
+움직이는지 확인한다. 두 rank field가 <strong>같은 100개 클립</strong>에서 추정되고, 그 100개를
+갈아끼우는 것만으로 val500이 +0.029~+0.451 m 움직인다는 것이 이미 측정돼 있다
+(<code>2026-09-03_calib-draw-variance</code>). dualsafe의 τ 튜닝을 죽인 것과 같은 함정이다.</p>
+
+<table>
+<thead><tr><th>게이트</th><th>내용</th></tr></thead>
+<tbody>
+<tr><td><strong>S1 (가동 범위)</strong></td><td>|δ|=0.1에서의 노브 변위가 δ=0에서의 추출 간 변위를 넘어야 한다. 다른 추출이 kept set을 더 멀리 옮긴다면 이 n에서 노브는 학습 불가능하다.</td></tr>
+<tr><td><strong>S2 (방향 일관성)</strong></td><td>같은 δ가 서로 다른 추출을 <em>공통 방향</em>으로 옮겨야 한다: <code>ov(K_d(δ), K_d'(δ)) &gt; ov(K_d(δ), K_d'(0))</code>. 효과가 추출별이면 잡음을 맞추는 것이다.</td></tr>
+<tr><td><strong>S3 (위치)</strong></td><td>나머지 열 추출의 leave-one-out 합의 대비 최적 δ가 추출 간에 일관돼야 한다. 흩어지면 최적점은 추출의 성질이다.</td></tr>
+<tr><td><strong>S4 (스케일링)</strong></td><td>게이트가 아닌 정량화: 잡음 바닥이 n에 따라 어떻게 줄고, 노브가 그 위로 올라오는 n은 얼마인가.</td></tr>
+</tbody>
+</table>
+
+<p>
+데이터는 디스크에 이미 있던 <strong>상호 서로소 n=100 추출 11개</strong>다:
+<code>importance_nt500_{a..e}</code>, <code>importance_tr500_{a..e}</code>,
+<code>importance_v2_ada</code>(출시본 calib_100을 Ada에서 재측정). 쌍별 공유 클립 ≤1개, 전부
+Ada·seed 42. <code>importance_tr100_a_solo</code>는 <code>tr500_a</code>와 같은 100개 클립이라
+중복으로 제외했다.
+</p>
+
+<h2><span class="num">4</span>S1 — 노브의 가동 범위가 잡음 안에 통째로 들어간다 <span class="fail">FAIL</span></h2>
+
+<figure>
+  <img src="PLOT::bal::s1_knob_vs_noise.png" alt="knob displacement vs noise floor">
+  <figcaption>δ에 따른 kept set 변위(실선)와 추출 간 변위(파선). 노브 곡선이 자기 축의
+  파선 아래에 있는 구간에서는, δ를 돌리는 것보다 캘리브레이션 클립을 갈아끼우는 쪽이
+  kept set을 더 많이 바꾼다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>축</th><th class="r">추출 바꿈 (δ=0)</th><th class="r">노브 |δ|=0.1</th><th class="r">|δ|=0.2</th><th class="r">|δ|=0.4</th></tr></thead>
+<tbody>
+<tr><td>VLM Q head</td><td class="r"><strong>9.0%</strong></td><td class="r">5.2% (0.57×)</td><td class="r">8.4% (0.93×)</td><td class="r">11.9% (1.32×)</td></tr>
+<tr><td>VLM MLP channel</td><td class="r"><strong>14.6%</strong></td><td class="r">3.8% (0.26×)</td><td class="r">6.7% (0.46×)</td><td class="r">10.6% (0.73×)</td></tr>
+</tbody>
+</table>
+
+<p style="font-size:0.86rem;color:var(--text-muted)">
+노브 열은 게이트와 같게 ±δ 중 <strong>큰 쪽</strong>이고, 괄호는 그 축의 잡음 바닥 대비 배율이다.
+변위는 11개 추출에 대한 평균이며, 잡음 바닥은 55개 추출 쌍에 대한 평균이다.
+</p>
+
+<p>
+클립 100개를 갈아끼우는 것이 δ를 ±0.1 돌리는 것보다 kept set을 <strong>1.7배(Q)~3.8배(MLP)</strong>
+더 움직인다. δ=±0.4까지 밀어야 잡음과 비슷해지는데(Q 1.32×, MLP는 여전히 0.73×), 그 지점의
+CE 결정 비율은 3.5% / 96.8%로 <strong>이미 사실상 단일 기준</strong>이다.
+</p>
+
+<h2><span class="num">5</span>S2 — 그래도 노브는 잡음이 아니다 <span class="pass">PASS</span></h2>
+
+<p>
+같은 δ를 서로 다른 두 추출에 적용하면 둘이 서로 <em>가까워진다</em>. 8개 비영 δ 전부에서
+gain &gt; 0이므로, δ에는 추출과 무관한 실체가 있다. 문제는 크기다.
+</p>
+
+<table>
+<thead><tr><th>δ</th><th class="r">Q: 같은 δ끼리</th><th class="r">Q: δ=0 대비</th><th class="r">Q gain</th><th class="r">MLP gain</th></tr></thead>
+<tbody>
+<tr><td>±0.05</td><td class="r">90.8–91.1%</td><td class="r">90.7–90.9%</td><td class="r">+0.08 / +0.19pp</td><td class="r">+0.09 / +0.01pp</td></tr>
+<tr><td>±0.10</td><td class="r">90.6–90.9%</td><td class="r">90.2%</td><td class="r">+0.76 / +0.36pp</td><td class="r">+0.19 / +0.09pp</td></tr>
+<tr><td>±0.20</td><td class="r">90.6–91.1%</td><td class="r">88.8–88.9%</td><td class="r">+2.24 / +1.81pp</td><td class="r">+0.46 / +0.39pp</td></tr>
+<tr><td>±0.40</td><td class="r">91.1–91.3%</td><td class="r">86.3–86.5%</td><td class="r">+4.59 / +5.02pp</td><td class="r">+1.15 / +1.38pp</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p><strong>해석.</strong> "노브가 아무것도 안 한다"가 아니라 <strong>"노브가 하는 일이 클립 교체가
+하는 일보다 훨씬 작다"</strong>이다. 이 구분이 중요한 이유는, 전자라면 파라미터화가 잘못된
+것이고 후자라면 <em>표본 크기</em>가 부족한 것이기 때문이다. S4가 후자임을 확인한다.</p>
+</div>
+
+<h2><span class="num">6</span>S3 — 최적점이 흩어진다, 그런데 흩어지는 방식이 좋다 <span class="fail">FAIL</span></h2>
+
+<figure>
+  <img src="PLOT::bal::s3_loo_curves.png" alt="leave-one-out curves">
+  <figcaption>각 추출(가는 선)이 나머지 열 추출의 합의와 얼마나 겹치는지를 δ의 함수로 그린 것.
+  분홍 점이 그 추출의 최적 δ다. 곡선이 δ=0 근처에서 평평하고, 최적점이 추출마다 다른 자리에
+  찍히되 ±0.1을 넘지 않는다. 그림은 0.02 간격의 세밀한 격자, 아래 표는 게이트 판정에 쓴 성긴
+  격자(±0.05, ±0.1, ±0.2, ±0.4)이므로 두 최적값이 격자 해상도만큼 다를 수 있다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>축</th><th>추출 11개의 최적 δ</th><th class="r">서로 다른 값</th><th class="r">최빈값</th></tr></thead>
+<tbody>
+<tr><td>VLM Q head</td><td><code>+0.05 +0.05 0 0 0 0 0 −0.05 +0.05 −0.05 −0.05</code></td><td class="r">3</td><td class="r"><strong>0.00</strong></td></tr>
+<tr><td>VLM MLP channel</td><td><code>−0.05 0 0 0 0 −0.05 0 0 0 0 −0.10</code></td><td class="r">3</td><td class="r"><strong>0.00</strong></td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>게이트는 실패했지만 결과 자체는 긍정적이다.</strong> 일관된 비영 최적점이 없으므로
+튜닝할 것이 없다. 동시에 최빈값이 양 축 모두 정확히 <strong>δ=0</strong>이고 ±0.1을 넘는 추출이
+하나도 없다 — 즉 <strong>동등 가중은 11개 독립 추출의 합의가 고르는 값</strong>이다. 논문에서
+"두 목적함수를 동등하게 가중했다"를 방어할 때 임의 선택이 아니라는 근거로 그대로 쓸 수 있다.</p>
+</div>
+
+<h2><span class="num">7</span>S4 — 그럼 얼마나 큰 캘리브레이션이 필요한가</h2>
+
+<figure>
+  <img src="PLOT::bal::s4_scaling.png" alt="noise floor scaling with n">
+  <figcaption>서로소 쌍으로 측정한 잡음 바닥과 n의 관계(log–log). 파선은 각 축에서 노브가
+  |δ|=0.1에 만드는 변위, 별표는 두 선이 만나는 지점.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>캘리브레이션 클립 수</th><th class="r">100</th><th class="r">200</th><th class="r">300</th><th class="r">500</th><th class="r">2000</th></tr></thead>
+<tbody>
+<tr><td>Q head 변위</td><td class="r">9.0%</td><td class="r">7.3%</td><td class="r">7.0%</td><td class="r">5.4%</td><td class="r">2.5%</td></tr>
+<tr><td>MLP 변위</td><td class="r">14.6%</td><td class="r">11.9%</td><td class="r">10.3%</td><td class="r">8.3%</td><td class="r">4.3%</td></tr>
+</tbody>
+</table>
+
+<p>
+변위 ∝ <code>n^-0.43</code>(순수 샘플링 잡음의 <code>n^-0.5</code>보다 약간 느리다). 노브가 잡음
+위로 올라오는 지점은 <strong>n ≈ 458 (Q), n ≈ 2,998 (MLP)</strong>이고, 구속 조건은 약
+<strong>3,000클립</strong>이다. n=100의 쌍은 55개, 그 외 각 n은 서로소 쌍 1개
+(<code>nt500_c200</code>↔<code>tr500_c200</code>, …, <code>st4000_b2000</code>↔<code>st4000_c2000</code>,
+공유 클립 ≤7)로 측정했다.
+</p>
+
+<h2><span class="num">8</span>판정과 권고</h2>
+
+<div class="callout warn">
+<p><strong>스윕을 빌드하지 않는다.</strong> 근거는 두 겹이고, 두 번째가 결정적이다.</p>
+<ol>
+<li>n=100에서는 δ를 고르는 것이 아니라 <em>추출</em>을 고르는 것이다 (S1, S3).</li>
+<li>n을 ≈3,000으로 올리면 노브는 보이지만, <strong>그때는 튜닝 대상인 기준 자체가 달라진다.</strong>
+서로소인 2,000클립 두 추출은 서로 일치하면서 <em>둘 다 baseline을 못 이긴다</em>
+(<code>calib100-is-a-lucky-draw</code>). 출시본 dual의 +0.079는 calib_100 추출의 성질이므로,
+n을 키워 δ를 튜닝하면 δ가 붙을 그 기준이 이미 우리가 원하는 기준이 아니다.</li>
+</ol>
+<p>즉 이것은 "n이 부족하다"가 아니라 <strong>"n을 늘리면 δ는 보이지만 그 δ가 붙을 기준이
+사라진다"</strong>는 구조적 문제다.</p>
+</div>
+
+<p>부수적으로, 이 결과는 앞선 두 규칙과 같은 방향을 가리킨다:</p>
+
+<ul>
+<li><strong>변위 크기는 손상을 예측하지 않는다.</strong> maxstep11은 7.0–9.7% 옮기고 −0.0033,
+dualsafe는 6.0% 옮기고 +0.1945다. 여기서 노브가 만드는 3.8–5.2%도 그 자체로는 좋고 나쁨을
+말하지 않는다 — 구분되는 것은 변위가 <em>신호</em>에서 왔는가 <em>표본 잡음</em>에서 왔는가다.</li>
+<li><strong>기준 설계에서 지배적인 것은 결합 연산의 합집합 성질이다</strong>
+(<code>2026-09-04_union-step-criterion</code>). 가중치를 조절하는 것은 그 위에 얹는 2차 효과이고,
+이 실험은 그 2차 효과가 현재 캘리브레이션 예산에서 측정 한계 아래임을 보인다.</li>
+</ul>
+
+<h2><span class="num">9</span>재현</h2>
+
+<pre><code># 원값 스케일 + 두 파라미터화의 sweep (선택 단계만)
+.venv/bin/python experiments/paper/criterion_scale.py
+
+# 사전 등록 게이트 S1–S4 + 플롯
+.venv/bin/python experiments/evaluation/analyze_balance_stability.py
+#   -> outputs/balance_stability/{config,metrics}.json, summary.txt, plots/*.png
+
+# 이 보고서
+python experiments/head_analysis/build_report.py \
+    experiments/evaluation/balance_report_template.html \
+    reports/evaluation/2026-09-09_criterion-balance.html \
+    bal=$PWD/outputs/balance_stability/plots</code></pre>
+
+<p>
+모델을 로드하지 않고 클립을 평가하지 않는다 — 전부 디스크에 이미 있는
+<code>importance.npz</code>에 대한 numpy 계산이다. 따라서 이 보고서의 어떤 수치도 개루프·폐루프
+성능 주장이 아니라 <strong>선택(어떤 유닛이 남는가)에 대한 주장</strong>이다. δ가 실제로 무엇을
+비용으로 치르는지는 빌드와 평가가 필요하고, 위 판정에 따라 그것을 하지 않기로 했다.
+</p>
+
+<footer>
+  Alpamayo 1.5 구조적 프루닝 · 2026-09-09 ·
+  분석 <code>experiments/evaluation/analyze_balance_stability.py</code>,
+  <code>experiments/paper/criterion_scale.py</code> ·
+  데이터 <code>outputs/balance_stability/</code> ·
+  관련 보고서 <code>2026-09-04_union-step-criterion</code>,
+  <code>2026-09-03_calib-draw-variance</code>
+</footer>
+
+</div>
+</body></html>
