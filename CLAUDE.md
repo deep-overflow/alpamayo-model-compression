@@ -430,6 +430,11 @@ belongs in **how the calibration set is drawn**, not in a weight over a set of 1
 more useful as a rule of thumb: **kept-set overlap is not a safety gate**. `dualsafe` keeps 94.0%
 of dual's Q heads and 92.6% of its MLP channels and still loses 0.19 m, with minADE changed on
 100.0% of clips. Overlap answers "is there anything to measure", never "is this safe".
+Do **not** file `dualsafe` alongside `dualprod` / `znorm11` as another "dilution" failure. Those
+two broke the union on the **objective** axis; `dualsafe` leaves the objective structure intact
+and shrinks the sample on the **clip** axis. The similar damage sizes (+0.14 to +0.20) come from
+both axes moving on the same shallow `calib_100` floor, not from a shared mechanism -- and adding
+terms under `max` is itself harmless, which `maxstep11` settled.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so

@@ -729,6 +729,12 @@ def main():
                     help="run supplying traj_exp_mlp for the dualrc_u40_s<N>_em<M> "
                          "expert-MLP-only half (importance_stepexp_znorm is what the "
                          "expert-axis ablation selected with)")
+    ap.add_argument("--clearance", type=str, default="calib_clearance",
+                    help="calib_clearance.py run supplying per-clip GT-path clearance for "
+                         "the dualsafe configs")
+    ap.add_argument("--safe-tau", type=float, default=5.0,
+                    help="metres in dualsafe's clip weight w = exp(-d/tau); larger tau "
+                         "converges to the uniform weighting dual already uses")
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
                     help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
                          "trajvqa configs (measured on LingoQA train)")
@@ -784,7 +790,8 @@ def main():
                                          args.tyr_supernet, args.tyr_config,
                                          (args.scope_start, args.scope_end),
                                          args.importance, args.cache_importance,
-                                         args.expert_importance)
+                                         args.expert_importance,
+                                         args.clearance, args.safe_tau)
 
     full_total = sl.n_params(model)
     t0 = time.time()
@@ -812,7 +819,14 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
         "config": args.config,
+        # Every run that fed a mask, not just the two that used to be recorded: a built
+        # checkpoint could not say which expert aggregation produced it, and recovering
+        # that meant re-deriving masks and diffing against slim_meta.json.
         "importance_from": args.importance, "jlens_from": args.jlens,
+        "expert_importance_from": args.expert_importance,
+        "cache_importance_from": args.cache_importance,
+        "stepvlm_from": args.stepvlm, "vqa_importance_from": args.vqa_importance,
+        "clearance_from": args.clearance, "safe_tau": args.safe_tau,
         "params": meta["params"],
         "kvonly_layers": list(kvonly),
         "kept_q_per_layer": {"vlm": [len(m["q"]) for m in meta["vlm"]],

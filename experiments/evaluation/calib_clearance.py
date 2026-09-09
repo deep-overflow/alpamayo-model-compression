@@ -26,8 +26,12 @@ measured on calibration clips, so the missing evaluation labels do not block it.
 (branch `worktree-openloop-collision`) and is still moving, so a copy in this branch would
 go stale and could revert that work on merge. This script needs that branch to have landed
 on main; the four entry points it uses (`load_obstacles`, `load_ego_size`,
-`ego_self_tracks`, `score_path` with its `min_center_dist`) were checked against that
-branch's head on 2026-09-08.
+`ego_self_tracks`, `score_path` with its `min_center_dist`) are unchanged at that branch's
+head 0288e5b, confirmed by its author on 2026-09-09. Two of its later changes are worth
+knowing when re-running this: `score_path` gained an optional `prepared=` that hoists the
+per-clip interpolation out of the loop -- irrelevant here, which scores exactly one path
+per clip -- and `load_obstacles` now prefers `labels/obstacle_perclip/<clip_id>.parquet`
+over the chunk zip, so the labelled count may come out above the 93/100 recorded here.
 
 Usage:
   .venv/bin/python experiments/evaluation/calib_clearance.py
