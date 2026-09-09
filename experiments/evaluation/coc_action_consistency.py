@@ -52,6 +52,11 @@ import numpy as np
 from scipy import stats
 
 OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
+# Frozen open-loop protocol: minADE@6 / minFDE@6, i.e. the min over the FIRST SIX of the
+# eight stored samples. run_baseline stores all eight and `minADE_rollout` is the min over
+# all of them, so reading that field silently reports @8 -- on val500 dual that is 0.7766
+# against 0.8904 at @6. Every K-sensitive read here goes through this constant.
+K = 6
 
 # Head clause -> the eval_lib.bucket class it asserts. Ambiguous heads are absent on
 # purpose: "Keep distance" is a following behaviour that is cruise or decel depending
@@ -88,7 +93,7 @@ def rows(d):
 
 
 def at6(r, key="ade_rollout_k"):
-    return float(np.min(np.asarray(r[key], float)[:6]))
+    return float(np.min(np.asarray(r[key], float)[:K]))
 
 
 def mode_agree(tab, arms, ids, uncond):
@@ -104,7 +109,7 @@ def mode_agree(tab, arms, ids, uncond):
         hit[a] = ok if uncond else np.where(cov[a], ok, np.nan)
 
     lbl = "agree(all)" if uncond else "agree|mapped"
-    print(f"\n{'arm':26s} {'coverage':>9s} {lbl:>13s} {'degen':>7s} {'minADE@6':>9s}")
+    print(f"\n{'arm':26s} {'coverage':>9s} {lbl:>13s} {'degen':>7s} {f'minADE@{K}':>9s}")
     for a in arms:
         ade = np.array([at6(tab[a][c]) for c in ids])
         dg = np.mean([tab[a][c]["coc_degenerate"] for c in ids])

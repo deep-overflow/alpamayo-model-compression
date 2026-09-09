@@ -42,10 +42,10 @@ from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from coc_action_consistency import HEAD2BUCKET, at6, head, rows
+from coc_action_consistency import HEAD2BUCKET, K, at6, head, rows
 
 OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
-K, BOOT = 6, 10000
+BOOT = 10000  # K comes from coc_action_consistency, so the label and the number cannot drift apart
 SAFE_TAU = 5.0
 U40_RATIO = 0.3985632694  # run_grid.allocations() matched to slim_integrated_mag
 
@@ -189,7 +189,7 @@ def dualsafe_block(res, plots):
                    label=f"{nm} - baseline")
     ax[0].axvline(0, color=MUTED, lw=0.8)
     ax[0].set_xlim(-0.6, 1.6)
-    ax[0].set_xlabel("paired minADE@6 delta (m)")
+    ax[0].set_xlabel(f"paired minADE@{K} delta (m)")
     ax[0].set_ylabel("clips (%)")
     ax[0].set_title("val500 paired deltas vs baseline", fontsize=10)
     ax[0].legend(frameon=False, fontsize=8)
@@ -328,7 +328,7 @@ def consistency_block(res, plots):
     ax.set_yticks(y)
     ax.set_yticklabels(ordr, fontsize=8)
     ax.invert_yaxis()
-    ax.set_xlabel("median paired minADE@6 delta vs baseline (m)")
+    ax.set_xlabel(f"median paired minADE@{K} delta vs baseline (m)")
     ax.set_title("trajectory damage does not follow CoC drift, "
                  "except where the CoC collapses", fontsize=9.5)
     ax.legend(frameon=False, fontsize=8)
@@ -353,7 +353,7 @@ def write_summary(res, path):
                  f"(min {100 * o['mlp'][1]:.1f}%)")
     v = res["val500"]
     L.append(f"\n   val500, paired on {v['n']} clips")
-    L.append(f"   {'arm':10s} {'minADE@6 mean(med)':>22s} {'minFDE@6 mean(med)':>22s} "
+    L.append(f"   {'arm':10s} {f'minADE@{K} mean(med)':>22s} {f'minFDE@{K} mean(med)':>22s} "
              f"{'CoC degen':>10s}")
     for nm, m in v["arms"].items():
         L.append(f"   {nm:10s} {m['minADE6_mean']:12.4f} ({m['minADE6_median']:.4f}) "
@@ -372,7 +372,7 @@ def write_summary(res, path):
     L.append(f"\nB. CoC-action consistency (val500, n={c['n_clips']}, "
              f"unparseable = 0 as in the paper)")
     L.append(f"   {'arm':12s} {'coverage':>9s} {'agree':>7s} {'d vs base':>10s} "
-             f"{'p':>10s} {'p Bonf':>9s} {'degen':>7s} {'minADE@6':>9s}")
+             f"{'p':>10s} {'p Bonf':>9s} {'degen':>7s} {f'minADE@{K}':>9s}")
     for n, m in c["arms"].items():
         d = c["vs_baseline"].get(n)
         dd = f"{d['delta_pp']:+9.1f}pp" if d else f"{'--':>11s}"
