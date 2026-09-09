@@ -1,7 +1,7 @@
 """CoC 퇴화율을 씬 단위 페어드로 검정할 수 있게 씬별 값을 남긴다.
 
 `analyze_alpasim.py` 는 arm 별 rollout 평균만 저장하므로 "5.92% vs 4.66% 가 유의한가" 를
-답할 수 없다. 같은 파서를 재사용해 rollout 단위 값을 얻고, 씬당 2 rollout 을 평균해 씬별
+답할 수 없다. 같은 파서를 재사용해 rollout 단위 값을 얻고, 씬당 rollout 을 평균해 씬별
 배열로 저장한다. 통계는 저장하지 않는다 -- 리포트 쪽에서 이 배열로 다시 계산하므로 숫자를
 손으로 옮길 일이 없다.
 
@@ -10,7 +10,8 @@ alpasim venv 로 돌려야 한다. ASL 프로토버프를 읽는 데 alpasim_uti
   cd /home/cvlab21/project/chan/alpasim && uv run python \
       <repo>/experiments/evaluation/coc_paired_tyrk.py --out <abs>/outputs/tyrK_pairs
 
-150씬 x 2 rollout x 3 arm = 900개 ASL 파싱에 ~10분 걸린다.
+`--arm NAME RUNDIR` 를 반복하면 임의의 arm 집합을 쓸 수 있다 (생략하면 150씬 tyrK 3 arm).
+씬 x rollout x arm 당 ASL 하나를 읽으므로 150씬 3 arm 이면 900개, ~10분 걸린다.
 """
 import argparse
 import asyncio
@@ -24,9 +25,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "experiments/head_analysis"))
 import analyze_alpasim as A
 
-ARMS = {"baseline": "m2601_merged_baseline",
-        "tyr_c100": "m2601_merged_slim_tyr_u40_r",
-        "tyrK": "m2601_merged_slim_tyrK"}
+DEFAULT_ARMS = [("baseline", "m2601_merged_baseline"),
+                ("tyr_c100", "m2601_merged_slim_tyr_u40_r"),
+                ("tyrK", "m2601_merged_slim_tyrK")]
 KEYS = ("degenerate_frac", "empty_frac", "soup_frac")
 
 
@@ -35,12 +36,15 @@ def main():
     ap.add_argument("--runs-root", type=Path,
                     default=Path("/home/cvlab21/project/chan/alpasim-runs"))
     ap.add_argument("--out", type=Path, default=REPO / "outputs/tyrK_pairs")
+    ap.add_argument("--arm", nargs=2, action="append", metavar=("NAME", "RUNDIR"),
+                    help="arm 하나 (반복 가능). 생략하면 150씬 tyrK 3 arm")
     args = ap.parse_args()
     out = args.out if args.out.is_absolute() else REPO / args.out
     out.mkdir(parents=True, exist_ok=True)
+    arms = [tuple(a) for a in args.arm] if args.arm else DEFAULT_ARMS
 
     per_scene = {}
-    for name, d in ARMS.items():
+    for name, d in arms:
         run = args.runs_root / d
         acc = {}
         for r in A.load_rollouts(run):
