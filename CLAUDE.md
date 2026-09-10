@@ -654,9 +654,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
 | `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률. 7절(G3, 2026-09-07 추가)은 그 소멸이 지표 탓임을 보인다 — 같은 rollout의 연속 대리지표에서 근접 시 제동비율이 baseline 0.251 > dual 0.168 > tyr_r 0.146 > lp_r50 0.123으로 단조 감소(셋 다 p≤0.0017)하고, lp_r50은 선행차 TTC<2s가 0.55%→3.86% |
 | `2026-09-06_calibration-size-closedloop.html` | `evaluation/calibsize_report_template.html` | 같은 dual 기준을 100클립 대신 2,000클립으로 추정한 두 **서로소** 추출의 폐루프 150씬: 둘 다 출하본 대비 −0.112 / −0.115 (p<1e-4)이고 서로는 −0.003 (p=0.33)로 구분 불가 → 손해는 한 번의 불운이 아니라 **수렴한 선택의 성질**이고 `calib_100`이 운 좋은 추출; 두 arm 모두 baseline을 못 이기므로 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다 |
+| `2026-09-09_method-x-draw.html` | `evaluation/method_x_draw_report_template.html` | 같은 세 캘리브레이션 추출(calib_100 / rd100_a / rd100_b)을 두 방법에 물린 2×3 격자: **추출 민감도가 방법마다 다르다** — tyr(출력 재구성) 범위 0.008·sd 0.004로 세 쌍 모두 n.s.인데 dual+fisher+h4(LLM-Pruner param_mix 2차 + 층당 Q4 균등) 범위 0.076·sd 0.039로 두 쌍 유의하고 baseline 대비 부호까지 갈림. 그래서 **단일 추출 비교는 뒤집힌다** — calib_100에서 tyr −dfh4 +0.071(p=0.0002)이 rd100_b에서 +0.002(p=0.45). 주행과 CoC는 서로 다른 축에서 흔들림(tyr은 CoC 3.7–9.0%, dfh4는 주행 0.076 범위) |
 
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (45 entries as of 2026-09-06: 43 html + 2 tex).
+`ls reports/evaluation/` is the full set (46 entries as of 2026-09-09: 44 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
