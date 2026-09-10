@@ -193,7 +193,9 @@ minADE 델타는 heavy-tail이라 두 통계가 이렇게 갈릴 수 있고, 여
   </figcaption>
 </figure>
 
-<h2><span class="num">4</span>게이트는 그 이유를 설명하지 못한다</h2>
+<h2><span class="num">4</span>왜 지는가 — 두 후보를 배제했다</h2>
+
+<h3>4.1 게이트는 설명하지 못한다</h3>
 
 <p>
 가장 하고 싶은 설명은 "차선·도로 유지가 무너졌다"이다. offroad가 6.7% → 9.3%로 올랐으니까.
@@ -222,13 +224,68 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 </tbody></table>
 
 <div class="callout warn">
-<p><b>종합 점수는 유의하게 움직이는데 게이트는 어느 것도 분리하지 못한다.</b> 즉
-<b>기전은 미해결</b>이다. offroad 쪽으로 기울기는 하지만(p=0.087) 불일치 씬이 4 vs 7밖에
-안 되어 근거가 되지 못한다. 이 레포는 이미 같은 벽을 만난 적이 있고 — 과실 충돌은 개수로
-검정하기엔 너무 드물다 — 그래서 <code>analyze_longitudinal.py</code>가 존재한다. 같은
-rollout을 연속 대리지표(time headway, 근접 노출, 제동 반응)로 다시 읽는 것이 이 질문을 푸는
-방법이고, 이 보고서는 거기까지 가지 않았다.</p>
+<p><b>종합 점수는 유의하게 움직이는데 게이트는 어느 것도 분리하지 못한다.</b> offroad 쪽으로
+기울기는 하지만(p=0.087) 불일치 씬이 4 vs 7밖에 안 되어 근거가 되지 못한다. 이 레포는 이미
+같은 벽을 만난 적이 있고 — 과실 충돌은 개수로 검정하기엔 너무 드물다 — 그래서
+<code>analyze_longitudinal.py</code>가 존재한다. 그것을 다음 절에서 돌린다.</p>
 </div>
+
+<h3>4.2 종방향도 아니다 — 오히려 <em>개선</em>된다</h3>
+
+<p>
+<code>analyze_longitudinal.py</code>는 같은 rollout의 10 Hz 시계열을 연속 대리지표로 다시
+읽는다(GPU 불필요). 기존 스크립트는 비교 기준이 <code>"baseline"</code>으로 하드코딩돼 있어
+"프루닝이 얼마를 물었나"만 답하고 <b>"두 압축 arm이 어떻게 다른가"는 못 물었다</b> — 점수 축에서
+<code>analyze_calibsize.py</code>가 메운 것과 같은 공백이라, <code>--reference</code>를 추가해
+<code>dual</code> 기준으로 돌렸다.
+</p>
+
+<table>
+<thead><tr><th>지표 (근접 = 장애물 6 m 이내)</th><th class="r"><code>dual+h4 − dual</code></th><th class="r">95% CI</th><th class="r">p</th><th class="r">방향</th></tr></thead>
+<tbody>
+<tr><td>제동비율</td><td class="r"><b>+0.0525</b></td><td class="r sig">[+0.0287, +0.0783]</td><td class="r sig">4e−05</td><td class="r">더 안전</td></tr>
+<tr><td>제동가속</td><td class="r">−0.0714</td><td class="r sig">[−0.1343, −0.0182]</td><td class="r sig">0.0010</td><td class="r">더 안전</td></tr>
+<tr><td>근접 시 평균속도</td><td class="r"><b>−0.6332</b></td><td class="r sig">[−0.8821, −0.4076]</td><td class="r sig">&lt;1e−04</td><td class="r">더 안전</td></tr>
+<tr><td>THW &lt; 1 s 시간비율</td><td class="r">−0.0324</td><td class="r sig">[−0.0499, −0.0157]</td><td class="r sig">1e−04</td><td class="r">더 안전</td></tr>
+<tr><td>선행차 THW p05</td><td class="r">+0.0133</td><td class="r ns">[−0.1727, +0.1849]</td><td class="r ns">0.250</td><td class="r ns">n.s.</td></tr>
+<tr><td>선행차 TTC p05</td><td class="r">−4.62</td><td class="r ns">[−11.49, −0.26]</td><td class="r ns">0.699</td><td class="r ns">n.s.</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::hm::longitudinal.png" alt="종방향 대리지표">
+  <figcaption>
+    지표마다 단위가 달라 <code>dual</code> 자신의 수준 대비 비율로 그렸다 — 읽을 것은
+    크기가 아니라 방향과 유의성이다. 선행차 TTC p05는 CI가 0을 배제하지만 Wilcoxon이
+    p=0.70이라 회색으로 뒀다(씬당 n=113, 동률이 많다).
+  </figcaption>
+</figure>
+
+<p>절대값으로 보면 <code>dual+h4</code>가 baseline에 더 가깝다:</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">근접 시 제동비율</th><th class="r">근접 시 평균속도 (m/s)</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.343</td><td class="r">8.43</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.290</td><td class="r">9.00</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r"><b>0.325</b></td><td class="r"><b>8.35</b></td></tr>
+</tbody></table>
+
+<div class="callout bad">
+<p><b>손실은 제동·차간거리 판단이 아니다.</b> <code>dual</code>이 baseline 대비 잃었던 것
+(제동비율 −0.068, 근접 시 속도 +0.762)을 <code>dual+h4</code>가 상당 부분 되돌리는데도
+주행 점수는 −0.091이다. 종방향 축은 <b>배제</b>된다.</p>
+<p>그래서 <code>dual+h4</code>는 이런 조합이다 — <b>CoC 퇴화 0%, 제동 판단 개선, 개루프 궤적
+오차 해 없음, 그런데 주행은 최하위권</b>. 남은 설명은 <b>횡방향</b>(차선 유지·경로 추종)이고,
+4.1절의 offroad 6.7%→9.3%가 유의하지는 않아도 같은 방향을 가리킨다. 종방향이 빠지면서 그
+약한 신호의 무게가 올라간다 — 다만 <b>이것은 가설이지 이 보고서의 결과가 아니다.</b></p>
+</div>
+
+<p>
+부수 확인: <code>dualexp_em93p75</code>는 <code>dual</code> 대비 종방향이 거의 동일하다
+(제동비율 +0.0069 p=0.51, 제동가속 −0.0111 p=0.52). VLM 절반이 비트 동일하니 당연하고,
+그 arm의 폐루프 −0.035가 expert 절단의 효과임을 재확인해 준다. 충돌 rollout을 제외해도
+선행차 THW 효과는 유지된다(<code>dual+h4</code> −0.473 s → −0.580 s, p≤0.0005).
+</p>
 
 <h2><span class="num">5</span>같은 방향의 두 번째 사례 — 다만 교란이 있다</h2>
 
@@ -272,8 +329,11 @@ rollout을 연속 대리지표(time headway, 근접 노출, 제동 반응)로 �
 <h2><span class="num">7</span>한계</h2>
 
 <ul>
-<li><b>기전 미해결.</b> 4절 — 점수는 움직이는데 게이트는 분리되지 않는다. "offroad 때문"은
-가설이지 결과가 아니다.</li>
+<li><b>기전은 여전히 미해결이다 — 후보 둘이 줄었을 뿐.</b> 4절이 게이트와 종방향을 배제했고,
+남은 횡방향 가설은 <b>측정하지 않았다</b>. "offroad 때문"은 가설이지 결과가 아니다.</li>
+<li><b>종방향 배제는 "종방향이 무관하다"가 아니다.</b> 6 m·1 m/s·1 s라는 임계값에 의존하고,
+선행차 지표 둘은 CI와 Wilcoxon이 어긋난다(씬당 동률이 많다). 배제된 것은 "제동 판단이
+나빠져서 졌다"는 가설이지 종방향 축 전체가 아니다.</li>
 <li><b>150씬은 suite 전체보다 쉽다</b>(0.742 vs 나머지 763씬 0.660, p=0.039; 과실 충돌
 2.0% vs 5.5%). 절대값은 낙관적이고 <b>대응 델타</b>만 읽어야 한다.</li>
 <li><b>폐루프 1회, 재현 없음.</b> 씬당 σ≈0.32라 N=150은 0.080까지 분해한다 — 관측된 0.091은
@@ -287,9 +347,10 @@ rollout을 연속 대리지표(time headway, 근접 노출, 제동 반응)로 �
 <h2><span class="num">8</span>다음</h2>
 
 <ol>
-<li><b><code>analyze_longitudinal.py</code>를 이 arm에 돌린다.</b> 게이트가 못 가르는 것을
-연속 대리지표가 가른 전례가 있다(hard100 보고서 7절: 근접 시 제동비율이 arm 간 단조 감소,
-셋 다 p≤0.0017). 기전을 푸는 가장 싼 수단이고 GPU가 들지 않는다.</li>
+<li><b>횡방향 대리지표를 만든다.</b> 4.2절이 종방향을 배제하면서 이것이 유일하게 남은
+후보가 됐다. 같은 rollout의 <code>metrics.parquet</code>·ASL에서 차선 중심 대비 횡오차,
+경로 이탈까지의 시간, 곡률 추종 오차를 뽑으면 되고 — <code>analyze_longitudinal.py</code>와
+같은 자리를 읽으므로 GPU가 들지 않는다. 그런 스크립트가 현재 <b>없다</b>.</li>
 <li><b>hard100 복제.</b> 검정력 1.55배, 이미 있는 인프라(<code>run_hard100*.sh</code>)로 실행
 가능. −0.091이 재현되면 결론이 단단해진다.</li>
 <li><b>head 수 스윕</b>(qcut6 / qcut9)은 1·2가 끝난 뒤에. 곡선이 단조라면 볼 것이 없고,
@@ -300,11 +361,14 @@ rollout을 연속 대리지표(time headway, 근접 노출, 제동 반응)로 �
 
 <footer>
 분석 <code>experiments/evaluation/analyze_headmlp_split.py</code> ·
+종방향 <code>experiments/head_analysis/analyze_longitudinal.py --reference slim_dual_u40_v2</code>
+(alpasim venv, GPU 불필요) ·
 빌드 <code>make_slim.py --config dual_u40_qcut4_v2 --importance importance_v2</code> ·
 개루프 <code>run_baseline.py</code> (cvlab20, Ada) ·
 폐루프 <code>launch_alpasim_shards.sh slim_dual_u40_qcut4_v2 150 2 "4 5 6 7"</code>
 + <code>merge_alpasim_shards.py --expect-scenes 150</code> ·
 결과 <code>outputs/headmlp_split/</code>,
+<code>outputs/headmlp_longitudinal{,_vsdual}/</code>,
 <code>alpasim-runs/m2601_merged_slim_dual_u40_qcut4_v2/</code> ·
 브랜치 <code>worktree-safety-weighted-importance</code>
 </footer>

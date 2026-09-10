@@ -479,8 +479,13 @@ delta CI spans 0 on all three sets; the median excludes 0, and the protocol's he
 and CoC degeneracy drops 1.4/3.0/3.4% -> **0.0/0.0/0.0%**, i.e. head cuts are what breaks
 generation. Closed loop over 150 scenes is **-0.091 [-0.134,-0.050], p=3e-06 vs `dual`**, and
 -0.012 (n.s.) vs baseline -- the reallocation returns the shipped arm's whole advantage. Neither
-gate separates (offroad 20 -> 28 hits, scene-paired Wilcoxon p=0.087, McNemar p=0.55), so the
-mechanism is unresolved; `analyze_longitudinal.py`'s continuous surrogates are the tool for that.
+gate separates (offroad 20 -> 28 hits, scene-paired Wilcoxon p=0.087, McNemar p=0.55), and the
+longitudinal surrogates rule themselves out: measured against `dual`, `dual+h4` is **safer** --
+braking rate near obstacles +0.0525 (p=4e-05), speed when close -0.633 (p<1e-4), time under
+THW 1 s -0.032 (p=1e-4) -- so the loss is not braking or following judgement. That leaves the
+lateral axis (lane keeping / path tracking) as the only live hypothesis, which nothing here
+measures. `analyze_longitudinal.py` gained `--reference` for this: it used to hardcode
+"baseline", answering what pruning cost but never how two pruned arms differ.
 Two consequences: **never judge a head<->MLP reallocation on open-loop minADE**, and this is the
 sharpest instance yet of CoC health not being a safety proxy -- 0.0% degeneracy alongside the worst
 driving of any dual variant. Report `reports/evaluation/2026-09-10_head-vs-mlp-budget.html`.
@@ -546,7 +551,11 @@ They aggregate per-rollout → per-scene mean → paired delta vs baseline with 
 Wilcoxon. `analyze_collisions.py` does per-collision forensics (does CoC degeneracy *concentrate*
 in the 5 s before a crash?); `analyze_longitudinal.py` exists because at-fault collisions are too
 rare to power a count, so it re-reads the same rollouts as continuous surrogates (time headway,
-proximity exposure, braking response, speed at closest approach).
+proximity exposure, braking response, speed at closest approach). Its `--reference` (2026-09-10)
+makes those deltas arm-to-arm instead of always-vs-baseline -- the same gap `analyze_calibsize.py`
+fills on the score axis, and what "why is `dual+h4` worse than `dual`" needs. Note the robustness
+block stays baseline-referenced on purpose: it asks whether a pruning effect survives dropping
+the crashed rollouts, which is a different question from an arm-vs-arm delta.
 
 ### Sharding one config over several GPUs (2026-08-10)
 

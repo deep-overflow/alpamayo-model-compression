@@ -281,6 +281,59 @@ def make_plots(res, plots):
     plt.close(fig)
 
 
+# ------------------------------------------------------- longitudinal surrogates
+# analyze_longitudinal.py (alpasim venv) re-reads the same rollouts as continuous
+# measures. Its output is read here rather than recomputed: the gates are rare events
+# with no power, and the surrogates are what decide whether the loss is longitudinal.
+LONG_DIR = Path("/home/cvlab21/project/chan/alpamayo-model-compression/outputs/"
+                "headmlp_longitudinal_vsdual")
+# (key, label, sign that means SAFER). matplotlib has no Korean face on this box, so plot
+# labels stay English while the prose around them is Korean -- same as the rest of the repo.
+LONG_KEYS = [("brake_frac_when_close", "braking rate (near obstacle)", 1),
+             ("brake_accel_when_close", "braking accel (near obstacle)", -1),
+             ("mean_speed_when_close", "speed when close", -1),
+             ("frac_thw_below_1s", "time with THW < 1 s", -1),
+             ("lead_thw_p05", "lead-vehicle THW p05", 1),
+             ("lead_ttc_p05", "lead-vehicle TTC p05", 1)]
+
+
+def longitudinal_block(res, plots):
+    f = LONG_DIR / "metrics.json"
+    if not f.exists():
+        return
+    m = json.loads(f.read_text())
+    arm = "slim_dual_u40_qcut4_v2"
+    d = m["paired_vs_baseline"][arm]
+    res["longitudinal"] = {"reference": m.get("reference"), "n_scenes": m["n_scenes"],
+                           "arm": arm,
+                           **{k: d[k] for k, _, _ in LONG_KEYS}}
+
+    # Each measure has its own unit, so plot the delta normalised by the reference arm's
+    # own level -- the point is direction and significance, not magnitude across rows.
+    ref_abs = m["configs"][m["reference"]]
+    fig, ax = plt.subplots(figsize=(7.8, 3.4))
+    ys, labs, cols = [], [], []
+    for k, lab, better in LONG_KEYS:
+        base = abs(ref_abs[k]["mean"]) or 1.0
+        ys.append(100 * d[k]["delta"] / base)
+        labs.append(lab)
+        sig = d[k]["wilcoxon_p"] is not None and d[k]["wilcoxon_p"] < 0.05
+        good = (d[k]["delta"] * better) > 0
+        cols.append((GREEN if good else RED) if sig else MUTED)
+    y = np.arange(len(ys))
+    ax.barh(y, ys, color=cols, alpha=0.85)
+    ax.axvline(0, color=INK, lw=0.9)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labs, fontsize=8.5)
+    ax.invert_yaxis()
+    ax.set_xlabel("dual+h4 - dual, % of dual's own level")
+    ax.set_title("longitudinal surrogates: dual+h4 is SAFER than dual\n"
+                 "green = significantly safer, grey = not significant", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(plots / "longitudinal.png", dpi=150)
+    plt.close(fig)
+
+
 def write_summary(res, path):
     L = [f"head<->MLP reallocation: open loop vs closed loop  (minADE@{K})", ""]
     for s, v in res["open"].items():
@@ -313,6 +366,18 @@ def write_summary(res, path):
             x = c["gates"][a][g]
             L.append(f"     {a:18s} {x['k']:3d}/{x['n']} = {100 * x['rate']:5.1f}% "
                      f"[{100 * x['ci'][0]:.1f},{100 * x['ci'][1]:.1f}]")
+    if "longitudinal" in res:
+        lg = res["longitudinal"]
+        L.append(f"\n   longitudinal surrogates, paired vs {lg['reference']} "
+                 f"({lg['n_scenes']} scenes) -- from analyze_longitudinal.py")
+        for k, lab, _ in LONG_KEYS:
+            e = lg[k]
+            star = "*" if (e["wilcoxon_p"] is not None and e["wilcoxon_p"] < 0.05) else " "
+            L.append(f"     {k:24s} {e['delta']:+9.4f} [{e['ci_lo']:+.4f},{e['ci_hi']:+.4f}] "
+                     f"p={e['wilcoxon_p']:.4f}{star} n={e['n']}")
+        L.append("     -> the loss is NOT longitudinal: dual+h4 brakes more and travels"
+                 " slower near obstacles.")
+
     L.append("\n   gates, PAIRED on the 150 scenes (rollouts are not pairable: per-run UUIDs,"
              " seed-free design)")
     for a, cell in c["gate_paired_vs_dual"].items():
@@ -338,6 +403,7 @@ def main():
     open_loop(res)
     closed_loop(res)
     make_plots(res, plots)
+    longitudinal_block(res, plots)
     (out / "config.json").write_text(json.dumps({
         "purpose": "head<->MLP 예산 재배분의 개루프-폐루프 해리",
         "open_sets": [s[0] for s in OPEN_SETS], "closed_runs": CL,
