@@ -334,6 +334,51 @@ def longitudinal_block(res, plots):
     plt.close(fig)
 
 
+# ------------------------------------------------------------ lateral surrogates
+LAT_DIR = Path("/home/cvlab21/project/chan/alpamayo-model-compression/outputs/headmlp_lateral")
+LAT_KEYS = [("frac_out_of_lane", "time out of lane", -1),
+            ("longest_excursion_s", "longest out-of-lane episode", -1),
+            ("out_of_lane_episodes", "out-of-lane episodes", -1),
+            ("lane_margin_median", "lane margin median (in lane)", 1),
+            ("frac_wrong_lane", "time in wrong lane", -1),
+            ("plan_dev_median", "plan deviation median", -1)]
+
+
+def lateral_block(res, plots):
+    f = LAT_DIR / "metrics.json"
+    if not f.exists():
+        return
+    m = json.loads(f.read_text())
+    arm = "slim_dual_u40_qcut4_v2"
+    d = m["paired"][arm]
+    res["lateral"] = {"reference": m["reference"], "n_scenes": m["n_scenes"], "arm": arm,
+                      "abs": {c: {k: m["configs"][c][k]["mean"] for k, _, _ in LAT_KEYS}
+                              for c in m["configs"]},
+                      **{k: d[k] for k, _, _ in LAT_KEYS}}
+
+    ref_abs = m["configs"][m["reference"]]
+    fig, ax = plt.subplots(figsize=(7.8, 3.4))
+    ys, labs, cols = [], [], []
+    for k, lab, better in LAT_KEYS:
+        base = abs(ref_abs[k]["mean"]) or 1.0
+        ys.append(100 * d[k]["delta"] / base)
+        labs.append(lab)
+        excl = (d[k]["ci_lo"] > 0) or (d[k]["ci_hi"] < 0)
+        cols.append((GREEN if d[k]["delta"] * better > 0 else RED) if excl else MUTED)
+    y = np.arange(len(ys))
+    ax.barh(y, ys, color=cols, alpha=0.85)
+    ax.axvline(0, color=INK, lw=0.9)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labs, fontsize=8.5)
+    ax.invert_yaxis()
+    ax.set_xlabel("dual+h4 - dual, % of dual's own level")
+    ax.set_title("lateral surrogates: dual+h4 leaves the lane more, and for longer\n"
+                 "red = worse, green = better (CI excludes 0), grey = n.s.", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(plots / "lateral.png", dpi=150)
+    plt.close(fig)
+
+
 def write_summary(res, path):
     L = [f"head<->MLP reallocation: open loop vs closed loop  (minADE@{K})", ""]
     for s, v in res["open"].items():
@@ -378,6 +423,19 @@ def write_summary(res, path):
         L.append("     -> the loss is NOT longitudinal: dual+h4 brakes more and travels"
                  " slower near obstacles.")
 
+    if "lateral" in res:
+        lt = res["lateral"]
+        L.append(f"\n   lateral surrogates, paired vs {lt['reference']} "
+                 f"({lt['n_scenes']} scenes) -- from analyze_lateral.py")
+        for k, lab, better in LAT_KEYS:
+            e = lt[k]
+            excl = (e["ci_lo"] > 0) or (e["ci_hi"] < 0)
+            tag = ("  SAFER" if e["delta"] * better > 0 else "  WORSE") if excl else ""
+            L.append(f"     {k:24s} {e['delta']:+9.4f} [{e['ci_lo']:+.4f},{e['ci_hi']:+.4f}]"
+                     f"{'*' if excl else ' '}{tag}")
+        L.append("     -> the loss IS lateral: more time out of lane and longer excursions,"
+                 " though FEWER of them.")
+
     L.append("\n   gates, PAIRED on the 150 scenes (rollouts are not pairable: per-run UUIDs,"
              " seed-free design)")
     for a, cell in c["gate_paired_vs_dual"].items():
@@ -404,6 +462,7 @@ def main():
     closed_loop(res)
     make_plots(res, plots)
     longitudinal_block(res, plots)
+    lateral_block(res, plots)
     (out / "config.json").write_text(json.dumps({
         "purpose": "head<->MLP 예산 재배분의 개루프-폐루프 해리",
         "open_sets": [s[0] for s in OPEN_SETS], "closed_runs": CL,

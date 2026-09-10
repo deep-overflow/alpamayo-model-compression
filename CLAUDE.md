@@ -482,10 +482,13 @@ generation. Closed loop over 150 scenes is **-0.091 [-0.134,-0.050], p=3e-06 vs 
 gate separates (offroad 20 -> 28 hits, scene-paired Wilcoxon p=0.087, McNemar p=0.55), and the
 longitudinal surrogates rule themselves out: measured against `dual`, `dual+h4` is **safer** --
 braking rate near obstacles +0.0525 (p=4e-05), speed when close -0.633 (p<1e-4), time under
-THW 1 s -0.032 (p=1e-4) -- so the loss is not braking or following judgement. That leaves the
-lateral axis (lane keeping / path tracking) as the only live hypothesis, which nothing here
-measures. `analyze_longitudinal.py` gained `--reference` for this: it used to hardcode
-"baseline", answering what pruning cost but never how two pruned arms differ.
+THW 1 s -0.032 (p=1e-4). The mechanism is **lateral**: `analyze_lateral.py` (new, 2026-09-10)
+puts `dual+h4` **+4.4pp of time out of lane** [+0.019,+0.069] with the **longest excursion
+4.87 s -> 5.64 s** [+0.30,+1.25], while the number of excursions FALLS (-0.38) and the in-lane
+margin improves (+0.047) -- it leaves the lane less often and comes back worse. That is why the
+`offroad` gate leaned the right way and still could not resolve it: a binary gate cannot count
+duration. Both scripts gained `--reference` for this; they hardcoded "baseline", answering
+what pruning cost but never how two pruned arms differ.
 Two consequences: **never judge a head<->MLP reallocation on open-loop minADE**, and this is the
 sharpest instance yet of CoC health not being a safety proxy -- 0.0% degeneracy alongside the worst
 driving of any dual variant. Report `reports/evaluation/2026-09-10_head-vs-mlp-budget.html`.
@@ -549,7 +552,14 @@ cd /home/cvlab21/project/chan/alpasim && uv run python \
 
 They aggregate per-rollout → per-scene mean → paired delta vs baseline with bootstrap CI and
 Wilcoxon. `analyze_collisions.py` does per-collision forensics (does CoC degeneracy *concentrate*
-in the 5 s before a crash?); `analyze_longitudinal.py` exists because at-fault collisions are too
+in the 5 s before a crash?); `analyze_lateral.py` (2026-09-10) is the lane-keeping twin --
+time out of lane, excursion count and longest excursion, in-lane margin, cross-track error and
+plan deviation, from `min_distance_to_lane_boundary_m` and friends in the same parquet, under
+**this** repo's venv (only pandas). Its zero handling is the load-bearing bit: 32% of steps read
+exactly 0, and that is the lane edge, not a sentinel -- positive values run continuously down to
+0 (p1 = 0.0097 m) and `offroad` fires on 3.46% of zero-margin steps against 0.00% of positive
+ones. So time-at-zero is the continuous precursor to the `offroad` gate. Verify that before
+trusting any lane metric on a new sim version. `analyze_longitudinal.py` exists because at-fault collisions are too
 rare to power a count, so it re-reads the same rollouts as continuous surrogates (time headway,
 proximity exposure, braking response, speed at closest approach). Its `--reference` (2026-09-10)
 makes those deltas arm-to-arm instead of always-vs-baseline -- the same gap `analyze_calibsize.py`

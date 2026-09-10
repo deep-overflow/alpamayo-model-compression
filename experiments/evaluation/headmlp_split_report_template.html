@@ -81,15 +81,17 @@
 출하 <code>dual</code>은 24.0%를 층당 <b>Q head 13개 + MLP 4898채널</b>에서 가져온다.
 같은 24.0%를 <b>head 4개 + MLP 5666채널</b>에서 가져오면 어떻게 되는가? 기준·캘리브레이션·
 expert·KV가 모두 같고 제거 파라미터가 비트 단위로 동일한 1요인 비교다. 답은 모드에 따라
-갈린다 — <b>개루프는 해를 못 보고, 폐루프는 명확히 본다</b>(−0.091, p=3e−06). 그리고 이
-레포가 "MLP 폭은 싸다"고 기록해 온 근거는 <b>전부 개루프</b>였다.
+갈린다 — <b>개루프는 해를 못 보고, 폐루프는 명확히 본다</b>(−0.091, p=3e−06). 기전까지
+좁혔다: 제동·차간 판단은 오히려 <b>좋아지고</b>, 무너지는 것은 <b>차선 유지</b>다 —
+나가는 횟수가 아니라 <b>나가 있는 시간</b>. 그리고 이 레포가 "MLP 폭은 싸다"고 기록해 온
+근거는 <b>전부 개루프</b>였다.
 </p>
 
 <div class="kpi">
   <div><span class="v">−0.091</span><span class="k">폐루프 vs dual (p=3e−06)</span></div>
   <div><span class="v">CI가 0 포함</span><span class="k">개루프 평균 델타, 세 세트 모두</span></div>
   <div><span class="v">3.4% → 0.0%</span><span class="k">CoC 퇴화 (head를 덜 자르면)</span></div>
-  <div><span class="v">−0.012</span><span class="k">baseline조차 못 이김 (n.s.)</span></div>
+  <div><span class="v">+4.4pp</span><span class="k">차선 밖 시간 (최장 이탈 +0.77 s)</span></div>
 </div>
 
 <h2><span class="num">1</span>1요인 설계</h2>
@@ -193,7 +195,7 @@ minADE 델타는 heavy-tail이라 두 통계가 이렇게 갈릴 수 있고, 여
   </figcaption>
 </figure>
 
-<h2><span class="num">4</span>왜 지는가 — 두 후보를 배제했다</h2>
+<h2><span class="num">4</span>왜 지는가 — 차선 유지다</h2>
 
 <h3>4.1 게이트는 설명하지 못한다</h3>
 
@@ -276,9 +278,60 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 주행 점수는 −0.091이다. 종방향 축은 <b>배제</b>된다.</p>
 <p>그래서 <code>dual+h4</code>는 이런 조합이다 — <b>CoC 퇴화 0%, 제동 판단 개선, 개루프 궤적
 오차 해 없음, 그런데 주행은 최하위권</b>. 남은 설명은 <b>횡방향</b>(차선 유지·경로 추종)이고,
-4.1절의 offroad 6.7%→9.3%가 유의하지는 않아도 같은 방향을 가리킨다. 종방향이 빠지면서 그
-약한 신호의 무게가 올라간다 — 다만 <b>이것은 가설이지 이 보고서의 결과가 아니다.</b></p>
+4.1절의 offroad 6.7%→9.3%가 유의하지는 않아도 같은 방향을 가리킨다. 4.3절이 그것을 잰다.</p>
 </div>
+
+<h3>4.3 횡방향이다 — 다만 예상과 다른 모양으로</h3>
+
+<p>
+횡방향 대리지표 스크립트가 없어 새로 썼다(<code>analyze_lateral.py</code>, GPU 불필요).
+신호는 sim이 이미 10 Hz로 쓰는 <code>min_distance_to_lane_boundary_m</code>인데,
+<b>쓰기 전에 0의 의미부터 확정해야 했다</b> — 전체 스텝의 32%가 정확히 0이라, 이게 "여유
+0 m"인지 "정의 안 됨"인지에 따라 지표가 통째로 뒤집힌다.
+</p>
+
+<div class="callout">
+<p><b>0은 센티넬이 아니라 차선 밖이다.</b> 24k 스텝에서 양의 값이 0까지 <b>연속적</b>이고
+(p1 = 0.0097 m, 틈 없음), <code>offroad</code>는 margin==0 스텝의 <b>3.46%</b>에서 발생하는
+반면 margin&gt;0 스텝에서는 <b>정확히 0.00%</b>다. 따라서 이 계열은 차선 가장자리까지의
+여유이고 차선을 벗어나면 0에 고정되며, <b>margin==0 시간비율이 <code>offroad</code> 게이트의
+연속 선행지표</b>다 — 4.1절이 검정력 부족으로 못 본 바로 그 양이다.</p>
+</div>
+
+<table>
+<thead><tr><th>지표</th><th class="r"><code>dual+h4 − dual</code></th><th class="r">95% CI</th><th class="r">판정</th></tr></thead>
+<tbody>
+<tr><td><b>차선 밖 시간비율</b></td><td class="r"><b>+0.0437</b></td><td class="r sig">[+0.0193, +0.0692]</td><td class="r sig"><b>악화</b></td></tr>
+<tr><td><b>최장 이탈 지속시간</b></td><td class="r"><b>+0.768 s</b></td><td class="r sig">[+0.296, +1.246]</td><td class="r sig"><b>악화</b></td></tr>
+<tr><td>잘못된 차선 시간비율</td><td class="r">+0.0168</td><td class="r sig">[+0.0015, +0.0347]</td><td class="r sig">악화</td></tr>
+<tr><td>이탈 에피소드 <em>수</em></td><td class="r">−0.377</td><td class="r">[−0.583, −0.180]</td><td class="r">개선</td></tr>
+<tr><td>차선 내 여유 중앙값</td><td class="r">+0.047</td><td class="r">[+0.001, +0.093]</td><td class="r">개선</td></tr>
+<tr><td>계획 편차 중앙값</td><td class="r">−0.033</td><td class="r">[−0.048, −0.019]</td><td class="r">개선</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::hm::lateral.png" alt="횡방향 대리지표">
+  <figcaption>
+    <code>dual</code> 자신의 수준 대비 비율. 이탈 <b>횟수</b>는 줄었는데 이탈 <b>시간</b>과
+    <b>최장 지속</b>은 늘었다 — 부호가 갈리는 것이 이 절의 핵심이다.
+  </figcaption>
+</figure>
+
+<div class="callout bad">
+<p><b>나가는 횟수는 줄었는데 나가 있는 시간은 늘었다.</b> 에피소드 수 −0.38, 차선 밖 시간
++4.4pp, 최장 이탈 4.87 s → 5.64 s. 잔펀치가 늘어난 것이 아니라 <b>한 번 나가면 돌아오지
+못한다</b>. 그리고 차선 <i>안에</i> 있을 때는 오히려 더 중앙에 있다(여유 중앙값 +0.047).</p>
+<p>이것이 4.1절에서 offroad 게이트가 6.7%→9.3%로 기울고도 유의하지 못했던 이유다 — 게이트는
+이진 사건이라 "얼마나 오래 나가 있었는가"를 세지 못하는데, 실제로 움직인 축이 바로
+<b>지속시간</b>이었다.</p>
+</div>
+
+<p>
+<code>dualexp_em93p75</code>는 횡방향 어느 항목도 <code>dual</code>과 구분되지 않는다
+(차선 밖 시간 +0.0045, CI [−0.0130, +0.0224]). VLM 절반이 비트 동일하니 예상대로이고,
+이 스크립트의 <b>음성 대조군</b> 역할을 한다 — 무엇이든 유의하게 나왔다면 지표를 의심했어야
+한다.
+</p>
 
 <p>
 부수 확인: <code>dualexp_em93p75</code>는 <code>dual</code> 대비 종방향이 거의 동일하다
@@ -329,8 +382,12 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 <h2><span class="num">7</span>한계</h2>
 
 <ul>
-<li><b>기전은 여전히 미해결이다 — 후보 둘이 줄었을 뿐.</b> 4절이 게이트와 종방향을 배제했고,
-남은 횡방향 가설은 <b>측정하지 않았다</b>. "offroad 때문"은 가설이지 결과가 아니다.</li>
+<li><b>기전은 좁혔지만 인과는 아니다.</b> 4.3절은 <code>dual+h4</code>가 차선 밖에서 더
+오래 머문다는 <b>상관</b>을 보인다. 차선 이탈이 점수 손실을 <i>일으켰다</i>는 것은 아니고,
+둘 다 같은 원인의 결과일 수도 있다. 씬별로 이탈 시간과 점수 손실이 함께 움직이는지는
+재지 않았다.</li>
+<li><b>이탈 횟수는 오히려 줄었다.</b> 방향이 갈리는 지표를 하나의 이야기로 묶을 때는 조심해야
+한다 — "복귀 실패"는 해석이지 측정된 기전이 아니다.</li>
 <li><b>종방향 배제는 "종방향이 무관하다"가 아니다.</b> 6 m·1 m/s·1 s라는 임계값에 의존하고,
 선행차 지표 둘은 CI와 Wilcoxon이 어긋난다(씬당 동률이 많다). 배제된 것은 "제동 판단이
 나빠져서 졌다"는 가설이지 종방향 축 전체가 아니다.</li>
@@ -347,10 +404,10 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 <h2><span class="num">8</span>다음</h2>
 
 <ol>
-<li><b>횡방향 대리지표를 만든다.</b> 4.2절이 종방향을 배제하면서 이것이 유일하게 남은
-후보가 됐다. 같은 rollout의 <code>metrics.parquet</code>·ASL에서 차선 중심 대비 횡오차,
-경로 이탈까지의 시간, 곡률 추종 오차를 뽑으면 되고 — <code>analyze_longitudinal.py</code>와
-같은 자리를 읽으므로 GPU가 들지 않는다. 그런 스크립트가 현재 <b>없다</b>.</li>
+<li><b>씬 단위로 이탈 시간과 점수 손실을 붙여 본다.</b> 4.3절은 두 양이 각각 움직였다는
+것까지만 보인다. 같은 씬에서 함께 움직이는지(상관·회귀)를 재면 "차선 이탈이 손실의 내용물"이
+상관에서 기전으로 한 발 나아간다. <code>analyze_lateral.py</code>가 이미 씬별 값을 들고
+있으므로 추가 실행이 필요 없다.</li>
 <li><b>hard100 복제.</b> 검정력 1.55배, 이미 있는 인프라(<code>run_hard100*.sh</code>)로 실행
 가능. −0.091이 재현되면 결론이 단단해진다.</li>
 <li><b>head 수 스윕</b>(qcut6 / qcut9)은 1·2가 끝난 뒤에. 곡선이 단조라면 볼 것이 없고,
@@ -362,13 +419,15 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 <footer>
 분석 <code>experiments/evaluation/analyze_headmlp_split.py</code> ·
 종방향 <code>experiments/head_analysis/analyze_longitudinal.py --reference slim_dual_u40_v2</code>
-(alpasim venv, GPU 불필요) ·
+(alpasim venv) · 횡방향 <code>experiments/head_analysis/analyze_lateral.py</code>
+(이 레포 venv, 둘 다 GPU 불필요) ·
 빌드 <code>make_slim.py --config dual_u40_qcut4_v2 --importance importance_v2</code> ·
 개루프 <code>run_baseline.py</code> (cvlab20, Ada) ·
 폐루프 <code>launch_alpasim_shards.sh slim_dual_u40_qcut4_v2 150 2 "4 5 6 7"</code>
 + <code>merge_alpasim_shards.py --expect-scenes 150</code> ·
 결과 <code>outputs/headmlp_split/</code>,
 <code>outputs/headmlp_longitudinal{,_vsdual}/</code>,
+<code>outputs/headmlp_lateral/</code>,
 <code>alpasim-runs/m2601_merged_slim_dual_u40_qcut4_v2/</code> ·
 브랜치 <code>worktree-safety-weighted-importance</code>
 </footer>
