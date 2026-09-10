@@ -71,8 +71,8 @@
   <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
   <h1>궤적 기준의 앵커를 바꾸면: 추정은 안정되고 선택은 나빠진다</h1>
   <div class="meta">
-    2026-09-10 · <code>nvidia/Alpamayo-1.5-10B</code> · 24.0% 압축 3종 + 무손상 baseline ·
-    중요도 calib_100, 개루프 val500 · 전 arm cvlab20 (Ada) · minADE@6 · minFDE@6
+    2026-09-10 · <code>nvidia/Alpamayo-1.5-10B</code> · 24.0% 압축 5종 + 무손상 baseline ·
+    중요도 calib_100, 개루프 val500 (대조군은 3세트) · Ada (cvlab20 · cvlab21) · minADE@6 · minFDE@6
   </div>
 </header>
 
@@ -84,6 +84,8 @@ Taylor 점수는 "이 모델이 무엇을 쓰는가"가 아니라 "무엇이 출
 그 비대칭을 없애려 <strong>타깃을 모델 자신의 샘플로</strong> 바꿔 봤다. 결과는 두 갈래다 —
 <strong>추정은 확실히 더 안정되고(split-half +0.036), 그 추정이 고른 유닛은 확실히 더
 나쁘다(+0.054 m)</strong>. GT를 선택자로만 되살린 절충안(best-of-6)은 셋 중 가장 나빴다.
+반대 방향 — GT 타깃을 유지한 채 노이즈를 K배로 늘리는 것 — 은 열 개 비교 전부에서
+<strong>아무 일도 일으키지 않았다</strong>. 여섯 개 arm을 재고 나면 출하 기준이 제자리에 있다.
 </p>
 
 <div class="kpi">
@@ -234,7 +236,57 @@ ADE 평균 <strong>1.844 m</strong>가 500클립 단일-draw 기준 1.76과 같�
 <strong>K를 올려 정밀도를 사는 길이 막혀 있다</strong>는 뜻이다.</p>
 </div>
 
-<h2><span class="num">5</span>G4 — 개루프에서는 두 대안 모두 나쁘다</h2>
+<h2><span class="num">5</span>그 예측을 개루프가 확인한다 — K는 순위를 바꾸지 않는다</h2>
+
+<p>
+4절은 <code>|Σ|</code>에 항을 더하는 것이 표본을 늘리는 게 아니라 통계를 바꾼다고 말한다.
+그렇다면 그 기준이 실제로 좋은지 나쁜지는 별개 문제다. <code>gtk3</code>·<code>gtk10</code>을
+같은 예산으로 빌드해 val500에서 쟀다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">K</th><th class="r">minADE@6 mean</th><th class="r">median</th><th class="r">minFDE@6 median</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">—</td><td class="r">0.8236</td><td class="r">0.5241</td><td class="r">1.1243</td><td class="r">0.8%</td></tr>
+<tr><td>출하 <code>dual</code></td><td class="r">1</td><td class="r">0.8904</td><td class="r">0.6391</td><td class="r">1.3615</td><td class="r">1.4%</td></tr>
+<tr><td><code>dualgtref</code></td><td class="r">1</td><td class="r">0.8971</td><td class="r">0.6366</td><td class="r">1.4530</td><td class="r">1.4%</td></tr>
+<tr><td><code>dualgtk3</code></td><td class="r">3</td><td class="r">0.8896</td><td class="r">0.6322</td><td class="r">1.3849</td><td class="r">1.4%</td></tr>
+<tr><td><code>dualgtk10</code></td><td class="r">10</td><td class="r">0.9053</td><td class="r">0.6442</td><td class="r">1.3747</td><td class="r">1.6%</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>paired minADE@6</th><th class="r">median</th><th class="r">[95% CI]</th><th class="r">mean</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td><code>gtk3 − gtref</code></td><td class="r ns">+0.0032</td><td class="r ns">[−0.0121, +0.0158]</td><td class="r">−0.0075</td><td class="r ns">0.34</td></tr>
+<tr><td><code>gtk10 − gtref</code></td><td class="r ns">+0.0011</td><td class="r ns">[−0.0075, +0.0120]</td><td class="r">+0.0082</td><td class="r ns">0.45</td></tr>
+<tr><td><code>gtk10 − gtk3</code></td><td class="r ns">−0.0002</td><td class="r ns">[−0.0100, +0.0154]</td><td class="r">+0.0157</td><td class="r ns">0.37</td></tr>
+<tr><td><code>gtk3 − 출하본</code></td><td class="r ns">+0.0023</td><td class="r ns">[−0.0162, +0.0172]</td><td class="r">−0.0008</td><td class="r ns">0.41</td></tr>
+<tr><td><code>gtk10 − 출하본</code></td><td class="r ns">+0.0020</td><td class="r ns">[−0.0063, +0.0116]</td><td class="r">+0.0148</td><td class="r ns">0.23</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<p><strong>열 개 비교가 전부 CI에 0을 포함한다</strong>(minFDE도 p ≥ 0.09). 압축 비용은 셋 다
++0.038~+0.057로 재현된다. 4절의 예측이 그대로 확인된 것이다 — K를 올리면 점수 크기만 8.8배
+커지고, <code>rank_norm</code>이 스케일 불변이므로 순위가 거의 그대로이며(kept set이 출하본과
+96%, <code>gtk3</code>↔<code>gtk10</code>끼리는 97%), 따라서 성능도 그대로다.</p>
+<p>다섯 층위가 일관된다:</p>
+<table>
+<thead><tr><th>층위</th><th>K = 1 → 10</th></tr></thead>
+<tbody>
+<tr><td>점수 크기</td><td>8.8배 증가</td></tr>
+<tr><td>클립별 분산</td><td>1.3745 → 1.3490 (변화 없음)</td></tr>
+<tr><td>split-half 안정성</td><td>0.8626 → 0.8732 (K=3이 정점, 비단조)</td></tr>
+<tr><td>kept set</td><td>96% 유지</td></tr>
+<tr><td><strong>개루프</strong></td><td><strong>구별 불가 (p ≥ 0.23)</strong></td></tr>
+</tbody>
+</table>
+<p><code>|Σ_s|</code> 집계에 항을 더하는 것은 <strong>사실상 스케일 연산</strong>이고, 순위 기반
+선택에서는 no-op에 가깝다.</p>
+</div>
+
+<h2><span class="num">6</span>G4 — 개루프에서는 두 대안 모두 나쁘다</h2>
 
 <p>
 세 arm 모두 같은 박스에서 100클립 Ada 중요도로 빌드하고 같은 배치로 평가했다. 예산은
@@ -276,7 +328,7 @@ ADE 평균 <strong>1.844 m</strong>가 500클립 단일-draw 기준 1.76과 같�
   전체가 이동한다.</figcaption>
 </figure>
 
-<h2><span class="num">6</span>best-of-6이 가장 나쁜 이유 — 선택이 전형성을 깬다</h2>
+<h2><span class="num">7</span>best-of-6이 가장 나쁜 이유 — 선택이 전형성을 깬다</h2>
 
 <p>
 <code>dualself</code>가 실패한 진단은 명확했다. 계획서에 <strong>미리 적어둔 대가</strong>가
@@ -326,13 +378,74 @@ GT 앵커(1.4%)와 거의 같고 자기 앵커(5.4%)의 1/3이다. 즉 <strong>G
   GT 앵커 수준으로 돌아온다.</figcaption>
 </figure>
 
-<h2><span class="num">7</span>결론</h2>
+<h2><span class="num">8</span>대조군은 세 세트에서 출하본을 재현한다</h2>
+
+<p>
+<code>dualgtref</code>는 기각 대상이 아니라 <strong>출하 <code>dual</code>을 다른 조건에서
+재측정한 것</strong>이다 — 같은 100클립·같은 기준이지만 중요도를 cvlab21의 Blackwell이 아니라
+cvlab20의 Ada에서 쟀고, <code>run_importance</code>는 결정적이지 않다(같은 카드·같은 코드로도
+kept set 일치가 <strong>0.997</strong>이 천장이다). 그 결과 retained set이 출하본과 Q 3.4% /
+MLP 2.7% 다르다. 세 세트로 확장해 그 차이가 성능으로 새는지 확인했다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th class="r">n</th><th class="r">paired median</th><th class="r">[95% CI]</th><th class="r">p</th><th class="r">\|Δ\|&gt;0.05</th><th class="r">나빠진 클립</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">500</td><td class="r ns">−0.0004</td><td class="r ns">[−0.0064, +0.0040]</td><td class="r ns">0.72</td><td class="r">52.6%</td><td class="r">49.8%</td></tr>
+<tr><td>test500</td><td class="r">500</td><td class="r ns">+0.0006</td><td class="r ns">[−0.0062, +0.0072]</td><td class="r ns">0.55</td><td class="r">51.4%</td><td class="r">50.4%</td></tr>
+<tr><td>OOD-val</td><td class="r">262</td><td class="r ns">+0.0072</td><td class="r ns">[−0.0036, +0.0188]</td><td class="r ns">0.13</td><td class="r">58.8%</td><td class="r">54.6%</td></tr>
+</tbody>
+</table>
+
+<p>
+세 CI가 모두 0을 포함하고 부호가 50% 근처로 <strong>편향이 없다</strong>. 클립 단위로는 여전히
+크게 다르지만(<code>|Δ|&gt;0.05</code>가 51~59%, 값이 정확히 같은 클립은 0%) 차이의 중심이 0이다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th>압축 비용 — <code>gtref</code></th><th>압축 비용 — 출하본</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td>+0.0569 [+0.0302, +0.0782]</td><td>+0.0581 [+0.0361, +0.0829]</td></tr>
+<tr><td>test500</td><td>+0.0601 [+0.0346, +0.0914]</td><td>+0.0524 [+0.0340, +0.0794]</td></tr>
+<tr><td>OOD-val</td><td>+0.0739 [+0.0448, +0.1233]</td><td>+0.0776 [+0.0411, +0.1139]</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>세 가지가 동시에 확인된다.</strong> (1) 중요도 측정은 한 번만 하면 된다 — 다시 재도
+논문에 쓰는 압축 비용이 재현된다. (2) <code>run_importance</code>의 비결정성은 무해하다 —
+kept set 0.997 천장이 성능으로 새지 않는다. (3) cvlab20을 평가에 써도 된다 — 지금까지는 다른
+세션이 40클립에서 확인한 비트 동일성을 인용만 했는데, 여기서 1,262클립으로 직접 검증됐다.</p>
+</div>
+
+<div class="callout warn">
+<p><strong>단서 하나.</strong> OOD에서만 CoC 퇴화율이 <strong>5.7% vs 3.4%</strong>로 벌어진다
+(val 1.4/1.4%, test 2.6/3.0%는 일치). minADE는 p=0.13으로 구별 불가인데 퇴화율만 1.7배다.
+262클립에서 15개 대 9개라 검정을 세울 수 없어 <strong>관측으로만 기록</strong>한다. 이산·임계값
+지표가 연속 지표보다 민감하다는 것은 <code>2026-09-05_architecture-invariance</code>가 Ada→A100
+에서 이미 기록한 패턴이다.</p>
+</div>
+
+<h2><span class="num">9</span>결론</h2>
 
 <div class="callout bad">
-<p><strong>궤적 기준의 GT 앵커는 유지한다.</strong> 모델 자신의 샘플로 바꾸는 세 가지 방식
-— 무작위 draw, GT 최근접 draw — 이 모두 개루프에서 유의하게 나쁘고, 그중 어느 것도 압축 자체의
-비용(+0.057)보다 작지 않다.</p>
+<p><strong>궤적 기준의 GT 앵커는 유지한다.</strong> 타깃을 모델 쪽으로 옮기는 두 방식(무작위
+draw, GT 최근접 draw)은 개루프에서 유의하게 나쁘고 손해가 압축 자체의 비용(+0.057)에 맞먹거나
+그 2.3배다. 반대로 GT 타깃을 유지한 채 노이즈만 늘리는 두 방식(K=3, K=10)은 유의한 변화를
+전혀 만들지 못한다. <strong>이 축에서 출하 기준을 개선하는 방향은 측정된 범위 안에 없다.</strong></p>
 </div>
+
+<table>
+<thead><tr><th>arm</th><th>타깃</th><th class="r">val500 minADE@6 median</th><th class="r">출하본 대비</th></tr></thead>
+<tbody>
+<tr><td>출하 <code>dual</code></td><td>GT, 노이즈 1개/t</td><td class="r">0.6391</td><td class="r">—</td></tr>
+<tr><td><code>dualgtref</code></td><td>동일, 재측정</td><td class="r">0.6366</td><td class="r ns">−0.0004 (p=0.72)</td></tr>
+<tr><td><code>dualgtk3</code></td><td>GT, 노이즈 3개/t</td><td class="r">0.6322</td><td class="r ns">+0.0023 (p=0.41)</td></tr>
+<tr><td><code>dualgtk10</code></td><td>GT, 노이즈 10개/t</td><td class="r">0.6442</td><td class="r ns">+0.0020 (p=0.23)</td></tr>
+<tr><td><code>dualself</code></td><td>모델 샘플 (무작위)</td><td class="r">0.7164</td><td class="r sig">+0.0729 ✱</td></tr>
+<tr><td><code>dualbestn6</code></td><td>모델 샘플 중 GT 최근접</td><td class="r">0.8822</td><td class="r sig">+0.1303 ✱ (vs gtref)</td></tr>
+</tbody>
+</table>
 
 <p>얻은 규칙 세 가지:</p>
 
@@ -343,8 +456,10 @@ GT 앵커(1.4%)와 거의 같고 자기 앵커(5.4%)의 1/3이다. 즉 <strong>G
 <code>dualfm10</code> 5.6% → +0.0001, <code>dualsafe</code> 6.0% → +0.1945)와 <strong>독립적인
 두 번째 사례</strong>다 — 선택 통계로 기준을 고르는 모든 경로가 막힌다.</li>
 <li><strong><code>|Σ|</code> 추정량은 표본으로 정밀도를 사지 못한다.</strong> K를 10배 올리면
-크기가 8.8배 커질 뿐 분산은 그대로다. 정밀도를 원하면 집계를
-<code>Σ_draws|Σ_steps|</code>로 바꿔야 한다.</li>
+크기가 8.8배 커질 뿐 분산은 그대로이고(1.3745 → 1.3490), kept set이 96% 유지되며,
+<strong>개루프에서도 열 개 비교 전부 구별 불가</strong>다. <code>rank_norm</code>이 스케일
+불변이므로 이 연산은 순위 기반 선택에서 사실상 no-op이다. 정밀도를 원하면 집계를
+<code>Σ_draws|Σ_steps|</code>로 바꿔야 하고, 그것은 다른 추정량이다.</li>
 <li><strong>타깃은 on-manifold가 아니라 전형적이어야 한다.</strong> best-of-n은 on-manifold
 조건을 만족하면서 전형성을 깨고, 그 결과가 가장 나빴다.</li>
 </ol>
@@ -356,7 +471,7 @@ GT 앵커(1.4%)와 거의 같고 자기 앵커(5.4%)의 1/3이다. 즉 <strong>G
 제거해야 할 잡음이라는 함의는 <strong>틀렸다</strong>.
 </p>
 
-<h2><span class="num">8</span>한계</h2>
+<h2><span class="num">10</span>한계</h2>
 
 <ul>
 <li><strong>G3는 표본 수와 분리되지 않았다</strong>(4절). 자기 앵커의 안정성 이득이 앵커 때문인지
@@ -365,13 +480,14 @@ GT 앵커(1.4%)와 거의 같고 자기 앵커(5.4%)의 1/3이다. 즉 <strong>G
 <li><strong>폐루프 미측정.</strong> 개루프가 숨긴 실패를 폐루프가 드러낸 전례가 있고, 최근에는
 같은 24%를 head에서 MLP로 옮기면 개루프는 좋아 보이는데 폐루프가 −0.091로 나빠지는 해리도
 기록됐다. 여기의 판정은 개루프 판정이다.</li>
-<li><strong>val500만.</strong> test500 / OOD-val 미측정. 효과 크기가 판별 한계의 1.1~2.6배로
-크므로 우선순위는 낮다고 본다.</li>
+<li><strong>기각된 두 arm은 val500만.</strong> <code>self</code> / <code>bestn6</code>의
+test500 · OOD-val은 측정하지 않았다. 효과 크기가 판별 한계의 1.1~2.6배로 크고 이미 기각됐으므로
+우선순위가 낮다고 봤다. 대조군 <code>dualgtref</code>는 세 세트를 모두 돌렸다(7절).</li>
 <li><code>best-of-n</code>의 n=6 하나만 봤다. 전형성 가설이 옳다면 worst-of-6과 best-of-2가
 그것을 검정한다.</li>
 </ul>
 
-<h2><span class="num">9</span>재현</h2>
+<h2><span class="num">11</span>재현</h2>
 
 <pre><code># G1: 결합 선택 (기울기 없음, forward만)
 .venv/bin/python experiments/head_analysis/run_selftraj_probe.py --gpu 0 --num-clips 100
@@ -383,6 +499,10 @@ GT 앵커(1.4%)와 거의 같고 자기 앵커(5.4%)의 1/3이다. 즉 <strong>G
     --exp-id importance_selftraj_v1 --traj-target self --self-coupling tied --k-draws 10
 .venv/bin/python experiments/head_analysis/run_importance.py --num-clips 100 --gpu 0 \
     --exp-id importance_bestn6 --traj-target bestn --n-best 6
+.venv/bin/python experiments/head_analysis/run_importance.py --num-clips 100 --gpu 0 \
+    --exp-id importance_gtk3  --traj-target gtk --k-draws 3     # GT, 노이즈 3개/t
+.venv/bin/python experiments/head_analysis/run_importance.py --num-clips 100 --gpu 0 \
+    --exp-id importance_gtk10 --traj-target gtk --k-draws 10    # GT, 노이즈 10개/t
 
 # 빌드 (selection-only이므로 --no-state: slim_meta.json 3.4 MB로 비트 동일 복원)
 .venv/bin/python experiments/head_analysis/make_slim.py --config dual_u40_v2 --no-state \
