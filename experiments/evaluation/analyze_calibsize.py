@@ -29,6 +29,7 @@ import argparse
 import collections
 import itertools
 import json
+import re
 from pathlib import Path
 
 import matplotlib
@@ -244,8 +245,10 @@ def main():
     coc = {}
     if args.coc_from and Path(args.coc_from).exists():
         m = json.loads(Path(args.coc_from).read_text())
-        # analyze_alpasim 의 키는 config 이름(slim_dual_st2000 ...)이라 arm 이름으로 되돌린다
-        by_run = {v["run"].replace("m2601_merged_", ""): k for k, v in meta.items()}
+        # analyze_alpasim 의 키는 config 이름(slim_dual_st2000 ...)이라 arm 이름으로 되돌린다.
+        # 병합 런의 접두사는 매트릭스마다 다르므로(m2601_merged_ / h100_merged_ ...) 첫
+        # "..._merged_" 까지를 통째로 벗긴다 -- 하나만 하드코딩하면 다른 매트릭스에서 조용히 빈다.
+        by_run = {re.sub(r"^.*?_merged_", "", v["run"]): k for k, v in meta.items()}
         for cfg, v in m.get("coc", {}).items():
             if cfg in by_run:
                 coc[by_run[cfg]] = v
@@ -288,7 +291,7 @@ def main():
     if len(masks) > 1:
         plot_overlap(ov, list(masks), out / "plots")
 
-    lines = [f"캘리브레이션 크기/추출 x 폐루프 — 150씬 x 2 rollout, arm {len(names)}개", ""]
+    lines = [f"arm 간 폐루프 비교 — {len(scenes)}씬, arm {len(names)}개", ""]
     lines.append(f"{'arm':11s} {'캘리브레이션':22s} {'score':>6s} {'95% CI':>17s} "
                  f"{'중앙값':>7s} {'CoC퇴화':>8s}")
     lines.append("-" * 80)
