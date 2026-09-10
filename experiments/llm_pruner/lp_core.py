@@ -429,20 +429,20 @@ def n_pruned_channels(n_channels, ratio):
     return n_channels - int(n_channels * (1.0 - ratio))
 
 
-def keep_masks_for_ratio(q_scores, mlp_scores, ratio, scope, geom):
+def keep_masks_for_units(q_scores, mlp_scores, n_q_drop, n_mlp_drop, scope):
     """Local (per-layer) pruning: drop the lowest-scoring groups inside each layer.
 
     `--global_pruning` is deliberately off; a global threshold is confounded by the depth
     trend in the scores and turns a width sweep into a depth sweep.
+
+    Taking the budget as explicit per-layer counts rather than a ratio is what a matched
+    comparison needs: one `--pruning_ratio` sets the head and MLP budgets together through
+    the same fraction, so a published arm at (4 heads, 5666 MLP) -- head 12.5%, MLP 46.1%
+    -- is not reachable from any single ratio. `keep_masks_for_ratio` is the upstream path
+    and still computes both from one number.
     """
     n_layers, n_heads = q_scores.shape
     intermediate = mlp_scores.shape[1]
-    head_dim = geom["head_dim"]
-
-    n_q_ch = n_pruned_channels(n_heads * head_dim, ratio)
-    n_q_drop = n_q_ch // head_dim  # whole heads only
-    n_mlp_drop = n_pruned_channels(intermediate, ratio)
-
     q_keep = np.ones((n_layers, n_heads), dtype=np.float32)
     mlp_keep = np.ones((n_layers, intermediate), dtype=np.float32)
     for li in scope:
@@ -453,6 +453,15 @@ def keep_masks_for_ratio(q_scores, mlp_scores, ratio, scope, geom):
     return q_keep, mlp_keep, {"heads_dropped_per_layer": int(n_q_drop),
                               "mlp_dropped_per_layer": int(n_mlp_drop),
                               "layers": len(scope)}
+
+
+def keep_masks_for_ratio(q_scores, mlp_scores, ratio, scope, geom):
+    """Upstream LLM-Pruner budget: one `--pruning_ratio` drives both axes."""
+    n_heads = q_scores.shape[1]
+    head_dim = geom["head_dim"]
+    n_q_drop = n_pruned_channels(n_heads * head_dim, ratio) // head_dim  # whole heads only
+    n_mlp_drop = n_pruned_channels(mlp_scores.shape[1], ratio)
+    return keep_masks_for_units(q_scores, mlp_scores, n_q_drop, n_mlp_drop, scope)
 
 
 def removed_params(plan, geom):

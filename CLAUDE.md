@@ -363,6 +363,7 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `maxstep11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 랭크의 **최댓값** | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `meandual_u40_v2` | dual의 두 half를 z-score **평균**으로 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `dualsafe_u40_v2` | dual, `I_traj` half를 GT 경로 여유거리로 클립 가중 (`w=exp(-d/5)`) | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) — **REJECT** |
+| `dual_u40_qcut4_v2` (= dual+h4) | dual, 같은 예산을 head 4 + MLP 5666으로 재배분 | uniform 0.398563 + `_qcut4` | **VLM only** (−2.66B, 24.0%) — **폐루프 REJECT** |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -467,6 +468,22 @@ an arm, in either direction. This is the other end of the calibration-size axis:
 selection stability does not buy performance stability (converged kept set at n=2,000, still
 +0.1105 off), this one finds the converse, that at n=100 the selection is not converged enough for
 a 6% move to carry any meaning.
+
+`dual+h4` (`dual_u40_qcut4_v2`, 2026-09-10) moves the same 24.0% between the two axes instead of
+changing the score: `_qcut<N>` fixes the heads dropped per layer at N and **derives** the channel
+count from whatever budget `rq`/`rm` already set, asserting it divides evenly -- so `dual` (13 heads
++ 4898 ch) and `dual+h4` (4 + 5666) remove bit-identical 2,657,452,032 params with the same
+criterion, calibration, expert and KV. It is the cleanest one-factor test of *where* the budget
+comes from, and it is where **open loop and closed loop disagree**. Open loop detects no harm (mean
+delta CI spans 0 on all three sets; the median excludes 0, and the protocol's headline is the mean)
+and CoC degeneracy drops 1.4/3.0/3.4% -> **0.0/0.0/0.0%**, i.e. head cuts are what breaks
+generation. Closed loop over 150 scenes is **-0.091 [-0.134,-0.050], p=3e-06 vs `dual`**, and
+-0.012 (n.s.) vs baseline -- the reallocation returns the shipped arm's whole advantage. Neither
+gate separates (offroad 20 -> 28 hits, scene-paired Wilcoxon p=0.087, McNemar p=0.55), so the
+mechanism is unresolved; `analyze_longitudinal.py`'s continuous surrogates are the tool for that.
+Two consequences: **never judge a head<->MLP reallocation on open-loop minADE**, and this is the
+sharpest instance yet of CoC health not being a safety proxy -- 0.0% degeneracy alongside the worst
+driving of any dual variant. Report `reports/evaluation/2026-09-10_head-vs-mlp-budget.html`.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -730,8 +747,9 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-06_calibration-size-closedloop.html` | `evaluation/calibsize_report_template.html` | 같은 dual 기준을 100클립 대신 2,000클립으로 추정한 두 **서로소** 추출의 폐루프 150씬: 둘 다 출하본 대비 −0.112 / −0.115 (p<1e-4)이고 서로는 −0.003 (p=0.33)로 구분 불가 → 손해는 한 번의 불운이 아니라 **수렴한 선택의 성질**이고 `calib_100`이 운 좋은 추출; 두 arm 모두 baseline을 못 이기므로 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다 |
 | `2026-09-08_criterion-augmentation.html` | `evaluation/criterion_aug_report_template.html` | dual 기준에 신호를 더하는 두 축. 클립 축 — `dualsafe`(GT 경로 여유거리로 `w=exp(-d/5)` 가중)는 유효 표본을 100→70.8로 줄이고 유지집합은 94.0%나 유지하는데도 val500에서 **+0.1945 (p=4.7e-32)**, 24% 프루닝 자체(+0.0581)의 3.3배 — 다른 100클립 추출을 뽑은 것과 구별되지 않는다. 목적 축 — 논문의 `r_consistency`는 릴리스 체크포인트에 meta-action 토큰이 없어(`SPECIAL_TOKENS_KEYS`에 키 부재) 토큰 NLL로 못 붙지만 CoC 머리 어절이 곧 meta-action(36종, 상위 15종 90.1%)이라 재현 가능; 그 결과 **`I_CoC`가 이미 4.0pp 중 2.4pp를 회수**하고 `dual`의 잔차 −1.6pp는 분해능(≈2.5pp) 아래이며, 건강한 arm에서 CoC 드리프트와 궤적 손상은 무관(p=0.33–0.85) |
 
+| `2026-09-10_head-vs-mlp-budget.html` | `evaluation/headmlp_split_report_template.html` | 같은 24.0%를 head 13+MLP 4898 대신 head 4+MLP 5666에서 가져오는 1요인 재배분(`_qcut4`, 제거 파라미터 비트 동일). **개루프는 해를 못 보고 폐루프는 본다** — 개루프 평균 델타 CI가 세 세트 모두 0을 포함(중앙값은 배제하므로 헤드라인 통계를 따를 것)하고 CoC 퇴화는 3.4%→**0.0%**인데, 폐루프 150씬은 `dual` 대비 **−0.091 [−0.134,−0.050] p=3e−06**이고 baseline조차 못 이긴다(−0.012 n.s.). 게이트는 **어느 것도 분리하지 못한다** — offroad 20→28건이 씬 대응 Wilcoxon p=0.087·McNemar p=0.55라 기전은 미해결. 이 레포의 "MLP 폭은 싸다"는 근거가 전부 개루프였음을 뒤집는다 |
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (51 entries as of 2026-09-08: 49 html + 2 tex).
+`ls reports/evaluation/` is the full set (52 entries as of 2026-09-10: 50 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against

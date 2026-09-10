@@ -78,7 +78,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--importance", required=True, help="exp-id under outputs/ holding lp_importance.npz")
     ap.add_argument("--arm", default="coc_param_first", help="score arm, e.g. coc_param_first")
-    ap.add_argument("--ratio", type=float, required=True, help="LLM-Pruner --pruning_ratio")
+    ap.add_argument("--ratio", type=float, help="LLM-Pruner --pruning_ratio; one number "
+                                                "sets the head and MLP budgets together")
+    ap.add_argument("--units", help="explicit per-layer budget, 'qhead:<N>,mlp:<M>', as an "
+                                    "alternative to --ratio. Needed to match a published "
+                                    "arm whose two axes are not a common fraction (the "
+                                    "dfh4 arms are qhead:4,mlp:5666 = 12.5% / 46.1%).")
     ap.add_argument("--out", required=True, help="output dir, relative to REPO")
     ap.add_argument("--layer-start", type=int, default=4)
     ap.add_argument("--layer-end", type=int, default=34)
@@ -86,6 +91,18 @@ def main():
     ap.add_argument("--gpu", default=None)
     ap.add_argument("--no-save", action="store_true", help="build and smoke only")
     args = ap.parse_args()
+
+    if (args.ratio is None) == (args.units is None):
+        raise SystemExit("pass exactly one of --ratio or --units")
+    budget = {}
+    if args.units:
+        for part in args.units.split(","):
+            k, _, v = part.partition(":")
+            if k.strip() not in ("qhead", "mlp") or not v.strip().isdigit():
+                raise SystemExit(f"--units expects 'qhead:<N>,mlp:<M>', got {part!r}")
+            budget[k.strip()] = int(v)
+        if set(budget) != {"qhead", "mlp"}:
+            raise SystemExit(f"--units needs both qhead and mlp, got {sorted(budget)}")
 
     imp_dir = REPO / "outputs" / args.importance
     z = np.load(imp_dir / "lp_importance.npz")
@@ -133,9 +150,14 @@ def main():
 
     geom = lp.text_geometry(model)
     scope = lp.layer_scope(geom["n_layers"], args.layer_start, args.layer_end)
-    vq, vm, plan = lp.keep_masks_for_ratio(q_scores, mlp_scores, args.ratio, scope, geom)
+    if args.units:
+        vq, vm, plan = lp.keep_masks_for_units(q_scores, mlp_scores, budget["qhead"],
+                                               budget["mlp"], scope)
+    else:
+        vq, vm, plan = lp.keep_masks_for_ratio(q_scores, mlp_scores, args.ratio, scope, geom)
     expected = lp.removed_params(plan, geom)
-    print(f"ratio={args.ratio}: {plan['heads_dropped_per_layer']}/{geom['n_heads']} heads and "
+    print(f"budget={args.units or f'ratio={args.ratio}'}: "
+          f"{plan['heads_dropped_per_layer']}/{geom['n_heads']} heads and "
           f"{plan['mlp_dropped_per_layer']}/{geom['intermediate']} MLP ch per layer "
           f"x {plan['layers']} layers -> {expected:,} params "
           f"({100 * expected / full_total:.2f}% of the model)", flush=True)
@@ -158,6 +180,7 @@ def main():
     meta["config"] = {
         "method": "LLM-Pruner block-wise, grouped Taylor",
         "importance_from": args.importance, "arm": args.arm, "ratio": args.ratio,
+        "units": args.units,
         "layer_scope": [args.layer_start, args.layer_end], "plan": plan,
         "importance_scope": sorted(imp_scope),   # so the scope guard is auditable after the fact
         "model_revision": MODEL_REV,
