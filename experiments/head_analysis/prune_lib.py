@@ -346,6 +346,72 @@ def expert_selffm_grads(model, cache, rope_deltas, seed, prefill, n_steps=10,
     return float(np.mean(losses)), grads, leaves
 
 
+def best_of_n_target(model, cache, rope_deltas, prefill, gt_xy, hist_xyz, hist_rot,
+                     seed, n=6, n_steps=10, self_xor=0x5E1F):
+    """The model's own sample that lands closest to the GT, as the flow-matching target.
+
+    The GT anchor pairs a noise with a trajectory the model may never produce; the pure
+    self anchor (expert_selffm_grads) puts the target on the model's manifold but throws
+    the GT away, and open-loop says that costs +0.0540 m and quadruples CoC degeneracy.
+    best-of-n keeps both: draw n chains, decode each, keep the one nearest the GT. The
+    target is on-manifold AND chosen by the GT.
+
+    n defaults to 6 because the evaluation protocol is minADE@6 -- the criterion then
+    optimises the same "best of six" the metric reads.
+
+    Returns (x1 (1, 64, 2), diagnostics). The caller hands x1 to expert_fm_grads
+    UNCHANGED, so the estimator, its fresh-noise-per-step schedule and its |sum_s|
+    aggregation stay the shipped ones and the only factor that differs is the target.
+    That matters: raising k_draws instead extends the signed sum inside |sum|, which is
+    a different statistic rather than the same one with more samples -- measured on
+    2026-09-10, the traj map's magnitude grew 8.8x from K=1 to K=10 and the per-clip
+    dispersion did not fall at all.
+    """
+    device = gt_xy.device
+    n_tok = model.action_space.get_action_space_dims()[0]  # 64
+    dims = model.action_space.get_action_space_dims()  # (64, 2)
+    offset = torch.tensor([prefill], device=device)
+    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
+    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
+        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
+        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
+    )
+    forward_kwargs = {}
+    if model.config.expert_non_causal_attention:
+        forward_kwargs["is_causal"] = False
+
+    def field(x, t_val):
+        t = torch.full((1, 1, 1), t_val, device=device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            # fp32 in, as the release step_fn passes it
+            embeds = model.action_in_proj(x, t)
+            if embeds.dim() == 2:
+                embeds = embeds.view(1, n_tok, -1)
+            out = model.expert(
+                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+            )
+            cache.crop(prefill)
+            return model.action_out_proj(out.last_hidden_state[:, -n_tok:]).float()
+
+    dt = 1.0 / n_steps
+    ades, best, best_ade = [], None, float("inf")
+    with torch.no_grad():
+        for k in range(n):
+            gen = torch.Generator(device="cpu").manual_seed((seed ^ self_xor) + k)
+            x = torch.randn(1, *dims, generator=gen).to(device)
+            for s in range(n_steps):
+                x = x + dt * field(x, s * dt)
+            xyz, _ = model.action_space.action_to_traj(
+                x, hist_xyz[:, -1].float(), hist_rot[:, -1].float())
+            ade = float(torch.norm(xyz[0, :, :2] - gt_xy, dim=-1).mean())
+            ades.append(ade)
+            if ade < best_ade:
+                best_ade, best = ade, x.detach()
+    return best, {"ade_of_draws": ades, "ade_best": best_ade,
+                  "ade_mean": float(np.mean(ades)), "argbest": int(np.argmin(ades))}
+
+
 def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1):
     """Run the FM loss backward through the expert onto detached cache leaves.
 

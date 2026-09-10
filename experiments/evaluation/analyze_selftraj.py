@@ -56,9 +56,11 @@ plt.rcParams.update({
 # anchor does with its N chords. Without it, "the self anchor is more stable" is
 # indistinguishable from "the self anchor was given ten times the samples".
 IMP = {"self": "importance_selftraj_v1", "gt": "importance_gt_ref100",
+       "bestn6": "importance_bestn6",
        "gt_k3": "importance_gtk3", "gt_k10": "importance_gtk10"}
-K_OF = {"gt": 1, "gt_k3": 3, "gt_k10": 10, "self": 10}
+K_OF = {"gt": 1, "gt_k3": 3, "gt_k10": 10, "self": 10, "bestn6": 1}
 EVAL = {"self": "dualself_u40_v2_ps_indist", "gt": "dualgtref_u40_v2_ps_indist",
+        "bestn6": "dualbestn6_u40_v2_ps_indist",
         "baseline": "baseline_ada_ps_indist", "shipped": "dual_u40_v2_ps_indist"}
 KEEP = {"vlm_q": 19, "vlm_mlp": 7390}
 N_SPLITS = 20
@@ -130,8 +132,9 @@ def g4(root):
                          "fde_mean": float(f.mean()), "fde_median": float(np.median(f)),
                          "degen": float(np.mean([r[i]["coc_degenerate"] for i in ids]))}
     for m in ("ade", "fde"):
-        for x, y in (("self", "gt"), ("self", "baseline"), ("gt", "baseline"),
-                     ("gt", "shipped")):
+        for x, y in (("bestn6", "gt"), ("self", "gt"), ("bestn6", "self"),
+                     ("bestn6", "baseline"), ("self", "baseline"),
+                     ("gt", "baseline"), ("gt", "shipped")):
             if x not in v or y not in v:
                 continue
             d = v[x][m] - v[y][m]
@@ -175,28 +178,31 @@ def plots(r1, r23, r4, v, out):
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.0))
     ax = axes[0]
     for axis, c, mk in (("vlm_q", C1, "o"), ("vlm_mlp", C2, "s")):
-        gts = [(K_OF[n], np.mean(r23["stability"][axis][n]))
-               for n in r23["stability"][axis] if n != "self"]
-        gts.sort()
+        st = r23["stability"][axis]
+        gts = sorted((K_OF[n], np.mean(st[n])) for n in st if n.startswith("gt"))
         ax.plot([k for k, _ in gts], [v_ for _, v_ in gts], mk + "-", color=c, lw=1.6,
                 ms=6, label=f"GT anchor, {'Q head' if axis == 'vlm_q' else 'MLP'}")
-        sv = np.mean(r23["stability"][axis]["self"])
-        ax.plot(K_OF["self"], sv, "*", color=c, ms=16, mec=INK, mew=0.6)
-        ax.annotate("self", (K_OF["self"], sv), textcoords="offset points",
-                    xytext=(8, -4), fontsize=8.5, color=c)
+        for n, m2, dx in (("self", "*", 9), ("bestn6", "D", -26)):
+            if n not in st:
+                continue
+            sv = np.mean(st[n])
+            ax.plot(K_OF[n], sv, m2, color=c, ms=14 if m2 == "*" else 7,
+                    mec=INK, mew=0.6)
+            ax.annotate(n, (K_OF[n], sv), textcoords="offset points",
+                        xytext=(dx, -3), fontsize=8.5, color=c)
     ax.set_xscale("log")
     ax.set_xticks([1, 3, 10])
     ax.set_xticklabels(["1", "3", "10"])
     ax.set_xlabel("independent noises averaged per t  (K)")
     ax.set_ylabel("split-half agreement")
-    ax.set_title("G3  stability vs how many noises, not which anchor")
+    ax.set_title("G3  the GT anchor does not improve with more noises")
     ax.legend(frameon=False, fontsize=8.5, loc="lower right")
 
     ax = axes[1]
     labels, meds, los, his, cols = [], [], [], [], []
     for key, lbl, c in (("ade:gt-baseline", "GT anchor\nvs baseline", MUTED),
-                        ("ade:self-baseline", "self anchor\nvs baseline", C1),
-                        ("ade:self-gt", "self anchor\nvs GT anchor", C3)):
+                        ("ade:bestn6-gt", "best-of-6\nvs GT anchor", C2),
+                        ("ade:self-gt", "self anchor\nvs GT anchor", C1)):
         d = r4["delta"][key]
         labels.append(lbl)
         meds.append(d["median"])
