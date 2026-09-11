@@ -47,9 +47,15 @@ run_py() {
   bash experiments/head_analysis/run_retry_host.sh "${RETRIES-480}" "$@" >>"$log" 2>&1
 }
 
+CLAIMS=$LOGDIR/strat_claims
+mkdir -p "$CLAIMS"
+
 empty_card() {
-  # first card in $1 with < 100 MiB in use; nvidia-smi -i and --gpu agree under PCI order
+  # first card in $1 with < 100 MiB in use and no live claim on it; nvidia-smi -i and
+  # --gpu agree under PCI order. A claim is a file holding the claimant's pid, so a
+  # worker that died releases its card by dying.
   for g in $1; do
+    if [ -f "$CLAIMS/$g" ] && kill -0 "$(cat "$CLAIMS/$g")" 2>/dev/null; then continue; fi
     used=$(nvidia-smi -i "$g" --query-gpu=memory.used --format=csv,noheader,nounits)
     [ "${used:-99999}" -lt 100 ] && { echo "$g"; return 0; }
   done
@@ -57,9 +63,26 @@ empty_card() {
 }
 
 wait_empty() {
+  # blocks until a card in $1 is empty, claims it and prints it. Selection and claim happen
+  # under one lock, so two workers polling in the same minute cannot both take a card
+  # before either has allocated on it. $$ is the launcher's pid in every worker subshell,
+  # which is what the liveness check wants: claims die with the launcher.
   local g
-  until g=$(empty_card "$1"); do sleep 60; done
-  echo "$g"
+  while :; do
+    g=$(
+      exec 9>"$CLAIMS/.lock"
+      flock -x 9
+      g=$(empty_card "$1") || exit 1
+      echo $$ >"$CLAIMS/$g"
+      echo "$g"
+    )
+    [ -n "$g" ] && { echo "$g"; return 0; }
+    sleep 60
+  done
+}
+
+release_card() {
+  rm -f "$CLAIMS/$1"
 }
 
 # tag  manifest  cache
@@ -84,11 +107,11 @@ importance)
     [ -f "outputs/eval_sets/$man.parquet" ] || { echo "no manifest $man"; continue; }
     gpu=$(wait_empty "$cards")
     echo "$(date '+%H:%M:%S') importance $tag on gpu $gpu"
-    bash experiments/head_analysis/run_retry_host.sh "${RETRIES-480}" \
-      experiments/head_analysis/run_importance.py \
+    run_py "$LOGDIR/$imp.log" experiments/head_analysis/run_importance.py \
       --calib-manifest "$man" --cache "$cache" --num-clips 100 \
-      --exp-id "$imp" --gpu "$gpu" >>"logs/$imp.log" 2>&1
+      --exp-id "$imp" --gpu "$gpu"
     echo "$(date '+%H:%M:%S') $imp exit=$?"
+    release_card "$gpu"
   done
   ;;
 
@@ -103,11 +126,11 @@ slim)
     [ -f "outputs/$imp/importance.npz" ] || { echo "no importance for $tag"; continue; }
     gpu=$(wait_empty "$cards")
     echo "$(date '+%H:%M:%S') slim $tag on gpu $gpu"
-    bash experiments/head_analysis/run_retry_host.sh "${RETRIES-480}" \
-      experiments/head_analysis/make_slim.py --config dual_u40_v2 \
-      --importance "$imp" --jlens jlens_v2 --out "$out" --no-state --gpu "$gpu" \
-      >>"logs/slim_dual_$tag.log" 2>&1
+    run_py "$LOGDIR/slim_dual_$tag.log" experiments/head_analysis/make_slim.py \
+      --config dual_u40_v2 --importance "$imp" --jlens jlens_v2 --out "$out" \
+      --no-state --gpu "$gpu"
     echo "$(date '+%H:%M:%S') slim_dual_$tag exit=$?"
+    release_card "$gpu"
   done
   ;;
 
@@ -126,31 +149,34 @@ eval)
     echo "now: bash experiments/evaluation/launch_arms.sh worker <gpu> &   (one per free Ada card)"
     exit 0
   fi
-  # cvlab20: the same flock queue as launch_arms.sh, but calling python directly. One worker
-  # per card in $2; a worker takes a job only once its card is completely empty.
-  cards=${2-"4 5 6 7"}
+  # cvlab20: the same flock queue as launch_arms.sh, but calling python directly. K workers
+  # (default 4) share the card pool in $2; for every job a worker waits for, claims and
+  # then releases a completely empty card, so a busy card never blocks a free one.
+  cards=${2-"0 1 2 3 4 5 6 7"}
   Q=$LOGDIR/strat_eval_queue.txt
   CUR=$LOGDIR/strat_eval_cursor
   : >"$Q"
   for tag in "${tags[@]}"; do for sh in 0 1; do echo "$tag $sh" >>"$Q"; done; done
   echo 0 >"$CUR"
-  echo "queued $(wc -l <"$Q") test500 shards for: ${tags[*]}"
+  echo "queued $(wc -l <"$Q") test500 shards for: ${tags[*]}  (${K-4} workers over cards $cards)"
   worker() {
-    local gpu=$1 idx tag sh
+    local w=$1 gpu idx tag sh
     while :; do
       idx=$(flock "$CUR" bash -c 'i=$(cat '"$CUR"'); n=$(wc -l < '"$Q"');
             [ "$i" -lt "$n" ] && echo $((i + 1)) > '"$CUR"'; echo $i')
       [ "$idx" -ge "$(wc -l <"$Q")" ] && break
       read -r tag sh < <(sed -n "$((idx + 1))p" "$Q")
-      wait_empty "$gpu" >/dev/null
-      echo "$(date '+%H:%M:%S') gpu$gpu -> dual_$tag test shard $sh/2"
+      gpu=$(wait_empty "$cards")
+      echo "$(date '+%H:%M:%S') worker$w gpu$gpu -> dual_$tag test shard $sh/2"
       run_py "$LOGDIR/eval_dual_${tag}_test_s$sh.log" experiments/evaluation/run_baseline.py \
         --set test --model "outputs/slim_dual_$tag" --exp-id "dual_${tag}_test" \
         --shard "$sh" --n-shards 2 --gpu "$gpu" --reserve-gb 26
+      echo "$(date '+%H:%M:%S') worker$w dual_$tag shard $sh exit=$?"
+      release_card "$gpu"
     done
-    echo "$(date '+%H:%M:%S') gpu$gpu done"
+    echo "$(date '+%H:%M:%S') worker$w done"
   }
-  for g in $cards; do worker "$g" & sleep 5; done
+  for w in $(seq 1 "${K-4}"); do worker "$w" & sleep 5; done
   wait
   echo "$(date '+%H:%M:%S') eval done"
   ;;

@@ -309,3 +309,29 @@ stop 1.91 vs cruise 0.41 m/s², 정규화 RMS(a) accel 1.64 / stop 1.65 vs cruis
 
 GPU: Ada 4–7은 `m2601_slim_dualexp_u40_em87p5` 150씬 폐루프(5시간째)가, Blackwell 0–3은 다른
 멤버의 cosmos 학습이 점유. 중요도 런처는 백그라운드에서 빈 Ada 카드를 기다리는 중.
+
+### 2. 캐시·G0 완료, GPU 단계를 cvlab20으로 (2026-09-11 21:30–22:20 KST)
+
+캐시 `pre_processed/calib_strat` **700/700, 3.74 GB, 오류 0** (25.5분). 전체 21세트(신규 7 +
+rd_a/b + calib_100 + nt/tr + test500 = 2,600클립)에서 raw action 재계산:
+
+- **G0-c PASS — 700/700.** 추출에 쓴 egomotion 라벨과 캐시 npz에서 다시 계산한 bucket5가 전부
+  일치. t0 재선택은 일어나지 않았다.
+- **G0-d PASS.** 풀 전체 중앙값: mean|κ| turn 0.035 vs cruise 0.0008 (44배), 최대 감속 stop
+  1.90 vs cruise 0.41 m/s², 정규화 RMS(a) accel 1.61 / stop 1.65 vs cruise 0.51.
+  `outputs/strat_calib/raw_actions.parquet`, `g0_raw.json`.
+
+**GPU 단계는 cvlab20으로** (사용자 지시). cvlab21의 Ada 4–7은 우리 폐루프가, Blackwell은 다른
+멤버가 점유. cvlab20은 `/mnt/dataset1` 79%(1.5 TB 여유), 카드 8장 중 0–3·6·7은 31 GB씩,
+4·5는 다른 사람의 소규모 프로세스(0.3 / 2.5 GB) — 완전히 빈 카드는 아직 없어 런처가 대기 중.
+옮긴 것: 코드 트리(`experiments/ src/ paper/`, 러너 3종 체크섬 일치), 매니페스트 8종,
+`calib_strat` 캐시 4.0 GB (97 MB/s). `calib_rd_a/b`·`test` 캐시, `jlens_v2`,
+`slim_integrated_mag/slim_meta.json`은 이미 있었다. 런처는 `DIRECT_ENV=…/env.sh`로
+`run_retry_host.sh` 대신 `.venv/bin/python`을 직접 부르고 로그는 `/mnt/dataset1/chan/logs`.
+cvlab21 쪽 런처는 중복 방지를 위해 중지 — 9 arm 전부 한 박스(cvlab20, Ada)에서 잰다.
+분석은 cvlab21의 `baseline_ada_ps_test`와 페어링(두 박스 비트 동일, 2026-09-08 slim 경로 검증).
+
+실수 하나: 첫 rsync를 `experiments/ src/`(끝 슬래시)로 보내 내용물이 cvlab20 repo 루트에
+풀렸다. 올바른 경로로 재동기화했고 동작에는 영향 없음(임포트는 `experiments/…` 기준). 루트의
+잔재(`alpamayo_r1 evaluation head_analysis lingoqa llm_pruner recovery transfer`, 그리고
+`paper/`에 섞인 `experiments/paper` 파일)는 공용 계정이라 자동 삭제가 거부됨 — 수동 정리 필요.
