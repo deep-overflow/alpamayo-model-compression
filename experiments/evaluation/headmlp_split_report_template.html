@@ -81,17 +81,17 @@
 출하 <code>dual</code>은 24.0%를 층당 <b>Q head 13개 + MLP 4898채널</b>에서 가져온다.
 같은 24.0%를 <b>head 4개 + MLP 5666채널</b>에서 가져오면 어떻게 되는가? 기준·캘리브레이션·
 expert·KV가 모두 같고 제거 파라미터가 비트 단위로 동일한 1요인 비교다. 답은 모드에 따라
-갈린다 — <b>개루프는 해를 못 보고, 폐루프는 명확히 본다</b>(−0.091, p=3e−06). 기전까지
-좁혔다: 제동·차간 판단은 오히려 <b>좋아지고</b>, 무너지는 것은 <b>차선 유지</b>다 —
-나가는 횟수가 아니라 <b>나가 있는 시간</b>. 그리고 이 레포가 "MLP 폭은 싸다"고 기록해 온
-근거는 <b>전부 개루프</b>였다.
+갈린다 — <b>개루프는 해를 못 보고, 폐루프는 명확히 본다</b>(−0.091, p=3e−06). 기전은 좁혔으나
+특정하지 못했다: 제동·차간 판단은 오히려 <b>좋아지고</b>, 차선 유지는 나빠진다(나가는 횟수가
+아니라 <b>나가 있는 시간</b>). 다만 씬 단위로 붙여 보면 그 연관은 <b>횡방향에 특이적이지
+않다</b>. 그리고 이 레포가 "MLP 폭은 싸다"고 기록해 온 근거는 <b>전부 개루프</b>였다.
 </p>
 
 <div class="kpi">
   <div><span class="v">−0.091</span><span class="k">폐루프 vs dual (p=3e−06)</span></div>
   <div><span class="v">CI가 0 포함</span><span class="k">개루프 평균 델타, 세 세트 모두</span></div>
   <div><span class="v">3.4% → 0.0%</span><span class="k">CoC 퇴화 (head를 덜 자르면)</span></div>
-  <div><span class="v">+4.4pp</span><span class="k">차선 밖 시간 (최장 이탈 +0.77 s)</span></div>
+  <div><span class="v">83%</span><span class="k">격차를 나르는 씬 = 이탈 시간이 는 83개</span></div>
 </div>
 
 <h2><span class="num">1</span>1요인 설계</h2>
@@ -195,7 +195,7 @@ minADE 델타는 heavy-tail이라 두 통계가 이렇게 갈릴 수 있고, 여
   </figcaption>
 </figure>
 
-<h2><span class="num">4</span>왜 지는가 — 차선 유지다</h2>
+<h2><span class="num">4</span>왜 지는가 — 좁혔지만 특정하지 못했다</h2>
 
 <h3>4.1 게이트는 설명하지 못한다</h3>
 
@@ -333,6 +333,58 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 한다.
 </p>
 
+<h3>4.4 그런데 그 연관은 횡방향에 특이적이지 않다</h3>
+
+<p>
+4.3절은 두 집계가 같은 런에서 함께 움직였다는 것까지다. 차선 이탈이 <b>−0.091의 내용물</b>
+이라는 주장은 씬 단위로 붙여 봐야 한다. 붙여 보면 절반은 맞고 절반은 틀린다.
+</p>
+
+<div class="callout warn">
+<p><b>먼저 순환부터 확인해야 한다.</b> 폐루프 점수 공식은
+<code>collision_at_fault == 0</code>, <code>offroad == 0</code>,
+<code>progress_score = min(clamp(progress_clipped_rel,0,1)/0.8, 1.0)</code>이다 —
+<b><code>offroad</code>가 점수 안에 하드 게이트로 들어 있다</b>. 완전한 순환은 아니다
+(여기서 재는 것은 margin==0 시간으로 전체의 41%인데 그중 <code>offroad</code>를 트립하는
+것은 3.46%뿐이다). 그래도 직접 채널이므로, 어느 arm도 <code>offroad</code>를 내지 않은
+씬만 따로 본다.</p>
+</div>
+
+<table>
+<thead><tr><th>검정 (Spearman, 씬 단위)</th><th class="r"><code>dual+h4</code></th><th class="r">95% CI</th><th class="r"><code>em93p75</code> (대조)</th><th class="r">95% CI</th></tr></thead>
+<tbody>
+<tr><td>(a) 전체 150씬</td><td class="r">−0.247</td><td class="r sig">[−0.402, −0.074]</td><td class="r">−0.231</td><td class="r sig">[−0.408, −0.053]</td></tr>
+<tr><td><b>(b) offroad 없는 130씬</b></td><td class="r"><b>−0.203</b></td><td class="r sig">[−0.373, −0.014]</td><td class="r">−0.148</td><td class="r ns">[−0.323, +0.032]</td></tr>
+<tr><td>(c) 계획편차 (특이성 대조)</td><td class="r"><b>−0.333</b></td><td class="r sig">[−0.486, −0.171]</td><td class="r">−0.217</td><td class="r sig">[−0.390, −0.023]</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::jn::join.png" alt="씬별 이탈 시간 델타 vs 점수 델타">
+  <figcaption>
+    빨간 점은 어느 한 arm이 <code>offroad</code>를 낸 씬 — 점수 게이트가 직접 걸린 곳이다.
+    파란 점만으로도 기울기가 남는다는 것이 (b)의 내용이다.
+  </figcaption>
+</figure>
+
+<p><b>지지하는 것</b> — 손실은 소수 파국이 아니라 <b>넓게 퍼져 있다</b>. 이탈 시간이 늘어난
+<b>83개 씬</b>의 평균 점수 손실이 −0.137, 나머지 67개는 −0.035이고(Mann-Whitney p=0.027),
+그 83개가 <b>전체 격차의 83%</b>를 나른다. 그리고 (b)에서 <code>dual+h4</code>는 게이트를
+빼도 관계가 남는데(CI가 0 배제) <code>em93p75</code>는 무너진다 — 이 대비는
+<code>dual+h4</code> 쪽에 실체가 있다는 편이다.</p>
+
+<div class="callout bad">
+<p><b>반박하는 것 둘.</b></p>
+<p>(1) <b>특이성 대조가 더 강하다.</b> 특이성을 보려고 넣은 <b>계획편차</b>가 ρ=−0.333으로
+이탈 시간(−0.247)보다 점수와 더 강하게 움직인다. 이탈 시간이 점수를 설명하는 <i>특별한</i>
+변수라고 말할 근거가 없다.</p>
+<p>(2) <b>음성 대조군이 음성이 아니다.</b> <code>em93p75</code>는 횡방향이 전혀 안 움직였는데도
+(a)에서 ρ=−0.231로 거의 같은 상관을 낸다. 즉 이 상관의 상당 부분은 <b>두 런 사이의 씬별
+잡음이 점수와 차선 지표에 동시에 실리는 일반 현상</b>일 수 있다.</p>
+<p>따라서 <b>"차선 이탈이 −0.091의 원인"이라고 쓸 수 없다.</b> 말할 수 있는 것은 —
+<b><code>dual+h4</code>의 손실은 절반 이상의 씬에 퍼져 있고, 그 씬들은 차선 이탈과 계획편차가
+함께 나빠진 씬이다.</b> 어느 하나를 원인으로 지목하는 것은 이 데이터가 감당하지 못한다.</p>
+</div>
+
 <p>
 부수 확인: <code>dualexp_em93p75</code>는 <code>dual</code> 대비 종방향이 거의 동일하다
 (제동비율 +0.0069 p=0.51, 제동가속 −0.0111 p=0.52). VLM 절반이 비트 동일하니 당연하고,
@@ -382,12 +434,15 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 <h2><span class="num">7</span>한계</h2>
 
 <ul>
-<li><b>기전은 좁혔지만 인과는 아니다.</b> 4.3절은 <code>dual+h4</code>가 차선 밖에서 더
-오래 머문다는 <b>상관</b>을 보인다. 차선 이탈이 점수 손실을 <i>일으켰다</i>는 것은 아니고,
-둘 다 같은 원인의 결과일 수도 있다. 씬별로 이탈 시간과 점수 손실이 함께 움직이는지는
-재지 않았다.</li>
+<li><b>기전은 특정되지 않았다.</b> 4.4절이 이유를 준다 — 씬 단위 연관이 횡방향에 특이적이지
+않고(계획편차가 더 강함), 횡방향이 안 움직인 arm도 비슷한 상관을 낸다. 4.3절의 지표 이동은
+실재하지만, 그것이 점수 손실의 <i>원인</i>이라는 진술은 이 데이터로 지지되지 않는다.</li>
 <li><b>이탈 횟수는 오히려 줄었다.</b> 방향이 갈리는 지표를 하나의 이야기로 묶을 때는 조심해야
 한다 — "복귀 실패"는 해석이지 측정된 기전이 아니다.</li>
+<li><b>씬별 상관은 공유 잡음을 못 걷어낸다.</b> 두 델타가 같은 두 런에서 나오므로, 어떤 씬이
+우연히 <code>dual+h4</code>에 불리하게 굴렀다면 점수와 차선 지표가 <b>함께</b> 나빠진다.
+음성 대조군(<code>em93p75</code>)이 (a)에서 거의 같은 ρ를 내는 것이 그 증거다. 이걸 가르려면
+같은 arm을 시드만 바꿔 두 번 돌린 런이 필요하고, 그런 런은 없다.</li>
 <li><b>종방향 배제는 "종방향이 무관하다"가 아니다.</b> 6 m·1 m/s·1 s라는 임계값에 의존하고,
 선행차 지표 둘은 CI와 Wilcoxon이 어긋난다(씬당 동률이 많다). 배제된 것은 "제동 판단이
 나빠져서 졌다"는 가설이지 종방향 축 전체가 아니다.</li>
@@ -404,10 +459,10 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 <h2><span class="num">8</span>다음</h2>
 
 <ol>
-<li><b>씬 단위로 이탈 시간과 점수 손실을 붙여 본다.</b> 4.3절은 두 양이 각각 움직였다는
-것까지만 보인다. 같은 씬에서 함께 움직이는지(상관·회귀)를 재면 "차선 이탈이 손실의 내용물"이
-상관에서 기전으로 한 발 나아간다. <code>analyze_lateral.py</code>가 이미 씬별 값을 들고
-있으므로 추가 실행이 필요 없다.</li>
+<li><b>같은 arm을 시드만 바꿔 한 번 더 돌린다.</b> 4.4절이 막힌 지점이 정확히 이것이다 —
+씬별 상관이 실제 기전인지 두 런 사이의 공유 잡음인지 가를 수 없다. <code>dual</code>을 다른
+시드로 150씬 한 번 더 돌리면 "같은 arm끼리의 ρ"라는 <b>귀무 분포</b>가 생기고, 관측된 −0.247이
+그것을 넘는지 바로 읽힌다. 폐루프 7시간이지만 이 질문을 닫는 유일한 방법이다.</li>
 <li><b>hard100 복제.</b> 검정력 1.55배, 이미 있는 인프라(<code>run_hard100*.sh</code>)로 실행
 가능. −0.091이 재현되면 결론이 단단해진다.</li>
 <li><b>head 수 스윕</b>(qcut6 / qcut9)은 1·2가 끝난 뒤에. 곡선이 단조라면 볼 것이 없고,
@@ -420,14 +475,14 @@ rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설
 분석 <code>experiments/evaluation/analyze_headmlp_split.py</code> ·
 종방향 <code>experiments/head_analysis/analyze_longitudinal.py --reference slim_dual_u40_v2</code>
 (alpasim venv) · 횡방향 <code>experiments/head_analysis/analyze_lateral.py</code>
-(이 레포 venv, 둘 다 GPU 불필요) ·
++ <code>analyze_lateral_score_join.py</code> (이 레포 venv, 셋 다 GPU 불필요) ·
 빌드 <code>make_slim.py --config dual_u40_qcut4_v2 --importance importance_v2</code> ·
 개루프 <code>run_baseline.py</code> (cvlab20, Ada) ·
 폐루프 <code>launch_alpasim_shards.sh slim_dual_u40_qcut4_v2 150 2 "4 5 6 7"</code>
 + <code>merge_alpasim_shards.py --expect-scenes 150</code> ·
 결과 <code>outputs/headmlp_split/</code>,
 <code>outputs/headmlp_longitudinal{,_vsdual}/</code>,
-<code>outputs/headmlp_lateral/</code>,
+<code>outputs/headmlp_lateral{,_join}/</code>,
 <code>alpasim-runs/m2601_merged_slim_dual_u40_qcut4_v2/</code> ·
 브랜치 <code>worktree-safety-weighted-importance</code>
 </footer>

@@ -489,6 +489,17 @@ margin improves (+0.047) -- it leaves the lane less often and comes back worse. 
 `offroad` gate leaned the right way and still could not resolve it: a binary gate cannot count
 duration. Both scripts gained `--reference` for this; they hardcoded "baseline", answering
 what pruning cost but never how two pruned arms differ.
+**Do not promote that to a cause.** `analyze_lateral_score_join.py` puts the two per-scene
+deltas together and the association is real but **not lateral-specific**: rho(excursion time,
+score) is -0.247 [-0.402,-0.074] and survives dropping every scene where either arm went
+offroad (-0.203, which matters because `score_criteria` carries `offroad == 0` as a hard gate),
+but **plan deviation correlates harder** (-0.333) and the negative control `dualexp_em93p75` --
+which moved nothing lateral -- returns almost the same rho (-0.231). Two deltas drawn from the
+same pair of runs share their scene noise, so a scene that simply rolled badly for one arm
+degrades both. What is defensible: the loss is **broad** (83 of 150 scenes carry 83% of the
+gap, mean -0.137 there vs -0.035 elsewhere, Mann-Whitney p=0.027), and those scenes are ones
+where lane keeping and plan deviation worsened together. Settling it needs a same-arm,
+different-seed closed-loop run to give the null distribution of that rho; none exists.
 Two consequences: **never judge a head<->MLP reallocation on open-loop minADE**, and this is the
 sharpest instance yet of CoC health not being a safety proxy -- 0.0% degeneracy alongside the worst
 driving of any dual variant. Report `reports/evaluation/2026-09-10_head-vs-mlp-budget.html`.

@@ -227,6 +227,10 @@ def main():
         res["paired"][cfg] = cell
 
     (args.out / "metrics.json").write_text(json.dumps(res, indent=2))
+    # per-scene values are the raw material for joining these against anything else
+    # (score deltas, gate outcomes), and recomputing them means re-reading 1,200 parquets
+    (args.out / "per_scene.json").write_text(json.dumps(
+        {c: {s: v for s, v in per_scene[c].items()} for c in cfgs}, indent=1))
 
     L = [f"횡방향 대리지표 — {len(scenes)} 씬, 기준 {args.reference}",
          f"(차선 가장자리 근접 기준 {NEAR_EDGE_M} m, eval_relevant 스텝만)", ""]
