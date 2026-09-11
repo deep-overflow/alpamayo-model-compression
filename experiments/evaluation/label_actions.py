@@ -191,7 +191,9 @@ def raw_from_cache(args, out):
     df.to_parquet(out / "raw_actions.parquet", index=False)
 
     # G0-c: the label the draw used must be the label the cache carries
-    lab = df[df["bucket_label"].notna()] if "bucket_label" in df.columns else df.iloc[:0]
+    if "bucket_label" not in df.columns:
+        df["bucket_label"] = np.nan
+    lab = df[df["bucket_label"].notna()]
     mism = lab[lab["bucket_label"] != lab["bucket_cache"]]
     # G0-d: strata must separate in the raw action space
     med = df.groupby("bucket_cache")[["k_mean_abs", "a_max_decel", "rms_a_norm",

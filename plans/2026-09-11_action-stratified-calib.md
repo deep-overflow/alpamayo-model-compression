@@ -1,6 +1,7 @@
 # action 층화 캘리브레이션 추출 — 3규칙 × 3seed, test500
 
-날짜: 2026-09-11. 브랜치: `worktree-worktree-action-strat-calib`. 상태: **승인 대기**.
+날짜: 2026-09-11. 브랜치: `worktree-worktree-action-strat-calib`. 상태: **승인됨, 1단계 진행 중**
+(승인 2026-09-11 20:45 KST; 진행 기록은 문서 끝).
 
 ## 왜
 
@@ -276,3 +277,35 @@ tr accel +0.134 vs +0.230)는 이 해상도 안이다. arm 단위 SD(H5)는 n=3�
 | accel (75) | +0.168 | +0.230 (0.043) | +0.134 (0.048) |
 | turn (82) | +0.147 | +0.296 (0.089) | +0.285 (0.094) |
 | all (500) | +0.098 | +0.522 (0.350) | +0.317 (0.058) |
+
+## 진행 기록
+
+### 1. 승인, 1단계 (2026-09-11 20:45–21:30 KST)
+
+코드 셋 + 런처: `experiments/evaluation/label_actions.py` (후보 라벨링 + 캐시 raw action 검증),
+`make_calib_strat.py` (규칙별 추출, 서로소·쿼터 assert), `analyze_strat_calib.py` (G1–G5,
+arm 없으면 pending), `launch_strat_calib.sh` (중요도 → slim → 평가 큐; **빈 Ada 카드**를
+60초 폴링으로 기다려 그 카드에 고정 — `reserve_gpu`의 "여유 있음"은 "빔"이 아니다).
+
+**라벨링**: 공식 train 153,625 − 홀드아웃 7,004(기존 calib_* 21개 + 평가셋 + OOD) = 146,621에서
+3,000 무작위(seed 20260911), egomotion만 읽어 t0=5.1 s bucket5. 16 workers **16.1분, 실패 0**.
+조성 cruise 56.3 / stop 13.1 / accel 15.1 / turnL 7.7 / turnR 7.8% — **test500(56/13/15/9/7)과
+같다**, 즉 자연 풀 = 평가셋 조성. turn 층 230 / 234개.
+
+**추출 (G0-a, G0-b 통과)**: 7세트 전부 쿼터 정확 실현(se 56/13/15/9/7, su 20×5, assert), 9세트
+서로소 + 기존 전 세트·평가셋·OOD와 겹침 0 (assert). 6축 weighted L1: rd_c 0.137, se 0.151 /
+0.192 / 0.183, su 0.205 / 0.160 / 0.132 — 전부 랜덤 수준(rd_a/b 0.190 / 0.225, 그리디 0.031).
+seed 규칙 `default_rng([20260911, rule_idx, letter_idx])`.
+
+**캐시 함정 하나**: `build_cache.py`는 토큰을 환경에서만 읽는데 맨 셸은 `HF_TOKEN` 미설정 +
+`HF_HOME`이 공용 캐시라 익명 요청이 되어 `refs` 엔드포인트 **429**로 700/700 실패(0.2분,
+exit 0 — `errors.json`을 봐야 보인다). 토큰·`HF_HOME`·`HF_HUB_CACHE`를 설정하는 파이썬
+래퍼로 재실행: 25클립/1.5분 → 700클립 ~27분, 클립당 ~5.1 MB.
+
+**G0-d 사전 확인 (참조셋 1,800클립, 새 세트 캐시 전)**: `traj_to_action`을 CPU에서 돌린 raw
+action 공간에서 bucket5 층이 갈라진다 — mean|κ| turn 0.033 vs cruise 0.0008 (40배), 최대 감속
+stop 1.91 vs cruise 0.41 m/s², 정규화 RMS(a) accel 1.64 / stop 1.65 vs cruise 0.51. 부수:
+버킷이 속도도 층화한다(v0 중앙값 cruise 13.3, stop 6.8, turn 5.5, accel 1.3 m/s).
+
+GPU: Ada 4–7은 `m2601_slim_dualexp_u40_em87p5` 150씬 폐루프(5시간째)가, Blackwell 0–3은 다른
+멤버의 cosmos 학습이 점유. 중요도 런처는 백그라운드에서 빈 Ada 카드를 기다리는 중.
