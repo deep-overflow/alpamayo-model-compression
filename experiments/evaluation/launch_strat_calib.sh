@@ -85,6 +85,75 @@ release_card() {
   rm -f "$CLAIMS/$1"
 }
 
+imp_complete() {
+  # run_importance.save() checkpoints importance.npz, importance_perclip.npz AND
+  # metrics.json together every few clips, so file existence means nothing: the marker
+  # is n_clips == 100 inside metrics.json
+  grep -q '"n_clips": 100,' "outputs/$1/metrics.json" 2>/dev/null
+}
+
+imp_running() {
+  # a live run refreshes metrics.json at every checkpoint; a file younger than 20 min
+  # that is not complete belongs to a run another launcher (or an orphan) still has going
+  local m="outputs/$1/metrics.json"
+  [ -f "$m" ] && [ $(( $(date +%s) - $(stat -c %Y "$m") )) -lt 1200 ]
+}
+
+pool() {
+  # <stage> <cards>: K workers pull sets from a flock-guarded queue; each job waits for,
+  # claims and releases a completely empty card. Same pattern as the eval stage.
+  local stage=$1 cards=$2
+  local Q=$LOGDIR/strat_${stage}_queue.txt CUR=$LOGDIR/strat_${stage}_cursor
+  echo "$SETS" >"$Q"
+  echo 0 >"$CUR"
+  worker() {
+    local w=$1 idx tag man cache gpu imp out
+    while :; do
+      idx=$(flock "$CUR" bash -c 'i=$(cat '"$CUR"'); n=$(wc -l < '"$Q"');
+            [ "$i" -lt "$n" ] && echo $((i + 1)) > '"$CUR"'; echo $i')
+      [ "$idx" -ge "$(wc -l <"$Q")" ] && break
+      read -r tag man cache < <(sed -n "$((idx + 1))p" "$Q")
+      imp=importance_${tag/_/100_}
+      out=outputs/slim_dual_$tag
+      case $stage in
+      importance)
+        imp_complete "$imp" && { echo "skip $imp (complete)"; continue; }
+        imp_running "$imp" && { echo "skip $imp (another run is on it)"; continue; }
+        [ -f "outputs/eval_sets/$man.parquet" ] || { echo "no manifest $man"; continue; }
+        gpu=$(wait_empty "$cards")
+        echo "$(date '+%H:%M:%S') worker$w importance $tag on gpu $gpu"
+        run_py "$LOGDIR/$imp.log" experiments/head_analysis/run_importance.py \
+          --calib-manifest "$man" --cache "$cache" --num-clips 100 \
+          --exp-id "$imp" --gpu "$gpu"
+        echo "$(date '+%H:%M:%S') worker$w $imp exit=$?"
+        ;;
+      slim)
+        [ -f "$out/slim_meta.json" ] && { echo "skip $out (exists)"; continue; }
+        # an importance run may still be finishing on another card (or as an orphan of an
+        # earlier launcher); a 100-clip pass takes ~12 min, so wait up to an hour for it
+        local i=0
+        until imp_complete "$imp"; do
+          i=$((i + 1))
+          [ "$i" -gt 60 ] && break
+          sleep 60
+        done
+        imp_complete "$imp" || { echo "no complete importance for $tag"; continue; }
+        gpu=$(wait_empty "$cards")
+        echo "$(date '+%H:%M:%S') worker$w slim $tag on gpu $gpu"
+        run_py "$LOGDIR/slim_dual_$tag.log" experiments/head_analysis/make_slim.py \
+          --config dual_u40_v2 --importance "$imp" --jlens jlens_v2 --out "$out" \
+          --no-state --gpu "$gpu"
+        echo "$(date '+%H:%M:%S') worker$w slim_dual_$tag exit=$?"
+        ;;
+      esac
+      release_card "$gpu"
+    done
+    echo "$(date '+%H:%M:%S') worker$w done"
+  }
+  for w in $(seq 1 "${K-4}"); do worker "$w" & sleep 5; done
+  wait
+}
+
 # tag  manifest  cache
 SETS="rd_a calib_rd100_a calib_rd_a
 rd_b calib_rd100_b calib_rd_b
@@ -98,43 +167,14 @@ su_c calib_su100_c calib_strat"
 
 case ${1-} in
 importance)
-  cards=${2-"4 5 6 7"}
-  echo "$SETS" | while read -r tag man cache; do
-    imp=importance_${tag/_/100_}
-    # run_importance.save() checkpoints all its files every few clips, so the existence
-    # of importance.npz does not mean the run finished: the marker is n_clips == 100
-    if grep -q '"n_clips": 100,' "outputs/$imp/metrics.json" 2>/dev/null; then
-      echo "skip $imp (complete)"; continue
-    fi
-    [ -f "outputs/eval_sets/$man.parquet" ] || { echo "no manifest $man"; continue; }
-    gpu=$(wait_empty "$cards")
-    echo "$(date '+%H:%M:%S') importance $tag on gpu $gpu"
-    run_py "$LOGDIR/$imp.log" experiments/head_analysis/run_importance.py \
-      --calib-manifest "$man" --cache "$cache" --num-clips 100 \
-      --exp-id "$imp" --gpu "$gpu"
-    echo "$(date '+%H:%M:%S') $imp exit=$?"
-    release_card "$gpu"
-  done
+  # nine 100-clip passes (~12 min, 40.5 GB each) over up to K empty cards at once
+  pool importance "${2-"4 5 6 7"}"
   ;;
 
 slim)
-  cards=${2-"4 5 6 7"}
-  echo "$SETS" | while read -r tag man cache; do
-    imp=importance_${tag/_/100_}
-    out=outputs/slim_dual_$tag
-    if [ -f "$out/slim_meta.json" ]; then
-      echo "skip $out (exists)"; continue
-    fi
-    grep -q '"n_clips": 100,' "outputs/$imp/metrics.json" 2>/dev/null ||
-      { echo "no complete importance for $tag"; continue; }
-    gpu=$(wait_empty "$cards")
-    echo "$(date '+%H:%M:%S') slim $tag on gpu $gpu"
-    run_py "$LOGDIR/slim_dual_$tag.log" experiments/head_analysis/make_slim.py \
-      --config dual_u40_v2 --importance "$imp" --jlens jlens_v2 --out "$out" \
-      --no-state --gpu "$gpu"
-    echo "$(date '+%H:%M:%S') slim_dual_$tag exit=$?"
-    release_card "$gpu"
-  done
+  # make_slim --no-state is ~1-2 min per arm (build_slim_coc_u40_v2.log: 71 s); pooled
+  # anyway so a set whose importance is still finishing does not hold the others
+  pool slim "${2-"4 5 6 7"}"
   ;;
 
 eval)
