@@ -259,6 +259,19 @@ def main():
                 "n_pairs": len(pairs),
                 "q": float(np.mean([overlap(ks[a][0], ks[b][0]) for a, b in pairs])),
                 "mlp": float(np.mean([overlap(ks[a][1], ks[b][1]) for a, b in pairs]))}
+    # between-rule pairs: if these equal the within-rule means, the rule moved the
+    # selection no more than a re-draw of natural clips does
+    groups = list(RULES) + ["nt"]
+    for i, ga in enumerate(groups):
+        for gb in groups[i + 1:]:
+            ka = [k for k in ks if k.startswith(ga + "_")]
+            kb = [k for k in ks if k.startswith(gb + "_")]
+            pairs = [(a, b) for a in ka for b in kb]
+            if pairs:
+                ov[f"between_{ga}_{gb}"] = {
+                    "n_pairs": len(pairs),
+                    "q": float(np.mean([overlap(ks[a][0], ks[b][0]) for a, b in pairs])),
+                    "mlp": float(np.mean([overlap(ks[a][1], ks[b][1]) for a, b in pairs]))}
     facts["kept_overlap"] = ov
 
     metrics = {"arms": arm_level, "rule_loss_by_bucket": by_bucket, "contrasts": con,
