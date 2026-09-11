@@ -101,8 +101,10 @@ importance)
   cards=${2-"4 5 6 7"}
   echo "$SETS" | while read -r tag man cache; do
     imp=importance_${tag/_/100_}
-    if [ -f "outputs/$imp/importance.npz" ]; then
-      echo "skip $imp (exists)"; continue
+    # run_importance.save() checkpoints all its files every few clips, so the existence
+    # of importance.npz does not mean the run finished: the marker is n_clips == 100
+    if grep -q '"n_clips": 100,' "outputs/$imp/metrics.json" 2>/dev/null; then
+      echo "skip $imp (complete)"; continue
     fi
     [ -f "outputs/eval_sets/$man.parquet" ] || { echo "no manifest $man"; continue; }
     gpu=$(wait_empty "$cards")
@@ -123,7 +125,8 @@ slim)
     if [ -f "$out/slim_meta.json" ]; then
       echo "skip $out (exists)"; continue
     fi
-    [ -f "outputs/$imp/importance.npz" ] || { echo "no importance for $tag"; continue; }
+    grep -q '"n_clips": 100,' "outputs/$imp/metrics.json" 2>/dev/null ||
+      { echo "no complete importance for $tag"; continue; }
     gpu=$(wait_empty "$cards")
     echo "$(date '+%H:%M:%S') slim $tag on gpu $gpu"
     run_py "$LOGDIR/slim_dual_$tag.log" experiments/head_analysis/make_slim.py \
