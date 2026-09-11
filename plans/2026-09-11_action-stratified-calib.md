@@ -1,6 +1,6 @@
 # action 층화 캘리브레이션 추출 — 3규칙 × 3seed, test500
 
-날짜: 2026-09-11. 브랜치: `worktree-worktree-action-strat-calib`. 상태: **승인됨, 1단계 진행 중**
+날짜: 2026-09-11. 브랜치: `worktree-worktree-action-strat-calib`. 상태: **완료 (2026-09-12 02:00 KST, PR #60)**
 (승인 2026-09-11 20:45 KST; 진행 기록은 문서 끝).
 
 ## 왜
