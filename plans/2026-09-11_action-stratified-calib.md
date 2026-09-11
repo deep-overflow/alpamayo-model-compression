@@ -335,3 +335,22 @@ cvlab21 쪽 런처는 중복 방지를 위해 중지 — 9 arm 전부 한 박스
 풀렸다. 올바른 경로로 재동기화했고 동작에는 영향 없음(임포트는 `experiments/…` 기준). 루트의
 잔재(`alpamayo_r1 evaluation head_analysis lingoqa llm_pruner recovery transfer`, 그리고
 `paper/`에 섞인 `experiments/paper` 파일)는 공용 계정이라 자동 삭제가 거부됨 — 수동 정리 필요.
+
+### 3. 2단계 가동 (2026-09-11 22:18 KST)
+
+첫 체인은 importance/slim이 **순차**였고, 카드 2·3·6이 비자마자 그 설계가 병목이 됐다(9 × 12분).
+런처를 eval과 같은 **K워커 풀**(flock 큐, 작업마다 빈 카드 claim/release)로 바꿨다. 완료 판정은
+파일 존재가 아니라 `metrics.json`의 `n_clips == 100` — `run_importance.save()`가 10클립마다
+importance.npz·perclip·metrics.json을 **함께** 체크포인트하므로 존재만으로는 절반짜리 런을
+"완료"로 오인한다(실제로 그렇게 한 번 건너뛰었다). 20분 안에 갱신된 미완료 metrics.json은
+"다른 런이 진행 중"으로 보고 건너뛴다. make_slim(`--no-state`)은 로그상 71초라 slim은 병목이
+아니다(CLAUDE.md의 1.5 h는 17 GB state 저장 포함).
+
+함정 하나 더: 구버전 런처를 `pkill -f`로 죽였더니 bash만 죽고 `run_retry_host.sh` + 파이썬
+자식이 카드 5에서 rd_a를 계속 돌려 완주했다(레시피 동일이라 결과는 유효, `metrics.json`
+n_clips=100 확인). 재실행 전 `pgrep -af run_importance`로 고아를 확인할 것.
+
+22:17 KST 상태: rd_a 완료, rd_b 고아 진행 중(카드 7), **rd_c/se_a/se_b/se_c 4개 동시 실행**
+(카드 0–3, 40.5 GB씩). su_a/b/c → slim 9 → test500 18 shard(워커 4) 순. 예상 완료 ~01:30 KST.
+결과 회수는 `cvlab20-server/fetch_strat_results.sh`(importance·slim_meta·평가 레코드만, state
+없음) → cvlab21에서 `analyze_strat_calib.py`.
