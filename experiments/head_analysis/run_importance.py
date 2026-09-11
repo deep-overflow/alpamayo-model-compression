@@ -106,9 +106,34 @@ def process_clip(model, processor, data, args, seed, acc):
             inputs["ego_history_rot"], seed, prefill, n_steps=args.fm_steps,
             k_draws=args.k_draws,
         )
-    else:
+    elif args.traj_target == "bestn":
+        # the target is the model's own draw that lands closest to the GT: on-manifold,
+        # but still chosen by the GT. expert_fm_grads is called unchanged, so the
+        # estimator and its noise schedule are the shipped ones and the target is the
+        # only factor (plans/2026-09-10_self-anchored-traj-importance.md)
+        gt_xy = data["ego_future_xyz"][0, 0, :, :2].to("cuda").float()  # (64, 2)
+        x1, bestn = pl.best_of_n_target(
+            model, cache, rope_deltas, prefill, gt_xy, inputs["ego_history_xyz"],
+            inputs["ego_history_rot"], seed, n=args.n_best, n_steps=args.fm_steps)
         fm_loss, grads, leaves = pl.expert_fm_grads(
             model, cache, rope_deltas, x1, args.fm_steps, seed, prefill
+        )
+    elif args.traj_target == "self":
+        # same training-path loss, but anchored on a trajectory the model itself produces
+        # instead of the GT -- the axis `infer` does NOT touch, since that one swaps the
+        # path and keeps the GT target
+        # (plans/2026-09-10_self-anchored-traj-importance.md)
+        fm_loss, grads, leaves = pl.expert_selffm_grads(
+            model, cache, rope_deltas, seed, prefill, n_steps=args.fm_steps,
+            k_draws=args.k_draws, coupling=args.self_coupling,
+        )
+    else:
+        # k_draws=1 is the shipped estimator bit-for-bit; >1 repeats the whole sweep
+        # with a fresh noise stream so the GT anchor can be matched to
+        # expert_selffm_grads' evaluation count
+        fm_loss, grads, leaves = pl.expert_fm_grads(
+            model, cache, rope_deltas, x1, args.fm_steps, seed, prefill,
+            k_draws=args.k_draws if args.traj_target == "gtk" else 1,
         )
     acc["traj"]["exp_q"] += expert_gates.q_scores()
     acc["traj"]["exp_mlp"] += expert_gates.mlp_scores()
@@ -130,8 +155,11 @@ def process_clip(model, processor, data, args, seed, acc):
     vlm_gates.remove()
     expert_gates.remove()
     del cache, cache_t, leaves, grads, ts, gs
-    return {"coc_len": coc_end - coc_start, "prompt_len": prompt_len,
-            "fm_loss": fm_loss, "peak_gb": peak}
+    rec = {"coc_len": coc_end - coc_start, "prompt_len": prompt_len,
+           "fm_loss": fm_loss, "peak_gb": peak}
+    if args.traj_target == "bestn":
+        rec["bestn"] = bestn
+    return rec
 
 
 def main():
@@ -152,6 +180,23 @@ def main():
                     help="fm: the shipped training-path loss at GT-anchored x_t; "
                          "infer: final-trajectory error through the model's own "
                          "Euler chain (rollout path)")
+    ap.add_argument("--traj-target", choices=["gt", "gtk", "bestn", "self"],
+                    default="gt",
+                    help="gt: the shipped flow-matching target x1 = gt_actions(...); "
+                         "self: x1 = the model's own Denoise_10(eps0), which removes the "
+                         "asymmetry with I_CoC (already scored on the model's own "
+                         "rollout); bestn: the model's own draw nearest the GT, "
+                         "on-manifold but GT-selected; gtk: the GT target with "
+                         "--k-draws repeats of the whole sweep. fm mode only")
+    ap.add_argument("--self-coupling", choices=["tied", "independent"], default="tied",
+                    help="--traj-target self only. tied: the loss noise IS the eps0 that "
+                         "generated the sample, the only pairing the model's flow "
+                         "produces; independent: a fresh eps per step. G1 measured tied "
+                         "at 29.9% of the GT-anchored loss (not degenerate, because the "
+                         "flow is not straight), so tied is the default")
+    ap.add_argument("--n-best", type=int, default=6,
+                    help="--traj-target bestn only: draws to pick the target from. "
+                         "6 matches the minADE@6 the evaluation protocol reads")
     ap.add_argument("--k-draws", type=int, default=4,
                     help="infer only: noise draws per clip, accumulated before the "
                          "abs (one Euler chain is a single draw, the training path "
@@ -174,6 +219,10 @@ def main():
                          "before the per-clip gates, so a masked unit's gate gradient is "
                          "exactly zero and it cannot re-enter a ranking")
     args = ap.parse_args()
+    if args.traj_mode == "infer" and args.traj_target != "gt":
+        # the infer branch is matched first, so this combination would silently measure
+        # the rollout path against the GT and ignore --traj-target entirely
+        ap.error("--traj-target applies to the fm path; it is ignored by --traj-mode infer")
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -236,8 +285,18 @@ def main():
         "model": "nvidia/Alpamayo-1.5-10B",
         "purpose": "dual-objective Taylor importance for Q head / MLP channel / KV group",
         "objectives": {"coc": "CoC NLL",
-                       "traj": ("flow-matching MSE vs GT trajectory" if args.traj_mode == "fm"
-                                else "final-trajectory MSE through the model's own Euler chain")},
+                       "traj": ("final-trajectory MSE through the model's own Euler chain"
+                                if args.traj_mode == "infer"
+                                else f"flow-matching MSE vs the model's own Denoise_10 sample "
+                                     f"({args.self_coupling} coupling)"
+                                if args.traj_target == "self"
+                                else f"flow-matching MSE vs GT trajectory "
+                                     f"({args.k_draws} draws)"
+                                if args.traj_target == "gtk"
+                                else f"flow-matching MSE vs the model's own draw nearest "
+                                     f"the GT (best of {args.n_best})"
+                                if args.traj_target == "bestn"
+                                else "flow-matching MSE vs GT trajectory")},
         "num_clips": len(calib), "clip_ids": [c for c, _ in calib], "seed": args.seed,
         "calib_manifest": args.calib_manifest, "cache": args.cache,
         "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
@@ -245,7 +304,11 @@ def main():
         "mask": args.mask,
         "fm_steps": args.fm_steps, "gradient_checkpointing": args.checkpoint,
         "traj_mode": args.traj_mode,
-        "k_draws": args.k_draws if args.traj_mode == "infer" else None,
+        "traj_target": args.traj_target,
+        "self_coupling": args.self_coupling if args.traj_target == "self" else None,
+        "k_draws": (args.k_draws if args.traj_mode == "infer"
+                    or args.traj_target in ("self", "gtk") else None),
+        "n_best": args.n_best if args.traj_target == "bestn" else None,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
 

@@ -44,6 +44,15 @@ Configs:
   meandual_u40_v2  -- dual's two halves under znorm11's operator: mean of z(I_traj) and
                       z(I_CoC). The fourth cell of the 2x2 (operator x step axis).
                       plans/2026-09-03_union-step-criterion.md.
+  dualfm<N>_u40_v2 -- dual with the reasoning half handicapped by delta = N/100:
+                      max(rank I_traj, rank I_CoC - delta). Budget, allocation, expert and
+                      KV are dual_u40_v2's, so the only factor is how much say each
+                      objective gets. delta = 0 IS dual (verified: kept sets agree 1.000000
+                      with slim_dual_u40_v2), +1 is traj_u40_v2, -1 is coc_u40_v2. Positive
+                      delta favours the trajectory (action) objective -- dualfm10 takes the
+                      reasoning half from 46.5% to 25.9% of retained Q heads while removing
+                      the identical 2,657,452,032 params.
+                      reports/evaluation/2026-09-09_criterion-balance.html.
   dualexp_u40_em<M> -- the same VLM half + expert MLP-ONLY at M% (expert Q heads and KV
                       untouched); M may carry a decimal written with `p` (em93p75 =
                       93.75%). The expert score comes from --expert-importance, so the
@@ -579,6 +588,19 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             jl = dict(np.load(REPO / "outputs" / jlens / "jlens.npz"))
             return jl["q_j"], jl["mlp_j"]
 
+        # dualfm<N>: dual with the reasoning half handicapped by delta = N/100, i.e.
+        #   max(rank(I_traj), rank(I_CoC) - delta)
+        # delta = 0 IS dual, +1 is traj_u40_v2 and -1 is coc_u40_v2, so the stem opens the
+        # balance between the two objectives as one knob without changing budget, allocation,
+        # expert or KV. Positive delta gives the trajectory (action) objective more say:
+        # at delta = 0.10 the reasoning half decides 25.9% of retained Q heads instead of
+        # 46.5%. Ranks are uniform on [0, 1], so subtracting a constant is the well-
+        # conditioned parameterisation -- the multiplicative max((1-l)r, l r) saturates
+        # outside l in [0.4, 0.6]. See experiments/paper/criterion_scale.py, and
+        # reports/evaluation/2026-09-09_criterion-balance.html for why delta is NOT
+        # tunable at n=100 (the draw noise floor is 1.7-3.8x the knob at |delta|=0.1).
+        fm = re.match(r"^dualfm(\d+)$", stem)
+        delta = float(fm.group(1)) / 100 if fm else 0.0
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
                  "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
@@ -586,7 +608,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
                  "dualprod": ("traj", "coc"),
-                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(stem, (stem,))
+                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(
+                     "dual" if fm else stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
         op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
@@ -611,8 +634,10 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         sq, sm = half(parts[0])
         for p in parts[1:]:
             oq, om = half(p)
-            sq = op(rank(sq), rank(oq))
-            sm = op(rank(sm), rank(om))
+            # delta is 0 for every stem but dualfm<N>, so this stays bit-identical for the
+            # shipped checkpoints
+            sq = op(rank(sq), rank(oq) - delta)
+            sm = op(rank(sm), rank(om) - delta)
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)

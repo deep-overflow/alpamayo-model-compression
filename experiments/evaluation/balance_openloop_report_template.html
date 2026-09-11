@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>동등 가중에서 벗어나면 얻는 것이 없다: FM/CE 균형 노브의 개루프 검정</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #C0392B;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sig { color: var(--bad); font-weight: 600; }
+  .ns { color: var(--text-muted); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>동등 가중에서 벗어나면 얻는 것이 없다: FM/CE 균형 노브의 개루프 검정</h1>
+  <div class="meta">
+    2026-09-09 · <code>nvidia/Alpamayo-1.5-10B</code> 24.0% 압축 3종 + 무손상 baseline ·
+    val500 / test500 / OOD-val 262 · 전 arm Ada · 롤아웃 전용 minADE@6 · minFDE@6
+  </div>
+</header>
+
+<p class="lede">
+같은 날의 선행 보고서(<code>2026-09-09_criterion-balance</code>)는 <strong>선택 통계</strong>로
+균형 노브를 기각했다 — 캘리브레이션 추출이 kept set을 노브보다 1.7~3.8배 더 흔들고, 11개
+서로소 추출의 최빈 최적 δ가 0이다. 그것은 <em>어떤 유닛이 남는가</em>에 대한 논증이지
+<em>다른 유닛을 남기면 얼마를 치르는가</em>에 대한 측정이 아니다. 이 보고서가 그 측정이다.
+결과는 예측대로다: <strong>δ=+0.10은 세 세트 모두에서 dual과 구별되지 않고, δ=+0.20은
+val500에서 유의하게 나쁘다.</strong> action 목적함수에 발언권을 더 주어 얻는 구간은 없다.
+</p>
+
+<div class="kpi">
+  <div><span class="v">+0.0001</span><span class="k">δ=+0.10 val500 median Δ</span></div>
+  <div><span class="v">3 / 3</span><span class="k">세트에서 dual과 동급</span></div>
+  <div><span class="v">+0.0102 ✱</span><span class="k">δ=+0.20 val500 (유의, 나쁨)</span></div>
+  <div><span class="v">미재현</span><span class="k">그 유의 결과의 상태</span></div>
+</div>
+
+<h2><span class="num">1</span>무엇을 만들었나</h2>
+
+<p>
+<code>make_slim.py</code>에 <code>dualfm&lt;N&gt;</code> stem을 추가했다. 점수는
+</p>
+
+<pre><code>score_δ = max( rank(I_traj), rank(I_CoC) − δ )        δ = N/100</code></pre>
+
+<p>
+δ가 양수면 추론 목적함수의 순위가 통째로 내려가므로 <strong>궤적(action) 목적함수가 더
+많이 결정</strong>한다. 예산·배분·expert·KV는 전부 <code>dual_u40_v2</code>의 것을 그대로
+쓰므로 <strong>변하는 것은 두 목적함수의 발언권 하나뿐</strong>이다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">δ</th><th class="r">제거 파라미터</th><th class="r">dual 대비 변위 (Q / MLP)</th><th class="r">추론이 결정하는 Q head</th></tr></thead>
+<tbody>
+<tr><td><code>dual_u40_v2</code></td><td class="r">0</td><td class="r">2,657,452,032</td><td class="r">—</td><td class="r">46.5%</td></tr>
+<tr><td><code>dualfm10_u40_v2</code></td><td class="r">+0.10</td><td class="r">2,657,452,032</td><td class="r">5.6% / 3.8%</td><td class="r">25.9%</td></tr>
+<tr><td><code>dualfm20_u40_v2</code></td><td class="r">+0.20</td><td class="r">2,657,452,032</td><td class="r">8.2% / 6.9%</td><td class="r">14.0%</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>빌드 전에 검증한 것.</strong> δ는 다른 모든 stem에서 0이라 기존 체크포인트가 여전히
+비트 단위로 재생성된다. 이를 실제로 확인했다: numpy로 재현한 δ=0 마스크가 출시본
+<code>slim_dual_u40_v2</code>의 kept set과 양 축 모두 <strong>1.000000</strong> 일치하고,
+빌드된 <code>dualfm10</code>이 사전 예측 마스크와 <strong>1.000000</strong> 일치한다. 세 arm
+모두 층별 19/32 헤드, 7390/12288 채널로 균일하고 expert 16헤드와 KV는 손대지 않았다.</p>
+</div>
+
+<h2><span class="num">2</span>사전에 정한 읽는 법</h2>
+
+<p>
+이 프로토콜이 판별하는 최소 크기는 <strong>0.05 m</strong>이고, δ=+0.10의 변위(5.6% / 3.8%)는
+선행 보고서가 잰 캘리브레이션 잡음 바닥(9.0% / 14.6%) <strong>아래</strong>다. 그러므로
+<strong>null은 예상된 결과이며, 선행 판정을 반증하지 못한 것이 아니라 확증한다.</strong>
+유의한 효과가 나왔다면 선행 판정이 틀린 것이었다. 이 방향을 실행 전에 고정해 두었기 때문에
+null을 사후에 "실패"로도 "성공"으로도 재해석하지 않는다.
+</p>
+
+<p>
+판정은 <strong>페어드 중앙값 + 부트스트랩 CI</strong>가 1차, 평균과 Wilcoxon은 병기한다.
+minADE·minFDE는 8개 저장 샘플 중 <strong>앞 6개</strong>에 대한 최소값(@6)이고, 롤아웃 전용이며
+teacher-forced는 쓰지 않는다. 시드는 루프 인덱스가 아니라 클립에서 유도된다.
+</p>
+
+<h2><span class="num">3</span>δ=+0.10 — 세 세트 모두 dual과 구별 불가</h2>
+
+<figure>
+  <img src="PLOT::bal::o2_forest_dualfm10.png" alt="forest plot across three sets">
+  <figcaption>세 세트 × 두 지표의 dual 대비 페어드 중앙값과 95% 부트스트랩 CI. 회색 띠는
+  프로토콜이 판별하지 못하는 ±0.05 m. <strong>여섯 구간이 모두 0을 포함</strong>하고, 부호도
+  일관되지 않는다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>세트</th><th class="r">n</th><th class="r">minADE@6 median Δ</th><th class="r">[95% CI]</th><th class="r">mean</th><th class="r">Wilcoxon</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">500</td><td class="r">+0.0001</td><td class="r">[−0.0119, +0.0060]</td><td class="r">−0.0059</td><td class="r">0.688</td></tr>
+<tr><td>test500</td><td class="r">500</td><td class="r">−0.0023</td><td class="r">[−0.0150, +0.0067]</td><td class="r">−0.0076</td><td class="r">0.592</td></tr>
+<tr><td>OOD-val</td><td class="r">262</td><td class="r">+0.0086</td><td class="r">[−0.0103, +0.0267]</td><td class="r">−0.0308</td><td class="r">0.637</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>세트</th><th class="r">minFDE@6 median Δ</th><th class="r">[95% CI]</th><th class="r">mean</th><th class="r">Wilcoxon</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">−0.0027</td><td class="r">[−0.0376, +0.0115]</td><td class="r">−0.0099</td><td class="r">0.703</td></tr>
+<tr><td>test500</td><td class="r">−0.0246</td><td class="r">[−0.0721, +0.0142]</td><td class="r">−0.0532</td><td class="r">0.046 †</td></tr>
+<tr><td>OOD-val</td><td class="r">+0.0077</td><td class="r">[−0.0397, +0.0691]</td><td class="r">−0.0988</td><td class="r">0.927</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>† 두 검정이 엇갈리는 한 칸.</strong> test500 minFDE에서 Wilcoxon은 0.046인데
+<strong>부트스트랩 CI는 0을 포함</strong>한다. 1차 판정은 중앙값+CI이므로 <strong>유의하지
+않다</strong>고 읽는다. Wilcoxon이 잡은 것은 중앙값의 이동이 아니라 분포 전체의 미세한
+쏠림이다(mean −0.0532). 세 세트에서 부호가 −0.0027 / −0.0246 / +0.0077로 뒤섞이므로 방향성
+주장도 성립하지 않는다.</p>
+</div>
+
+<p>
+주목할 점은 <strong>kept set의 5.6%(Q) / 3.8%(MLP)를 바꾸었고 500클립 전부에서 minADE 값이
+달라졌는데도</strong>(changed 100.0%) 집계에서는 완전히 상쇄된다는 것이다. 유닛 단위로는
+분명히 다른 모델인데 성능은 같다.
+</p>
+
+<h2><span class="num">4</span>δ=+0.20 — 유의하게 나쁘지만, 아직 한 세트뿐</h2>
+
+<figure>
+  <img src="PLOT::bal::o1_dose_response.png" alt="dose response on val500">
+  <figcaption>val500에서 δ에 따른 dual 대비 페어드 중앙값(95% CI). 회색 띠는 판별 불가 구간.
+  세 점 전부가 그 안에 들어간다 — δ=+0.20의 CI가 0을 배제하긴 하지만, 크기 자체는 게이트의
+  1/5이다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>비교 (val500)</th><th class="r">median</th><th class="r">[95% CI]</th><th class="r">mean</th><th class="r">Wilcoxon</th></tr></thead>
+<tbody>
+<tr><td>minADE@6 <code>dualfm20 − dual</code></td><td class="r sig">+0.0102</td><td class="r sig">[+0.0005, +0.0240]</td><td class="r">+0.0487</td><td class="r sig">0.040 ✱</td></tr>
+<tr><td>minFDE@6 <code>dualfm20 − dual</code></td><td class="r ns">+0.0203</td><td class="r ns">[−0.0113, +0.0974]</td><td class="r">+0.1136</td><td class="r ns">0.166</td></tr>
+<tr><td>minADE@6 <code>dual − baseline</code></td><td class="r">+0.0581</td><td class="r">[+0.0361, +0.0829]</td><td class="r">+0.0669</td><td class="r">0.0000 ✱</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong>이 결과를 결론으로 쓰지 않는다.</strong> 세 가지 이유가 있다.</p>
+<ol>
+<li><strong>CI 하한이 +0.0005</strong>다. 0에서 0.5 mm 떨어져 있다.</li>
+<li><strong>dual 대비 비교를 8번 했다</strong>(dualfm10 3세트 × 2지표 + dualfm20 1세트 × 2지표).
+α=0.05에서 전부 null이어도 평균 0.4개는 우연히 유의하게 나온다. Bonferroni 기준
+0.00625로는 p=0.040도 p=0.046도 통과하지 못한다.</li>
+<li><strong>재현하지 않았다.</strong> test500 replication을 계획했으나 Ada 4–7이 폐루프
+평가에 점유되어 실행하지 못했다. 같은 세션에서 <code>maxstep11</code>의 꼬리 주장이 세 세트에서
+재현되는 듯 보였다가 선택 기준을 바꾸자 부호가 전부 뒤집힌 전례가 있다
+(<code>2026-09-04_union-step-criterion</code>).</li>
+</ol>
+<p>따라서 <strong>δ=+0.20은 "미재현 관찰"</strong>로 기록한다. 방향(더 나쁨)은 δ=+0.10의
+null과 모순되지 않고 용량-반응으로도 자연스럽지만, 그것이 근거를 만들어 주지는 않는다.</p>
+</div>
+
+<h2><span class="num">5</span>CoC 퇴화 — 흥미롭지만 클립 수가 너무 적다</h2>
+
+<figure>
+  <img src="PLOT::bal::o3_coc_degeneracy.png" alt="CoC degeneracy by arm and set">
+  <figcaption>arm별·세트별 CoC 퇴화 클립 비율. OOD-val의 baseline 막대가 보이지 않는 것은
+  값이 정확히 0.0%(0클립)이기 때문이다.</figcaption>
+</figure>
+
+<table>
+<thead><tr><th>세트</th><th class="r">baseline</th><th class="r">dual</th><th class="r">dualfm10</th><th class="r">dualfm20</th></tr></thead>
+<tbody>
+<tr><td>val500 (n=500)</td><td class="r">0.8% (4)</td><td class="r">1.4% (7)</td><td class="r">1.0% (5)</td><td class="r">2.0% (10)</td></tr>
+<tr><td>test500 (n=500)</td><td class="r">0.6% (3)</td><td class="r">3.0% (15)</td><td class="r">2.8% (14)</td><td class="r">—</td></tr>
+<tr><td>OOD-val (n=262)</td><td class="r">0.0% (0)</td><td class="r">3.4% (9)</td><td class="r">0.8% (2)</td><td class="r">—</td></tr>
+</tbody>
+</table>
+
+<p>
+<code>dualfm10</code>이 세 세트 모두에서 <code>dual</code>보다 낮다. 추론 목적함수의 발언권을
+줄였는데 추론 붕괴가 오히려 줄어든 셈이라 해석하고 싶어지는 패턴이다.
+</p>
+
+<div class="callout">
+<p><strong>그러나 차이는 2클립, 1클립, 7클립이다.</strong> 세 세트가 같은 방향이라는 점은
+우연치고 눈에 띄지만, val500과 test500의 차이(0.4pp, 0.2pp)는 사실상 0이고 전체 신호는
+OOD의 7클립에서 온다. 이 정도 카운트로는 검정을 세울 수 없다. <strong>관찰로만 기록하고
+결론에 넣지 않는다.</strong> 확인하려면 퇴화율을 1차 지표로 삼은 별도 설계가 필요하다.</p>
+</div>
+
+<h2><span class="num">6</span>압축 자체의 비용은 재확인됐다</h2>
+
+<table>
+<thead><tr><th>세트</th><th class="r">minADE@6 <code>dual − baseline</code></th><th class="r"><code>dualfm10 − baseline</code></th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">+0.0581 [+0.0361, +0.0829]</td><td class="r">+0.0476 [+0.0165, +0.0734]</td></tr>
+<tr><td>test500</td><td class="r">+0.0524 [+0.0340, +0.0794]</td><td class="r">+0.0548 [+0.0421, +0.0803]</td></tr>
+<tr><td>OOD-val</td><td class="r">+0.0776 [+0.0411, +0.1139]</td><td class="r">+0.0737 [+0.0393, +0.1223]</td></tr>
+</tbody>
+</table>
+
+<p>
+24.0% 프루닝의 비용은 세 세트에서 +0.052~+0.078 m이고, 노브를 어디에 두든 그 값이 바뀌지
+않는다. <strong>노브가 움직이는 크기(≤0.010)는 압축 비용(≈0.06)의 6분의 1 이하</strong>이며,
+이것이 이 실험의 규모 감각이다.
+</p>
+
+<h2><span class="num">7</span>결론</h2>
+
+<pre><code>δ = 0     (dual)      기준 — 11개 독립 추출의 최빈 최적점
+δ = +0.10             val +0.0001 / test −0.0023 / OOD +0.0086   전부 n.s., 부호 뒤섞임
+δ = +0.20             val +0.0102 (유의, 나쁨) — 미재현</code></pre>
+
+<div class="callout good">
+<p><strong>동등 가중은 임의 선택이 아니다.</strong> 선행 보고서가 선택 통계로 보인 것
+(11개 서로소 캘리브레이션 추출의 최빈 최적 δ = 0)을 개루프가 확인했다. action 목적함수에
+발언권을 더 주면 이득 구간 없이 손해만 커진다. 논문에서 "두 목적함수를 동등하게 가중했다"를
+방어할 때, 이제 <strong>선택 통계와 실제 성능 양쪽</strong>에 근거가 있다.</p>
+</div>
+
+<p>세 번째 사례가 하나 더 쌓였다 — <strong>kept set 변위 크기는 손상을 예측하지 않는다</strong>:</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">dual/dualfix 대비 변위</th><th class="r">val500 비용</th></tr></thead>
+<tbody>
+<tr><td><code>maxstep11</code></td><td class="r">7.0–9.7%</td><td class="r">−0.0033 (n.s.)</td></tr>
+<tr><td><code>dualfm10</code></td><td class="r">5.6% / 3.8%</td><td class="r">+0.0001 (n.s.)</td></tr>
+<tr><td><code>dualsafe</code></td><td class="r">6.0%</td><td class="r">+0.1945 ✱</td></tr>
+</tbody>
+</table>
+
+<p>
+가르는 것은 변위의 크기가 아니라 <strong>변위가 신호에서 왔는가 표본 잡음에서 왔는가</strong>다.
+<code>dualfm10</code>의 변위는 결정론적이고 의도된 것이라 무해했고, <code>dualsafe</code>의
+변위는 n=100 재가중에서 온 잡음이라 해로웠다.
+</p>
+
+<h2><span class="num">8</span>남은 것</h2>
+
+<ul>
+<li><strong><code>dualfm20</code> test500 replication</strong> — 계획했으나 Ada 4–7이 폐루프에
+점유되어 미실행. 빌드 불필요, 2카드 31분. 이것 없이는 δ=+0.20의 유의성을 결론에 넣지 않는다.
+Blackwell로 옮기는 것은 권하지 않는다: <code>dual</code>의 Blackwell test500 대조군이 없어
+arm 두 개를 새로 돌려야 하고, 아키텍처 간 delta 전이 오차(≤0.011 m)가 재현하려는 효과
+(+0.0102 m)와 같은 크기라 불일치가 나와도 세트 차이인지 아키텍처 차이인지 구분할 수 없다.</li>
+<li><strong>음의 δ</strong>(추론 쪽으로 미는 방향)는 측정하지 않았다. 선택 통계상 대칭이지만
+개루프로는 확인되지 않았다.</li>
+<li><strong>폐루프</strong> 미측정. 개루프가 숨긴 실패를 폐루프가 드러낸 전례가 있으므로,
+"무해"는 개루프 판정으로만 읽어야 한다.</li>
+</ul>
+
+<h2><span class="num">9</span>재현</h2>
+
+<pre><code># 체크포인트 (선택만, 가중치 재작성 없음)
+.venv/bin/python experiments/head_analysis/make_slim.py \
+    --config dualfm10_u40_v2 --out outputs/slim_dualfm10_u40_v2 --importance importance_v2
+.venv/bin/python experiments/head_analysis/make_slim.py \
+    --config dualfm20_u40_v2 --out outputs/slim_dualfm20_u40_v2 --importance importance_v2
+
+# 개루프 (Ada, 세트당 2~3 샤드)
+.venv/bin/python experiments/evaluation/run_baseline.py --set indist \
+    --model outputs/slim_dualfm10_u40_v2 --exp-id dualfm10_u40_v2_ps_indist \
+    --shard 0 --n-shards 2 --gpu 6
+#   --set test / --set ood --manifest ood_val 로 나머지 두 세트
+
+# 집계와 플롯
+.venv/bin/python experiments/evaluation/analyze_balance_openloop.py
+#   -> outputs/balance_openloop/{config,metrics}.json, summary.txt, plots/*.png</code></pre>
+
+<footer>
+  Alpamayo 1.5 구조적 프루닝 · 2026-09-09 ·
+  분석 <code>experiments/evaluation/analyze_balance_openloop.py</code> ·
+  데이터 <code>outputs/balance_openloop/</code> ·
+  선행 <code>2026-09-09_criterion-balance</code> (선택 통계) ·
+  관련 <code>2026-09-04_union-step-criterion</code>,
+  <code>2026-09-03_calib-draw-variance</code>
+</footer>
+
+</div>
+</body></html>

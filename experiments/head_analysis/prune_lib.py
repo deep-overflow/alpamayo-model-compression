@@ -240,12 +240,191 @@ def expert_infer_grads(model, cache, rope_deltas, gt_xy, hist_xyz, hist_rot, see
     return float(np.mean(losses)), grads, leaves
 
 
-def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill):
+def expert_selffm_grads(model, cache, rope_deltas, seed, prefill, n_steps=10,
+                        k_draws=10, coupling="tied", self_xor=0x5E1F):
+    """FM gradients anchored on the model's OWN denoised sample instead of the GT.
+
+    The shipped criterion pairs a fresh noise with the GT action; I_CoC meanwhile scores
+    the model's own rollout, so only the trajectory half is GT-anchored. The trajectory
+    distribution is multimodal and the GT is one mode of it -- on a clip where the model
+    produces a different mode the residual v(x_t,t) - (x1_gt - eps) is dominated by mode
+    mismatch, and the Taylor score becomes a projection onto "what moves the output
+    toward the GT" rather than "what this model uses".
+
+    Here the target is xhat = Denoise_10(eps0), a trajectory the model actually produces.
+    `coupling` picks how the loss noise pairs with it:
+
+      tied         x_t = (1-t) eps0 + t xhat,  u = xhat - eps0   (the model's OWN coupling:
+                   the ODE maps eps0 to xhat, so this is the only pair the flow produces)
+      independent  x_t = (1-t) eps  + t xhat,  u = xhat - eps    (fresh eps per step)
+
+    `tied` was suspected of degenerating -- a perfectly rectified flow would make the
+    instantaneous field equal the chord and collapse the residual -- but the probe
+    measured it at 29.9% of the GT-anchored loss because Alpamayo's flow is not straight
+    (||v - chord||/||chord|| = 0.168 median). See
+    plans/2026-09-10_self-anchored-traj-importance.md and outputs/selftraj_probe/.
+
+    K matters more here than on the shipped path: under `tied` a draw's n_steps
+    evaluations are n_steps points on ONE chord, so the independent-noise count is
+    k_draws, not k_draws * n_steps. The shipped path draws a fresh eps per step and so
+    averages n_steps independent problems per clip; k_draws=n_steps restores parity.
+
+    The Euler chain runs under no_grad: xhat is a target, held constant exactly as
+    seq_tf is for the CoC half. Gradients accumulate on the detached cache leaves across
+    all draws, so the single VLM backward that follows is unchanged.
+
+    Returns (mean loss, [(dL/dk, dL/dv) per layer], leaves), matching expert_fm_grads.
+    """
+    device = next(model.expert.parameters()).device
+    n_layers = len(model.expert.layers)
+    leaves = []
+    for i in range(n_layers):
+        k, v = lib.cache_layer_kv(cache, i)
+        leaves.append((k.detach().requires_grad_(True), v.detach().requires_grad_(True)))
+
+    offset = torch.tensor([prefill], device=device)
+    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
+    n_tok = model.action_space.get_action_space_dims()[0]  # 64
+    dims = model.action_space.get_action_space_dims()  # (64, 2)
+    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
+        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
+        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
+    )
+    forward_kwargs = {}
+    if model.config.expert_non_causal_attention:
+        forward_kwargs["is_causal"] = False
+
+    def field(x, t_val, cast=True):
+        """cast=False keeps x in fp32 into action_in_proj, which is what the release
+        step_fn and expert_infer_grads do; the shipped FM loss casts first. The Euler
+        chain therefore runs uncast so xhat is the trajectory the release path would
+        produce, while the loss keeps the shipped cast so only the TARGET differs from
+        expert_fm_grads. Measured effect of the cast on the sample: 0.005 m mean /
+        0.012 m max over 4 clips, against a 1.76 m single-draw distance from GT."""
+        # re-seat the leaves: update()+crop() leave the previous step's slices behind
+        for i, (k, v) in enumerate(leaves):
+            lib.set_cache_layer_kv(cache, i, k, v)
+        t = torch.full((1, 1, 1), t_val, device=device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            embeds = model.action_in_proj(x.to(torch.bfloat16) if cast else x, t)
+            if embeds.dim() == 2:
+                embeds = embeds.view(1, n_tok, -1)
+            out = model.expert(
+                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+            )
+            cache.crop(prefill)
+            return model.action_out_proj(out.last_hidden_state[:, -n_tok:])
+
+    dt = 1.0 / n_steps
+    losses = []
+    for draw in range(k_draws):
+        gen0 = torch.Generator(device="cpu").manual_seed((seed ^ self_xor) + draw)
+        eps0 = torch.randn(1, *dims, generator=gen0).to(device)
+        with torch.no_grad():
+            x = eps0.clone()
+            for s in range(n_steps):
+                x = x + dt * field(x, s * dt, cast=False).float()
+        xhat = x.detach()  # (1, 64, 2) -- a target, like seq_tf for the CoC half
+
+        # a separate stream, and one that cannot arithmetically land on gen0's: gen0 is
+        # (seed ^ self_xor) + draw over [0, k_draws), so offsetting by k_draws keeps the
+        # two windows disjoint whatever the seed
+        gen = torch.Generator(device="cpu").manual_seed(seed + k_draws + draw)
+        for s in range(n_steps):
+            t_val = (s + 0.5) / n_steps
+            noise = eps0 if coupling == "tied" else \
+                torch.randn(1, *dims, generator=gen).to(device)
+            x_t = (1.0 - t_val) * noise + t_val * xhat
+            v_target = xhat - noise
+            pred = field(x_t, t_val)
+            loss = F.mse_loss(pred.float(), v_target)
+            loss.backward()
+            losses.append(loss.item())
+
+    grads = [(k.grad, v.grad) for k, v in leaves]
+    return float(np.mean(losses)), grads, leaves
+
+
+def best_of_n_target(model, cache, rope_deltas, prefill, gt_xy, hist_xyz, hist_rot,
+                     seed, n=6, n_steps=10, self_xor=0x5E1F):
+    """The model's own sample that lands closest to the GT, as the flow-matching target.
+
+    The GT anchor pairs a noise with a trajectory the model may never produce; the pure
+    self anchor (expert_selffm_grads) puts the target on the model's manifold but throws
+    the GT away, and open-loop says that costs +0.0540 m and quadruples CoC degeneracy.
+    best-of-n keeps both: draw n chains, decode each, keep the one nearest the GT. The
+    target is on-manifold AND chosen by the GT.
+
+    n defaults to 6 because the evaluation protocol is minADE@6 -- the criterion then
+    optimises the same "best of six" the metric reads.
+
+    Returns (x1 (1, 64, 2), diagnostics). The caller hands x1 to expert_fm_grads
+    UNCHANGED, so the estimator, its fresh-noise-per-step schedule and its |sum_s|
+    aggregation stay the shipped ones and the only factor that differs is the target.
+    That matters: raising k_draws instead extends the signed sum inside |sum|, which is
+    a different statistic rather than the same one with more samples -- measured on
+    2026-09-10, the traj map's magnitude grew 8.8x from K=1 to K=10 and the per-clip
+    dispersion did not fall at all.
+    """
+    device = gt_xy.device
+    n_tok = model.action_space.get_action_space_dims()[0]  # 64
+    dims = model.action_space.get_action_space_dims()  # (64, 2)
+    offset = torch.tensor([prefill], device=device)
+    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
+    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
+        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
+        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
+    )
+    forward_kwargs = {}
+    if model.config.expert_non_causal_attention:
+        forward_kwargs["is_causal"] = False
+
+    def field(x, t_val):
+        t = torch.full((1, 1, 1), t_val, device=device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            # fp32 in, as the release step_fn passes it
+            embeds = model.action_in_proj(x, t)
+            if embeds.dim() == 2:
+                embeds = embeds.view(1, n_tok, -1)
+            out = model.expert(
+                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+            )
+            cache.crop(prefill)
+            return model.action_out_proj(out.last_hidden_state[:, -n_tok:]).float()
+
+    dt = 1.0 / n_steps
+    ades, best, best_ade = [], None, float("inf")
+    with torch.no_grad():
+        for k in range(n):
+            gen = torch.Generator(device="cpu").manual_seed((seed ^ self_xor) + k)
+            x = torch.randn(1, *dims, generator=gen).to(device)
+            for s in range(n_steps):
+                x = x + dt * field(x, s * dt)
+            xyz, _ = model.action_space.action_to_traj(
+                x, hist_xyz[:, -1].float(), hist_rot[:, -1].float())
+            ade = float(torch.norm(xyz[0, :, :2] - gt_xy, dim=-1).mean())
+            ades.append(ade)
+            if ade < best_ade:
+                best_ade, best = ade, x.detach()
+    return best, {"ade_of_draws": ades, "ade_best": best_ade,
+                  "ade_mean": float(np.mean(ades)), "argbest": int(np.argmin(ades))}
+
+
+def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1):
     """Run the FM loss backward through the expert onto detached cache leaves.
 
     Returns the accumulated dL/d(cache) so a single VLM backward can follow, and
     the mean FM loss. Doing it in two stages costs one VLM backward instead of
     fm_steps of them.
+
+    k_draws repeats the whole fm_steps sweep with a fresh noise stream, accumulating on
+    the same leaves. k_draws=1 is the shipped path bit-for-bit (draw 0 keeps the original
+    seed). It exists so the GT anchor can be given the SAME number of gradient
+    evaluations as expert_selffm_grads, whose k_draws x fm_steps sweep would otherwise
+    make any stability comparison a comparison of sample counts
+    (plans/2026-09-10_self-anchored-traj-importance.md).
     """
     device = x1.device
     n_layers = len(model.expert.layers)
@@ -265,31 +444,32 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill):
     if model.config.expert_non_causal_attention:
         forward_kwargs["is_causal"] = False
 
-    gen = torch.Generator(device="cpu").manual_seed(seed)
     losses = []
-    for s in range(fm_steps):
-        t_val = (s + 0.5) / fm_steps
-        noise = torch.randn(x1.shape, generator=gen).to(device)  # (1, 64, 2)
-        x_t = (1.0 - t_val) * noise + t_val * x1
-        v_target = x1 - noise  # (1, 64, 2)
-        t = torch.full((1, 1, 1), t_val, device=device)
-        # update()+crop() leave graph-attached slices from the previous step in the
-        # cache; that graph is freed after backward(), so reset the leaves each step
-        for i, (k, v) in enumerate(leaves):
-            lib.set_cache_layer_kv(cache, i, k, v)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
-            if embeds.dim() == 2:
-                embeds = embeds.view(1, n_tok, -1)
-            out = model.expert(
-                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
-                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
-            )
-            cache.crop(prefill)
-            pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
-        loss = F.mse_loss(pred.float(), v_target)
-        loss.backward()
-        losses.append(loss.item())
+    for draw in range(k_draws):
+        gen = torch.Generator(device="cpu").manual_seed(seed + draw)
+        for s in range(fm_steps):
+            t_val = (s + 0.5) / fm_steps
+            noise = torch.randn(x1.shape, generator=gen).to(device)  # (1, 64, 2)
+            x_t = (1.0 - t_val) * noise + t_val * x1
+            v_target = x1 - noise  # (1, 64, 2)
+            t = torch.full((1, 1, 1), t_val, device=device)
+            # update()+crop() leave graph-attached slices from the previous step in the
+            # cache; that graph is freed after backward(), so reset the leaves each step
+            for i, (k, v) in enumerate(leaves):
+                lib.set_cache_layer_kv(cache, i, k, v)
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
+                if embeds.dim() == 2:
+                    embeds = embeds.view(1, n_tok, -1)
+                out = model.expert(
+                    inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                    attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+                )
+                cache.crop(prefill)
+                pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
+            loss = F.mse_loss(pred.float(), v_target)
+            loss.backward()
+            losses.append(loss.item())
 
     grads = [(k.grad, v.grad) for k, v in leaves]
     return float(np.mean(losses)), grads, leaves
