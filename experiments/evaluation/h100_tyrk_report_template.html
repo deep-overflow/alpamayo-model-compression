@@ -1,0 +1,238 @@
+<meta charset="utf-8">
+<title>hard100 5-arm — tyrK</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DCD8CC;
+    --accent: #D97757; --card: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 96px; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); font-size: 15px; margin: 0 0 6px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 36px;
+          padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  p { margin: 12px 0; }
+  code { background: #EFEDE5; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px;
+          font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left;
+           vertical-align: top; }
+  th { font-weight: 600; font-size: 13px; color: var(--muted); border-bottom: 2px solid var(--ink); }
+  td.r, th.r { text-align: right; }
+  tr.hl td { background: #FBF0EC; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 14px; margin: 26px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+         padding: 16px 18px; }
+  .kpi .v { font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
+  .kpi .l { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.45; }
+  .note { background: var(--card); border-left: 3px solid var(--accent);
+          padding: 14px 18px; margin: 20px 0; }
+  .note.calm { border-left-color: var(--muted); }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; display: block; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  ul { margin: 12px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .verdict { font-size: 17px; font-weight: 600; margin: 18px 0 6px; }
+</style>
+
+<div class="wrap">
+
+<h1>hard100에서 tyrK — 압축은 이기고, 방법은 갈리지 않는다</h1>
+<p class="lede">난이도 상위 100씬 위의 5-arm 폐루프. <code>tyrK</code>가 다섯 중 가장 높지만
+방법 간 열 쌍이 모두 유의하지 않다</p>
+<p class="meta">2026-09-10 · alpasim <code>public_2601_hard100</code> <!--KPI_N-->씬 × 2 rollout ·
+RTX 5880 Ada 4–7 · <code>outputs/h100_tyrK_eval</code>, <code>outputs/h100_tyrK_pairs</code></p>
+
+<h2>1. 무엇을 물었나</h2>
+
+<p>150씬에서 <code>tyrK</code>와 형제 arm <code>tyr@calib_100</code>은 구분되지 않았다
+(+0.0020, p=0.74). 그 arm 쌍은 <strong>선택이 97.7% 겹쳐서</strong> 처치 자체가 약했다.
+난이도 상위 100씬은 효과 크기를 약 1.55배 키우므로(<code>hard_score</code> 기반 선택,
+2026-09-03 측정) 같은 물음을 더 강한 조건에서 다시 묻는다.</p>
+
+<ul>
+  <li><strong>G1</strong> — 압축 arm이 무압축 baseline을 이기는가? (150씬에서 확인된 것의 재현)</li>
+  <li><strong>G2</strong> — 방법 간 서열이 생기는가? 2026-09-05 hard100 리포트의 결론은
+      "소멸"이었고, arm이 하나 늘어도 그대로인지 본다.</li>
+  <li><strong>G3</strong> — <code>tyrK</code>가 탐색 적합도에서 궤적 항을 뺀 대가를 치르는가?</li>
+</ul>
+
+<p>씬 집합은 150씬 매트릭스와 <strong>서로소</strong>다 — <code>make_hard_suite.py</code>가
+첫 150씬을 제외하고 GT 경로 5 m 미만을 버린 뒤 <code>hard_score</code>로 뽑았다.</p>
+
+<h2>2. 결과 요약</h2>
+
+<div class="kpis">
+  <div class="kpi"><div class="v"><!--KPI_TYRK--></div>
+    <div class="l">tyrK scene score<br>다섯 arm 중 최고, baseline <!--KPI_BASE--></div></div>
+  <div class="kpi"><div class="v"><!--KPI_TYRK_VS_BASE--></div>
+    <div class="l">tyrK − baseline<br>p=<!--KPI_TYRK_VS_BASE_P-->, G1 통과</div></div>
+  <div class="kpi"><div class="v">p ≥ <!--KPI_PMIN--></div>
+    <div class="l">방법 간 열 쌍의 최소 p<br>서열 없음 (G2)</div></div>
+</div>
+
+<p class="verdict">압축 &gt; 무압축은 더 어려운 씬에서 오히려 뚜렷해지고, 방법 간 서열은 여전히 없다.
+tyrK는 궤적 항을 뺀 대가를 치르지 않는다.</p>
+
+<h2>3. 다섯 arm</h2>
+
+<div class="scroll"><!--TABLE_ARMS--></div>
+
+<figure>
+  PLOT::h100::score_5arm.png
+  <figcaption>baseline만 아래에 떨어져 있고 네 압축 arm의 CI는 서로 크게 겹친다.</figcaption>
+</figure>
+
+<h2>4. G1 — 압축이 무압축을 이긴다</h2>
+
+<div class="scroll"><!--TABLE_VS_BASE--></div>
+
+<p>네 압축 arm 중 셋이 유의하게 baseline을 앞선다. 외부 baseline <code>lp_r50</code>만
+<!--KPI_LP_VS_BASE--> (p=<!--KPI_LP_VS_BASE_P-->)로 유의하지 않은데, 승패 자체는 42/34로
+나쁘지 않고 분산이 커서(동점 씬 24개로 가장 적다) CI가 0을 가로지른다.</p>
+
+<div class="note calm">
+<p style="margin:0"><strong>왜 압축이 이기는가는 이 리포트가 답하지 않는다.</strong>
+150씬에서도 같은 방향이었고(+0.037~+0.039), 어려운 씬에서 격차가 커진다(+0.065~+0.099).
+offroad가 baseline 26.5%에서 압축 arm 16–21%로 떨어지는 것과 함께 읽으면 진행/차선 유지
+쪽에서 벌어지는 것으로 보이지만, 인과는 별도 실험의 몫이다.</p>
+</div>
+
+<h2>5. G2 — 방법 간 서열은 없다</h2>
+
+<div class="scroll"><!--TABLE_METHODS--></div>
+
+<figure>
+  PLOT::h100::forest.png
+  <figcaption>위 네 줄(vs baseline)은 0을 벗어나고, 아래 여섯 줄(방법 간)은 전부 0을 가로지른다.
+  흐린 선이 CI가 0을 포함하는 비교다.</figcaption>
+</figure>
+
+<p>열 쌍 중 방법 간 여섯 쌍이 모두 유의하지 않다(p ≥ <!--KPI_PMIN-->). 2026-09-05 리포트의
+"방법 간 서열이 소멸한다"가 arm을 하나 더 넣어도 유지된다.</p>
+
+<div class="note">
+<p style="margin:0"><strong>마지막 열이 이 표의 핵심이다.</strong> 두 종류의 "차이 없음"을
+구별해야 한다. <code>tyrK</code> vs <code>tyr@calib_100</code>은 선택이
+<!--KPI_OV_TT-->% 겹치므로 <em>처치가 약해서</em> 차이가 안 나는 쪽이다. 반면
+<code>dual</code> vs <code>tyr@calib_100</code>은 <!--KPI_OV_DT-->%만 겹친다 — 유닛의
+1/4가 다르고 한쪽은 가중치까지 다시 쓰는데도 주행이 같다. 후자가 훨씬 강한 진술이다.</p>
+</div>
+
+<h2>6. G3 — tyrK는 대가를 치르지 않는다</h2>
+
+<p>탐색 적합도에서 <code>MSE<sub>vf</sub></code>를 빼면 궤적 목적이 탐색 단계에서 사라진다.
+주행이 나빠질 것이라 예상할 수 있지만 그렇지 않다 — <code>tyrK − tyr@calib100</code>은
+<!--KPI_TT--> (p=<!--KPI_TT_P-->)로, 부호는 오히려 <strong>tyrK 쪽</strong>이다.
+150씬의 +0.0020과 같은 방향이고 둘 다 유의하지 않다.</p>
+
+<div class="scroll"><!--TABLE_POWER--></div>
+
+<p>이 설계는 <!--KPI_MDE--> 이상만 분해할 수 있다(80% 검정력, 양측 5%). 관측된
+<!--KPI_TT-->는 그보다 작으므로 <strong>"차이가 없다"가 아니라 "이 크기의 차이는
+이 실험으로 말할 수 없다"</strong>가 정확한 진술이다. 다만 150씬과 hard100 두 독립 표본에서
+모두 부호가 tyrK 쪽이고 크기가 작다는 사실은, 적어도 <em>손해는 없다</em>는 쪽을 지지한다.</p>
+
+<h2>7. 안전 게이트</h2>
+
+<p>씬 점수는 <code>collision_at_fault == 0</code>과 <code>offroad == 0</code>을 통과해야
+매겨지므로 게이트는 점수와 별개로 본다. rollout 단위 비율에 Wilson 95% 구간.</p>
+
+<div class="scroll"><!--TABLE_GATES--></div>
+
+<ul>
+  <li><strong>at-fault 충돌</strong>: tyrK가 <!--KPI_COL_TYRK-->건으로 가장 낮다
+      (baseline <!--KPI_COL_BASE-->건). 다만 rollout 몇 건 차이라 Wilson 구간이 크게 겹치고,
+      이 표본으로는 순위를 주장할 수 없다.</li>
+  <li><strong>offroad</strong>: 네 압축 arm 모두 baseline보다 낮다. 점수 이득의 상당 부분이
+      여기서 온다.</li>
+  <li><strong>wrong lane</strong>: 반대로 압축 arm이 모두 baseline보다 높다. 게이트는 아니지만
+      기록해 둔다.</li>
+</ul>
+
+<h2>8. CoC</h2>
+
+<div class="scroll"><!--TABLE_COC--></div>
+
+<p>퇴화의 <em>성질</em>이 계열마다 다르다. Tyr 계열(<code>tyr@calib_100</code>,
+<code>tyrK</code>)은 거의 전부 <strong>빈 출력</strong>이고 soup이 0에 가깝다. 반면
+<code>dual</code>과 <code>lp_r50</code>은 빈 출력과 soup이 섞여 있다. 즉 재구성 계열은
+CoC를 <strong>침묵시키고</strong>, 선택-only 계열은 <strong>망가뜨린다</strong>.</p>
+
+<p>tyrK는 형제 arm보다 퇴화가 <!--KPI_COC_DELTA--> pp 낮다(p=<!--KPI_COC_P-->).</p>
+
+<div class="note">
+<p style="margin:0"><strong>이것은 재현이다.</strong> 150씬 리포트에서 이 −1.26 pp(p=0.0003)는
+평균이 갈리는 것을 보고 나서 돌린 <em>사후</em> 검정이라 재현이 필요하다고 적었다. hard100은
+그 150씬과 <strong>서로소</strong>인 씬 집합이고, 여기서 <!--KPI_COC_DELTA--> pp로 같은 방향·
+더 큰 크기로 나왔다. 사전에 예측된 방향이 독립 표본에서 확인됐으므로, CoC 이득은 이제
+표본 특이성으로 설명하기 어렵다. 주행이 두 표본 모두에서 움직이지 않는다는 점도 함께
+재현됐다.</p>
+</div>
+
+<div class="note calm">
+<p style="margin:0">CoC 건강도는 이 저장소의 기존 결과상 <strong>주행 안전의 대리지표가 아니다</strong>.
+여기서도 CoC가 가장 나쁜 <code>tyr@calib_100</code>(6.3%)과 가장 좋은 <code>baseline</code>(0.9%)의
+주행 순위가 정반대다. 두 축을 따로 읽어야 한다.</p>
+</div>
+
+<h2>9. 한계</h2>
+
+<ul>
+  <li><strong>다중비교.</strong> 열 쌍을 한 번에 보았다. 어느 것도 유의하지 않으므로 보정이
+      결론을 바꾸지는 않지만, 반대로 "가장 높은 arm"을 사후에 고르는 것은 편향이다 —
+      tyrK가 1위인 것은 순위이지 검정 결과가 아니다.</li>
+  <li><strong>검정력.</strong> 6절의 MDE 표 참조. hard100은 150씬보다 효과 크기를 키우지만
+      씬 수가 적어 순이득은 제한적이다.</li>
+  <li><strong>한 번의 캘리브레이션 추출.</strong> 모든 arm이 <code>calib_100</code> 위에서
+      만들어졌다. 출력 재구성 계열이 추출에 강건하다는 별도 결과(2026-09-09)가 있지만
+      여기서 측정하지는 않았다.</li>
+  <li><strong>rollout 2회.</strong> 씬당 반복 잡음이 평균 0.07–0.11이다. 씬 평균으로 줄이지만
+      완전히 없애지는 못한다.</li>
+  <li><strong>lp_r50은 제거율이 다르다</strong>(25.0% vs 24.0%). 동등 비교가 아니라 외부 기준선이다.</li>
+</ul>
+
+<h2>10. 재현</h2>
+
+<pre style="background:#EFEDE5;padding:14px 16px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.6">SUITE=public_2601_hard100 PARENT_SUITE=public_2601 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
+SCENES_CSV=$RUNS/hard100/hard100_suite.csv \
+  bash experiments/head_analysis/launch_alpasim_shards.sh slim_tyrK 100 2 "4 5 6 7"
+python experiments/head_analysis/merge_alpasim_shards.py --runs-root $RUNS \
+    --shards h100_slim_tyrK_sh{0,1,2,3} --out h100_merged_slim_tyrK --expect-scenes 100
+
+# 5-arm, baseline 대비 (alpasim venv)
+cd $ALPASIM &amp;&amp; uv run python $REPO/experiments/head_analysis/analyze_alpasim.py \
+    --runs-root $RUNS --prefix h100_merged_ \
+    --configs baseline slim_dual_u40_v2 slim_tyr_u40_r lp_r50 slim_tyrK \
+    --out $REPO/outputs/h100_tyrK_eval
+
+# 전 쌍 + 게이트 + 선택 중첩
+.venv/bin/python experiments/evaluation/analyze_calibsize.py --runs-root $RUNS \
+    --coc-from outputs/h100_tyrK_eval/metrics.json --out outputs/h100_tyrK_pairs \
+    --arm baseline h100_merged_baseline - "무압축" \
+    --arm dual h100_merged_slim_dual_u40_v2 slim_dual_u40_v2 "dual Taylor" \
+    --arm tyr_c100 h100_merged_slim_tyr_u40_r slim_tyr_u40_r "Tyr, 적합도 KL+MSE" \
+    --arm tyrK h100_merged_slim_tyrK slim_tyrK "Tyr, 적합도 KL 단독" \
+    --arm lp_r50 h100_merged_lp_r50 - "LLM-Pruner (외부)"
+
+# CoC 씬별 값 (alpasim venv)
+cd $ALPASIM &amp;&amp; uv run python $REPO/experiments/evaluation/coc_paired_tyrk.py \
+    --runs-root $RUNS --out $REPO/outputs/h100_tyrK_pairs \
+    --arm baseline h100_merged_baseline --arm dual h100_merged_slim_dual_u40_v2 \
+    --arm tyr_c100 h100_merged_slim_tyr_u40_r --arm tyrK h100_merged_slim_tyrK \
+    --arm lp_r50 h100_merged_lp_r50</pre>
+
+<p class="sub" style="margin-top:32px;padding-top:16px;border-top:1px solid var(--rule)">
+같은 실험의 150씬 판은 <code>2026-09-09_tyrk-search-fitness.html</code>.
+hard100 씬 집합은 150씬 매트릭스와 서로소이고, 이 100씬의 무압축 기대 점수(0.499, sangoh의
+913씬 런에서)와 관측된 baseline <!--KPI_BASE-->이 일치하므로 설정 자체는 정상이다.
+전 arm 동일 아키텍처(Ada)에서 측정했다.</p>
+
+</div>

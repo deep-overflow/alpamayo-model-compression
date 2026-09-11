@@ -84,7 +84,9 @@ for arm in $ARMS; do
   say "evaluating $arm on cuda:$CARDS"
   ARM="$arm" CARDS="$CARDS" NSH=4 bash $REM/cvlab20-server/eval_arm_sharded.sh \
     >>"$CHAN/logs/eval_$arm.out" 2>&1
-  say "eval $arm exit=$?"
+  # `say` runs date in a command substitution, which would clobber $? before it is read
+  rc=$?
+  say "eval $arm exit=$rc"
   for s in test indist oodval; do
     say "  $arm $s: $(cat "$CHAN/outputs/${arm}_${s}"/summary_s0of4.txt 2>/dev/null | head -1)"
   done

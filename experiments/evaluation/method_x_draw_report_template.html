@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>추출 민감도는 방법마다 다르다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow {
+    color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem;
+  }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 {
+    font-family: "Tiempos Headline", Georgia, "Times New Roman", serif;
+    font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem;
+  }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code {
+    font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem;
+    overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem;
+    font-size: 0.9rem; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: var(--bg-code); text-align: left; font-weight: 600;
+    padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--text-muted); font-size: 0.86em; font-weight: 400; }
+  .callout {
+    background: #FBF0EB; border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout strong:first-child { color: var(--accent-dark); }
+  .note {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0; color: var(--text-muted); font-size: 0.92rem;
+  }
+  .warn {
+    background: #FFF8E6; border-left: 4px solid #eda100;
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.95rem;
+  }
+  .tag {
+    display: inline-block; background: var(--bg-code); color: var(--text-muted);
+    font-size: 0.75rem; font-weight: 600; padding: 0.15em 0.6em; border-radius: 999px;
+    margin-left: 0.5rem; vertical-align: middle; letter-spacing: 0.03em;
+  }
+  .pass { background: #E4F0E4; color: #2C6E2C; }
+  .fail { background: #F6E3D8; color: var(--accent-dark); }
+  figure {
+    margin: 1.5rem 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.75rem; line-height: 1.55; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+  .kpi {
+    flex: 1 1 160px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .kpi .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  @media (max-width: 640px) {
+    body { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.55rem; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Model Compression &middot; 폐루프 평가</div>
+  <h1>추출 민감도는 방법마다 다르다</h1>
+  <div class="meta">
+    2026-09-09 &middot; alpasim <code>public_2601</code> 첫 <!--KPI_N-->씬 &times; 2 rollout &times; 7 arm
+    &middot; 드라이버 전부 Ada 4&ndash;7, <code>OMP_NUM_THREADS=8</code>
+    &middot; 분석 <code>experiments/evaluation/analyze_calibsize.py</code>
+    &middot; 산출물 <code>outputs/method_x_draw_pairs/</code>
+  </div>
+</header>
+
+<h2><span class="num">1.</span>요약</h2>
+
+<p>압축 기준을 100개 캘리브레이션 클립에서 잰다. 그 100개를 다른 100개로 바꾸면 결과가 얼마나
+달라지는가? 같은 세 추출(<code>calib_100</code> / <code>rd100_a</code> / <code>rd100_b</code>,
+서로 교집합 0)을 두 방법에 물렸다.</p>
+
+<div class="callout">
+  <p><strong>결론 1 &mdash; 추출 민감도가 방법마다 크게 다르다.</strong>
+  세 추출에서 tyr(출력 재구성)의 점수 범위는 <strong><!--KPI_TYR_RANGE--></strong>,
+  dual+fisher+h4(2차 Fisher)는 <strong><!--KPI_DFH4_RANGE--></strong>다.
+  표준편차로는 <!--KPI_TYR_SD--> 대 <!--KPI_DFH4_SD--> &mdash; <strong><!--KPI_SD_RATIO-->배</strong>.</p>
+  <p><strong>결론 2 &mdash; 그래서 단일 추출로 방법을 비교하면 결론이 뒤집힌다.</strong>
+  <code>calib_100</code>만 보면 tyr이 <!--KPI_CROSS_C100--> 우세(p=<!--KPI_CROSS_C100_P-->)로
+  유의하지만, <code>rd100_b</code>에서는 <!--KPI_CROSS_RDB-->(p=<!--KPI_CROSS_RDB_P-->)로
+  <strong>동률</strong>이다. 같은 두 방법, 같은 예산, 같은 씬인데 결론이 반대로 나온다.</p>
+  <p><strong>결론 3 &mdash; 주행과 CoC 는 서로 다른 축에서 흔들린다.</strong>
+  추출을 바꿨을 때 tyr 은 <em>CoC</em>가 3.7&ndash;9.0%로 움직이고 주행은 붙어 있는데,
+  dual+fisher+h4 는 <em>주행</em>이 0.076 범위로 움직이고 CoC 는 0.58&ndash;0.72%에 붙어 있다.
+  한 지표로 방법을 고르면 다른 지표는 통제되지 않는다.</p>
+</div>
+
+<h2><span class="num">2.</span>설계</h2>
+
+<p>세 캘리브레이션은 <strong>같은 풀(official train 153,625)에서 같은 규칙</strong>으로 뽑혔다
+&mdash; greedy 분포매칭, 같은 속성 가중치, seed 42, <code>t0_us</code> 5,100,000 고정. 셋의
+교집합은 0이고, 평가 세트(val/test/OOD)와도 겹치지 않는다.</p>
+
+<p>두 방법은 <strong>같은 예산</strong>을 지운다 &mdash; 2,657,452,032 파라미터(23.99%). 다만
+<em>무엇을</em> 지우는지와 <em>어떻게</em> 배분하는지가 다르다.</p>
+
+<table>
+<thead><tr><th>방법</th><th>점수의 출처</th><th>가중치</th><th>배분</th></tr></thead>
+<tbody>
+<tr><td><strong>tyr</strong></td>
+    <td>OSSCAR 재구성에서 0이 되는 열</td>
+    <td><strong>최소제곱으로 다시 씀</strong> (<code>H = &Sigma;xx&#7488;</code>)</td>
+    <td>진화 탐색으로 찾은 층별 불균등 (Q 17&ndash;23/32)</td></tr>
+<tr><td><strong>dual+fisher+h4</strong></td>
+    <td>LLM-Pruner grouped Taylor, dual 목적에 <strong>Fisher 2차항</strong>(<code>param_mix</code>)</td>
+    <td>원본 유지 (선택만)</td>
+    <td>균등 h4 (전 층 Q 28/32, MLP 6,622/12,288)</td></tr>
+</tbody>
+</table>
+
+<div class="warn">
+  <p><strong>두 요인이 섞여 있다.</strong> 방법(재구성 vs 2차 선택)과 배분(불균등 vs 균등)이 함께
+  다르므로, 아래의 <em>방법 간</em> 점수 차이를 &ldquo;2차 Fisher가 재구성보다 나쁘다&rdquo;로 읽으면
+  안 된다. 반면 <strong>추출 민감도(결론 1)는 이 교란에 영향받지 않는다</strong> &mdash; 각 방법을
+  자기 자신과 비교하기 때문이다. 이 리포트의 무게는 결론 1에 있다.</p>
+</div>
+
+<h2><span class="num">3.</span>격자</h2>
+
+<!--TABLE_GRID-->
+
+<figure>
+  <img src="PLOT::mxd::draw_spread.png" alt="방법별 추출 분산">
+  <figcaption>같은 세 추출에서 두 방법. 왼쪽 세 막대(tyr)는 거의 같은 높이인데, 오른쪽
+  세 막대(dual+fisher+h4)는 baseline 아래에서 위까지 걸쳐 있다.</figcaption>
+</figure>
+
+<h2><span class="num">4.</span>추출 민감도 &mdash; 방법 안에서의 비교</h2>
+
+<p>각 방법을 자기 자신과 비교하므로 배분 교란이 없다. 세 추출을 두 개씩 짝지어 씬 단위 페어드
+차이를 낸다.</p>
+
+<!--TABLE_WITHIN-->
+
+<div class="callout">
+  <p><strong>tyr 은 세 쌍 모두 구분되지 않고, dual+fisher+h4 는 두 쌍이 유의하다.</strong>
+  같은 조작(캘리브레이션 100개를 다른 100개로 교체)인데 한쪽은 움직이지 않고 다른 쪽은 움직인다.</p>
+</div>
+
+<h3>baseline 대비 &mdash; 부호까지 갈린다</h3>
+
+<!--TABLE_VS_BASE-->
+
+<p>tyr 은 세 추출 모두 baseline 위에 있다. dual+fisher+h4 는 두 추출에서 아래,
+한 추출에서 위다 &mdash; <strong>&ldquo;이 방법이 무압축을 이기는가&rdquo;라는 질문의 답이 뽑은
+클립 100개에 달려 있다.</strong></p>
+
+<h2><span class="num">5.</span>그래서 단일 추출 비교는 뒤집힌다</h2>
+
+<!--TABLE_CROSS-->
+
+<p>같은 두 방법을 같은 150씬에서 비교하는데, 어느 캘리브레이션을 썼는지에 따라 유의한 차이가
+되기도 하고 동률이 되기도 한다. 이 프로젝트의 기준 비교는 거의 전부 <code>calib_100</code>
+하나 위에서 이루어졌으므로, 그 결과들도 같은 취약성을 안고 있다.</p>
+
+<h2><span class="num">6.</span>주행과 CoC 는 다른 축에서 움직인다</h2>
+
+<!--TABLE_COC-->
+
+<figure>
+  <img src="PLOT::mxd::score_vs_coc.png" alt="주행 점수 vs CoC 퇴화율">
+  <figcaption>추출을 바꿀 때 tyr(초록)은 가로로, dual+fisher+h4(주황)는 세로로 움직인다.
+  두 지표가 독립적으로 흔들린다는 뜻이다.</figcaption>
+</figure>
+
+<p>tyr 의 CoC 퇴화는 <strong>거의 전부 빈 출력</strong>이고(soup 0.01&ndash;1.8%),
+dual+fisher+h4 는 세 추출 모두 무압축 수준(0.55%)에 붙어 있으면서 생성 길이도 더 길다.
+<strong>CoC 로 방법을 골랐다면 dual+fisher+h4 를, 주행으로 골랐다면 tyr 을 택했을 것이다.</strong></p>
+
+<h2><span class="num">7.</span>게이트</h2>
+
+<!--TABLE_GATES-->
+
+<p>300 rollout 에 사건이 8&ndash;32건이라 개별 비교를 검정할 검정력이 없다. 다만
+dual+fisher+h4 의 offroad 가 주행 점수와 같은 방향으로 움직이는 것(10.7% &rarr; 9.3% &rarr; 7.0%,
+점수는 0.715 &rarr; 0.736 &rarr; 0.791)은 기록해 둔다.</p>
+
+<h2><span class="num">8.</span>해석 <span class="tag">의견</span></h2>
+
+<h3>왜 재구성이 덜 흔들리나</h3>
+<p>두 방법이 캘리브레이션에서 뽑아내는 양이 다르다. 2차 Fisher 는 클립별 <em>그래디언트</em>의
+1·2차 적률을 쓰고, 재구성은 입력의 2차 통계 <code>H = &Sigma;xx&#7488;</code>를 쓴다. 후자는
+개별 클립의 그래디언트보다 클립 간 변동이 작은 양이고, 게다가 <strong>선택이 재구성의
+부산물</strong>이다 &mdash; 남길 유닛을 직접 고르는 대신 최소제곱 해에서 0이 되는 열을 읽는다.
+100 vs 100 클립에서 켜진 유닛 겹침이 tyr 96.8% / dual 90.7% 로 측정된 것도 같은 방향이다
+(2026-09-06 리포트). 다만 이건 정황이고, 인과를 분리한 실험은 아직 없다.</p>
+
+<h3>말할 수 없는 것</h3>
+<ul>
+  <li><strong>&ldquo;2차 Fisher 가 재구성보다 나쁘다&rdquo;</strong>는 아니다. 배분(균등 h4 vs 탐색된
+  불균등)이 함께 다르고, <code>rd100_b</code>에서는 두 방법이 동률이다.</li>
+  <li><strong>추출 3개는 분산 추정에 적은 수다.</strong> sd 0.039 는 자유도 2의 추정치이므로
+  구간이 넓다. 방향(tyr &lt; dfh4)은 세 쌍의 페어드 검정이 따로 지지하지만, 배수는 정밀하지 않다.</li>
+  <li><strong>이 150씬은 자기가 뽑혀 나온 913씬보다 쉽다</strong>(0.742 vs 0.660, p=0.039).
+  절대값은 낙관적이며, 여기서 읽어야 할 것은 arm 간 차이다.</li>
+</ul>
+
+<h3>실무적으로</h3>
+<p>새 압축 기준을 제안할 때 캘리브레이션 추출 하나로 평가하면, 그 결과의 상당 부분이 추출
+운일 수 있다 &mdash; 적어도 이 2차 Fisher arm 은 그렇다. 반대로 재구성 계열은 추출 하나로도
+비교적 안전하다. <strong>어느 쪽인지는 미리 알 수 없으므로, 새 방법은 추출을 최소 두 개
+써서 재현되는지 확인하는 편이 낫다.</strong></p>
+
+<h2><span class="num">9.</span>재현</h2>
+<pre><code># dual+fisher+h4 체크포인트 3개는 cvlab20 의 soowon 트리에서 가져왔다
+#   /mnt/dataset1/soowon/ad_vla/outputs/soowon/llm-pruner/c100s{1,2,3}_dfh4
+#   -> outputs/lp_dfh4_{calib100,rd_a,rd_b}   (c100s1=calib_100, s2=rd100_a, s3=rd100_b)
+# 가져온 뒤 slim_meta 구조 / 층별 남긴 수 / 파라미터 회계 / base revision /
+# state_dict 키·shape 을 우리 체크포인트와 대조하고 나서 돌렸다.
+
+bash alpasim-runs/lp_dfh4/chain.sh          # 3 arm 순차 폐루프 (arm 당 ~7.5h)
+
+.venv/bin/python experiments/evaluation/analyze_calibsize.py \
+    --coc-from outputs/method_x_draw_eval/metrics.json \
+    --out outputs/method_x_draw_pairs \
+    --arm baseline m2601_merged_baseline - "무압축" \
+    --arm tyr_c100 m2601_merged_slim_tyr_u40_r slim_tyr_u40_r "tyr @ calib_100" \
+    --arm tyr_rd_a m2601_merged_slim_tyr_rd_a slim_tyr_rd_a "tyr @ rd100_a" \
+    --arm tyr_rd_b m2601_merged_slim_tyr_rd_b slim_tyr_rd_b "tyr @ rd100_b" \
+    --arm dfh4_c100 m2601_merged_lp_dfh4_calib100 - "dfh4 @ calib_100" \
+    --arm dfh4_rd_a m2601_merged_lp_dfh4_rd_a - "dfh4 @ rd100_a" \
+    --arm dfh4_rd_b m2601_merged_lp_dfh4_rd_b - "dfh4 @ rd100_b"
+
+.venv/bin/python experiments/evaluation/plot_method_x_draw.py</code></pre>
+
+<div class="note">
+  <p><strong>실행 중 걸린 것.</strong> <code>make_slim.py --gpu</code> 는 정수 하나만 받는데
+  supernet/search 는 콤마 목록을 받는다. 워커를 늘리며 <code>--gpu 5,6,7</code> 로 바꿨다가
+  30번 재시도 끝에 죽었고, 그때 <code>final_config.json</code> 이 <em>매 세대 갱신된다</em>는
+  것도 드러났다 &mdash; 존재만으로 완료를 판정하면 반쪽 설정으로 다음 단계가 돈다. 두 가지 모두
+  체인에 검사로 넣었다(첫 카드만 전달, 세대 수 확인).</p>
+</div>
+
+</div>
+</body>
+</html>

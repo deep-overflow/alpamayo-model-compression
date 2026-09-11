@@ -29,6 +29,7 @@ import argparse
 import collections
 import itertools
 import json
+import re
 from pathlib import Path
 
 import matplotlib
@@ -41,9 +42,12 @@ from scipy import stats
 
 REPO = Path(__file__).resolve().parents[2]
 
-# arm 이름 -> (병합 런 디렉터리, slim 체크포인트 디렉터리 또는 None, 캘리브레이션 설명)
-ARMS = [
-    ("baseline", "m2601_merged_baseline", None, "무압축"),
+# arm 이름 -> (병합 런 디렉터리, slim 체크포인트 디렉터리 또는 "-", 캘리브레이션 설명)
+# 기본값은 dual 캘리브레이션 크기 연구(2026-09-06). --arm 으로 얼마든지 갈아끼울 수 있게 한 것은
+# tyr 계열에 같은 질문을 다시 물으면서다 -- 같은 표·같은 검정을 쓰는데 arm 목록만 다른 스크립트를
+# 하나 더 만들 이유가 없다. `-` 는 체크포인트 없음(baseline)을 뜻한다.
+DEFAULT_ARMS = [
+    ("baseline", "m2601_merged_baseline", "-", "무압축"),
     ("calib100", "m2601_merged_slim_dual_u40_v2", "slim_dual_u40_v2", "calib_100 (100클립)"),
     ("st2000_a", "m2601_merged_slim_dual_st2000", "slim_dual_st2000",
      "calib_st4000 앞 2,000클립"),
@@ -210,13 +214,18 @@ def main():
     ap.add_argument("--coc-from", type=Path, default=None,
                     help="analyze_alpasim.py 가 쓴 metrics.json (CoC 퇴화율을 여기서 읽는다)")
     ap.add_argument("--out", type=Path, default=REPO / "outputs/calibsize_eval")
+    ap.add_argument("--arm", nargs=4, action="append", metavar=("NAME", "RUNDIR", "SLIMDIR", "LABEL"),
+                    help="arm 하나 (반복 가능). SLIMDIR 이 '-' 면 체크포인트 없음(baseline). "
+                         "생략하면 dual 캘리브레이션 크기 연구의 4 arm")
     args = ap.parse_args()
 
     out = args.out if args.out.is_absolute() else REPO / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
 
+    arms = [tuple(a) for a in args.arm] if args.arm else DEFAULT_ARMS
     runs, meta = {}, {}
-    for name, run_dir, slim, desc in ARMS:
+    for name, run_dir, slim, desc in arms:
+        slim = None if slim == "-" else slim
         per = load_run(args.runs_root / run_dir)
         if per is None:
             print(f"{name}: {run_dir} 에 aggregate 가 없습니다 -- 건너뜁니다", flush=True)
@@ -236,8 +245,10 @@ def main():
     coc = {}
     if args.coc_from and Path(args.coc_from).exists():
         m = json.loads(Path(args.coc_from).read_text())
-        # analyze_alpasim 의 키는 config 이름(slim_dual_st2000 ...)이라 arm 이름으로 되돌린다
-        by_run = {v["run"].replace("m2601_merged_", ""): k for k, v in meta.items()}
+        # analyze_alpasim 의 키는 config 이름(slim_dual_st2000 ...)이라 arm 이름으로 되돌린다.
+        # 병합 런의 접두사는 매트릭스마다 다르므로(m2601_merged_ / h100_merged_ ...) 첫
+        # "..._merged_" 까지를 통째로 벗긴다 -- 하나만 하드코딩하면 다른 매트릭스에서 조용히 빈다.
+        by_run = {re.sub(r"^.*?_merged_", "", v["run"]): k for k, v in meta.items()}
         for cfg, v in m.get("coc", {}).items():
             if cfg in by_run:
                 coc[by_run[cfg]] = v
@@ -280,7 +291,7 @@ def main():
     if len(masks) > 1:
         plot_overlap(ov, list(masks), out / "plots")
 
-    lines = [f"캘리브레이션 크기/추출 x 폐루프 — 150씬 x 2 rollout, arm {len(names)}개", ""]
+    lines = [f"arm 간 폐루프 비교 — {len(scenes)}씬, arm {len(names)}개", ""]
     lines.append(f"{'arm':11s} {'캘리브레이션':22s} {'score':>6s} {'95% CI':>17s} "
                  f"{'중앙값':>7s} {'CoC퇴화':>8s}")
     lines.append("-" * 80)
