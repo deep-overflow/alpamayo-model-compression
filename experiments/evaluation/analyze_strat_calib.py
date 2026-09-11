@@ -219,6 +219,48 @@ def main():
         if (out / f).exists():
             facts[f.split(".")[0]] = json.loads((out / f).read_text())
 
+    # ---- kept-set overlap: descriptive only. Overlap never predicted cost in this repo
+    # (dual_st2000 92.1% -> +0.1105, maxstep11 92.5% -> n.s.), so it is reported to be
+    # read against the contrasts, not as a gate.
+    imp_dirs = {"calib_100": "importance_v2",
+                **{f"nt_{s}": f"importance_nt500_{s}" for s in REF["nt"]},
+                **{f"{r}_{s}": f"importance_{r}100_{s}" for r in RULES for s in SEEDS}}
+
+    def complete(d):
+        # run_importance checkpoints importance.npz every 10 clips, so a fetched directory
+        # can hold a 10-clip partial whose selection overlaps ~80% instead of ~90%: only a
+        # run whose metrics.json says n_clips == 100 (or the shipped v2 file) counts
+        m = REPO / "outputs" / d / "metrics.json"
+        if not (REPO / "outputs" / d / "importance.npz").exists():
+            return False
+        if d == "importance_v2" or not m.exists():
+            return True
+        n = json.loads(m.read_text()).get("n_clips")   # absent in derived nt block files
+        return n is None or n == 100
+
+    imp_dirs = {k: d for k, d in imp_dirs.items() if complete(d)}
+    try:
+        from analyze_calib_variance import kept_sets, overlap
+        ks = kept_sets(imp_dirs)
+    except Exception as e:  # noqa: BLE001  the contrasts do not depend on this block
+        print(f"kept-set overlap skipped: {e}")
+        ks = {}
+    ov = {}
+    if "calib_100" in ks:
+        for k, (q, m) in ks.items():
+            if k != "calib_100":
+                ov[f"{k}-calib_100"] = {"q": overlap(q, ks["calib_100"][0]),
+                                        "mlp": overlap(m, ks["calib_100"][1])}
+    for grp in list(RULES) + ["nt"]:
+        keys = [k for k in ks if k.startswith(grp + "_")]
+        pairs = [(a, b) for i, a in enumerate(keys) for b in keys[i + 1:]]
+        if pairs:
+            ov[f"within_{grp}"] = {
+                "n_pairs": len(pairs),
+                "q": float(np.mean([overlap(ks[a][0], ks[b][0]) for a, b in pairs])),
+                "mlp": float(np.mean([overlap(ks[a][1], ks[b][1]) for a, b in pairs]))}
+    facts["kept_overlap"] = ov
+
     metrics = {"arms": arm_level, "rule_loss_by_bucket": by_bucket, "contrasts": con,
                "gates": gates, "facts": facts}
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
@@ -245,6 +287,12 @@ def main():
         for k in ["all"] + BUCKETS:
             L.append(f"  {k:10s} {fmt(c[k])}")
     L.append("")
+    if ov:
+        L.append("kept-set overlap (dual_u40_v2 selection; Q heads / MLP channels):")
+        for k, v in ov.items():
+            extra = f" (n_pairs={v['n_pairs']})" if "n_pairs" in v else ""
+            L.append(f"  {k:18s} Q {v['q'] * 100:5.1f}%  MLP {v['mlp'] * 100:5.1f}%{extra}")
+        L.append("")
     L.append("gates: " + json.dumps(gates, ensure_ascii=False))
     text = "\n".join(L) + "\n"
     (out / "summary.txt").write_text(text)
