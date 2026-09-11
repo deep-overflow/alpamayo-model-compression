@@ -264,7 +264,10 @@ tr accel +0.134 vs +0.230)는 이 해상도 안이다. arm 단위 SD(H5)는 n=3�
 | rd_a | 61 | 13 | 17 | 5 | 4 | 23.3 | 2.07 | 33 | 34% | 미평가 |
 | rd_b | 51 | 12 | 18 | 3 | 16 | 20.0 | 2.02 | 71 | 36% | 미평가 |
 
-버킷별 손해(unpruned 대비 클립별 Δ 평균, 5추출 평균과 추출 간 SD):
+버킷별 손해(unpruned 대비 클립별 Δ 평균, 5추출 평균과 추출 간 SD). 이 표는 `baseline_test`와
+페어링한 값이고, `analyze_strat_calib.py`는 calib_variance 관례대로 `baseline_ada_ps_test`와
+페어링한다 — 두 baseline 런은 다른 실행이라 값이 ≤0.02 다르다(nt cruise +0.736 vs +0.746);
+게이트 판정은 분석기 쪽 값으로 한다:
 
 | bucket (n) | calib_100 | nt ×5 | tr ×5 |
 |---|---:|---:|---:|
