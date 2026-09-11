@@ -41,8 +41,8 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from scipy import stats  # noqa: E402
+import matplotlib.pyplot as plt
+from scipy import stats
 
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
 PREFIX = "m2601_merged_"
