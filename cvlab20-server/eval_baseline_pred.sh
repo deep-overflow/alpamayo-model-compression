@@ -1,38 +1,42 @@
 #!/bin/bash
-# Open-loop evaluation of one slim arm over the three frozen sets, sharded across cards.
+# Unpruned baseline over the three sets WITH the sampled paths kept (--save-pred).
 #
-# Work is not evenly split by clip count: an OOD clip costs ~12 s (it is scored twice,
-# own rollout and teacher-forced gt_coc) against ~8 s in-distribution. 500+500+262 clips
-# is ~3.1 GPU-hours, so four shards per set gives twelve jobs of ~1000/1000/790 s that
-# pack onto four cards as 3 jobs each with almost no idle tail -- about 50 min wall,
-# against 67 min for the obvious one-set-per-card split.
+# Phase 1 of plans/2026-09-08_openloop-collision-proxy.md. run_baseline computes pred_k
+# and throws it away, so no existing run can be scored for collisions; the baseline goes
+# first because it is what says whether the metric discriminates at all (gate G1).
 #
-# Each shard writes to its OWN exp dir and the shards are merged at the end. run_baseline
-# gives the per-clip rows and the summary a `_s<i>of<n>` suffix, but writes config.json to
-# a fixed path, so shards of one set sharing a dir race on that one file.
-#
-# A worker is bound to its card for the whole run and waits rather than moving to another:
-# the box is shared and "enough headroom" has previously put a run on someone else's card.
+# Same 12-shard layout as eval_arm_sharded.sh, but the model is `baseline` rather than a
+# slim dir, so no checkpoint is needed on this box.
 set -uo pipefail
-ARM=${ARM:?set ARM, e.g. tyr_rd_b}
+ARM=${ARM:-baseline_pred}
 CARDS=${CARDS:-"0 1 2 3"}
 NSH=${NSH:-4}
 REM=/home/cvlab20/project/chan
 CHAN=/mnt/dataset1/chan
-cd $REM/alpamayo-model-compression || exit 1
+# Our own checkout, not the shared one under $HOME. The account is shared with the whole
+# lab and so is /home/cvlab20/project/chan/alpamayo-model-compression: another session
+# rsynced its tree over that path mid-run, run_baseline.py lost --save-pred, and eight of
+# twelve shards died on "unrecognized arguments" while the four that had already started
+# finished fine.
+REPO_DIR=${REPO_DIR:-/mnt/dataset1/chan/repo}
+cd "$REPO_DIR" || exit 1
 . $REM/cvlab20-server/env.sh
+export ALPAMAYO_REPO="$REPO_DIR"
 mkdir -p "$CHAN/logs"
 
-# longest first so the tail of the schedule is the short jobs
+# SETS lets a partial re-run skip sets that already finished -- test500's four shards
+# survived the shared-checkout overwrite and re-running them would cost 18 minutes for
+# rows that are already on disk.
+SETS=${SETS:-"test indist oodval"}
 JOBS=()
-for s in test indist oodval; do
+for s in $SETS; do
   for i in $(seq 0 $((NSH - 1))); do JOBS+=("$s $i"); done
 done
 Q=$CHAN/logs/${ARM}_queue.txt
 CUR=$CHAN/logs/${ARM}_cursor
 printf '%s\n' "${JOBS[@]}" >"$Q"
 echo 0 >"$CUR"
-echo "$(date -u '+%F %T') $ARM: ${#JOBS[@]} jobs ($NSH shards x 3 sets) on cuda:$CARDS"
+echo "$(date -u '+%F %T') $ARM: ${#JOBS[@]} jobs on cuda:$CARDS"
 
 worker() {
   local gpu=$1
@@ -42,6 +46,8 @@ worker() {
           [ "$i" -lt "$n" ] && echo $((i+1)) > '"$CUR"'; echo $i')
     [ "$idx" -ge "${#JOBS[@]}" ] && break
     read -r set_name shard <<<"${JOBS[$idx]}"
+    # Empty, not merely roomy. "Free memory is enough" has put a run on a card another
+    # member was using before; the standing rule on this shared box is an empty card.
     local used
     until used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -i "$gpu" 2>/dev/null);
           [ -n "$used" ] && [ "$used" -le 16 ]; do
@@ -54,13 +60,14 @@ worker() {
     esac
     echo "$(date -u '+%H:%M') gpu$gpu -> $ARM $set_name shard $shard/$NSH"
     .venv/bin/python experiments/evaluation/run_baseline.py \
-      "${sargs[@]}" --model "outputs/slim_$ARM" \
+      "${sargs[@]}" --model baseline --save-pred \
       --exp-id "${ARM}_${set_name}_sh${shard}" \
       --shard "$shard" --n-shards "$NSH" \
-      --gpu "$gpu" --reserve-gb 26 \
+      --gpu "$gpu" --reserve-gb 30 \
       >>"$CHAN/logs/${ARM}_${set_name}_sh${shard}.log" 2>&1
     # capture before anything else runs: in `echo "$(date) ... exit=$?"` the command
-    # substitution executes first, so $? is date's status and every job reports exit=0
+    # substitution executes first, so $? is date's status and every job reports exit=0.
+    # That is how eight failed shards were reported as successes.
     local rc=$?
     echo "$(date -u '+%H:%M') gpu$gpu $set_name.$shard exit=$rc"
     [ "$rc" -eq 0 ] || echo "  FAILED: $(tail -1 "$CHAN/logs/${ARM}_${set_name}_sh${shard}.log")"
@@ -71,20 +78,16 @@ worker() {
 for g in $CARDS; do worker "$g" & sleep 5; done
 wait
 
-# merge: the row files already carry _s<i>of<n>, so they can share one dir untouched
-for s in test indist oodval; do
+for s in $SETS; do
   dst=$CHAN/outputs/${ARM}_${s}
   mkdir -p "$dst"
-  n=0
   for i in $(seq 0 $((NSH - 1))); do
     src=$CHAN/outputs/${ARM}_${s}_sh${i}
     [ -d "$src" ] || { echo "MISSING shard $i of $s"; continue; }
     cp -n "$src"/*_s*of*.json "$dst"/ 2>/dev/null
     cp -n "$src"/summary_s*.txt "$dst"/ 2>/dev/null
     [ -f "$dst/config.json" ] || cp "$src/config.json" "$dst"/ 2>/dev/null
-    n=$((n + 1))
   done
-  got=$(ls "$dst"/*_s*of*.json 2>/dev/null | wc -l)
-  echo "$s: merged $n shard dirs -> $got row files in $dst"
+  echo "$s: $(ls "$dst"/*_s*of*.json 2>/dev/null | wc -l) row files, $(du -sh "$dst" | cut -f1)"
 done
-echo "$(date -u '+%F %T') $ARM evaluation done"
+echo "$(date -u '+%F %T') $ARM done"

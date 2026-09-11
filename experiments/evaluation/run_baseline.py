@@ -137,6 +137,11 @@ def main():
     ap.add_argument("--no-tf", action="store_true",
                     help="ood only: skip the GT-CoC teacher-forced condition, roughly "
                          "halving per-clip cost when only rollout metrics are needed")
+    ap.add_argument("--save-pred", action="store_true",
+                    help="keep the k sampled paths themselves, not just their ADE/FDE. "
+                         "Needed by anything scoring the trajectory against something "
+                         "other than the GT path -- the open-loop collision proxy reads "
+                         "them. 8x64x2 at mm precision is ~7 KB/clip, ~3.5 MB per set.")
     args = ap.parse_args()
 
     tag = "baseline" if args.model == "baseline" else Path(args.model).name
@@ -271,6 +276,10 @@ def main():
             a_h, f_h = el.ade_fde(pred_k[:, :h], gt_xy[:h])
             rec.update({f"ade_rollout_k_h{h}": [round(float(x), 6) for x in a_h],
                         f"fde_rollout_k_h{h}": [round(float(x), 6) for x in f_h]})
+        if args.save_pred:
+            # the paths in the same t0 rig frame as gt_xy, mm precision -- enough for a
+            # footprint overlap test and a third of the bytes of the default repr
+            rec["pred_xy_k"] = np.round(np.asarray(pred_k, dtype=float), 3).tolist()
 
         if args.which == "ood":
             rec.update({"gt_coc": m["gt_coc"], "cluster": m["cluster"], "split": m["split"]})
