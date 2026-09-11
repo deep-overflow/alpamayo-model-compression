@@ -268,6 +268,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", type=Path, required=True)
     ap.add_argument("--prefix", default="matrix_")
+    ap.add_argument("--reference", default="baseline",
+                    help="config every delta is measured against; must be in --configs")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--configs", nargs="+", default=CONFIGS,
                     help="run dirs to compare; the first is treated as the baseline")
@@ -332,18 +334,25 @@ def main():
         agg["n_rollouts"] = len(per_rollout[cfg])
         metrics["configs"][cfg] = agg
 
+    # The reference used to be hardcoded to "baseline", which answers "what did pruning
+    # cost?" but never "how do two pruned arms differ?" -- the same gap analyze_calibsize.py
+    # was written to fill on the score axis. --reference makes the comparison arm-to-arm.
+    ref = args.reference
+    if ref not in CONFIGS:
+        raise SystemExit(f"--reference {ref!r} is not among --configs {CONFIGS}")
     for cfg in CONFIGS:
-        if cfg == "baseline":
+        if cfg == ref:
             continue
         d = {}
         for k in KEYS:
-            deltas = [per_scene[cfg][k][s] - per_scene["baseline"][k][s] for s in scenes
+            deltas = [per_scene[cfg][k][s] - per_scene[ref][k][s] for s in scenes
                       if not (np.isnan(per_scene[cfg][k][s])
-                              or np.isnan(per_scene["baseline"][k][s]))]
+                              or np.isnan(per_scene[ref][k][s]))]
             mean, lo, hi = boot_ci(deltas)
             d[k] = {"delta": mean, "ci_lo": lo, "ci_hi": hi,
                     "wilcoxon_p": wilcoxon_p(deltas), "n": len(deltas)}
         metrics["paired_vs_baseline"][cfg] = d
+    metrics["reference"] = ref
 
     # ---- robustness: does the following-distance effect survive dropping the
     # rollouts that actually crashed? (during a crash the gap goes to ~0, which would
@@ -395,7 +404,7 @@ def main():
 
     for i, (k, lab) in enumerate([("lead_thw_median", "median"), ("lead_thw_p05", "5th pct")]):
         for j, cfg in enumerate(CONFIGS):
-            if cfg == "baseline":
+            if cfg == metrics.get("reference", "baseline"):
                 continue
             e = metrics["paired_vs_baseline"][cfg][k]
             x = i * 4 + j
@@ -465,7 +474,7 @@ def main():
                  f"{a['lead_ttc_p05']['mean']:8.2f} {a['lead_frac_ttc_below_2s']['mean']:7.4f} "
                  f"{a['lead_brake_accel']['mean']:9.3f} {a['lead_brake_frac']['mean']:9.3f}")
     L.append("")
-    L.append("baseline 대비 씬-페어드 차이 (95% CI, Wilcoxon):")
+    L.append(f"{metrics.get('reference', 'baseline')} 대비 씬-페어드 차이 (95% CI, Wilcoxon):")
     for cfg, d in metrics["paired_vs_baseline"].items():
         L.append(f"  [{cfg}]")
         for k in ["brake_accel_when_close", "brake_frac_when_close", "thw_p05",

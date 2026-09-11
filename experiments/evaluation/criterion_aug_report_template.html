@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>더할수록 잃는다: dual 기준을 확장하는 두 경로</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sig { color: var(--bad); font-weight: 600; }
+  .ns { color: var(--text-muted); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>더할수록 잃는다: dual 기준을 확장하는 두 경로</h1>
+  <div class="meta">
+    2026-09-08 · <code>nvidia/Alpamayo-1.5-10B</code> · 개루프 val500 (paired, Ada) ·
+    안전 가중 <code>dualsafe_u40_v2</code> 신규 빌드 1종 + 저장된 rollout 10 arm 재분석 ·
+    GPU 신규 소요 약 20분(cvlab20), 나머지는 무GPU
+  </div>
+</header>
+
+<p class="lede">
+출하 기준은 <code>max(rank I_traj, rank I_CoC)</code>다. 여기에 무엇을 더 넣으면 나아지는가?
+더할 수 있는 축은 둘이다 — <b>클립 축</b>(어느 클립에서 잰 중요도를 더 믿을 것인가)과
+<b>목적 축</b>(세 번째 항을 세울 것인가). 이 보고서는 클립 축에서 안전 가중
+(<code>dualsafe</code>)을 실제로 지어 <b>기각</b>하고, 목적 축에서 Alpamayo-R1 논문의
+일관성 보상을 세 번째 항 후보로 놓고 <b>사전조사</b>한다. 둘 다 부정이지만 <b>이유는 다르다</b>:
+클립 가중은 n=100이라는 얕은 바닥 위에서 추출 잡음에 삼켜지고, 일관성이 사려던 것은
+<code>I_CoC</code>가 이미 사고 있다. 어느 쪽도 "<code>max</code>에 항을 더하면 희석된다"는
+아니다 — 그 직관은 이 레포에서 이미 반증됐고, 1절에서 먼저 치운다.
+</p>
+
+<div class="kpi">
+  <div><span class="v">+0.1945</span><span class="k">dualsafe − dual, val500 중앙값 (m)</span></div>
+  <div><span class="v">추출 잡음 안</span><span class="k">다른 100클립 추출은 +0.029~+0.451</span></div>
+  <div><span class="v">94.0%</span><span class="k">그런데 유지집합은 그대로 (Q head)</span></div>
+  <div><span class="v">−1.6pp</span><span class="k">dual의 일관성 잔차 (n.s., p=0.17)</span></div>
+</div>
+
+<h2><span class="num">1</span>두 실험을 왜 같이 두는가</h2>
+
+<p>
+<code>dual</code>의 성질은 <b>합집합</b>이다. 두 목적의 층내 랭크를 <code>max</code>로 묶으면
+어느 한쪽에서 상위인 유닛은 반드시 살아남는다. 목적 축에서 이 성질을 깨면 손해가 났다 —
+<code>dualprod</code>(교집합, +0.1423), <code>znorm11</code>(11개 손실의 z-score 평균,
++0.14~0.20).
+</p>
+
+<p>
+그렇다고 "항을 더하면 희석된다"가 성립하는 것은 <b>아니다</b>.
+<a href="2026-09-04_union-step-criterion.html">합집합·스텝 2×2</a>가 그 직관을 반증했다 —
+<code>maxstep11</code>은 <code>max</code> 아래 항을 11개까지 늘렸는데도 <code>dualfix</code>와
+구분되지 않았고(−0.0033), <code>znorm11</code>의 손해는 연산자와 항 수 <b>어느 쪽 단독도
+아닌 상호작용</b>이었다(단독 +0.0058 / −0.0033, 둘 다 +0.173). <code>max</code>에는 가중치가
+없으므로 중복된 항이 기존 항의 몫을 뺏지 않는다. 그러니 손해의 조건은 "항이 많다"가 아니라
+"각 목적이 자기 최상위를 관철하지 못한다"이다.
+</p>
+
+<p>
+이 보고서의 두 실험은 그 조건을 서로 다른 축에서 건드린다. A는 <b>클립 축</b> — 목적은 둘
+그대로 두고, 각 유닛 점수에 기여하는 <i>유효</i> 클립 수를 줄인다. B는 <b>목적 축</b> —
+세 번째 항을 세울 값어치가 있는지를 짓기 전에 잰다. 두 축의 결론이 다른 이유로 같은 곳을
+가리키므로 한 보고서에 둔다.
+</p>
+
+<div class="callout">
+<p>사전등록한 판정선이 있는 실험이 아니라 <code>dualsafe</code>는 기각 기록이고 B는
+사전조사다. 그래서 게이트 대신 두 개의 반증 가능한 물음을 뒀다.</p>
+<ul>
+<li><b>Q1</b> — <code>dualsafe</code>가 <code>dual</code>과 구분되지 않으면(CI가 0을 포함)
+가중은 무해무익이다.</li>
+<li><b>Q2</b> — CoC 항이 <i>없는</i> arm만 일관성을 잃는다면, <code>I_CoC</code>가 이미 그
+신호를 사고 있는 것이므로 세 번째 항의 여지는 그 잔차뿐이다.</li>
+</ul>
+</div>
+
+<h2><span class="num">2</span>A. 안전 가중 — <code>dualsafe</code></h2>
+
+<h3>2.1 설계</h3>
+
+<p>
+개루프 데이터에는 자동 라벨된 3D 장애물 트랙(<code>labels/obstacle.offline</code>)이 있고,
+<code>collision_lib.score_path</code>가 GT 경로에 대해 <code>min_center_dist</code> —
+<b>연속</b> 여유거리 — 를 준다. 충돌 여부는 이진이라 기울기가 없지만 여유거리는 연속이므로,
+<b>기울기가 필요 없는 자리</b>에 넣으면 된다. 클립 가중이 그 자리다:
+</p>
+
+<pre><code>w_i = exp(-d_i / tau),  tau = 5 m,  w /= w.sum()
+I_traj_safe = sum_i w_i * |dL_traj/dg|_i      # dual 은 여기서 w_i = 1/N
+</code></pre>
+
+<p>
+여유거리는 <b>GT 경로</b>에서 재므로 가중은 클립의 성질이지 모델의 성질이 아니다 — 어떤 arm을
+채점하든 같은 가중이 나온다. 라벨이 없는 7개 클립은 버리지 않고 중앙값 가중을 준다.
+예산·배분·expert·KV는 <code>dual_u40_v2</code>와 완전히 동일하고
+(정확히 2,657,452,032 파라미터 제거, 층당 Q 19/32·MLP 7390/12288),
+바뀌는 것은 층내 점수의 클립 가중뿐이다.
+</p>
+
+<h3>2.2 가중이 실제로 바꾼 것</h3>
+
+<figure>
+  <img src="PLOT::ca::clearance.png" alt="여유거리 분포와 가중 집중도">
+  <figcaption>
+    왼쪽 — <code>calib_100</code>의 GT 경로 여유거리(93/100 라벨, 미라벨 7개는 중앙값으로
+    채운 뒤의 분포). 중앙값 5.85 m, p10 3.05 m, 최대 133.40 m — 라벨된 93개만 보면
+    p10 2.98 m, p90 24.93 m다. GT 충돌은 1/93으로, 동료 세션의 G0 게이트를 재현한다.
+    오른쪽 — <code>exp(-d/5)</code> 가중의 누적 집중도. 상위 10개 클립이 전체 가중의
+    19.8%를 가져가고, Kish 유효 표본수는 <b>100 → 70.8</b>로 떨어진다.
+  </figcaption>
+</figure>
+
+<p>
+유효 표본수가 29% 줄었다. 그런데 <b>선택은 거의 움직이지 않았다</b> — 유지집합 겹침이
+Q head 94.0%(최소 84.2%), MLP 92.6%(최소 89.8%)다. 6~7%의 유닛만 교체된 셈이다.
+</p>
+
+<h3>2.3 결과 — val500, 500클립 대응</h3>
+
+<table>
+<thead><tr><th>arm</th><th class="r">minADE@6 평균(중앙)</th><th class="r">minFDE@6 평균(중앙)</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.8236 (0.5241)</td><td class="r">2.2050 (1.1243)</td><td class="r">0.8%</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.8904 (0.6391)</td><td class="r">2.3304 (1.3615)</td><td class="r">1.4%</td></tr>
+<tr><td><code>dualsafe</code></td><td class="r">1.3553 (0.9628)</td><td class="r">3.9032 (2.6631)</td><td class="r">1.4%</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>쌍</th><th class="r">중앙값</th><th class="r">평균</th><th class="r">95% CI (중앙값)</th><th class="r">Wilcoxon p</th></tr></thead>
+<tbody>
+<tr><td>dual − baseline</td><td class="r">+0.0581</td><td class="r">+0.0669</td><td class="r">[+0.0361, +0.0829]</td><td class="r sig">4.4e−06</td></tr>
+<tr><td>dualsafe − baseline</td><td class="r">+0.2714</td><td class="r">+0.5318</td><td class="r">[+0.2154, +0.3526]</td><td class="r sig">2.6e−34</td></tr>
+<tr><td><b>dualsafe − dual</b></td><td class="r"><b>+0.1945</b></td><td class="r">+0.4649</td><td class="r">[+0.1505, +0.2483]</td><td class="r sig">4.7e−32</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::ca::dualsafe.png" alt="val500 페어드 델타">
+  <figcaption>
+    왼쪽 — baseline 대비 클립별 페어드 델타의 누적분포. <code>dualsafe</code> 곡선이 통째로
+    오른쪽으로 밀려 있다(꼬리만이 아니다). 오른쪽 — 중앙값과 부트스트랩 CI.
+    가중이 프루닝보다 비싸다.
+  </figcaption>
+</figure>
+
+<div class="callout bad">
+<p><b>Q1 기각.</b> CI가 0을 포함하기는커녕 <code>dualsafe − dual</code>은
+중앙값 <b>+0.1945 m</b>로, <b>24% 프루닝 자체의 손해(+0.0581)보다 3.3배 크다</b>.
+minADE가 그대로인 클립은 <b>0.0%</b>이고 CoC 텍스트가 같은 클립은 66.0%다 — 즉 선택이 6%
+움직인 것만으로 모든 클립의 궤적이 달라졌다. CoC 퇴화율은 1.4%로 <code>dual</code>과
+동일하므로, 이것은 추론 붕괴가 아니라 순수한 궤적 품질 손실이다.</p>
+</div>
+
+<h3>2.4 왜 그렇게 비쌌나</h3>
+
+<p>
+"안전 가중이 원리적으로 틀렸다"가 아니라 <b>n=100에서 기준은 이미 추출에 지배당하고 있다</b>가
+맞는 해석이다. 근거 셋:
+</p>
+
+<ul>
+<li><code>calib_stability</code>는 유지집합이 잡음 바닥에 닿으려면 Q축 약 2,168클립,
+MLP축 약 6,125클립이 필요하다고 말한다. n=100은 그 한참 아래고, 여기서 유효 표본을
+70.8로 더 줄인 것이다.</li>
+<li><code>dual_nt_a~e</code>가 보여준 대로, <b>다른</b> 100클립 추출로 같은 기준을 재면
+같은 val500에서 <code>dual</code> 대비 +0.0290 / +0.0408 / +0.2135 / +0.4505 / +0.3807이
+든다(다섯 추출 모두 p&lt;1e−4). <code>dualsafe</code>의 +0.1945는 그 <b>한복판</b>이다.</li>
+<li>그 추출 분산은 이미 독립적으로 측정돼 있다 —
+<a href="2026-09-03_calib-draw-variance.html">캘리브레이션 추출 분산 보고서</a>와
+<a href="2026-09-06_calibration-size-closedloop.html">폐루프 크기 보고서</a>: 서로소인 두
+2,000클립 추출이 서로 일치하면서(−0.003) <b>둘 다 baseline을 못 이긴다</b>. 출하 <code>dual</code>의
+이득은 기준의 성질이 아니라 <code>calib_100</code>이라는 <b>운 좋은 추출</b>의 성질이다.</li>
+</ul>
+
+<div class="callout bad">
+<p><b>그러니 "프루닝의 3.3배"는 오히려 약한 표현이다.</b> 올바른 비교 대상은 프루닝 비용이
+아니라 <b>추출 간 분산</b>이고, <code>dualsafe</code>의 +0.1945는 그 분산 안에 들어앉아 있다.
+즉 안전 가중은 <i>추출 잡음에 지배당한 것</i>이지 그것에 못 미친 것이 아니다. 가중 함수를
+바꿔가며 튜닝해도 n=100에서는 잡음을 고를 뿐이다.</p>
+</div>
+
+<div class="callout warn">
+<p><b>다만 <code>dualprod</code>·<code>znorm11</code>과 같은 실패로 묶으면 안 된다.</b>
+그 둘은 <b>목적 축</b>에서 각 목적이 자기 최상위를 관철하지 못하게 만든 경우이고,
+<code>dualsafe</code>는 목적 구조를 그대로 둔 채 <b>클립 축</b>에서 표본을 줄인 경우다.
+손해 크기가 +0.14~0.20으로 비슷한 것은 우연이 아니라 두 축 모두 <code>calib_100</code>이라는
+얕은 바닥 위에서 움직이기 때문이지, 기전이 같아서가 아니다. 1절에서 봤듯
+<code>max</code> 아래 항을 늘리는 것 자체는 무해하다(<code>maxstep11</code>).</p>
+</div>
+
+<h2><span class="num">3</span>B. CoC-행동 일관성 — 세 번째 항이 될 수 있는가</h2>
+
+<h3>3.1 논문의 보상</h3>
+
+<p>
+Alpamayo-R1(arXiv 2511.00088, §5.3)은 GRPO로 세 보상을 쓴다. 그중
+<code>r_consistency</code>는 <b>예측 궤적</b>에서 규칙으로 meta-action(종방향 가·감속,
+횡방향 조향)을 뽑고, <b>추론 문장</b>에서 의도된 행동을 파싱해, 두 축이 모두 맞으면 1
+아니면 0을 준다. 파싱 실패도 0이다. 우리 기준에 넣는다면 세 번째 항
+<code>max(rank I_traj, rank I_CoC, rank I_consist)</code>가 자연스럽다 — 합집합 성질을
+깨지 않으니까.
+</p>
+
+<h3>3.2 막힌 길: meta-action 토큰은 릴리스 체크포인트에 없다</h3>
+
+<p>
+가장 곧은 미분 가능 대체물은 "meta-action 구간의 NLL"이다. 모델이 meta-action을 별도 특수
+토큰으로 뱉는다면 그 구간의 NLL은 <code>I_CoC</code>와 똑같은 방식으로 Taylor 미분된다.
+실제로 <code>token_utils.extract_text_tokens</code>는 <code>cot</code>,
+<code>meta_action</code>, <code>answer</code>를 뽑도록 돼 있다. <b>그런데 그 토큰이 없다.</b>
+</p>
+
+<pre><code># alpamayo1_5/models/base_model.py
+SPECIAL_TOKENS_KEYS = [..., "cot_start", "cot_end",
+                       "_padding_2", "_padding_3",          # &lt;- meta_action 자리
+                       "traj_future_start", ...]
+
+# alpamayo1_5/models/token_utils.py
+extract_tokens = ["cot", "meta_action", "answer"]           # &lt;- 찾지만 vocab 에 없다
+</code></pre>
+
+<p>
+<code>SPECIAL_TOKENS_KEYS</code>에 <code>meta_action_start/end</code> 키 자체가 없고
+(그 자리는 <code>_padding_0</code>~<code>_padding_8</code>), Cosmos-Reason2 토크나이저의
+vocab에도 없다. <code>extract_between_special_tokens</code>는 end 토큰을 못 찾으면
+<code>""</code>를 돌려주므로 이 추출기는 <b>항상 빈 문자열</b>이다. 저장된 rollout에서
+meta_action이 0건이었던 것은 디코딩 설정 문제가 아니라 구조적 부재였다 — 추출기는 학습·RL
+코드베이스에서 딸려온 죽은 코드다.
+</p>
+
+<h3>3.3 열린 길: meta-action은 CoC 첫 어절에 인라인돼 있다</h3>
+
+<p>
+릴리스 모델의 CoC는 한 문장짜리 템플릿이고, 그 <b>머리 어절이 곧 meta-action</b>이다.
+</p>
+
+<pre><code>"Turn left to pass the stopped lead vehicle blocking the path"
+"Keep lane since the lane is clear ahead"
+"Stop to yield to the cross-traffic vehicle since it is crossing our path"
+"Adapt speed for the right curve since the lane bends right ahead"
+</code></pre>
+
+<p>
+저장된 baseline rollout 1,000개(val500+test500)에서 첫 두 단어는 <b>36종</b>뿐이고
+상위 15종이 <b>90.1%</b>를 덮는다 — Keep distance 28.8% / Keep lane 16.2% /
+Adapt speed 10.0% / Nudge left 6.5% / Slow down 4.2% / Accelerate 3.6% / Stop 6.6% /
+Turn 2.9% … 논문의 종·횡 meta-action 어휘 그대로다. 그리고 궤적 쪽 분류기는 이미 있다:
+<code>eval_lib.bucket</code>이 경로 기하에서 <code>decel_stop / turn / accel / cruise</code>를
+뽑는다. <b>논문의 보상은 우리 코드로 재현된다.</b>
+</p>
+
+<div class="callout">
+<p><b>대리 지표임을 분명히.</b> 저장돼 있지 않은 것은 <i>예측 waypoint</i>다. 그래서 아래
+측정은 모델 자기 궤적 대신 <b>GT 유래 <code>bucket</code></b>을 쓴다 — 즉 논문의
+<i>자기일관성</i>이 아니라 <b>추론 정확도</b>다. <code>bucket</code>은 클립마다 상수이므로
+arm 사이의 모든 이동은 순수한 CoC 드리프트이고, 기준 질문에는 그것으로 충분하다.
+애매한 머리 어절("Keep distance", "Adapt speed", "Nudge *")은 억지로 매핑하지 않아
+커버리지가 41%이고, 절대 수준 25.2%는 그 보수적 매핑의 산물이다 —
+<b>대응 차이만 읽어야 한다.</b></p>
+</div>
+
+<h3>3.4 측정 1 — 프루닝이 일관성을 깨뜨리는가</h3>
+
+<p>논문 규칙대로 파싱 실패를 0으로 세고, val500 500클립 대응 McNemar(정확이항).</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">커버리지</th><th class="r">일관성</th><th class="r">Δ vs base</th><th class="r">p</th><th class="r">p Bonf(10)</th><th class="r">CoC 퇴화</th><th class="r">minADE@6</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">41.2%</td><td class="r">25.2%</td><td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">0.8%</td><td class="r">0.5241</td></tr>
+<tr><td><code>tyr_u40_r</code></td><td class="r">39.4%</td><td class="r">24.4%</td><td class="r">−0.8pp</td><td class="r ns">0.683</td><td class="r ns">1</td><td class="r">0.8%</td><td class="r">0.5911</td></tr>
+<tr><td><code>cachedual</code></td><td class="r">39.2%</td><td class="r">23.8%</td><td class="r">−1.4pp</td><td class="r ns">0.248</td><td class="r ns">1</td><td class="r">22.6%</td><td class="r">0.7485</td></tr>
+<tr><td><code>dual</code> (출하)</td><td class="r">39.4%</td><td class="r">23.6%</td><td class="r">−1.6pp</td><td class="r ns">0.169</td><td class="r ns">1</td><td class="r">1.4%</td><td class="r">0.6391</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">38.6%</td><td class="r">23.4%</td><td class="r">−1.8pp</td><td class="r ns">0.108</td><td class="r ns">1</td><td class="r">1.8%</td><td class="r">0.6398</td></tr>
+<tr><td><code>j_traj</code></td><td class="r">37.6%</td><td class="r">23.4%</td><td class="r">−1.8pp</td><td class="r ns">0.122</td><td class="r ns">1</td><td class="r">1.4%</td><td class="r">0.6651</td></tr>
+<tr><td><code>maxstep11</code></td><td class="r">38.4%</td><td class="r">23.0%</td><td class="r">−2.2pp</td><td class="r">0.0433</td><td class="r ns">0.433</td><td class="r">2.2%</td><td class="r">0.5991</td></tr>
+<tr><td><code>coc</code></td><td class="r">37.8%</td><td class="r">23.0%</td><td class="r">−2.2pp</td><td class="r ns">0.0614</td><td class="r ns">0.614</td><td class="r">14.2%</td><td class="r">0.9962</td></tr>
+<tr><td><code>znorm11</code></td><td class="r">36.4%</td><td class="r">22.8%</td><td class="r">−2.4pp</td><td class="r ns">0.0652</td><td class="r ns">0.652</td><td class="r">3.4%</td><td class="r">0.9220</td></tr>
+<tr><td><b><code>traj</code></b></td><td class="r">35.8%</td><td class="r">21.2%</td><td class="r"><b>−4.0pp</b></td><td class="r sig">5.4e−04</td><td class="r sig">5.4e−03</td><td class="r">1.4%</td><td class="r">0.6971</td></tr>
+<tr><td><b><code>cacheonly</code></b></td><td class="r">29.0%</td><td class="r">18.0%</td><td class="r"><b>−7.2pp</b></td><td class="r sig">7.3e−07</td><td class="r sig">7.3e−06</td><td class="r">63.2%</td><td class="r">1.1377</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::ca::consistency.png" alt="arm별 일관성과 퇴화율">
+  <figcaption>
+    왼쪽 — baseline 대비 일관성 델타. Bonferroni(10)를 통과하는 것은 두 개뿐이다:
+    추론 항이 <b>아예 없는</b> <code>traj</code>와, 생성 붕괴에 눈먼 캐시 프록시
+    <code>cacheonly</code>. 오른쪽 — 일관성은 CoC 퇴화율과 다른 축이다.
+    <code>cachedual</code>은 퇴화 22.6%인데 일관성은 상위이고,
+    <code>maxstep11</code>은 퇴화 2.2%인데 더 낮다.
+  </figcaption>
+</figure>
+
+<p>
+<code>traj</code>를 기준으로 한 직접 대응비교가 같은 이야기를 한다:
+<code>dual − traj</code> <b>+2.4pp</b>(p=0.043), <code>j_traj − traj</code> +2.2pp(p=0.071),
+<code>coc − traj</code> +1.8pp(p=0.136), <code>baseline − traj</code> +4.0pp(p=5.4e−04).
+개별 p는 약하지만 CoC 신호를 가진 세 arm이 모두 같은 방향·비슷한 크기다.
+</p>
+
+<div class="callout good">
+<p><b>Q2 확인.</b> 잃을 수 있었던 4.0pp 중 <b>약 2.4pp를 <code>I_CoC</code>가 이미 회수한다.</b>
+남은 잔차는 <code>dual</code>의 −1.6pp인데, 불일치 쌍이 17 vs 9개라 이 프로브의 분해능은
+약 2.5pp다 — <b>잔차는 측정 한계 아래에 있다.</b> 세 번째 항이 사올 수 있는 양이 그것이다.</p>
+</div>
+
+<h3>3.5 측정 2 — CoC 드리프트는 궤적 손상과 결합돼 있는가</h3>
+
+<p>
+추론 텍스트 보호가 minADE를 사려면, 프루닝이 CoC를 바꾼 클립이 궤적도 상한 클립이어야 한다.
+그룹 변수를 <b>쌍의 성질</b>(arm의 CoC가 baseline과 다른가)로 두면 한쪽 arm의 자기 점수로
+부분군을 고르는 함정(<code>plans/2026-09-04_union-step-criterion.md</code>)을 피한다.
+남는 교란은 클립 난이도라서 baseline 자신의 minADE를 그룹별로 함께 적는다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">CoC 바뀐 클립</th><th class="r">Δ | 바뀜</th><th class="r">Δ | 동일</th><th class="r">Mann-Whitney p</th><th class="r">base 중앙 바뀜/동일</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td class="r">230</td><td class="r">+0.0618</td><td class="r">+0.0506</td><td class="r ns">0.851</td><td class="r">0.569 / 0.506</td></tr>
+<tr><td><code>dualfix</code></td><td class="r">225</td><td class="r">+0.0703</td><td class="r">+0.0520</td><td class="r ns">0.498</td><td class="r">0.574 / 0.495</td></tr>
+<tr><td><code>j_traj</code></td><td class="r">225</td><td class="r">+0.0820</td><td class="r">+0.0975</td><td class="r ns">0.582</td><td class="r">0.577 / 0.491</td></tr>
+<tr><td><code>maxstep11</code></td><td class="r">233</td><td class="r">+0.0375</td><td class="r">+0.0542</td><td class="r ns">0.511</td><td class="r">0.608 / 0.489</td></tr>
+<tr><td><code>tyr_u40_r</code></td><td class="r">355</td><td class="r">+0.0523</td><td class="r">+0.0337</td><td class="r ns">0.327</td><td class="r">0.567 / 0.477</td></tr>
+<tr><td><code>traj</code></td><td class="r">338</td><td class="r">+0.0981</td><td class="r">+0.0783</td><td class="r ns">0.689</td><td class="r">0.538 / 0.514</td></tr>
+<tr><td><code>coc</code> (퇴화 14.2%)</td><td class="r">272</td><td class="r">+0.3825</td><td class="r">+0.2121</td><td class="r sig">0.0010</td><td class="r">0.544 / 0.507</td></tr>
+<tr><td><code>cachedual</code> (soup 22.6%)</td><td class="r">317</td><td class="r">+0.1610</td><td class="r">+0.0749</td><td class="r sig">0.0447</td><td class="r">0.565 / 0.495</td></tr>
+<tr><td><code>cacheonly</code> (퇴화 63.2%)</td><td class="r">485</td><td class="r">+0.4679</td><td class="r">+0.0769</td><td class="r sig">0.0209</td><td class="r">0.532 / 0.364</td></tr>
+<tr><td><code>znorm11</code> — <i>부호 반대</i></td><td class="r">289</td><td class="r">+0.2020</td><td class="r">+0.2843</td><td class="r sig">0.0035</td><td class="r">0.557 / 0.501</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::ca::coupling.png" alt="CoC 드리프트와 궤적 손상의 결합성">
+  <figcaption>
+    건강한 여섯 arm에서는 CoC가 바뀌든 안 바뀌든 궤적 손해가 같다(p=0.33~0.85). 결합이
+    나타나는 것은 CoC가 붕괴한 세 arm뿐이고, 네 번째 유의 사례인 <code>znorm11</code>은
+    방향이 <b>반대</b>다 — CoC가 <i>같은</i> 클립에서 더 상했다.
+  </figcaption>
+</figure>
+
+<div class="callout good">
+<p><b>운용 구간에서 둘은 분리돼 있다.</b> 추론 텍스트 보호는 <b>붕괴 방지 가드레일</b>이지
+점진적 궤적 개선의 원천이 아니다. 그리고 <code>dual</code>은 이미 그 가드레일이다
+(퇴화 1.4%, 일관성 잔차 n.s.). 유의한 결합 네 건 중 셋은 붕괴한 arm이고 하나는 부호가
+반대라는 점도 같이 읽어야 한다 — 이 대비는 "CoC가 상하면 궤적도 상한다"는 일반 법칙이
+아니라 붕괴의 부수 효과다.</p>
+</div>
+
+<h3>3.6 그래서 세 번째 항은</h3>
+
+<p>결론은 <b>여지가 없다</b>이지 "더하면 희석된다"가 아니다. 두 논거가 지탱한다.</p>
+
+<ol>
+<li><b>회수 가능한 여지가 −1.6pp인데 프로브 분해능(≈2.5pp) 아래다.</b>
+<code>I_CoC</code>가 이미 4.0pp 중 2.4pp를 사고 있다.</li>
+<li><b>결합이 없으므로 그것을 회수해도 minADE는 움직이지 않는다.</b> 건강한 arm에서
+CoC 드리프트와 궤적 손상은 독립이다(p=0.33~0.85).</li>
+</ol>
+
+<div class="callout warn">
+<p><b>쓰지 말아야 할 논거 하나.</b> "예산이 고정돼 있으니 항을 더하면 각 목적의 보호 지분이
+1/2 → 1/3으로 줄어 손해다"는 직관적이지만 이 레포에서 <b>이미 반증됐다</b> —
+<code>maxstep11</code>은 <code>max</code> 아래 항을 11개로 늘리고도 <code>dualfix</code>와
+구분되지 않았다(−0.0033). <code>max</code>에는 가중치가 없어서 항을 더해도 기존 항의 몫이
+줄지 않는다.</p>
+<p>그 직관의 <b>선택 쪽 절반은 실제로 잴 수 있다</b> — 빌드도 GPU도 필요 없이 디스크에 있는
+파일만으로. J-lens가 바로 그 비상관 항이다.</p>
+</div>
+
+<table>
+<thead><tr><th>축</th><th class="r">유지</th><th class="r">ρ traj–CoC</th><th class="r">ρ traj–J</th><th class="r">ρ 10 FM 스텝</th><th class="r">J 추가 시 변위</th><th class="r">10스텝 추가 시 변위</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">19 / 32</td><td class="r">+0.605</td><td class="r">+0.211</td><td class="r">+0.923</td><td class="r"><b>12.7%</b></td><td class="r">7.0%</td></tr>
+<tr><td>MLP</td><td class="r">7390 / 12288</td><td class="r">+0.583</td><td class="r">+0.283</td><td class="r">+0.820</td><td class="r"><b>13.7%</b></td><td class="r">9.7%</td></tr>
+</tbody></table>
+
+<p>
+상관이 변위를 지배한다는 절반은 <b>맞다</b> — 비상관 항(ρ≈0.2~0.3)은 중복 항 열 개(ρ≈0.8~0.9)
+보다 거의 두 배를 밀어낸다. 그런데 그 다음이 중요하다.
+</p>
+
+<p>
+그런데 <b>변위의 크기는 arm을 전혀 정렬하지 못한다.</b> 실제로 지어진 네 arm을 하나의
+기준으로 — 유지집합은 각자의 <code>slim_meta.json</code>에서 출하 <code>dual</code>과
+비교하고, 비용은 같은 val500 500클립에서 <code>dual</code> 대비 페어드로 — 재면 이렇다.
+</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">Q 겹침</th><th class="r">MLP 겹침</th><th class="r">중앙값</th><th class="r">평균</th><th class="r">95% CI (중앙값)</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td><code>dualfix</code></td><td class="r">96.6%</td><td class="r">96.6%</td><td class="r">+0.0002</td><td class="r">+0.0332</td><td class="r">[−0.0060, +0.0055]</td><td class="r ns">0.962</td></tr>
+<tr><td><code>maxstep11</code></td><td class="r">92.5%</td><td class="r">89.7%</td><td class="r">−0.0117</td><td class="r">+0.0011</td><td class="r">[−0.0281, +0.0037]</td><td class="r ns">0.152</td></tr>
+<tr><td><code>dual_st2000</code> (n=2,000)</td><td class="r">92.1%</td><td class="r">87.4%</td><td class="r">+0.1105</td><td class="r"><b>+0.3056</b></td><td class="r">[+0.0827, +0.1491]</td><td class="r sig">5.8e−22</td></tr>
+<tr><td><code>dualsafe</code></td><td class="r"><b>94.0%</b></td><td class="r">92.6%</td><td class="r"><b>+0.1945</b></td><td class="r"><b>+0.4649</b></td><td class="r">[+0.1505, +0.2483]</td><td class="r sig">4.7e−32</td></tr>
+</tbody></table>
+
+<p>
+평균을 함께 읽어야 한다. 유의한 두 arm은 평균이 중앙값의 <b>2.4~2.8배</b>다 — 손해가 모든
+클립을 고르게 미는 것이 아니라 <b>일부 클립의 꼬리</b>에 몰려 있다는 뜻이고, 중앙값만으로는
+그게 보이지 않는다. 반대로 <code>maxstep11</code>의 중앙값 −0.0117은 평균 +0.0011과 함께
+읽으면 "약간 낫다"가 아니라 <b>정확히 아무것도 아니다</b>로 읽힌다.
+</p>
+
+<div class="callout bad">
+<p><b>겹침 순서는 비용 순서와 무관하다.</b> 가장 적게 밀어낸 <code>dualsafe</code>(다음으로
+높은 겹침 94.0%)가 가장 비쌌고, 두 번째로 많이 밀어낸 <code>maxstep11</code>(92.5%)은
+중앙값·평균 어느 쪽으로도 <code>dual</code>과 구분되지 않는다. 네 arm의
+Spearman(겹침, 중앙값 비용)은 +0.000이다 — arm이 넷뿐이라 이 상관 자체는 추론이 아니라
+예시로 읽어야 하지만, 다음 한 쌍은 그렇지 않다.</p>
+<p><b>결정적인 대비:</b> <code>dual_st2000</code> 92.1%와 <code>maxstep11</code> 92.5% —
+<b>변위가 사실상 같은데</b> 한쪽은 +0.1105(평균 +0.3056, p=5.8e−22), 다른 쪽은
+−0.0117(평균 +0.0011, 비유의)다. 차이는
+밀어낸 <i>양</i>이 아니라 밀어낸 <b>근거</b>다: <code>maxstep11</code>의 변위는 실제 신호(다른
+스텝에서 상위인 유닛)가, <code>dual_st2000</code>과 <code>dualsafe</code>의 변위는
+<b>표본을 바꾼 것</b>이 만들었다.</p>
+<p>그래서 J의 12.7%도 그 자체로는 위험 신호가 아니다. 세 번째 항을 짓지 않는 이유는 변위가
+아니라 3.4·3.5절의 두 논거다.</p>
+</div>
+
+<div class="callout">
+<p><b>이것은 캘리브레이션 크기 연구의 반대쪽 끝이다.</b>
+<a href="2026-09-06_calibration-size.html">크기 2×2 보고서</a>는 <b>선택 안정성이 성능
+안정성을 사주지 않는다</b>고 결론냈다 — n=2,000에서 유지집합은 잡음 바닥까지 수렴하는데
+성능은 그대로 뒤처진다(여기서는 출하본 대비 +0.1105). 이 절은 그 역을 말한다 —
+n=100에서는 <b>선택이 6%가 움직인 것이 무엇을 뜻하는지 알 수 있을 만큼도 수렴하지
+않았다</b>. 두 결과는 같은 축의 양 끝이고, 합쳐서 읽으면 24% 예산에서 구속하는 것은
+기준이 아니라 <b>캘리브레이션</b>이다. (충돌 축에서도 같은 그림이 나온다 — 개루프 충돌
+보고서의 네 arm에서 압축은 충돌을 5~7pp 올리지만 minADE가 못 가르는 아홉 쌍을 충돌도
+가르지 못한다.)</p>
+</div>
+
+<p>
+참고로 배분 축으로 넣는 우회로도 이미 측정돼 있다. <code>run_grid.py</code>의
+<code>agree</code> 배분(목적 간 일치도를 층별 예산으로)에서 <code>dual_agree</code>는
+CoC 퇴화 최저(0.040, 유일하게 비유의)에 minADE는 dual 계열 최악(+0.179, 43/7)이었다 —
+일관성 신호를 배분에 쓰면 축을 맞바꾸는 거래가 된다.
+</p>
+
+<h2><span class="num">4</span>그래도 짓는다면</h2>
+
+<p>미분 가능한 형태는 둘이고, 둘 다 한 줄 수정이다.</p>
+
+<table>
+<thead><tr><th>형태</th><th>구현</th><th>비용</th><th>이미 있는 근거</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>A. <code>I_meta</code></b><br>CoC 앞 k 토큰만의 NLL</td>
+  <td><code>run_importance.py:83</code>의 <code>coc_end</code> → <code>coc_start+k</code></td>
+  <td>VLM backward 1회 추가 (+33%)</td>
+  <td><code>I_CoC</code>의 재가중이지 새 축이 아니다 — 상관이 높을 것으로 예상</td>
+</tr>
+<tr>
+  <td><b>B. <code>L_dep</code></b><br>CoC 구간 차단 대비<br><code>‖τ − τ_blocked‖²</code></td>
+  <td><code>prune_lib.expert_infer_grads</code>의<br><code>prefix_mask[:, coc_start:coc_end] = 0</code></td>
+  <td>expert 체인 1회 추가 (FLOPs의 5.5%)</td>
+  <td>Pathway G2가 실재를 확인: CoC 구간 차단이 minADE를 <b>+0.1336</b>
+      [+0.0293, +0.2198] 옮기고(p=0.040, n=50), 토큰당 손상은 prompt text의 <b>43배</b></td>
+</tr>
+</tbody></table>
+
+<p>
+두 타워를 실제로 결합하는 것은 B뿐이다. 다만 pathway에서 중앙값은 +0.134인데 평균은
+−0.009(50클립 중 34개만 악화)로 클립마다 부호가 뒤집힌다 — 우리 Taylor가 클립 안에서
+절댓값을 취하므로 집계 자체는 문제없지만, 밑에 깔린 양이 "많을수록 좋다"가 아니라는 뜻이다.
+</p>
+
+<div class="callout">
+<p><b>사전등록 게이트 — 체크포인트를 짓기 전에.</b> <code>calib_100</code>에서 importance만
+돌려(17 GB 체크포인트도, 500클립 평가도 불필요)
+<code>max(rank I_traj, rank I_CoC, rank I_consist)</code>의 유지집합을 출하
+<code>dual</code>과 비교한다.</p>
+<ul>
+<li>겹침 <b>≥ 97%</b> → 중단. <code>dual_ada</code> 재빌드가 그 수준에서 no-op였다.</li>
+<li>겹침 <b>≤ 85%</b> → 측정할 것이 있다. <code>dual</code> vs <code>j_traj</code>가
+84.8%였다.</li>
+</ul>
+<p>2절이 새로 더한 경고: 겹침이 <b>94%</b>여도 +0.1945를 물 수 있다. 그러니 겹침은
+"측정할 가치가 있는가"의 게이트이지 "안전한가"의 게이트가 아니다.</p>
+</div>
+
+<h2><span class="num">5</span>평가 지표로는 채택할 만하다</h2>
+
+<p>
+일관성은 CoC 퇴화율과도, minADE와도 상관이 낮아 현재 지표 집합이 못 보는 정보를 담는다
+(그림 3 오른쪽). 논문 그대로의 자기일관성 — CoC vs <b>자기</b> 궤적 — 을 얻으려면
+<code>run_baseline.py</code>의 레코드에 한 줄이면 된다. <code>pred_k</code>가 이미 스코프에
+있으므로 추가 연산이 <b>0</b>이다:
+</p>
+
+<pre><code>rec["pred_bucket_k"] = [el.bucket(pred_k[j]) for j in range(pred_k.shape[0])]
+</code></pre>
+
+<p>
+소급 적용은 arm당 재실행 약 2시간이 들지만, 앞으로의 실행은 공짜다. 지금 잰 GT 기준
+일관성은 그때까지의 하한으로 쓴다.
+</p>
+
+<h2><span class="num">6</span>한계</h2>
+
+<ul>
+<li><b>대리 지표.</b> 3.4·3.5절은 자기 궤적이 아니라 GT 유래 <code>bucket</code>을 쓰므로
+논문의 자기일관성이 아니라 추론 정확도다. 방향은 같지만 같은 양은 아니다.</li>
+<li><b>커버리지 41%.</b> 애매한 머리 어절을 매핑하지 않았다. 절대 수준은 해석하지 말고
+대응 차이만 읽어야 한다. 커버리지 자체가 arm마다 조금씩 다르고(41.2% → 29.0%) 그 변화도
+정보이지만 여기서는 분석하지 않았다.</li>
+<li><b>분해능.</b> 불일치 쌍이 arm당 25~55개라 약 2.5pp 미만은 못 가른다.
+<code>dual</code>의 −1.6pp를 "0이다"가 아니라 "못 쟀다"로 읽어야 한다.</li>
+<li><b><code>dualsafe</code>는 tau=5 m 한 점.</b> 가중 강도를 스윕하지 않았다. tau를 키우면
+균일 가중에 수렴하므로 손해도 0으로 수렴할 것이다 — 즉 "가중이 나쁘다"가 아니라
+"이 강도의 가중이 이 표본 크기에서 나쁘다"까지가 측정된 것이다.</li>
+<li><b>개루프만.</b> 두 결과 모두 val500 개루프다. <code>dualsafe</code>는 폐루프로
+확인하지 않았고, 기각 크기가 커서 확인할 이유도 약하다.</li>
+<li><b>단일 세트.</b> test500·OOD로 복제하지 않았다. <code>dualsafe</code>의 효과 크기는
+복제가 무의미할 만큼 크지만, 3절의 −1.6~−4.0pp는 복제가 필요하다.</li>
+<li><b>여유거리로 계층화하지 않았다 — 의도적이다.</b> 안전 가중 arm에서 가장 하고 싶은
+다음 절편은 "위험한 클립에서는 <code>dualsafe</code>가 이겼는가"인데, 그것은
+<a href="2026-09-04_union-step-criterion.html">합집합 2×2 보고서</a>가 철회한 것과 정확히
+같은 함정이다. 거기서는 한 arm 자신의 점수로 꼬리를 고른 탓에 평균 회귀가 "꼬리 이득"을
+만들어냈고, 다른 arm의 점수로 다시 고르자 세 세트 모두 부호가 뒤집혔다. 여유거리는 arm의
+점수가 아니라 클립의 성질이라 그 함정 자체는 아니지만, 가중이 <b>바로 그 변수</b>로 정의된
+이상 계층화는 가중이 겨냥한 부분군을 되읽는 것이 된다. 하려면 중립적 제3 변수와
+반대쪽 arm의 점수로 함께 재선택해야 한다.</li>
+</ul>
+
+<h2><span class="num">7</span>다음</h2>
+
+<ol>
+<li><b>일관성을 지표로 승격</b> — <code>run_baseline.py</code>에 <code>pred_bucket_k</code>
+한 줄. 이후 arm은 자기일관성을 공짜로 얻는다.</li>
+<li><b>3절을 test500·OOD로 복제</b> — 저장된 rollout만 쓰므로 무GPU, 수 분.</li>
+<li><b><code>I_meta</code> 게이트</b>(4절) — 정말 세 번째 항을 볼 거라면 importance 한 번
+(약 40분)으로 겹침을 재고 97%면 거기서 끝낸다.</li>
+<li><b>클립 축은 가중이 아니라 크기로</b> — 2.4절이 말하듯 병목은 가중 함수가 아니라
+n=100이다. 안전 신호를 쓰고 싶다면 가중 대신 <b>안전 지향 추출</b>로 n을 키우는 쪽이
+같은 의도를 희석 없이 실현한다.</li>
+</ol>
+
+<footer>
+분석 <code>experiments/evaluation/analyze_criterion_aug.py</code> ·
+일관성 프로브 <code>experiments/evaluation/coc_action_consistency.py</code> ·
+여유거리 <code>experiments/evaluation/calib_clearance.py</code>
+(<code>collision_lib.py</code>는 동료 세션 <code>worktree-openloop-collision</code>에서 가져옴) ·
+빌드 <code>make_slim.py --config dualsafe_u40_v2</code> ·
+결과 <code>outputs/criterion_aug/</code>, <code>outputs/calib_clearance/</code>,
+<code>outputs/dualsafe_u40_v2_indist/</code> ·
+브랜치 <code>worktree-safety-weighted-importance</code>
+</footer>
+
+</div>
+</body></html>
