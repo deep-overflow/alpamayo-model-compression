@@ -1,0 +1,163 @@
+<meta charset="utf-8">
+<title>alpasim 폐루프 결과 전체</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DCD8CC;
+    --accent: #D97757; --card: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 48px 28px 96px; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); font-size: 15px; margin: 0 0 6px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 36px;
+          padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  p { margin: 12px 0; }
+  code { background: #EFEDE5; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+          font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 9px; border-bottom: 1px solid var(--rule); text-align: left;
+           vertical-align: top; }
+  th { font-weight: 600; font-size: 12.5px; color: var(--muted);
+       border-bottom: 2px solid var(--ink); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  tr.base td { background: #F1EFE7; font-weight: 600; }
+  tr.ext td { background: #FBFAF6; }
+  .sub { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+  .scroll { overflow-x: auto; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 14px; margin: 26px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+         padding: 16px 18px; }
+  .kpi .v { font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
+  .kpi .l { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.45; }
+  .note { background: var(--card); border-left: 3px solid var(--accent);
+          padding: 14px 18px; margin: 20px 0; }
+  .note.calm { border-left-color: var(--muted); }
+  ul { margin: 12px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+</style>
+
+<div class="wrap">
+
+<h1>alpasim 폐루프 결과 전체</h1>
+<p class="lede">두 씬 집합에서 지금까지 돌린 모든 arm — 150씬 매트릭스 25개,
+hard100 5개</p>
+<p class="meta">2026-09-10 · alpasim <code>public_2601</code> · RTX 5880 Ada 4–7 ·
+rollout 합계 8,500개 · <code>outputs/alpasim_all</code></p>
+
+<h2>1. 읽는 법</h2>
+
+<p>씬 점수는 <code>progress_clipped_rel / 0.8</code>이되 <code>collision_at_fault</code>와
+<code>offroad</code>가 하나라도 있으면 0이다. 그래서 <strong>점수와 게이트를 따로 봐야 한다</strong> —
+게이트를 밟으면 진행을 아무리 잘해도 0이고, 반대로 게이트가 깨끗해도 진행이 느리면 점수가 낮다.</p>
+
+<p>집계는 rollout → 씬 평균 → arm 평균 순이다. <code>vs baseline</code>은 두 arm이 모두 돈
+씬에서만 낸 <strong>페어드</strong> 차이로, 부트스트랩 10,000회 CI와 Wilcoxon(동점 씬 제외)을 붙였다.
+<strong>*</strong>는 CI가 0을 포함하지 않는다는 뜻이다.</p>
+
+<div class="note">
+<p style="margin:0"><strong>CI와 p가 자주 엇갈린다 — 오류가 아니다.</strong> 예컨대
+<code>tyr</code>은 p=0.007인데 CI가 0을 포함해 별이 없다. 둘은 다른 것을 묻기 때문이다:
+부트스트랩 CI는 <em>평균</em> 이동을, Wilcoxon은 <em>부호의 대칭성</em>을 본다. 씬 점수는
+절반가량이 정확히 1.0이라 동점이 많고(승/패/무의 무가 크다) 꼬리가 두꺼워서, "이긴 씬이
+진 씬보다 일관되게 많다"와 "평균이 유의하게 올라갔다"가 갈릴 수 있다. 이 저장소의 규약은
+<strong>부트스트랩 평균 CI가 1차, Wilcoxon이 2차</strong>다.</p>
+</div>
+
+<div class="note calm">
+<p style="margin:0"><strong>검정력.</strong> 씬 단위 페어드 차이의 σ ≈ 0.32이므로 150씬은 약
+0.080, 100씬(hard100)은 그보다 조금 큰 차이만 분해한다. 표의 대부분은 그 문턱 아래에 있다 —
+<strong>순위는 검정 결과가 아니다.</strong> 유의한 것만 결론으로 쓰고, 나머지는 "이 설계로는
+말할 수 없다"로 읽어야 한다.</p>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="v">5 / 3</div>
+    <div class="l">150씬에서 baseline을 유의하게 상회 / 하회한 arm 수</div></div>
+  <div class="kpi"><div class="v">dual +0.0787</div>
+    <div class="l">150씬 최고 (baseline 0.750)</div></div>
+  <div class="kpi"><div class="v">j -0.2138</div>
+    <div class="l">150씬 최저 — 전체 폭 0.293</div></div>
+</div>
+
+<h2>2. 150씬 매트릭스</h2>
+
+<p><code>public_2601</code>을 scene_id로 정렬한 첫 150씬, 각 2 rollout.
+<strong>이 표본은 913씬 전체보다 쉽다</strong>(0.742 vs 0.660, Mann-Whitney p=0.039;
+과실 충돌 2.0% vs 5.5%). 따라서 여기의 <em>절대</em> 수치, 특히 충돌률은 suite 대비 낙관적이다.
+arm 간 페어드 차이는 거의 영향받지 않는다.</p>
+
+<div class="scroll"><table><thead><tr><th>arm</th><th class='r'>계열</th><th class='r'>scene score</th><th class='r'>vs baseline</th><th class='r'>95% CI</th><th class='r'>p</th><th class='r'>과실충돌</th><th class='r'>offroad</th><th class='r'>CoC 퇴화</th><th class='r'>제거</th></tr></thead><tbody><tr><td><strong>dual</strong><br><span class='sub'>dual Taylor max(rank I_traj, rank I_CoC) — 출하본</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.828</strong><br><span class='sub'>[0.779, 0.874]</span></td><td class='r'><strong>+0.0787</strong></td><td class='r sub'>[+0.0355, +0.1234] <strong>*</strong></td><td class='r'>0.0001</td><td class='r'>2.3%</td><td class='r'>6.7%</td><td class='r'>2.72%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dual_u55+LoRA</strong><br><span class='sub'>55% 제거 후 KI-LoRA 회복</span></td><td class='r sub'>합성·회복</td><td class='r'><strong>0.823</strong><br><span class='sub'>[0.770, 0.872]</span></td><td class='r'><strong>+0.0736</strong></td><td class='r sub'>[+0.0236, +0.1243] <strong>*</strong></td><td class='r'>0.001</td><td class='r'>3.0%</td><td class='r'>8.3%</td><td class='r'>0.00%</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>dual_w8</strong><br><span class='sub'>dual, 층당 Q 8개 제한 배분</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.813</strong><br><span class='sub'>[0.761, 0.862]</span></td><td class='r'><strong>+0.0635</strong></td><td class='r sub'>[+0.0260, +0.1019] <strong>*</strong></td><td class='r'>&lt;1e-4</td><td class='r'>2.0%</td><td class='r'>8.3%</td><td class='r'>2.64%</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>dual+expert</strong><br><span class='sub'>dual(VLM) + expert MLP 93.75% 추가 제거</span></td><td class='r sub'>합성·회복</td><td class='r'><strong>0.793</strong><br><span class='sub'>[0.740, 0.843]</span></td><td class='r'><strong>+0.0432</strong></td><td class='r sub'>[+0.0034, +0.0829] <strong>*</strong></td><td class='r'>0.009</td><td class='r'>3.0%</td><td class='r'>8.3%</td><td class='r'>2.59%</td><td class='r sub'>4.37B</td></tr><tr><td><strong>dualr</strong><br><span class='sub'>dual 선택 + 재구성 refit</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.792</strong><br><span class='sub'>[0.739, 0.842]</span></td><td class='r'><strong>+0.0425</strong></td><td class='r sub'>[+0.0048, +0.0797] <strong>*</strong></td><td class='r'>0.005</td><td class='r'>3.7%</td><td class='r'>7.7%</td><td class='r'>4.52%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>j_traj</strong><br><span class='sub'>max(rank I_traj, rank J) — rollout 없는 기준</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.791</strong><br><span class='sub'>[0.738, 0.843]</span></td><td class='r'><strong>+0.0418</strong></td><td class='r sub'>[-0.0047, +0.0876]</td><td class='r'>0.037</td><td class='r'>4.3%</td><td class='r'>7.0%</td><td class='r'>0.81%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dfh4@rd_b</strong><br><span class='sub'>같은 방법, 캘리브레이션 rd100_b</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.791</strong><br><span class='sub'>[0.740, 0.839]</span></td><td class='r'><strong>+0.0414</strong></td><td class='r sub'>[-0.0069, +0.0898]</td><td class='r'>0.011</td><td class='r'>3.3%</td><td class='r'>7.0%</td><td class='r'>0.72%</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>tyr@rd_b</strong><br><span class='sub'>Tyr, 캘리브레이션 rd100_b</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.789</strong><br><span class='sub'>[0.734, 0.842]</span></td><td class='r'><strong>+0.0391</strong></td><td class='r sub'>[-0.0037, +0.0820]</td><td class='r'>0.024</td><td class='r'>2.7%</td><td class='r'>10.7%</td><td class='r'>3.74%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>tyrK</strong><br><span class='sub'>Tyr 탐색, 적합도 KL_coc 단독</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.788</strong><br><span class='sub'>[0.736, 0.840]</span></td><td class='r'><strong>+0.0388</strong></td><td class='r sub'>[-0.0032, +0.0817]</td><td class='r'>0.014</td><td class='r'>4.3%</td><td class='r'>7.7%</td><td class='r'>4.66%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>tyr</strong><br><span class='sub'>Tyr 탐색, 적합도 KL_coc + MSE_vf</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.786</strong><br><span class='sub'>[0.732, 0.838]</span></td><td class='r'><strong>+0.0368</strong></td><td class='r sub'>[-0.0099, +0.0835]</td><td class='r'>0.007</td><td class='r'>3.0%</td><td class='r'>8.7%</td><td class='r'>5.92%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>traj</strong><br><span class='sub'>궤적 Taylor 단독</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.783</strong><br><span class='sub'>[0.729, 0.835]</span></td><td class='r'><strong>+0.0334</strong></td><td class='r sub'>[-0.0123, +0.0792]</td><td class='r'>0.072</td><td class='r'>3.3%</td><td class='r'>8.7%</td><td class='r'>4.99%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dualr_wl</strong><br><span class='sub'>dualr, Hessian 에 LingoQA train 포함</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.783</strong><br><span class='sub'>[0.726, 0.837]</span></td><td class='r'><strong>+0.0332</strong></td><td class='r sub'>[-0.0083, +0.0755]</td><td class='r'>0.020</td><td class='r'>3.0%</td><td class='r'>9.7%</td><td class='r'>2.66%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>tyr@rd_a</strong><br><span class='sub'>Tyr, 캘리브레이션 rd100_a</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.780</strong><br><span class='sub'>[0.726, 0.834]</span></td><td class='r'><strong>+0.0306</strong></td><td class='r sub'>[-0.0153, +0.0757]</td><td class='r'>0.054</td><td class='r'>4.3%</td><td class='r'>8.7%</td><td class='r'>8.95%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dualr_wl+e</strong><br><span class='sub'>dualr_wl + expert MLP 93.75%</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.769</strong><br><span class='sub'>[0.714, 0.822]</span></td><td class='r'><strong>+0.0195</strong></td><td class='r sub'>[-0.0225, +0.0604]</td><td class='r'>0.080</td><td class='r'>3.7%</td><td class='r'>9.7%</td><td class='r'>2.65%</td><td class='r sub'>4.37B</td></tr><tr><td><strong>dual_w4</strong><br><span class='sub'>dual, 층당 Q 4개 제한 배분</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.768</strong><br><span class='sub'>[0.714, 0.819]</span></td><td class='r'><strong>+0.0180</strong></td><td class='r sub'>[-0.0312, +0.0667]</td><td class='r'>0.340</td><td class='r'>4.7%</td><td class='r'>7.0%</td><td class='r'>2.79%</td><td class='r sub'>&mdash;</td></tr><tr class='base'><td><strong>baseline</strong><br><span class='sub'>무압축 nvidia/Alpamayo-1.5-10B</span></td><td class='r sub'>기준</td><td class='r'><strong>0.750</strong><br><span class='sub'>[0.697, 0.801]</span></td><td class='r sub' colspan='3'>&mdash; 기준 &mdash;</td><td class='r'>4.0%</td><td class='r'>7.0%</td><td class='r'>0.55%</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>dfh4@rd_a</strong><br><span class='sub'>같은 방법, 캘리브레이션 rd100_a</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.736</strong><br><span class='sub'>[0.679, 0.791]</span></td><td class='r'><strong>-0.0139</strong></td><td class='r sub'>[-0.0537, +0.0243]</td><td class='r'>0.893</td><td class='r'>4.7%</td><td class='r'>9.3%</td><td class='r'>0.58%</td><td class='r sub'>&mdash;</td></tr><tr class='ext'><td><strong>G_default_r40</strong><br><span class='sub'>sangoh, expert pruning</span></td><td class='r sub'>외부·타 연구원</td><td class='r'><strong>0.727</strong><br><span class='sub'>[0.670, 0.782]</span></td><td class='r'><strong>-0.0227</strong></td><td class='r sub'>[-0.0790, +0.0311]</td><td class='r'>0.468</td><td class='r'>7.0%</td><td class='r'>7.0%</td><td class='r'>&mdash;</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>expert_znorm</strong><br><span class='sub'>expert 전용 25% (znorm 스텝 집계)</span></td><td class='r sub'>합성·회복</td><td class='r'><strong>0.720</strong><br><span class='sub'>[0.665, 0.772]</span></td><td class='r'><strong>-0.0297</strong></td><td class='r sub'>[-0.0652, +0.0052]</td><td class='r'>0.067</td><td class='r'>4.0%</td><td class='r'>8.3%</td><td class='r'>0.59%</td><td class='r sub'>0.53B</td></tr><tr><td><strong>dual@st2000_a</strong><br><span class='sub'>dual 기준을 2,000클립 추출 A 로 추정</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.716</strong><br><span class='sub'>[0.659, 0.771]</span></td><td class='r'><strong>-0.0333</strong></td><td class='r sub'>[-0.0918, +0.0255]</td><td class='r'>0.330</td><td class='r'>4.0%</td><td class='r'>10.3%</td><td class='r'>1.64%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dfh4@calib100</strong><br><span class='sub'>LLM-Pruner param_mix 2차 + 층당 Q4, calib_100</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.715</strong><br><span class='sub'>[0.659, 0.770]</span></td><td class='r'><strong>-0.0343</strong></td><td class='r sub'>[-0.0793, +0.0095]</td><td class='r'>0.187</td><td class='r'>5.0%</td><td class='r'>10.7%</td><td class='r'>0.65%</td><td class='r sub'>&mdash;</td></tr><tr><td><strong>dual@st2000_b</strong><br><span class='sub'>dual 기준을 2,000클립 추출 B 로 (A 와 서로소)</span></td><td class='r sub'>캘리브레이션</td><td class='r'><strong>0.713</strong><br><span class='sub'>[0.657, 0.768]</span></td><td class='r'><strong>-0.0363</strong></td><td class='r sub'>[-0.0894, +0.0158]</td><td class='r'>0.395</td><td class='r'>8.0%</td><td class='r'>8.3%</td><td class='r'>1.74%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>coc</strong><br><span class='sub'>CoC NLL Taylor 단독</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.660</strong><br><span class='sub'>[0.601, 0.716]</span></td><td class='r'><strong>-0.0892</strong></td><td class='r sub'>[-0.1510, -0.0290] <strong>*</strong></td><td class='r'>0.008</td><td class='r'>7.3%</td><td class='r'>9.0%</td><td class='r'>1.96%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>wanda</strong><br><span class='sub'>Wanda (활성 규모 x 가중치), 외부 기준</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.621</strong><br><span class='sub'>[0.558, 0.683]</span></td><td class='r'><strong>-0.1284</strong></td><td class='r sub'>[-0.1995, -0.0579] <strong>*</strong></td><td class='r'>0.002</td><td class='r'>14.7%</td><td class='r'>9.3%</td><td class='r'>45.78%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>j</strong><br><span class='sub'>J-lens 단독</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.536</strong><br><span class='sub'>[0.475, 0.599]</span></td><td class='r'><strong>-0.2138</strong></td><td class='r sub'>[-0.2807, -0.1453] <strong>*</strong></td><td class='r'>&lt;1e-4</td><td class='r'>17.3%</td><td class='r'>12.0%</td><td class='r'>1.38%</td><td class='r sub'>2.66B</td></tr></tbody></table></div>
+
+<h2>3. hard100</h2>
+
+<p><code>hard_score = z(v_mean) + z(yaw_total_deg)</code> 상위 100씬으로,
+150씬 매트릭스와 <strong>서로소</strong>다. 무압축 기대 점수가 0.499(sangoh의 913씬 런)이고
+관측된 baseline이 0.510이므로 설정은 정상이다. 효과 크기가 약 1.55배 커지는 대신
+씬이 적어 순 검정력 이득은 제한적이다.</p>
+
+<div class="scroll"><table><thead><tr><th>arm</th><th class='r'>계열</th><th class='r'>scene score</th><th class='r'>vs baseline</th><th class='r'>95% CI</th><th class='r'>p</th><th class='r'>과실충돌</th><th class='r'>offroad</th><th class='r'>CoC 퇴화</th><th class='r'>제거</th></tr></thead><tbody><tr><td><strong>tyrK</strong><br><span class='sub'>Tyr 탐색, 적합도 KL_coc 단독</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.610</strong><br><span class='sub'>[0.532, 0.686]</span></td><td class='r'><strong>+0.0991</strong></td><td class='r sub'>[+0.0450, +0.1569] <strong>*</strong></td><td class='r'>0.002</td><td class='r'>1.5%</td><td class='r'>21.0%</td><td class='r'>4.76%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>dual</strong><br><span class='sub'>dual Taylor max(rank I_traj, rank I_CoC) — 출하본</span></td><td class='r sub'>선택 기준</td><td class='r'><strong>0.595</strong><br><span class='sub'>[0.518, 0.672]</span></td><td class='r'><strong>+0.0850</strong></td><td class='r sub'>[+0.0297, +0.1425] <strong>*</strong></td><td class='r'>0.002</td><td class='r'>4.0%</td><td class='r'>19.0%</td><td class='r'>3.65%</td><td class='r sub'>2.66B</td></tr><tr><td><strong>tyr</strong><br><span class='sub'>Tyr 탐색, 적합도 KL_coc + MSE_vf</span></td><td class='r sub'>출력 재구성</td><td class='r'><strong>0.586</strong><br><span class='sub'>[0.508, 0.662]</span></td><td class='r'><strong>+0.0751</strong></td><td class='r sub'>[+0.0299, +0.1251] <strong>*</strong></td><td class='r'>0.003</td><td class='r'>2.0%</td><td class='r'>21.5%</td><td class='r'>6.33%</td><td class='r sub'>2.66B</td></tr><tr class='ext'><td><strong>lp_r50</strong><br><span class='sub'>LLM-Pruner (soowon), 25.0% 제거</span></td><td class='r sub'>외부·타 연구원</td><td class='r'><strong>0.575</strong><br><span class='sub'>[0.502, 0.646]</span></td><td class='r'><strong>+0.0648</strong></td><td class='r sub'>[-0.0105, +0.1414]</td><td class='r'>0.074</td><td class='r'>3.5%</td><td class='r'>16.0%</td><td class='r'>5.13%</td><td class='r sub'>&mdash;</td></tr><tr class='base'><td><strong>baseline</strong><br><span class='sub'>무압축 nvidia/Alpamayo-1.5-10B</span></td><td class='r sub'>기준</td><td class='r'><strong>0.510</strong><br><span class='sub'>[0.435, 0.586]</span></td><td class='r sub' colspan='3'>&mdash; 기준 &mdash;</td><td class='r'>3.0%</td><td class='r'>26.5%</td><td class='r'>0.86%</td><td class='r sub'>&mdash;</td></tr></tbody></table><p class='sub'>게이트 지표가 없는 rollout이 arm당 최대 8개 있다(5/5 arm). 분모는 전체 rollout으로 두었으므로 위 비율은 그만큼 보수적이다.</p></div>
+
+<h2>4. 두 씬 집합을 모두 돈 arm</h2>
+
+<div class="scroll"><table><thead><tr><th>arm</th><th class='r'>150씬 score</th><th class='r'>vs base</th><th class='r'>hard100 score</th><th class='r'>vs base</th></tr></thead><tbody><tr><td>dual</td><td class='r'>0.828</td><td class='r'>+0.0787</td><td class='r'>0.595</td><td class='r'>+0.0850</td></tr><tr><td>tyrK</td><td class='r'>0.788</td><td class='r'>+0.0388</td><td class='r'>0.610</td><td class='r'>+0.0991</td></tr><tr><td>tyr</td><td class='r'>0.786</td><td class='r'>+0.0368</td><td class='r'>0.586</td><td class='r'>+0.0751</td></tr><tr><td>baseline</td><td class='r'>0.750</td><td class='r'>&mdash;</td><td class='r'>0.510</td><td class='r'>&mdash;</td></tr></tbody></table></div>
+
+<p>어려운 씬에서 <strong>압축 arm과 baseline의 격차가 오히려 커진다</strong>. 150씬에서
++0.037~+0.079였던 것이 hard100에서 +0.065~+0.099가 된다. 압축이 어려운 상황에서 더
+유리하다기보다, 무압축 baseline이 어려운 씬에서 더 크게 무너진다고 읽는 편이 안전하다 —
+이 표만으로는 두 해석을 가를 수 없다.</p>
+
+<h2>5. 계열별 요약 (150씬)</h2>
+
+<div class="scroll"><table><thead><tr><th>계열</th><th class='r'>arm</th><th class='r'>baseline 상회</th><th class='r'>유의하게 상회</th><th class='r'>최고</th><th class='r'>최저</th></tr></thead><tbody><tr><td>선택 기준</td><td class='r'>8</td><td class='r'>5</td><td class='r'>2</td><td class='r'>dual +0.0787</td><td class='r'>j -0.2138</td></tr><tr><td>출력 재구성</td><td class='r'>5</td><td class='r'>5</td><td class='r'>1</td><td class='r'>dualr +0.0425</td><td class='r'>dualr_wl+e +0.0195</td></tr><tr><td>캘리브레이션</td><td class='r'>7</td><td class='r'>3</td><td class='r'>0</td><td class='r'>dfh4@rd_b +0.0414</td><td class='r'>dual@st2000_b -0.0363</td></tr><tr><td>합성·회복</td><td class='r'>3</td><td class='r'>2</td><td class='r'>2</td><td class='r'>dual_u55+LoRA +0.0736</td><td class='r'>expert_znorm -0.0297</td></tr><tr><td>외부·타 연구원</td><td class='r'>1</td><td class='r'>0</td><td class='r'>0</td><td class='r'>G_default_r40 -0.0227</td><td class='r'>G_default_r40 -0.0227</td></tr></tbody></table></div>
+
+<div class="note">
+<p style="margin:0"><strong>표에서 실제로 읽히는 것.</strong></p>
+<ul style="margin:8px 0 0">
+  <li><strong>단일 기준은 위험하다.</strong> <code>dual</code>(두 목적의 합집합)이 최고인데,
+      그 두 반쪽을 따로 쓰면 <code>coc</code>와 <code>j</code>가 baseline을 유의하게 <em>하회</em>한다.
+      합집합 성질이 이득의 원천이다.</li>
+  <li><strong>캘리브레이션 추출이 기준만큼 중요하다.</strong> 같은 dual 기준을 2,000클립으로
+      다시 추정한 두 arm이 모두 baseline 아래로 내려간다. <code>calib_100</code>은 운 좋은
+      추출이고, 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다.</li>
+  <li><strong>재구성 계열은 서로 붙어 있다.</strong> Tyr 계열 arm들이 0.78–0.79에 몰려 있고,
+      캘리브레이션을 바꿔도(rd_a/rd_b) 폭이 작다.</li>
+  <li><strong>CoC와 주행은 다른 축이다.</strong> CoC 퇴화가 가장 심한 축에 있는 arm들이
+      주행에서는 상위권이고, 퇴화가 0인 <code>dual_u55+LoRA</code>도 상위권이다.
+      CoC 건강도를 안전 대리지표로 쓰면 안 된다.</li>
+</ul>
+</div>
+
+<h2>6. 이 표가 답하지 않는 것</h2>
+
+<ul>
+  <li><strong>arm 간 비교는 여기 없다.</strong> 모든 <code>vs baseline</code> 열은 baseline
+      기준이다. 두 arm의 직접 비교(예: tyrK vs tyr)는 각 실험의 전용 리포트에 있다 —
+      <code>analyze_calibsize.py</code>가 전 쌍을 낸다.</li>
+  <li><strong>제거량이 같지 않다.</strong> 대부분 2.66B(24.0%)지만 합성 arm은 4.37B,
+      expert 전용은 0.53B, 외부 arm은 규약이 다르다. 같은 열에 있다고 등가 비교가 아니다.</li>
+  <li><strong>다중비교 보정이 없다.</strong> 25개 arm을 한 표에서 보면 유의 판정 몇 개는
+      우연히 나온다. 개별 실험은 사전 등록된 가설 아래 돌았으므로 그 리포트를 함께 읽어야 한다.</li>
+  <li><strong>rollout 2회.</strong> 씬당 반복 잡음이 평균 0.07–0.16으로 작지 않다.</li>
+  <li><strong>CoC 열의 출처.</strong> 씬 집합이 같은 <code>analyze_alpasim</code> 산출물에서
+      가져왔다. 같은 config가 두 씬 집합에서 다른 값을 갖기 때문에 이름만으로 맞추면 틀린다.</li>
+</ul>
+
+<h2>7. 재현</h2>
+
+<pre style="background:#EFEDE5;padding:14px 16px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.6">.venv/bin/python experiments/evaluation/collect_alpasim_all.py --out outputs/alpasim_all
+.venv/bin/python experiments/evaluation/fill_alpasim_all_report.py \
+    experiments/evaluation/alpasim_all_report_template.html /tmp/f.html outputs/alpasim_all
+python experiments/head_analysis/build_report.py /tmp/f.html \
+    reports/evaluation/2026-09-10_alpasim-all.html</pre>
+
+<p class="sub" style="margin-top:32px;padding-top:16px;border-top:1px solid var(--rule)">
+수집기는 병합 런의 <code>aggregate/results-summary.json</code>에서 직접 집계하므로, arm이
+늘어도 <code>analyze_alpasim.py</code>를 다시 돌릴 필요가 없다. 전 arm 동일 아키텍처(Ada)에서
+측정했다 — 연속 지표는 아키텍처 간 오차가 ~0.01이지만 CoC 퇴화율 같은 이산·임계값 지표는
+아키텍처에 따라 움직인다.</p>
+
+</div>
