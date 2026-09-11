@@ -40,6 +40,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -75,6 +76,17 @@ def main():
                          "costs no download but inherits whatever that cache was built "
                          "for; 'split' draws from the whole official train split at "
                          "CALIB_T0 and needs build_cache.py afterwards")
+    ap.add_argument("--select", choices=["greedy", "random"], default="greedy",
+                    help="'random' draws uniformly instead of matching. Every "
+                         "calibration set in this repo is greedy-matched, so the premise "
+                         "that matching helps has never had a control; and greedy pins "
+                         "every draw to the same attribute profile (all six L1s at their "
+                         "n=100 discreteness floor), which makes its draws non-"
+                         "exchangeable in a way random ones are not.")
+    ap.add_argument("--exclude", nargs="*", default=[],
+                    help="extra manifest stems whose clips are also held out, on top of "
+                         "calib_100 and the OOD pool. Use it to keep a new draw "
+                         "independent of every set already measured.")
     ap.add_argument("--exp-id", default="eval_sets")
     ap.add_argument("--prefix", default="calib_tr")
     args = ap.parse_args()
@@ -86,6 +98,8 @@ def main():
     dc = pd.read_parquet(AV / "metadata" / "data_collection.parquet")
     ood = set(pd.read_parquet(AV / "reasoning" / "ood_reasoning.parquet").index.astype(str))
     prior = set(pd.read_parquet(out_dir / "calib_100.parquet")["clip_id"])
+    for stem in args.exclude:
+        prior |= set(pd.read_parquet(out_dir / f"{stem}.parquet")["clip_id"])
 
     full = derive(ci[ci.split == "train"], dc)          # target: the whole official split
     if args.pool == "cache":
@@ -104,7 +118,7 @@ def main():
     pool = pool[~pool.index.isin(ood) & ~pool.index.isin(prior)]
     need = args.blocks * args.block_size
     print(f"official train {len(full):,}  pool={args.pool} {n_cached:,}  "
-          f"-OOD/-calib_100 {n_cached - len(pool)}  -> pool {len(pool):,}  need {need}",
+          f"-OOD/-제외 {n_cached - len(pool)}  -> pool {len(pool):,}  need {need}",
           flush=True)
     assert len(pool) >= need, f"pool {len(pool)} < {need}"
 
@@ -113,9 +127,15 @@ def main():
     # since greedy corrects an early imbalance with a later pick
     names, rows, quality = [], [], []
     letters = "abcdefghijklmnopqrstuvwxyz"
+    rng = np.random.default_rng(args.seed)
     for b in range(args.blocks):
         codes, targets = encode(full, pool)
-        order, counts = greedy(codes, targets, len(pool), args.block_size, args.seed)
+        if args.select == "random":
+            order = rng.choice(len(pool), args.block_size, replace=False)
+            counts = {a: np.bincount(codes[a][order], minlength=len(targets[a]))
+                      .astype(float) for a in ATTR}
+        else:
+            order, counts = greedy(codes, targets, len(pool), args.block_size, args.seed)
         sel = pool.iloc[order]
         rmean, rstd = random_reference(codes, targets, len(pool), args.block_size, args.seed)
         wl1 = weighted_l1(counts, args.block_size, targets)
@@ -155,6 +175,7 @@ def main():
     (out_dir / f"config_{union_name}.json").write_text(json.dumps({
         "purpose": "disjoint in-distribution calibration blocks for the draw-variance study",
         "blocks": args.blocks, "block_size": args.block_size, "seed": args.seed,
+        "select": args.select,
         "cache": args.cache, "manifests": names, "union": union_name,
         "attributes": ATTR, "t0_rule": f"nearest {CALIB_T0} among the cache's windows",
         "pool": {"official_train": len(full), "cached": n_cached, "eligible": len(pool) + need},

@@ -148,14 +148,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 tyr_supernet="tyr_supernet_u40",
                 tyr_config="tyr_search_u40/final_config.json", scope=(4, 34),
                 imp_run="importance_v2", cache_imp="cachejlens_v1",
-                expert_imp="importance_stepexp_znorm"):
+                expert_imp="importance_stepexp_znorm",
+                clearance_run="calib_clearance", safe_tau=5.0):
     tc = model.vlm.config.text_config
     ec = model.expert.config
     emag = ml.magnitude_scores(model.expert.layers, ec.num_attention_heads, ec.head_dim,
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
-    uni = re.match(r"^(.+)_u(\d+)_v2$", cfg_name)
+    # the optional _qcut<N> trades Q heads for MLP channels at the SAME parameter
+    # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
+    # the difference into channels (plans/2026-09-05_axis-allocation.md)
+    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
@@ -447,6 +451,30 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             rq = np.full(tc.num_hidden_layers, pct / 100)
             rm = np.full(tc.num_hidden_layers, pct / 100)
 
+        if uni.group(3) is not None:
+            # Same removed-parameter total, different split between the axes. One Q head
+            # costs 2*head_dim*hidden (q_proj rows + o_proj cols); one MLP channel costs
+            # 3*hidden (gate/up rows + down col), so a head is worth 85.33 channels here.
+            # The channel count is DERIVED from whatever budget rq/rm just set rather than
+            # written down, and the assert refuses anything that does not divide evenly --
+            # a config that is "almost" the same size would silently stop being a
+            # one-factor comparison, which is the whole point of this arm.
+            n_q = int(uni.group(3))
+            attn_cost = 2 * tc.head_dim * tc.hidden_size
+            mlp_cost = 3 * tc.hidden_size
+            per_layer = (round(rq[0] * tc.num_attention_heads) * attn_cost
+                         + round(rm[0] * tc.intermediate_size) * mlp_cost)
+            n_m, rem = divmod(per_layer - n_q * attn_cost, mlp_cost)
+            assert rem == 0, (
+                f"_qcut{n_q} leaves {rem} parameters over; only cuts that divide evenly "
+                f"keep the budget identical")
+            assert 0 <= n_q < tc.num_attention_heads and 0 < n_m < tc.intermediate_size
+            rq = np.full(tc.num_hidden_layers, n_q / tc.num_attention_heads)
+            rm = np.full(tc.num_hidden_layers, n_m / tc.intermediate_size)
+            print(f"qcut{n_q}: cut {n_q}/{tc.num_attention_heads} heads and "
+                  f"{n_m}/{tc.intermediate_size} channels per layer "
+                  f"({per_layer:,} params, unchanged)", flush=True)
+
         def half(name):
             if name == "traj":
                 return imp["traj_vlm_q"], imp["traj_vlm_mlp"]
@@ -476,6 +504,33 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 pre = name[:-1]
                 return ((z[f"{pre}_vlm_q"] ** 2).mean(0),
                         (z[f"{pre}_vlm_mlp"] ** 2).mean(0))
+            if name == "trajsafe":
+                # The trajectory half, re-weighted by how safety-critical each calibration
+                # clip is. Alpamayo-R1's RL trajectory reward is L2 + collision + jerk;
+                # `traj` reads the L2 term alone, and this is the cheapest honest way to
+                # let the collision term in. collision_lib's contact test is a
+                # separating-axis boolean with no gradient, so it cannot be a loss -- but
+                # score_path also returns a continuous clearance, and a per-clip WEIGHT
+                # needs no gradient at all:
+                #     I^safe = sum_c w(d_c)|dFM_c/dg| / sum_c w(d_c),   w = exp(-d/tau)
+                # Clearance is measured on the GT path, so the weight is a property of the
+                # clip, not of the model being pruned.
+                # Clips whose obstacle chunk was never downloaded (7 of 100 here) are
+                # unknown, not obstacle-free, so they take the MEDIAN clip's weight rather
+                # than being dropped -- dropping would silently shrink the calibration set,
+                # and calibration size is one of the few things known to move selection.
+                z = dict(np.load(REPO / "outputs" / imp_run / "importance_perclip.npz"))
+                meta = json.loads(
+                    (REPO / "outputs" / imp_run / "metrics.json").read_text())["per_clip"]
+                clr = json.loads(
+                    (REPO / "outputs" / clearance_run / "clearance.json").read_text())
+                raw = [clr.get(r["clip_id"]) for r in meta]
+                dv = np.array([np.nan if v is None else float(v) for v in raw])
+                dv[np.isnan(dv)] = np.nanmedian(dv)
+                w = np.exp(-dv / safe_tau)
+                w = w / w.sum()
+                return (np.einsum("n,nlu->lu", w, z["traj_vlm_q"]),
+                        np.einsum("n,nlu->lu", w, z["traj_vlm_mlp"]))
             if name == "znorm11":
                 # CoC NLL + the ten flow-matching step losses, each z-scored WITHIN a layer
                 # and averaged with weight 1/11. The per-step VLM gradients come from
@@ -547,6 +602,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         fm = re.match(r"^dualfm(\d+)$", stem)
         delta = float(fm.group(1)) / 100 if fm else 0.0
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
+                 "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
                  "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
@@ -698,6 +754,12 @@ def main():
                     help="run supplying traj_exp_mlp for the dualrc_u40_s<N>_em<M> "
                          "expert-MLP-only half (importance_stepexp_znorm is what the "
                          "expert-axis ablation selected with)")
+    ap.add_argument("--clearance", type=str, default="calib_clearance",
+                    help="calib_clearance.py run supplying per-clip GT-path clearance for "
+                         "the dualsafe configs")
+    ap.add_argument("--safe-tau", type=float, default=5.0,
+                    help="metres in dualsafe's clip weight w = exp(-d/tau); larger tau "
+                         "converges to the uniform weighting dual already uses")
     ap.add_argument("--vqa-importance", type=str, default="importance_vqa",
                     help="run supplying vqa_vlm_* / coc_vlm_* for the vqa, coclingo and "
                          "trajvqa configs (measured on LingoQA train)")
@@ -753,7 +815,8 @@ def main():
                                          args.tyr_supernet, args.tyr_config,
                                          (args.scope_start, args.scope_end),
                                          args.importance, args.cache_importance,
-                                         args.expert_importance)
+                                         args.expert_importance,
+                                         args.clearance, args.safe_tau)
 
     full_total = sl.n_params(model)
     t0 = time.time()
@@ -781,7 +844,14 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
         "config": args.config,
+        # Every run that fed a mask, not just the two that used to be recorded: a built
+        # checkpoint could not say which expert aggregation produced it, and recovering
+        # that meant re-deriving masks and diffing against slim_meta.json.
         "importance_from": args.importance, "jlens_from": args.jlens,
+        "expert_importance_from": args.expert_importance,
+        "cache_importance_from": args.cache_importance,
+        "stepvlm_from": args.stepvlm, "vqa_importance_from": args.vqa_importance,
+        "clearance_from": args.clearance, "safe_tau": args.safe_tau,
         "params": meta["params"],
         "kvonly_layers": list(kvonly),
         "kept_q_per_layer": {"vlm": [len(m["q"]) for m in meta["vlm"]],

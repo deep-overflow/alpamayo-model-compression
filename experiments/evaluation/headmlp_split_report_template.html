@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개루프가 보지 못하는 축: head↔MLP 예산 재배분</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sig { color: var(--bad); font-weight: 600; }
+  .ns { color: var(--text-muted); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>개루프가 보지 못하는 축: head↔MLP 예산 재배분</h1>
+  <div class="meta">
+    2026-09-10 · <code>nvidia/Alpamayo-1.5-10B</code> ·
+    개루프 val500 / test500 / OOD-val 262 (paired, Ada) +
+    폐루프 alpasim 150씬 × 2 rollout ·
+    신규 <code>dual_u40_qcut4_v2</code> 빌드 1종, 개루프 3세트 + 폐루프 1회 (약 9 GPU-시간)
+  </div>
+</header>
+
+<p class="lede">
+출하 <code>dual</code>은 24.0%를 층당 <b>Q head 13개 + MLP 4898채널</b>에서 가져온다.
+같은 24.0%를 <b>head 4개 + MLP 5666채널</b>에서 가져오면 어떻게 되는가? 기준·캘리브레이션·
+expert·KV가 모두 같고 제거 파라미터가 비트 단위로 동일한 1요인 비교다. 답은 모드에 따라
+갈린다 — <b>개루프는 해를 못 보고, 폐루프는 명확히 본다</b>(−0.091, p=3e−06). 기전은 좁혔으나
+특정하지 못했다: 제동·차간 판단은 오히려 <b>좋아지고</b>, 차선 유지는 나빠진다(나가는 횟수가
+아니라 <b>나가 있는 시간</b>). 다만 씬 단위로 붙여 보면 그 연관은 <b>횡방향에 특이적이지
+않다</b>. 그리고 이 레포가 "MLP 폭은 싸다"고 기록해 온 근거는 <b>전부 개루프</b>였다.
+</p>
+
+<div class="kpi">
+  <div><span class="v">−0.091</span><span class="k">폐루프 vs dual (p=3e−06)</span></div>
+  <div><span class="v">CI가 0 포함</span><span class="k">개루프 평균 델타, 세 세트 모두</span></div>
+  <div><span class="v">3.4% → 0.0%</span><span class="k">CoC 퇴화 (head를 덜 자르면)</span></div>
+  <div><span class="v">83%</span><span class="k">격차를 나르는 씬 = 이탈 시간이 는 83개</span></div>
+</div>
+
+<h2><span class="num">1</span>1요인 설계</h2>
+
+<p>
+<code>make_slim</code>의 <code>_qcut</code> 경로가 이 arm을 만든다. head 수를 정하면 채널 수가
+<b>예산에서 유도</b>되고, 나누어떨어지지 않으면 assert가 막는다 — "거의 같은 크기"인 config가
+조용히 1요인 비교를 그만두는 것을 방지하려는 장치다.
+</p>
+
+<pre><code>attn_cost = 2 · head_dim · hidden = 1,048,576     # q_proj 행 + o_proj 열
+mlp_cost  = 3 · hidden           =    12,288     # gate/up 행 + down 열
+per_layer = 13·attn + 4898·mlp   = 73,818,112    # dual
+qcut4:  (73,818,112 − 4·attn) / mlp = 5666.0     # 나머지 0
+</code></pre>
+
+<table>
+<thead><tr><th>arm</th><th class="r">층당 유지 Q head</th><th class="r">층당 유지 MLP</th><th class="r">제거 파라미터</th></tr></thead>
+<tbody>
+<tr><td><code>dual_u40_v2</code> (출하)</td><td class="r">19 / 32</td><td class="r">7390 / 12288</td><td class="r">2,657,452,032 (24.0%)</td></tr>
+<tr><td><b><code>dual+h4</code></b> = <code>dual_u40_qcut4_v2</code></td><td class="r"><b>28 / 32</b></td><td class="r"><b>6622 / 12288</b></td><td class="r"><b>2,657,452,032 (24.0%)</b></td></tr>
+</tbody></table>
+
+<p>
+기준(<code>max(rank I_traj, rank I_CoC)</code>), 캘리브레이션(<code>importance_v2</code>,
+calib_100), expert 타워, KV는 전부 동일하다. 참고로 이 모양은 LLM-Pruner의
+<code>lp_dfh4</code> arm과 정확히 같은 예산 배분이기도 하다 — 저쪽은 기준이 다르다.
+</p>
+
+<h2><span class="num">2</span>개루프 — 해가 검출되지 않는다</h2>
+
+<table>
+<thead><tr><th>세트</th><th>arm</th><th class="r">minADE@6 평균(중앙)</th><th class="r">minFDE@6 평균(중앙)</th><th class="r">CoC 퇴화</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">val500<br>n=500</td><td>baseline</td><td class="r">0.8236 (0.5241)</td><td class="r">2.2050 (1.1243)</td><td class="r">0.8%</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.8904 (0.6391)</td><td class="r">2.3304 (1.3615)</td><td class="r">1.4%</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r">0.8518 (0.5627)</td><td class="r">2.2767 (1.2469)</td><td class="r"><b>0.0%</b></td></tr>
+<tr><td rowspan="3">test500<br>n=500</td><td>baseline</td><td class="r">0.8417 (0.5086)</td><td class="r">2.2673 (1.1631)</td><td class="r">0.6%</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.9498 (0.6637)</td><td class="r">2.5459 (1.4790)</td><td class="r">3.0%</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r">0.9108 (0.5847)</td><td class="r">2.4891 (1.4145)</td><td class="r"><b>0.0%</b></td></tr>
+<tr><td rowspan="3">OOD-val<br>n=262</td><td>baseline</td><td class="r">0.9995 (0.5745)</td><td class="r">2.4959 (1.1184)</td><td class="r">0.0%</td></tr>
+<tr><td><code>dual</code></td><td class="r">1.1192 (0.7287)</td><td class="r">2.8514 (1.3416)</td><td class="r">3.4%</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r">1.0344 (0.6484)</td><td class="r">2.5584 (1.2318)</td><td class="r"><b>0.0%</b></td></tr>
+</tbody></table>
+
+<p><code>dual+h4 − dual</code>, minADE@6 대응:</p>
+
+<table>
+<thead><tr><th>세트</th><th class="r">평균</th><th class="r">95% CI (평균)</th><th class="r">중앙값</th><th class="r">95% CI (중앙값)</th><th class="r">p</th></tr></thead>
+<tbody>
+<tr><td>val500</td><td class="r">−0.0387</td><td class="r ns">[−0.1027, +0.0338]</td><td class="r">−0.0415</td><td class="r sig">[−0.0616, −0.0279]</td><td class="r">1.4e−04</td></tr>
+<tr><td>test500</td><td class="r">−0.0390</td><td class="r ns">[−0.0876, +0.0118]</td><td class="r">−0.0352</td><td class="r sig">[−0.0528, −0.0116]</td><td class="r">0.0016</td></tr>
+<tr><td>OOD-val</td><td class="r">−0.0848</td><td class="r ns">[−0.1856, +0.0008]</td><td class="r">−0.0402</td><td class="r sig">[−0.0607, −0.0000]</td><td class="r">0.105</td></tr>
+</tbody></table>
+
+<div class="callout warn">
+<p><b>여기서 "좋아졌다"고 결론내면 안 된다.</b> 중앙값은 세 세트 모두 CI가 0을 배제하지만,
+개루프 프로토콜의 헤드라인은 <b>평균</b>이고 <b>평균은 셋 다 0을 포함</b>한다. 정확한 진술은
+"<b>개루프에서 해가 검출되지 않았다</b>"이지 "개루프에서 이득이 있었다"가 아니다.
+minADE 델타는 heavy-tail이라 두 통계가 이렇게 갈릴 수 있고, 여기서 실제로 갈렸다.</p>
+</div>
+
+<p>
+반면 <b>CoC 퇴화는 논쟁의 여지가 없다</b> — <code>dual</code>의 1.4 / 3.0 / 3.4%가
+<code>dual+h4</code>에서 <b>세 세트 모두 정확히 0.0%</b>가 된다. Q head를 13개가 아니라 4개만
+자르면 생성 붕괴가 사라진다. 이 프로젝트가 오래 추적해 온 CoC 붕괴의 원인이 <b>head 절단</b>
+이라는 직접 증거다.
+</p>
+
+<h2><span class="num">3</span>폐루프 — 명확히 나쁘다</h2>
+
+<table>
+<thead><tr><th>arm</th><th class="r">score</th><th class="r">vs baseline</th><th class="r">vs <code>dual</code></th><th class="r">p</th><th class="r">W/L/T</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code> (출하)</td><td class="r"><b>0.828</b></td><td class="r">+0.079</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td>baseline</td><td class="r">0.750</td><td class="r">—</td><td class="r sig">−0.079 [−0.124, −0.035]</td><td class="r sig">1.1e−04</td><td class="r">20/56/74</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r"><b>0.737</b></td><td class="r ns">−0.012 [−0.052, +0.027]</td><td class="r sig"><b>−0.091 [−0.134, −0.050]</b></td><td class="r sig"><b>3.1e−06</b></td><td class="r">17/60/73</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::hm::dissociation.png" alt="개루프와 폐루프의 방향이 반대">
+  <figcaption>
+    두 패널의 <b>부호 방향이 반대</b>임에 주의 — 왼쪽 minADE는 낮을수록, 오른쪽 score는
+    높을수록 좋다. 왼쪽: 개루프 평균 델타의 CI가 세 세트 모두 0을 가로지른다.
+    오른쪽: 폐루프에서 <code>dual+h4</code>의 CI는 0을 명확히 배제한다.
+  </figcaption>
+</figure>
+
+<div class="callout bad">
+<p><b>재배분은 출하본의 우위를 통째로 반납한다.</b> <code>dual</code>은 baseline을 +0.079로
+이기는데(p=1.1e−04), <code>dual+h4</code>는 <b>−0.012로 baseline과 구분되지 않는다</b>.
+같은 파라미터를 지우고, 같은 기준으로 골랐는데, 어디서 가져오느냐만 바꿨을 뿐이다.</p>
+</div>
+
+<figure>
+  <img src="PLOT::hm::scene_ecdf.png" alt="씬별 델타 분포">
+  <figcaption>
+    씬별 델타의 누적분포. 150씬 중 73개는 동률이고(폐루프 점수가 이산적이라 흔하다),
+    <code>dual+h4</code>는 60씬에서 지고 17씬에서 이긴다. 소수 파국이 평균을 끄는 것이
+    아니라 <b>지는 쪽이 이기는 쪽의 3.5배</b>다.
+  </figcaption>
+</figure>
+
+<h2><span class="num">4</span>왜 지는가 — 좁혔지만 특정하지 못했다</h2>
+
+<h3>4.1 게이트는 설명하지 못한다</h3>
+
+<p>
+가장 하고 싶은 설명은 "차선·도로 유지가 무너졌다"이다. offroad가 6.7% → 9.3%로 올랐으니까.
+<b>그런데 대응 검정이 그것을 지지하지 않는다.</b>
+</p>
+
+<figure>
+  <img src="PLOT::hm::gates.png" alt="게이트 비율과 Wilson 신뢰구간">
+  <figcaption>
+    Wilson 95% 구간이 크게 겹친다. 300 rollout에서 20건 vs 28건, 7건 vs 10건은 애초에
+    분해할 수 있는 크기가 아니다.
+  </figcaption>
+</figure>
+
+<p>
+rollout은 짝지을 수 없다 — id가 런마다 새로 뽑는 UUID이고 설계가 의도적으로 seed-free다.
+그러나 <b>씬은 짝지어지고</b> arm마다 씬당 rollout이 정확히 2개라, 씬별 적중 수가 올바른
+단위다. 그 단위에서:
+</p>
+
+<table>
+<thead><tr><th>게이트</th><th class="r"><code>dual</code> 적중</th><th class="r"><code>dual+h4</code> 적중</th><th class="r">달라진 씬</th><th class="r">Wilcoxon p</th><th class="r">McNemar p</th></tr></thead>
+<tbody>
+<tr><td>offroad</td><td class="r">20</td><td class="r">28</td><td class="r">12</td><td class="r ns">0.087</td><td class="r ns">0.549 (4 vs 7)</td></tr>
+<tr><td>collision_at_fault</td><td class="r">7</td><td class="r">10</td><td class="r">9</td><td class="r ns">0.454</td><td class="r ns">0.453 (2 vs 5)</td></tr>
+</tbody></table>
+
+<div class="callout warn">
+<p><b>종합 점수는 유의하게 움직이는데 게이트는 어느 것도 분리하지 못한다.</b> offroad 쪽으로
+기울기는 하지만(p=0.087) 불일치 씬이 4 vs 7밖에 안 되어 근거가 되지 못한다. 이 레포는 이미
+같은 벽을 만난 적이 있고 — 과실 충돌은 개수로 검정하기엔 너무 드물다 — 그래서
+<code>analyze_longitudinal.py</code>가 존재한다. 그것을 다음 절에서 돌린다.</p>
+</div>
+
+<h3>4.2 종방향도 아니다 — 오히려 <em>개선</em>된다</h3>
+
+<p>
+<code>analyze_longitudinal.py</code>는 같은 rollout의 10 Hz 시계열을 연속 대리지표로 다시
+읽는다(GPU 불필요). 기존 스크립트는 비교 기준이 <code>"baseline"</code>으로 하드코딩돼 있어
+"프루닝이 얼마를 물었나"만 답하고 <b>"두 압축 arm이 어떻게 다른가"는 못 물었다</b> — 점수 축에서
+<code>analyze_calibsize.py</code>가 메운 것과 같은 공백이라, <code>--reference</code>를 추가해
+<code>dual</code> 기준으로 돌렸다.
+</p>
+
+<table>
+<thead><tr><th>지표 (근접 = 장애물 6 m 이내)</th><th class="r"><code>dual+h4 − dual</code></th><th class="r">95% CI</th><th class="r">p</th><th class="r">방향</th></tr></thead>
+<tbody>
+<tr><td>제동비율</td><td class="r"><b>+0.0525</b></td><td class="r sig">[+0.0287, +0.0783]</td><td class="r sig">4e−05</td><td class="r">더 안전</td></tr>
+<tr><td>제동가속</td><td class="r">−0.0714</td><td class="r sig">[−0.1343, −0.0182]</td><td class="r sig">0.0010</td><td class="r">더 안전</td></tr>
+<tr><td>근접 시 평균속도</td><td class="r"><b>−0.6332</b></td><td class="r sig">[−0.8821, −0.4076]</td><td class="r sig">&lt;1e−04</td><td class="r">더 안전</td></tr>
+<tr><td>THW &lt; 1 s 시간비율</td><td class="r">−0.0324</td><td class="r sig">[−0.0499, −0.0157]</td><td class="r sig">1e−04</td><td class="r">더 안전</td></tr>
+<tr><td>선행차 THW p05</td><td class="r">+0.0133</td><td class="r ns">[−0.1727, +0.1849]</td><td class="r ns">0.250</td><td class="r ns">n.s.</td></tr>
+<tr><td>선행차 TTC p05</td><td class="r">−4.62</td><td class="r ns">[−11.49, −0.26]</td><td class="r ns">0.699</td><td class="r ns">n.s.</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::hm::longitudinal.png" alt="종방향 대리지표">
+  <figcaption>
+    지표마다 단위가 달라 <code>dual</code> 자신의 수준 대비 비율로 그렸다 — 읽을 것은
+    크기가 아니라 방향과 유의성이다. 선행차 TTC p05는 CI가 0을 배제하지만 Wilcoxon이
+    p=0.70이라 회색으로 뒀다(씬당 n=113, 동률이 많다).
+  </figcaption>
+</figure>
+
+<p>절대값으로 보면 <code>dual+h4</code>가 baseline에 더 가깝다:</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">근접 시 제동비율</th><th class="r">근접 시 평균속도 (m/s)</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.343</td><td class="r">8.43</td></tr>
+<tr><td><code>dual</code></td><td class="r">0.290</td><td class="r">9.00</td></tr>
+<tr><td><b><code>dual+h4</code></b></td><td class="r"><b>0.325</b></td><td class="r"><b>8.35</b></td></tr>
+</tbody></table>
+
+<div class="callout bad">
+<p><b>손실은 제동·차간거리 판단이 아니다.</b> <code>dual</code>이 baseline 대비 잃었던 것
+(제동비율 −0.068, 근접 시 속도 +0.762)을 <code>dual+h4</code>가 상당 부분 되돌리는데도
+주행 점수는 −0.091이다. 종방향 축은 <b>배제</b>된다.</p>
+<p>그래서 <code>dual+h4</code>는 이런 조합이다 — <b>CoC 퇴화 0%, 제동 판단 개선, 개루프 궤적
+오차 해 없음, 그런데 주행은 최하위권</b>. 남은 설명은 <b>횡방향</b>(차선 유지·경로 추종)이고,
+4.1절의 offroad 6.7%→9.3%가 유의하지는 않아도 같은 방향을 가리킨다. 4.3절이 그것을 잰다.</p>
+</div>
+
+<h3>4.3 횡방향이다 — 다만 예상과 다른 모양으로</h3>
+
+<p>
+횡방향 대리지표 스크립트가 없어 새로 썼다(<code>analyze_lateral.py</code>, GPU 불필요).
+신호는 sim이 이미 10 Hz로 쓰는 <code>min_distance_to_lane_boundary_m</code>인데,
+<b>쓰기 전에 0의 의미부터 확정해야 했다</b> — 전체 스텝의 32%가 정확히 0이라, 이게 "여유
+0 m"인지 "정의 안 됨"인지에 따라 지표가 통째로 뒤집힌다.
+</p>
+
+<div class="callout">
+<p><b>0은 센티넬이 아니라 차선 밖이다.</b> 24k 스텝에서 양의 값이 0까지 <b>연속적</b>이고
+(p1 = 0.0097 m, 틈 없음), <code>offroad</code>는 margin==0 스텝의 <b>3.46%</b>에서 발생하는
+반면 margin&gt;0 스텝에서는 <b>정확히 0.00%</b>다. 따라서 이 계열은 차선 가장자리까지의
+여유이고 차선을 벗어나면 0에 고정되며, <b>margin==0 시간비율이 <code>offroad</code> 게이트의
+연속 선행지표</b>다 — 4.1절이 검정력 부족으로 못 본 바로 그 양이다.</p>
+</div>
+
+<table>
+<thead><tr><th>지표</th><th class="r"><code>dual+h4 − dual</code></th><th class="r">95% CI</th><th class="r">판정</th></tr></thead>
+<tbody>
+<tr><td><b>차선 밖 시간비율</b></td><td class="r"><b>+0.0437</b></td><td class="r sig">[+0.0193, +0.0692]</td><td class="r sig"><b>악화</b></td></tr>
+<tr><td><b>최장 이탈 지속시간</b></td><td class="r"><b>+0.768 s</b></td><td class="r sig">[+0.296, +1.246]</td><td class="r sig"><b>악화</b></td></tr>
+<tr><td>잘못된 차선 시간비율</td><td class="r">+0.0168</td><td class="r sig">[+0.0015, +0.0347]</td><td class="r sig">악화</td></tr>
+<tr><td>이탈 에피소드 <em>수</em></td><td class="r">−0.377</td><td class="r">[−0.583, −0.180]</td><td class="r">개선</td></tr>
+<tr><td>차선 내 여유 중앙값</td><td class="r">+0.047</td><td class="r">[+0.001, +0.093]</td><td class="r">개선</td></tr>
+<tr><td>계획 편차 중앙값</td><td class="r">−0.033</td><td class="r">[−0.048, −0.019]</td><td class="r">개선</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::hm::lateral.png" alt="횡방향 대리지표">
+  <figcaption>
+    <code>dual</code> 자신의 수준 대비 비율. 이탈 <b>횟수</b>는 줄었는데 이탈 <b>시간</b>과
+    <b>최장 지속</b>은 늘었다 — 부호가 갈리는 것이 이 절의 핵심이다.
+  </figcaption>
+</figure>
+
+<div class="callout bad">
+<p><b>나가는 횟수는 줄었는데 나가 있는 시간은 늘었다.</b> 에피소드 수 −0.38, 차선 밖 시간
++4.4pp, 최장 이탈 4.87 s → 5.64 s. 잔펀치가 늘어난 것이 아니라 <b>한 번 나가면 돌아오지
+못한다</b>. 그리고 차선 <i>안에</i> 있을 때는 오히려 더 중앙에 있다(여유 중앙값 +0.047).</p>
+<p>이것이 4.1절에서 offroad 게이트가 6.7%→9.3%로 기울고도 유의하지 못했던 이유다 — 게이트는
+이진 사건이라 "얼마나 오래 나가 있었는가"를 세지 못하는데, 실제로 움직인 축이 바로
+<b>지속시간</b>이었다.</p>
+</div>
+
+<p>
+<code>dualexp_em93p75</code>는 횡방향 어느 항목도 <code>dual</code>과 구분되지 않는다
+(차선 밖 시간 +0.0045, CI [−0.0130, +0.0224]). VLM 절반이 비트 동일하니 예상대로이고,
+이 스크립트의 <b>음성 대조군</b> 역할을 한다 — 무엇이든 유의하게 나왔다면 지표를 의심했어야
+한다.
+</p>
+
+<h3>4.4 그런데 그 연관은 횡방향에 특이적이지 않다</h3>
+
+<p>
+4.3절은 두 집계가 같은 런에서 함께 움직였다는 것까지다. 차선 이탈이 <b>−0.091의 내용물</b>
+이라는 주장은 씬 단위로 붙여 봐야 한다. 붙여 보면 절반은 맞고 절반은 틀린다.
+</p>
+
+<div class="callout warn">
+<p><b>먼저 순환부터 확인해야 한다.</b> 폐루프 점수 공식은
+<code>collision_at_fault == 0</code>, <code>offroad == 0</code>,
+<code>progress_score = min(clamp(progress_clipped_rel,0,1)/0.8, 1.0)</code>이다 —
+<b><code>offroad</code>가 점수 안에 하드 게이트로 들어 있다</b>. 완전한 순환은 아니다
+(여기서 재는 것은 margin==0 시간으로 전체의 41%인데 그중 <code>offroad</code>를 트립하는
+것은 3.46%뿐이다). 그래도 직접 채널이므로, 어느 arm도 <code>offroad</code>를 내지 않은
+씬만 따로 본다.</p>
+</div>
+
+<table>
+<thead><tr><th>검정 (Spearman, 씬 단위)</th><th class="r"><code>dual+h4</code></th><th class="r">95% CI</th><th class="r"><code>em93p75</code> (대조)</th><th class="r">95% CI</th></tr></thead>
+<tbody>
+<tr><td>(a) 전체 150씬</td><td class="r">−0.247</td><td class="r sig">[−0.402, −0.074]</td><td class="r">−0.231</td><td class="r sig">[−0.408, −0.053]</td></tr>
+<tr><td><b>(b) offroad 없는 130씬</b></td><td class="r"><b>−0.203</b></td><td class="r sig">[−0.373, −0.014]</td><td class="r">−0.148</td><td class="r ns">[−0.323, +0.032]</td></tr>
+<tr><td>(c) 계획편차 (특이성 대조)</td><td class="r"><b>−0.333</b></td><td class="r sig">[−0.486, −0.171]</td><td class="r">−0.217</td><td class="r sig">[−0.390, −0.023]</td></tr>
+</tbody></table>
+
+<figure>
+  <img src="PLOT::jn::join.png" alt="씬별 이탈 시간 델타 vs 점수 델타">
+  <figcaption>
+    빨간 점은 어느 한 arm이 <code>offroad</code>를 낸 씬 — 점수 게이트가 직접 걸린 곳이다.
+    파란 점만으로도 기울기가 남는다는 것이 (b)의 내용이다.
+  </figcaption>
+</figure>
+
+<p><b>지지하는 것</b> — 손실은 소수 파국이 아니라 <b>넓게 퍼져 있다</b>. 이탈 시간이 늘어난
+<b>83개 씬</b>의 평균 점수 손실이 −0.137, 나머지 67개는 −0.035이고(Mann-Whitney p=0.027),
+그 83개가 <b>전체 격차의 83%</b>를 나른다. 그리고 (b)에서 <code>dual+h4</code>는 게이트를
+빼도 관계가 남는데(CI가 0 배제) <code>em93p75</code>는 무너진다 — 이 대비는
+<code>dual+h4</code> 쪽에 실체가 있다는 편이다.</p>
+
+<div class="callout bad">
+<p><b>반박하는 것 둘.</b></p>
+<p>(1) <b>특이성 대조가 더 강하다.</b> 특이성을 보려고 넣은 <b>계획편차</b>가 ρ=−0.333으로
+이탈 시간(−0.247)보다 점수와 더 강하게 움직인다. 이탈 시간이 점수를 설명하는 <i>특별한</i>
+변수라고 말할 근거가 없다.</p>
+<p>(2) <b>음성 대조군이 음성이 아니다.</b> <code>em93p75</code>는 횡방향이 전혀 안 움직였는데도
+(a)에서 ρ=−0.231로 거의 같은 상관을 낸다. 즉 이 상관의 상당 부분은 <b>두 런 사이의 씬별
+잡음이 점수와 차선 지표에 동시에 실리는 일반 현상</b>일 수 있다.</p>
+<p>따라서 <b>"차선 이탈이 −0.091의 원인"이라고 쓸 수 없다.</b> 말할 수 있는 것은 —
+<b><code>dual+h4</code>의 손실은 절반 이상의 씬에 퍼져 있고, 그 씬들은 차선 이탈과 계획편차가
+함께 나빠진 씬이다.</b> 어느 하나를 원인으로 지목하는 것은 이 데이터가 감당하지 못한다.</p>
+</div>
+
+<p>
+부수 확인: <code>dualexp_em93p75</code>는 <code>dual</code> 대비 종방향이 거의 동일하다
+(제동비율 +0.0069 p=0.51, 제동가속 −0.0111 p=0.52). VLM 절반이 비트 동일하니 당연하고,
+그 arm의 폐루프 −0.035가 expert 절단의 효과임을 재확인해 준다. 충돌 rollout을 제외해도
+선행차 THW 효과는 유지된다(<code>dual+h4</code> −0.473 s → −0.580 s, p≤0.0005).
+</p>
+
+<h2><span class="num">5</span>같은 방향의 두 번째 사례 — 다만 교란이 있다</h2>
+
+<p>
+<code>dualexp_u40_em93p75</code>(dual의 VLM 절반 + expert MLP 93.75% 절단, 총 39.4% 제거)도
+같은 모양이다. 개루프에서 <code>dual</code> 대비 <b>+0.0033 / +0.0008 / −0.0016</b>으로 사실상
+공짜인데(세 세트 모두 평균 CI가 0 포함), 폐루프는 <b>0.793</b>으로 −0.035
+[−0.072, −0.001]다.
+</p>
+
+<div class="callout">
+<p><b>다만 이건 깨끗한 1요인이 아니다.</b> 총 제거가 24.0%가 아니라 39.4%라 "MLP라서 나쁜가"와
+"15.4pp 더 잘라서 나쁜가"가 섞여 있다. <b>깨끗한 증거는 <code>dual+h4</code> 하나뿐이고</b>,
+<code>em93p75</code>는 방향이 일치한다는 정황으로만 읽어야 한다.</p>
+</div>
+
+<h2><span class="num">6</span>이것이 바꾸는 것</h2>
+
+<p>
+이 레포에 "MLP 폭은 싸다"가 여러 번 기록돼 있다. 가장 강한 형태는 expert 축 분해
+(2026-08-28)다 — MLP-only 50%가 −913M(전체 8.2%)인데 무압축과 <b>구별 불가</b>(0.0001),
+비용은 전부 Q head 몫이고 1차 중요도 질량의 하위 50% 몫이 MLP 0.44% vs Q 24.96%.
+</p>
+
+<div class="callout bad">
+<p><b>그 근거는 전부 개루프였다.</b> 해당 기록도 스스로 "개루프 판정이며 폐루프는 미측정 —
+배포 주장 전 폐루프 필요"라고 단서를 달아 뒀다. 이제 그 폐루프가 나왔고, <b>반대다</b>.</p>
+<p>정정된 규칙: <b>개루프 minADE로 head↔MLP 예산 재배분을 판정하지 말 것.</b> 두 축은
+개루프에서 거의 같은 값을 주는데 폐루프에서 갈린다.</p>
+</div>
+
+<p>
+역방향도 같은 무게로 읽어야 한다. <code>dual</code>의 <b>head 13개 절단은 개루프에서
+손해지만 폐루프에서 이득</b>이다. CoC 퇴화 1.4~3.4%를 감수하고 얻는 것이 있다 — 출하본을
+바꿀 이유가 아니라 <b>유지할 이유</b>다. 그리고 이번 결과로 "CoC 퇴화가 낮을수록 좋다"는
+직관도 한 번 더 깨진다: <code>dual+h4</code>는 퇴화 0.0%로 <code>dual</code>을 압도하면서
+주행은 −0.091이다. 이미 기록돼 있는 <b>CoC 건강은 안전 대리지표가 아니다</b>의 또 하나의
+사례이고, 이번 것은 퇴화가 <b>완전히 0</b>이라 가장 선명하다.
+</p>
+
+<h2><span class="num">7</span>한계</h2>
+
+<ul>
+<li><b>기전은 특정되지 않았다.</b> 4.4절이 이유를 준다 — 씬 단위 연관이 횡방향에 특이적이지
+않고(계획편차가 더 강함), 횡방향이 안 움직인 arm도 비슷한 상관을 낸다. 4.3절의 지표 이동은
+실재하지만, 그것이 점수 손실의 <i>원인</i>이라는 진술은 이 데이터로 지지되지 않는다.</li>
+<li><b>이탈 횟수는 오히려 줄었다.</b> 방향이 갈리는 지표를 하나의 이야기로 묶을 때는 조심해야
+한다 — "복귀 실패"는 해석이지 측정된 기전이 아니다.</li>
+<li><b>씬별 상관은 공유 잡음을 못 걷어낸다.</b> 두 델타가 같은 두 런에서 나오므로, 어떤 씬이
+우연히 <code>dual+h4</code>에 불리하게 굴렀다면 점수와 차선 지표가 <b>함께</b> 나빠진다.
+음성 대조군(<code>em93p75</code>)이 (a)에서 거의 같은 ρ를 내는 것이 그 증거다. 이걸 가르려면
+같은 arm을 시드만 바꿔 두 번 돌린 런이 필요하고, 그런 런은 없다.</li>
+<li><b>종방향 배제는 "종방향이 무관하다"가 아니다.</b> 6 m·1 m/s·1 s라는 임계값에 의존하고,
+선행차 지표 둘은 CI와 Wilcoxon이 어긋난다(씬당 동률이 많다). 배제된 것은 "제동 판단이
+나빠져서 졌다"는 가설이지 종방향 축 전체가 아니다.</li>
+<li><b>150씬은 suite 전체보다 쉽다</b>(0.742 vs 나머지 763씬 0.660, p=0.039; 과실 충돌
+2.0% vs 5.5%). 절대값은 낙관적이고 <b>대응 델타</b>만 읽어야 한다.</li>
+<li><b>폐루프 1회, 재현 없음.</b> 씬당 σ≈0.32라 N=150은 0.080까지 분해한다 — 관측된 0.091은
+그 문턱을 겨우 넘는 크기다. hard100으로 복제하면 검정력이 약 1.55배 오른다.</li>
+<li><b>qcut4 한 점.</b> head 4개만 봤다. head 4↔13 사이의 곡선이 단조인지, 최적점이 중간에
+있는지는 모른다. <code>_qcut</code>은 임의의 head 수를 받으므로 스윕은 빌드 비용만 든다.</li>
+<li><b>개루프-폐루프 해리의 방향은 확인했지만 크기는 아니다.</b> 개루프 평균 CI가 0을 포함하는
+이상, "개루프에서 얼마나 좋아 보였는가"는 정량화되지 않았다.</li>
+</ul>
+
+<h2><span class="num">8</span>다음</h2>
+
+<ol>
+<li><b>같은 arm을 시드만 바꿔 한 번 더 돌린다.</b> 4.4절이 막힌 지점이 정확히 이것이다 —
+씬별 상관이 실제 기전인지 두 런 사이의 공유 잡음인지 가를 수 없다. <code>dual</code>을 다른
+시드로 150씬 한 번 더 돌리면 "같은 arm끼리의 ρ"라는 <b>귀무 분포</b>가 생기고, 관측된 −0.247이
+그것을 넘는지 바로 읽힌다. 폐루프 7시간이지만 이 질문을 닫는 유일한 방법이다.</li>
+<li><b>hard100 복제.</b> 검정력 1.55배, 이미 있는 인프라(<code>run_hard100*.sh</code>)로 실행
+가능. −0.091이 재현되면 결론이 단단해진다.</li>
+<li><b>head 수 스윕</b>(qcut6 / qcut9)은 1·2가 끝난 뒤에. 곡선이 단조라면 볼 것이 없고,
+비단조라면 그때 의미가 생긴다.</li>
+<li><code>dual+h4</code> + expert MLP를 얹는 39.4% 지점은 <b>우선순위를 내린다</b> — 두 변형
+모두 폐루프에서 지는 방향이라 겹쳐 쌓을 근거가 약해졌다.</li>
+</ol>
+
+<footer>
+분석 <code>experiments/evaluation/analyze_headmlp_split.py</code> ·
+종방향 <code>experiments/head_analysis/analyze_longitudinal.py --reference slim_dual_u40_v2</code>
+(alpasim venv) · 횡방향 <code>experiments/head_analysis/analyze_lateral.py</code>
++ <code>analyze_lateral_score_join.py</code> (이 레포 venv, 셋 다 GPU 불필요) ·
+빌드 <code>make_slim.py --config dual_u40_qcut4_v2 --importance importance_v2</code> ·
+개루프 <code>run_baseline.py</code> (cvlab20, Ada) ·
+폐루프 <code>launch_alpasim_shards.sh slim_dual_u40_qcut4_v2 150 2 "4 5 6 7"</code>
++ <code>merge_alpasim_shards.py --expect-scenes 150</code> ·
+결과 <code>outputs/headmlp_split/</code>,
+<code>outputs/headmlp_longitudinal{,_vsdual}/</code>,
+<code>outputs/headmlp_lateral{,_join}/</code>,
+<code>alpasim-runs/m2601_merged_slim_dual_u40_qcut4_v2/</code> ·
+브랜치 <code>worktree-safety-weighted-importance</code>
+</footer>
+
+</div>
+</body></html>

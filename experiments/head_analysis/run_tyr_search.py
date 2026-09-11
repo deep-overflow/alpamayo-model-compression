@@ -262,6 +262,18 @@ def mutate(parent, sup, names_by_type):
     return child
 
 
+def fit_of(kl, mse, kl0, mse0, mode):
+    """Fitness from the two teacher-distance terms.
+
+    `dual` is the shipped objective, KL_coc/KL0 + MSE_vf/MSE0, so uniform init scores 2.0.
+    `kl` drops the vector-field term and scores 1.0 at init -- it exists because the search
+    logs show MSE_vf barely moves (0.80-1.10 of its init across three runs, and it ROSE to
+    1.095 in rd_b while KL fell), so the shipped objective may be dual in name only. Both
+    modes still compute and log both terms; only the ranking changes.
+    """
+    return kl / kl0 + (mse / mse0 if mode == "dual" else 0.0)
+
+
 def load_eval_state(args, devices):
     """One worker's world: model on its card, supernet handles, inputs, teacher."""
     device = reserve_gpu(args.reserve_gb, devices=devices)
@@ -353,7 +365,9 @@ def driver_main(args):
         **{k: v for k, v in vars(args).items()},
         "model_revision": MODEL_REV, "clip_ids": [c for c, _ in calib],
         "kl0": kl0, "mse0": mse0,
-        "fitness": "KL_coc/KL0 + MSE_vf/MSE0, dual-teacher, label-free",
+        "fitness": ("KL_coc/KL0 + MSE_vf/MSE0" if args.fitness == "dual"
+                    else "KL_coc/KL0 only (MSE_vf logged, not scored)")
+                   + ", dual-teacher, label-free",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4] for teacher rollouts",
     }, indent=2))
     if args.selection == "dual":
@@ -376,7 +390,7 @@ def driver_main(args):
                 offspring.append(parent)  # elitist
             clip_idx = random.sample(all_idx, min(ncl, len(all_idx)))
             terms = eval_batch(offspring, clip_idx)
-            scored = sorted(((kl / kl0 + mse / mse0, kl, mse, c)
+            scored = sorted(((fit_of(kl, mse, kl0, mse0, args.fitness), kl, mse, c)
                              for (kl, mse), c in zip(terms, offspring)),
                             key=lambda x: x[0])
             offspring = [c for *_, c in scored[:surv]]
@@ -398,7 +412,8 @@ def driver_main(args):
     assert mha_sum == 0 and mlp_sum == 0, (mha_sum, mlp_sum)
     (out_dir / "summary.txt").write_text(
         f"tyr search ({args.workers} workers): {args.generations} gens x "
-        f"{args.offspring} offspring, final fitness {fit_parent:.4f} (init 2.0)\n"
+        f"{args.offspring} offspring, final fitness {fit_parent:.4f} "
+        f"(init {2.0 if args.fitness == 'dual' else 1.0})\n"
         f"levels mha {[parent[n] for n in names_by_type['mha']]}\n"
         f"levels mlp {[parent[n] for n in names_by_type['mlp']]}\n")
     print("saved ->", out_dir, flush=True)
@@ -425,6 +440,9 @@ def main():
     ap.add_argument("--selection", choices=["weights", "dual"], default="weights",
                     help="weights: supernet weight files (Tyr); dual: mask-only supernet "
                          "from the dual ranking (dual-global arm)")
+    ap.add_argument("--fitness", choices=["dual", "kl"], default="dual",
+                    help="dual = KL_coc/KL0 + MSE_vf/MSE0 (shipped); "
+                         "kl = drop the vector-field term from the ranking")
     ap.add_argument("--importance", default="importance_v2")
     ap.add_argument("--workers", type=int, default=1,
                     help=">1: multi-GPU candidate-parallel search, one worker per "
@@ -489,7 +507,9 @@ def main():
         **{k: v for k, v in vars(args).items()},
         "model_revision": MODEL_REV, "clip_ids": [c for c, _ in calib],
         "kl0": kl0, "mse0": mse0,
-        "fitness": "KL_coc/KL0 + MSE_vf/MSE0, dual-teacher, label-free",
+        "fitness": ("KL_coc/KL0 + MSE_vf/MSE0" if args.fitness == "dual"
+                    else "KL_coc/KL0 only (MSE_vf logged, not scored)")
+                   + ", dual-teacher, label-free",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4] for teacher rollouts",
     }, indent=2))
     if args.selection == "dual":
@@ -515,7 +535,7 @@ def main():
             scored = []
             for cand in offspring:
                 kl, mse = fitness_terms(model, sup, cand, batch, teacher)
-                scored.append((kl / kl0 + mse / mse0, kl, mse, cand))
+                scored.append((fit_of(kl, mse, kl0, mse0, args.fitness), kl, mse, cand))
             scored.sort(key=lambda x: x[0])
             offspring = [c for _, _, _, c in scored[:surv]]
         fit_parent, kl_p, mse_p, parent = scored[0][:4]
@@ -532,7 +552,8 @@ def main():
     assert mha_sum == 0 and mlp_sum == 0, (mha_sum, mlp_sum)  # budget conserved
     (out_dir / "summary.txt").write_text(
         f"tyr search: {args.generations} gens x {args.offspring} offspring, "
-        f"final fitness {fit_parent:.4f} (uniform init = 2.0)\n"
+        f"final fitness {fit_parent:.4f} "
+        f"(uniform init = {2.0 if args.fitness == 'dual' else 1.0})\n"
         f"levels mha {[parent[n] for n in names_by_type['mha']]}\n"
         f"levels mlp {[parent[n] for n in names_by_type['mlp']]}\n")
     print("saved ->", out_dir, flush=True)

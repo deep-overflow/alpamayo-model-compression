@@ -253,6 +253,35 @@ avoid repeating that.
 - `analyze_baseline.py` (one model, `--compare` for a second), `analyze_arms.py` (three arms +
   pre-registered gates).
 - `run_depth_ablation.py` / `analyze_depth_ablation.py` — per-layer kv-only ablation.
+- `analyze_calibsize.py` / `fill_calibsize_report.py` (2026-09-06) — the closed-loop arm-vs-arm
+  matrix `analyze_alpasim.py` cannot produce: it compares every config against `baseline` only, so
+  a question like "do two 2,000-clip calibration draws differ from each other?" has no comparison
+  to read. This one takes any set of merged runs, emits **all pairwise** paired deltas (bootstrap
+  CI + Wilcoxon), gate rates with Wilson CIs and pairwise Fisher, and the kept-unit overlap matrix
+  read straight from each arm's `slim_meta.json`. It runs under this repo's `.venv` — CoC
+  degeneracy is read from an `analyze_alpasim.py` `metrics.json` rather than re-parsed from the
+  ASL, so alpasim's venv is not needed.
+- `calib_clearance.py` (2026-09-08) — per-clip GT-path clearance over `calib_100`, so importance
+  can be risk-weighted. Uses the peer session's `collision_lib.py` (autolabelled obstacle tracks +
+  SAT overlap); the quantity taken is `score_path(...)["min_center_dist"]`, which is **continuous**
+  and therefore usable where the binary collision flag is not. Measured on the **GT** path so the
+  weight is a property of the clip, not of any arm. 93/100 clips are labelled; the other 7 get the
+  median weight rather than being dropped. See `dualsafe` above for what came of it.
+- `coc_action_consistency.py` / `analyze_criterion_aug.py` (2026-09-08) — the Alpamayo-R1 RL
+  consistency reward (arXiv 2511.00088 S5.3), reproduced from stored rollouts with **no GPU**.
+  Two facts make that possible: the released 10B has no meta-action tokens at all
+  (`token_utils.extract_text_tokens` looks for `<|meta_action_start|>` but `base_model`'s
+  `SPECIAL_TOKENS_KEYS` has no such key — those slots are `_padding_0..8` — so the extractor
+  returns `""` always, and a "meta-action segment NLL" objective has nothing to attach to); and it
+  does not need them, because the CoC is one templated sentence whose **head clause is the
+  meta-action** (36 distinct 2-word heads over 1,000 rollouts, 90.1% in the top 15). Waypoints are
+  not stored, so `--mode agree` substitutes the GT-derived `bucket` for the model's own trajectory
+  — that makes it reasoning *accuracy*, not the paper's self-consistency; for the exact metric add
+  `el.bucket(pred_k[j])` to `run_baseline.py`'s record (`pred_k` is already in scope, so it costs
+  no compute). Score unmapped heads as misses (`--score uncond`, the paper's rule) — conditioning
+  on the mapped subset flatters a collapsing arm, because its degenerate CoCs leave that subset.
+  `--mode couple` groups by whether the CoC text differs from the reference arm's, a property of
+  the pair rather than of either arm's own score.
 
 Determinism: `CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA init, `use_deterministic_algorithms`,
 cudnn deterministic, TF32 off. Two runs agree bitwise **within one GPU architecture** — the same
@@ -280,6 +309,39 @@ Output convention: every run writes `outputs/<exp_id>/` containing `config.json`
 2026-08-06 to reclaim space; their `slim_meta.json` is intact, so `make_slim.py` rebuilds them
 in ~1.5 h each.
 
+## LLM-Pruner port (`experiments/llm_pruner/`, from 2026-09-06)
+
+The external baseline `lp_r50` was built in **soowon's** `alpamayo1.5` tree; that port
+(`lp_core.py`, `lp_objectives.py`, `run_lp_importance.py`, `lp_prune.py`) was copied here on
+2026-09-06 so the second-order arm could be run, which never happened there — not for a
+measured reason but because `--objectives coc,traj --second-order` needs an 82 GB host
+accumulator and thrashed the shared box. LLM-Pruner's canonical objective is the single
+language loss, and `--objectives coc --second-order` needs **41.2 GiB**, the size soowon
+already ran. Their vendored `analysis_lib`/`sample_cache`/`expert_per_clip`/`slim_lib` were
+*not* brought back: those were vendored *from this repo*, ours are newer, and the four
+`slim_lib` entry points `lp_prune.py` calls have identical signatures.
+
+**This is a different quantity from `prune_lib.py`'s.** Ours differentiates a multiplicative
+**gate** and takes `E_clip|dL/dg|` — the abs inside each clip. LLM-Pruner differentiates the
+**weights** and keeps the sign while summing over clips, so `param_mix = W⊙g − ½W²⊙E[g²]` is
+a real Taylor expansion. That distinction is why `dual2nd_u40_v2` is not a second-order
+result: with `E|g|` as the first-order term, `E[g²] = (E|g|)² + Var(|g|)` and `(E|g|)²` ranks
+identically to `E|g|`, so the only thing that moved its selection was the across-clip
+**variance** (69–81% of the score). It measured tail-weighting, not curvature, and cost
++0.027 minADE (p=0.00063) on test500. Nobody has measured second-order Taylor on this model.
+
+One `PORT:`-marked fix: upstream computes both Taylor terms on the same per-sample scale, but
+`GradAccumulator` sums signed per-clip gradients, making the first-order term N× too large.
+`param_first` is unaffected (the pipeline is degree-1 homogeneous, so a global factor cannot
+reorder), but `param_mix` collapses onto `param_first` — Spearman 0.979 at N=100. Hence
+`--first-order mean` (default, upstream-faithful); `--first-order sum` reproduces the
+original tree's arrays. `test_lp_formulas.py` re-derives upstream's branches independently
+and agrees to 0.00e+00 on all four variants and six reductions; it runs on CPU in a second.
+
+Order of work: reproduce `coc_param_first` against soowon's `lp_r50` selection **first**,
+then run `param_mix`. Keep `OMP_NUM_THREADS=8` — without it soowon measured other users' jobs
+slowing 11×.
+
 ## Named pruning configs
 
 These names are the vocabulary of `outputs/`, `reports/`, and the alpasim drivers. Built by
@@ -300,6 +362,8 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `dual_ada_u40_v2` | dual, `importance_v2_ada`로 재빌드 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `maxstep11_u40_v2` | 11개 손실(CoC + FM 10스텝) 층내 랭크의 **최댓값** | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
 | `meandual_u40_v2` | dual의 두 half를 z-score **평균**으로 | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) |
+| `dualsafe_u40_v2` | dual, `I_traj` half를 GT 경로 여유거리로 클립 가중 (`w=exp(-d/5)`) | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) — **REJECT** |
+| `dual_u40_qcut4_v2` (= dual+h4) | dual, 같은 예산을 head 4 + MLP 5666으로 재배분 | uniform 0.398563 + `_qcut4` | **VLM only** (−2.66B, 24.0%) — **폐루프 REJECT** |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -334,6 +398,13 @@ clips produce bit-identical CoC text), so the shipped checkpoint stands. `znorm1
 each objective's top units survive. `dual_ada` exists because the per-step file is Ada-only while
 shipped `dual` came from Blackwell `importance_v2`; the rebuild itself is a no-op (median |0.003|,
 p>=0.68), which also settles that the importance run's architecture does not matter.
+That "no-op" is a median, and the **mean is positive on all three sets** (+0.0339 val500 /
++0.0191 test500 / +0.0236 OOD-val), which looks like a systematic direction until tested: each
+mean's own bootstrap CI includes 0 ([-0.0203,+0.1055], [-0.0092,+0.0529], [-0.0699,+0.1521],
+paired t p=0.30 / 0.23 / 0.68). The structure says why -- **5 clips (1%) carry 95.7% of the val500
+mean**, and among the 267 clips moving more than 0.05 m the split is **133 worse / 134 better**
+(binomial p=1.0). A 97.2% / 97.3% kept-set overlap leaves per-clip noise that happens not to
+cancel, not an architecture effect. Quote the mean's CI, never the median's, when answering this.
 
 `maxstep11` / `meandual` (2026-09-04) close the 2x2 that `znorm11` collapsed -- operator
 (`max` union vs `mean`) x arity (2 losses vs 11). Neither factor moves anything alone
@@ -352,6 +423,86 @@ reproduce the bias, not the effect; when a subgroup is defined by one arm's own 
 re-select by the other arm and by a third variable before believing it. Caveat: the
 2x2's rows differ in normalisation too (`max` rows use `rank_norm`, `mean` rows z-scores), so
 "mean vs z-score" is not yet separated; a `mean of 11 rank_norm` arm would do it.
+
+`dualsafe` (2026-09-08) is the same question on the **clip** axis rather than the objective
+axis: keep `max(rank I_traj, rank I_CoC)` but weight each calibration clip by how close the GT
+path comes to a labelled obstacle (`collision_lib.score_path`'s `min_center_dist`, continuous, so
+it needs no gradient — it enters as `w = exp(-d/5)` on the per-clip `I_traj` accumulation). It is
+**REJECTed**: val500 `dualsafe - dual` is +0.1945 (mean +0.4649, p=4.7e-32), **3.3x the +0.0581
+that the 24% pruning itself costs**, with CoC degeneracy unchanged at 1.4% — pure trajectory loss,
+not a reasoning collapse. Two things to carry forward. First, the mechanism is sample size, not
+the weight function: Kish ESS falls 100 -> 70.8, and the damage is indistinguishable from simply
+drawing different calibration clips (`dual_nt_a..e` cost +0.029 / +0.041 / +0.214 / +0.451 /
++0.381 on the same set), which is the `calib_100`-is-a-lucky-draw result again. So a safety signal
+belongs in **how the calibration set is drawn**, not in a weight over a set of 100. Second, and
+more useful as a rule of thumb: **kept-set overlap is not a safety gate**. `dualsafe` keeps 94.0%
+of dual's Q heads and 92.6% of its MLP channels and still loses 0.19 m, with minADE changed on
+100.0% of clips. Overlap answers "is there anything to measure", never "is this safe".
+Do **not** file `dualsafe` alongside `dualprod` / `znorm11` as another "dilution" failure. Those
+two broke the union on the **objective** axis; `dualsafe` leaves the objective structure intact
+and shrinks the sample on the **clip** axis. The similar damage sizes (+0.14 to +0.20) come from
+both axes moving on the same shallow `calib_100` floor, not from a shared mechanism -- and adding
+terms under `max` is itself harmless, which `maxstep11` settled.
+The sharper form, measured from the shipped importance files with no build (`analyze_criterion_aug.py`
+section C): correlation does govern how much a third `max` term displaces -- adding the J-lens
+(within-layer Spearman to traj +0.211 Q / +0.283 MLP) moves 12.7% / 13.7% of the two-term kept set,
+against 7.0% / 9.7% for the ten FM steps (+0.923 / +0.820) -- but **displacement magnitude does not
+order the arms at all**. Four built arms, each measured against shipped `dual` on one basis (kept
+sets from `slim_meta.json`, cost paired over the same val500 clips):
+
+| arm | Q overlap | MLP | val500 median vs dual | mean | p |
+|---|---:|---:|---:|---:|---:|
+| `dualfix` | 96.6% | 96.6% | +0.0002 | +0.0332 | 0.962 |
+| `maxstep11` | 92.5% | 89.7% | -0.0117 | +0.0011 | 0.152 |
+| `dual_st2000` (n=2,000) | 92.1% | 87.4% | +0.1105 | **+0.3056** | 5.8e-22 |
+| `dualsafe` | 94.0% | 92.6% | **+0.1945** | **+0.4649** | 4.7e-32 |
+
+Spearman(overlap, median cost) is +0.000 -- illustrative at n=4, but the decisive pair is not:
+`dual_st2000` at 92.1% and `maxstep11` at 92.5% displace the same amount and land at +0.1105
+(p=6e-22) versus -0.0117 (n.s.). Read the mean column with it: both significant arms sit at
+2.4-2.8x their medians, so this damage is a tail of clips rather than a shift of all of them,
+and `maxstep11`'s -0.0117 median is +0.0011 on the mean, i.e. nothing rather than a small win. What separates them is where the displacing score came from --
+signal (a unit genuinely top-ranked at another denoising step) versus a resampling of the same
+100 clips. So an overlap or displacement figure is never on its own a reason to accept or reject
+an arm, in either direction. This is the other end of the calibration-size axis: that study found
+selection stability does not buy performance stability (converged kept set at n=2,000, still
++0.1105 off), this one finds the converse, that at n=100 the selection is not converged enough for
+a 6% move to carry any meaning.
+
+`dual+h4` (`dual_u40_qcut4_v2`, 2026-09-10) moves the same 24.0% between the two axes instead of
+changing the score: `_qcut<N>` fixes the heads dropped per layer at N and **derives** the channel
+count from whatever budget `rq`/`rm` already set, asserting it divides evenly -- so `dual` (13 heads
++ 4898 ch) and `dual+h4` (4 + 5666) remove bit-identical 2,657,452,032 params with the same
+criterion, calibration, expert and KV. It is the cleanest one-factor test of *where* the budget
+comes from, and it is where **open loop and closed loop disagree**. Open loop detects no harm (mean
+delta CI spans 0 on all three sets; the median excludes 0, and the protocol's headline is the mean)
+and CoC degeneracy drops 1.4/3.0/3.4% -> **0.0/0.0/0.0%**, i.e. head cuts are what breaks
+generation. Closed loop over 150 scenes is **-0.091 [-0.134,-0.050], p=3e-06 vs `dual`**, and
+-0.012 (n.s.) vs baseline -- the reallocation returns the shipped arm's whole advantage. Neither
+gate separates (offroad 20 -> 28 hits, scene-paired Wilcoxon p=0.087, McNemar p=0.55), and the
+longitudinal surrogates rule themselves out: measured against `dual`, `dual+h4` is **safer** --
+braking rate near obstacles +0.0525 (p=4e-05), speed when close -0.633 (p<1e-4), time under
+THW 1 s -0.032 (p=1e-4). The mechanism is **lateral**: `analyze_lateral.py` (new, 2026-09-10)
+puts `dual+h4` **+4.4pp of time out of lane** [+0.019,+0.069] with the **longest excursion
+4.87 s -> 5.64 s** [+0.30,+1.25], while the number of excursions FALLS (-0.38) and the in-lane
+margin improves (+0.047) -- it leaves the lane less often and comes back worse. That is why the
+`offroad` gate leaned the right way and still could not resolve it: a binary gate cannot count
+duration. Both scripts gained `--reference` for this; they hardcoded "baseline", answering
+what pruning cost but never how two pruned arms differ.
+**Do not promote that to a cause.** `analyze_lateral_score_join.py` puts the two per-scene
+deltas together and the association is real but **not lateral-specific**: rho(excursion time,
+score) is -0.247 [-0.402,-0.074] and survives dropping every scene where either arm went
+offroad (-0.203, which matters because `score_criteria` carries `offroad == 0` as a hard gate),
+but **plan deviation correlates harder** (-0.333) and the negative control `dualexp_em93p75` --
+which moved nothing lateral -- returns almost the same rho (-0.231). Two deltas drawn from the
+same pair of runs share their scene noise, so a scene that simply rolled badly for one arm
+degrades both. What is defensible: the loss is **broad** (83 of 150 scenes carry 83% of the
+gap, mean -0.137 there vs -0.035 elsewhere, Mann-Whitney p=0.027), and those scenes are ones
+where lane keeping and plan deviation worsened together. Settling it needs a same-arm,
+different-seed closed-loop run to give the null distribution of that rho; none exists.
+Two consequences: **never judge a head<->MLP reallocation on open-loop minADE**, and this is the
+sharpest instance yet of CoC health not being a safety proxy -- 0.0% degeneracy alongside the worst
+driving of any dual variant. Report `reports/evaluation/2026-09-10_head-vs-mlp-budget.html`.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -412,9 +563,20 @@ cd /home/cvlab21/project/chan/alpasim && uv run python \
 
 They aggregate per-rollout → per-scene mean → paired delta vs baseline with bootstrap CI and
 Wilcoxon. `analyze_collisions.py` does per-collision forensics (does CoC degeneracy *concentrate*
-in the 5 s before a crash?); `analyze_longitudinal.py` exists because at-fault collisions are too
+in the 5 s before a crash?); `analyze_lateral.py` (2026-09-10) is the lane-keeping twin --
+time out of lane, excursion count and longest excursion, in-lane margin, cross-track error and
+plan deviation, from `min_distance_to_lane_boundary_m` and friends in the same parquet, under
+**this** repo's venv (only pandas). Its zero handling is the load-bearing bit: 32% of steps read
+exactly 0, and that is the lane edge, not a sentinel -- positive values run continuously down to
+0 (p1 = 0.0097 m) and `offroad` fires on 3.46% of zero-margin steps against 0.00% of positive
+ones. So time-at-zero is the continuous precursor to the `offroad` gate. Verify that before
+trusting any lane metric on a new sim version. `analyze_longitudinal.py` exists because at-fault collisions are too
 rare to power a count, so it re-reads the same rollouts as continuous surrogates (time headway,
-proximity exposure, braking response, speed at closest approach).
+proximity exposure, braking response, speed at closest approach). Its `--reference` (2026-09-10)
+makes those deltas arm-to-arm instead of always-vs-baseline -- the same gap `analyze_calibsize.py`
+fills on the score axis, and what "why is `dual+h4` worse than `dual`" needs. Note the robustness
+block stays baseline-referenced on purpose: it asks whether a pruning effect survives dropping
+the crashed rollouts, which is a different question from an arm-vs-arm delta.
 
 ### Sharding one config over several GPUs (2026-08-10)
 
@@ -428,7 +590,7 @@ hardlinking the per-rollout dirs). Scores are copied verbatim, never recomputed;
 `aggregate/` is refused rather than salvaged. Verified by merging a stored 30-scene run and
 reproducing its published numbers exactly.
 
-Four things about this that will bite again:
+Five things about this that will bite again:
 
 - **Never shard with `scenes.scene_ids`.** 159 of `public_2601`'s scene_ids also exist in the 26.04
   release and `query_by_scene_ids` resolves a bare scene_id to the *newer* uuid — it silently swaps
@@ -446,6 +608,22 @@ Four things about this that will bite again:
 - **Startup is racy.** Four stacks coming up inside ~70 s made one runtime's gRPC version probe
   exceed its deadline; the run aborted with renderer exit 137, which looks like OOM but is the
   SIGKILL after the cascade. Relaunch that shard with `ONLY_SHARDS=<i>` (same k-way split).
+- **Docker runs out of network subnets** (2026-09-06). Each shard's compose stack creates its own
+  bridge network and never removes it, while docker's default address pool holds ~32; when it fills,
+  a shard dies with `all predefined address pools have been fully subnetted` *before any container
+  starts*, which reads like a GPU problem but is not — the cards are idle because nothing launched.
+  32 networks with only 3 in use is what it looked like the first time. Sweep the dead ones before
+  launching, matching **our own** run prefixes so another member's stack is never touched:
+
+  ```bash
+  for n in $(docker network ls --format '{{.Name}}' | grep -E '^(h100_|m2601_|cl150_|fmp_)'); do
+    [ "$(docker network inspect "$n" --format '{{len .Containers}}')" = 0 ] && docker network rm "$n"
+  done
+  ```
+
+  Recovery for a run already in flight is `ONLY_SHARDS="2 3"` after the sweep — but then the shard
+  launcher's exit is no longer the completion signal for the whole config, so wait on the artifacts
+  (all four `aggregate/results-summary.json`) before merging, not on the process.
 
 ### Running an arbitrary scene set (2026-09-03)
 
@@ -591,13 +769,20 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-04_stream-error-decomposition.html` | `head_analysis/streamerr_report_template.html` | 재구성 오차를 5개 토큰 타입으로 분해: CoC를 Hessian에 16% 넣는 거래는 에너지 가중 순손실(+0.0098); 오차는 fit 가중치를 따르지 않고 스트림 고유 난이도가 지배 |
 | `2026-09-05_architecture-invariance.html` | `evaluation/arch_report_template.html` | Ada와 A100에서 baseline+dual 전 세트 재측정: 프루닝 비용 차이 ≤0.011로 Ada 값이 모두 A100 CI 안, baseline 절대값도 0.004 이하 일치; 아키텍처가 실제로 문제되는 곳은 클립 단위 페어링과 이산·임계값 지표(CoC 퇴화율·LingoQA judge) |
 | `2026-09-04_union-step-criterion.html` | `evaluation/union_step_report_template.html` | 결합 연산 x 손실 개수의 2x2: znorm11의 손해는 어느 요인 단독도 아닌 상호작용 (단독 +0.006/-0.003, 둘 다 +0.173); maxstep11은 세 세트에서 dualfix와 전체·꼬리 모두 동급 (초판의 꼬리 이득 주장은 선택 편향이라 철회) |
+| `2026-09-06_calibration-size.html` | `evaluation/calib_size_report_template.html` | 캘리브레이션 크기 x 기준 2x2: n=2,000에서 유지집합은 잡음 바닥(Q 97.1%)까지 수렴하는데 성능은 다른 n=500 대비 +0.154 -- 선택 안정성은 성능 안정성을 사주지 않는다; maxstep11의 손해는 max 합집합의 붕괴(1.722x->1.454x); slim 경로 서버 간 비트 동일 실측 |
 | `2026-09-03_criterion-aggregation.html` | `evaluation/criterion_agg_report_template.html` | znorm11 (11개 손실 z-score 평균) 기각과 35번 층 index-order 결함: 집계 함수가 스텝 축 세분화보다 지배적, 결함은 측정 한계 아래 |
 | `2026-08-26_dual-plus-znorm.html` | `head_analysis/dualexp_report_template.html` | dual VLM + znorm expert composition: not free (G2 REJECT), conditional importance recovers ~21%, and the e10/e15 sweep isolates the cost to expert Q heads (MLP width is free) |
 | `2026-09-03_difficulty-stratified-arms.html` | `head_analysis/difficulty_strat_report_template.html` | 150씬 17 arm을 난이도 계층 × 게이트(offroad / at-fault)로 분해: LLM-Pruner는 종합 점수 동률(p=0.69–0.91)이나 과실 충돌 3.15배(p=0.011), 우리 arm의 점수↔충돌 선(r=−0.95) 위 +5.2pp |
-| `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률 |
-
+| `2026-09-05_hard100-closedloop.html` | `head_analysis/hard100_report_template.html` | 150씬과 겹치지 않는 어려운 100씬 4 arm: 압축>비압축은 유지(G1 통과, dual +0.085 p=0.0016)되나 **방법 간 서열이 소멸**(세 쌍 모두 p=0.38–0.80)하고 외부 LLM-Pruner가 25.0% 제거로 동률. 7절(G3, 2026-09-07 추가)은 그 소멸이 지표 탓임을 보인다 — 같은 rollout의 연속 대리지표에서 근접 시 제동비율이 baseline 0.251 > dual 0.168 > tyr_r 0.146 > lp_r50 0.123으로 단조 감소(셋 다 p≤0.0017)하고, lp_r50은 선행차 TTC<2s가 0.55%→3.86% |
+| `2026-09-06_calibration-size-closedloop.html` | `evaluation/calibsize_report_template.html` | 같은 dual 기준을 100클립 대신 2,000클립으로 추정한 두 **서로소** 추출의 폐루프 150씬: 둘 다 출하본 대비 −0.112 / −0.115 (p<1e-4)이고 서로는 −0.003 (p=0.33)로 구분 불가 → 손해는 한 번의 불운이 아니라 **수렴한 선택의 성질**이고 `calib_100`이 운 좋은 추출; 두 arm 모두 baseline을 못 이기므로 출하본의 +0.079는 기준을 잘 추정한 결과가 아니다 |
+| `2026-09-08_criterion-augmentation.html` | `evaluation/criterion_aug_report_template.html` | dual 기준에 신호를 더하는 두 축. 클립 축 — `dualsafe`(GT 경로 여유거리로 `w=exp(-d/5)` 가중)는 유효 표본을 100→70.8로 줄이고 유지집합은 94.0%나 유지하는데도 val500에서 **+0.1945 (p=4.7e-32)**, 24% 프루닝 자체(+0.0581)의 3.3배 — 다른 100클립 추출을 뽑은 것과 구별되지 않는다. 목적 축 — 논문의 `r_consistency`는 릴리스 체크포인트에 meta-action 토큰이 없어(`SPECIAL_TOKENS_KEYS`에 키 부재) 토큰 NLL로 못 붙지만 CoC 머리 어절이 곧 meta-action(36종, 상위 15종 90.1%)이라 재현 가능; 그 결과 **`I_CoC`가 이미 4.0pp 중 2.4pp를 회수**하고 `dual`의 잔차 −1.6pp는 분해능(≈2.5pp) 아래이며, 건강한 arm에서 CoC 드리프트와 궤적 손상은 무관(p=0.33–0.85) |
+| `2026-09-09_method-x-draw.html` | `evaluation/method_x_draw_report_template.html` | 같은 세 캘리브레이션 추출(calib_100 / rd100_a / rd100_b)을 두 방법에 물린 2×3 격자: **추출 민감도가 방법마다 다르다** — tyr(출력 재구성) 범위 0.008·sd 0.004로 세 쌍 모두 n.s.인데 dual+fisher+h4(LLM-Pruner param_mix 2차 + 층당 Q4 균등) 범위 0.076·sd 0.039로 두 쌍 유의하고 baseline 대비 부호까지 갈림. 그래서 **단일 추출 비교는 뒤집힌다** — calib_100에서 tyr −dfh4 +0.071(p=0.0002)이 rd100_b에서 +0.002(p=0.45). 주행과 CoC는 서로 다른 축에서 흔들림(tyr은 CoC 3.7–9.0%, dfh4는 주행 0.076 범위) |
+| `2026-09-10_head-vs-mlp-budget.html` | `evaluation/headmlp_split_report_template.html` | 같은 24.0%를 head 13+MLP 4898 대신 head 4+MLP 5666에서 가져오는 1요인 재배분(`_qcut4`, 제거 파라미터 비트 동일). **개루프는 해를 못 보고 폐루프는 본다** — 개루프 평균 델타 CI가 세 세트 모두 0을 포함(중앙값은 배제하므로 헤드라인 통계를 따를 것)하고 CoC 퇴화는 3.4%→**0.0%**인데, 폐루프 150씬은 `dual` 대비 **−0.091 [−0.134,−0.050] p=3e−06**이고 baseline조차 못 이긴다(−0.012 n.s.). 게이트는 **어느 것도 분리하지 못한다** — offroad 20→28건이 씬 대응 Wilcoxon p=0.087·McNemar p=0.55라 기전은 미해결. 이 레포의 "MLP 폭은 싸다"는 근거가 전부 개루프였음을 뒤집는다 |
+| `2026-09-09_tyrk-search-fitness.html` | `evaluation/tyrk_report_template.html` | Týr 탐색의 적합도에서 궤적 항을 뺀 1요인 폐루프(`tyrK` = supernet·teacher·`calib_100` 동일, `KL_coc+MSE_vf` → `KL_coc` 단독). 주행은 **구분 불가**(+0.0020 [−0.032,+0.037] p=0.74, 승/패/무 26/32/92)이고 둘 다 baseline을 이긴다. CoC 퇴화만 5.92%→4.66%(페어드 −1.26pp p=0.0003)로 **전부 빈 출력**, soup은 불변. 결론을 좌우하는 수치는 **선택 중첩 97.7%(Q)/98.1%(MLP)** — 684개 중 16개만 달라서 이건 "요인이 무의미"가 아니라 **"요인이 탐색 결과를 못 바꾼다"**이다. arm 간 차이를 해석하기 전에 중첩률부터 볼 것 |
+| `2026-09-10_hard100-tyrk.html` | `evaluation/h100_tyrk_report_template.html` | 위 실험을 150씬과 **서로소**인 어려운 100씬에서 5-arm으로. G1은 오히려 강해지고(+0.065~+0.099, `lp_r50`만 n.s.) **G2는 여전히 실패** — 방법 간 여섯 쌍 전부 p≥0.38이라 `tyrK` 1위(0.610)는 순위이지 검정 결과가 아니다(MDE 0.059). **CoC 이득은 재현된다: −1.58pp (p<1e-4)** — 150씬의 사후 −1.26pp가 독립 표본에서 같은 방향·더 큰 크기. 퇴화의 *성질*이 계열을 가른다: 재구성 계열은 거의 전부 빈 출력(soup ~0.02%), `dual`/`lp_r50`은 빈 출력과 soup이 섞임. G2를 읽는 열쇠도 중첩률 — `tyrK`vs`tyr` 97.7%(처치가 약함)인 반면 **`dual`vs`tyr`는 76.2%**인데도 주행이 같다(더 강한 null) |
+| `2026-09-10_alpasim-all.html` | `evaluation/alpasim_all_report_template.html` | 지금까지의 폐루프 전부를 한 표로: 150씬 25 arm + hard100 5 arm, rollout 9,000개. `collect_alpasim_all.py`가 병합 런의 `aggregate/results-summary.json`에서 직접 집계하므로 arm이 늘어도 `analyze_alpasim.py` 재실행이 필요 없다. 조용히 틀리는 함정 둘을 수집기가 막는다 — **게이트는 `rollout["metrics"]` 하위**라 최상위에서 읽으면 전 arm 0/0이 되어 결측처럼 보이고, **CoC는 config 이름으로 찾으면 틀린다**(같은 config가 여러 씬 집합에서 돌았다: `slim_tyr_u40_r` 150씬 0.0592 / hard100 0.0633 → `n_scenes`로 맞출 것). CI와 Wilcoxon이 자주 엇갈리는 이유도 적었다(씬 절반이 정확히 1.0이라 동점이 많다) |
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (44 entries as of 2026-09-05: 42 html + 2 tex).
+`ls reports/evaluation/` is the full set (54 entries as of 2026-09-11: 52 html + 2 tex).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against

@@ -1,0 +1,234 @@
+<meta charset="utf-8">
+<title>tyrK 폐루프 — 탐색 적합도의 궤적 항</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DCD8CC;
+    --accent: #D97757; --green: #008300; --card: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 96px; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); font-size: 15px; margin: 0 0 6px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 36px;
+          padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  h3 { font-size: 16px; margin: 28px 0 8px; }
+  p { margin: 12px 0; }
+  code { background: #EFEDE5; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px;
+          font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left;
+           vertical-align: top; }
+  th { font-weight: 600; font-size: 13px; color: var(--muted); border-bottom: 2px solid var(--ink); }
+  td.r, th.r { text-align: right; }
+  tr.hl td { background: #FBF0EC; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 14px; margin: 26px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+         padding: 16px 18px; }
+  .kpi .v { font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
+  .kpi .l { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.45; }
+  .note { background: var(--card); border-left: 3px solid var(--accent);
+          padding: 14px 18px; margin: 20px 0; }
+  .note.calm { border-left-color: var(--muted); }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; display: block; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  ul { margin: 12px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .verdict { font-size: 17px; font-weight: 600; margin: 18px 0 6px; }
+</style>
+
+<div class="wrap">
+
+<h1>tyrK 폐루프 — 탐색 적합도에서 궤적 항을 빼면</h1>
+<p class="lede">Týr 탐색의 적합도가 <code>KL<sub>coc</sub> + MSE<sub>vf</sub></code>에서
+<code>KL<sub>coc</sub></code> 단독으로 바뀔 때 무엇이 달라지는가 — 1요인 폐루프 비교</p>
+<p class="meta">2026-09-09 · alpasim <code>public_2601</code> 첫 <!--KPI_N-->씬 × 2 rollout ·
+RTX 5880 Ada 4–7 · <code>outputs/tyrK_closedloop</code>, <code>outputs/tyrK_pairs</code></p>
+
+<h2>1. 무엇을 물었나</h2>
+
+<p><code>tyrK</code>는 출하 <code>tyr_u40_r</code>과 supernet·teacher·캘리브레이션
+(<code>calib_100</code>)이 <strong>모두 같고 탐색 적합도만</strong> 다른 arm이다.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>요소</th><th><code>tyr_u40_r</code> (출하)</th><th><code>tyrK</code></th></tr></thead>
+<tbody>
+<tr><td>탐색 적합도</td><td>KL<sub>coc</sub>/KL₀ + MSE<sub>vf</sub>/MSE₀ <span class="sub">(init 2.0)</span></td>
+    <td>KL<sub>coc</sub>/KL₀ 단독 <span class="sub">(MSE는 기록만, init 1.0)</span></td></tr>
+<tr><td>최종 적합도</td><td>1.5382</td><td>0.5650</td></tr>
+<tr><td>supernet / teacher</td><td colspan="2"><code>tyr_supernet_u40</code> / <code>tyr_teacher_u40</code> — 동일</td></tr>
+<tr><td>캘리브레이션</td><td colspan="2"><code>calib_100</code> (100클립) — 동일</td></tr>
+<tr><td>제거 파라미터</td><td colspan="2">2,657,452,032 (24.0%) — 동일</td></tr>
+</tbody></table></div>
+
+<p>Týr는 <strong>가중치를 다시 쓰는</strong> 계열이다 — 층별 레벨이 정해지면 남긴 가중치를
+최소제곱으로 refit한다. 따라서 적합도를 바꾸면 어느 유닛을 남길지와 남긴 가중치의 값이
+함께 바뀐다. 물음은 하나다: <strong>탐색이 궤적 항을 보아야 하는가?</strong></p>
+
+<div class="note calm">
+<p style="margin:0"><strong>왜 물을 가치가 있나.</strong> MSE<sub>vf</sub>는 적합도 계산의 절반을
+차지한다. 잉여라면 다음 탐색부터 비용이 반으로 준다. 반대로 필요하다면, 궤적 목적이 탐색 단계에서
+무엇을 지키고 있었는지가 드러난다.</p>
+</div>
+
+<h2>2. 결과 요약</h2>
+
+<div class="kpis">
+  <div class="kpi"><div class="v"><!--KPI_DELTA--></div>
+    <div class="l">tyrK − tyr@calib100 주행 점수<br>p=<!--KPI_P-->, 승/패/무 <!--KPI_WLT--></div></div>
+  <div class="kpi"><div class="v"><!--KPI_OV_Q-->%</div>
+    <div class="l">두 체크포인트의 Q head 선택 중첩<br><!--KPI_KEPT_Q-->개 중 <!--KPI_OV_DIFF-->개만 다름</div></div>
+  <div class="kpi"><div class="v"><!--KPI_COC_DELTA--> pp</div>
+    <div class="l">CoC 퇴화율 변화<br>p=<!--KPI_COC_P-->, 개선/악화/동일 <!--KPI_COC_WLT--></div></div>
+</div>
+
+<p class="verdict">궤적 항은 탐색 결과를 거의 바꾸지 못하고, 그 작은 차이는 주행으로 옮겨지지 않는다.
+CoC 퇴화만 유의하게 줄어든다.</p>
+
+<h2>3. 주행 (1차 지표)</h2>
+
+<div class="scroll"><!--TABLE_ARMS--></div>
+
+<p>씬 단위 페어드 차이 — baseline과 pruned arm은 같은 씬을 돌았으므로 씬별로 짝지어 뺀다.
+부트스트랩 10,000회, Wilcoxon은 동점 씬을 제외하고 계산한다.</p>
+
+<div class="scroll"><!--TABLE_PAIRS--></div>
+
+<figure>
+  PLOT::tyrk::score_ci.png
+  <figcaption>세 arm의 씬 평균 점수와 95% 부트스트랩 CI. 두 tyr arm의 막대가 사실상 겹치고
+  baseline만 아래에 있다.</figcaption>
+</figure>
+
+<p>두 압축 arm은 모두 무압축 baseline(<!--KPI_BASE-->)을 유의하게 앞선다
+(<!--KPI_TYR_VS_BASE--> p=<!--KPI_TYR_VS_BASE_P-->, <!--KPI_TYRK_VS_BASE--> p=<!--KPI_TYRK_VS_BASE_P-->).
+서로는 <!--KPI_DELTA--> [<!--KPI_DELTA_LO-->, <!--KPI_DELTA_HI-->]로 <strong>구분되지 않는다</strong>.</p>
+
+<div class="note calm">
+<p style="margin:0"><strong>검정력.</strong> 씬 단위 페어드 차이의 σ ≈ 0.32이므로 <!--KPI_N-->씬이
+분해할 수 있는 최소 효과는 약 0.080이다. 관측된 <!--KPI_DELTA-->는 그 <strong>40분의 1</strong>이고,
+동점 씬이 <!--KPI_WLT-->에서 보듯 절반을 넘는다. 즉 "차이가 없다"가 아니라
+"이 설계로는 0.08보다 작은 차이를 말할 수 없고, 관측치는 그보다 훨씬 작다"가 정확한 진술이다.</p>
+</div>
+
+<h2>4. 안전 게이트</h2>
+
+<p>씬 점수는 <code>collision_at_fault == 0</code>과 <code>offroad == 0</code>을 통과해야 매겨지므로,
+게이트는 점수와 별개로 봐야 한다. rollout 단위 비율에 Wilson 95% 구간을 붙였다.</p>
+
+<div class="scroll"><!--TABLE_GATES--></div>
+
+<p>세 게이트 모두 두 arm 사이에서 유의하지 않다. at-fault 충돌은 tyrK가 수치상 높지만
+(rollout 4개 차이) Fisher p가 그것을 뒷받침하지 않는다.</p>
+
+<h2>5. CoC — 유일하게 갈리는 축</h2>
+
+<p><code>analyze_alpasim.py</code>는 arm별 rollout 평균만 저장하므로 "5.92% vs 4.66%가 유의한가"를
+그 파일만으로는 답할 수 없다. <code>coc_paired_tyrk.py</code>가 같은 파서로 ASL을 다시 읽어
+rollout 단위 값을 뽑고, 씬당 2 rollout을 평균해 <!--KPI_COC_N-->씬 페어드로 검정한다.</p>
+
+<div class="scroll"><!--TABLE_COC--></div>
+
+<figure>
+  PLOT::tyrk::coc_scatter.png
+  <figcaption>같은 <!--KPI_N-->씬을 두 arm 축에 짝지어 뿌렸다. 왼쪽(주행)은 대각선 위아래로 고르게
+  퍼져 있고, 오른쪽(CoC 퇴화)은 구름이 대각선 <strong>아래로</strong> 치우쳐 있다 — 이 실험에서
+  움직인 것은 CoC뿐이다.</figcaption>
+</figure>
+
+<p>두 압축 arm의 퇴화는 <strong>거의 전부 빈 출력</strong>이고 soup(헛소리)은 0에 가깝다.
+baseline은 정반대로 soup 쪽이다. 압축은 CoC를 헛소리로 만드는 것이 아니라 <strong>침묵시킨다</strong>.</p>
+
+<div class="note">
+<p style="margin:0"><strong>이 검정은 사후(post-hoc)다.</strong> 평균값이 갈리는 것을 보고 나서 돌렸고,
+사전 등록된 게이트가 아니다. 재현이 필요하다. 그리고 주행 점수가 동일하다는 사실과 함께 읽어야
+한다 — 이 저장소의 기존 결과는 CoC 건강도가 주행 안전의 대리지표가 <em>아니라고</em> 말한다.</p>
+</div>
+
+<h2>6. 왜 이 "차이 없음"이 약한 결론인가</h2>
+
+<p>두 체크포인트가 <strong>같은 유닛을 남긴다</strong>.</p>
+
+<div class="scroll"><!--TABLE_OVERLAP--></div>
+
+<p>층별 <em>개수</em>는 36개 층 중 20개에서 다르지만(±1~3), <em>어느 유닛을 남기는가</em>는
+거의 같다. 그래서 정확한 결론은 이렇게 갈라 써야 한다.</p>
+
+<ul>
+  <li><strong>틀린 진술</strong> — "궤적 항은 주행에 영향이 없다." 이 실험은 그것을 시험하지 않았다.
+      처치가 실제로 바꾼 것이 2%뿐이기 때문이다.</li>
+  <li><strong>맞는 진술</strong> — "궤적 항은 <strong>탐색 결과를 바꾸지 못한다</strong>(선택의 2%),
+      그리고 그 2%는 주행에 옮겨지지 않는다."</li>
+</ul>
+
+<p>전자보다 후자가 실은 더 유용하다. 두 탐색이 같은 해로 수렴했다는 뜻이고, 적합도의 절반을
+지워도 같은 곳에 도착한다는 뜻이다.</p>
+
+<div class="note">
+<p style="margin:0"><strong>일반화할 교훈.</strong> arm 간 "차이 없음"을 능력 동등으로 읽기 전에
+<strong>선택 중첩률을 먼저 보라</strong>. 중첩이 높으면 처치 자체가 약했던 것이고, 그때 "요인이
+무의미하다"는 결론은 데이터가 지지하지 않는다. <code>analyze_calibsize.py</code>가 이 중첩률을
+낸다 — <code>analyze_alpasim.py</code>는 각 arm을 baseline과만 비교하므로 arm 간 비교에 쓸 수 없다.</p>
+</div>
+
+<h2>7. 한계</h2>
+
+<ul>
+  <li><strong>씬 표본이 낙관적이다.</strong> <code>public_2601</code>의 첫 <!--KPI_N-->씬은 913씬 전체보다
+      쉽다(0.742 vs 0.660, Mann-Whitney p=0.039; at-fault 충돌 2.0% vs 5.5%). 여기의
+      <em>절대</em> 수치는 suite 대비 낙관적이며, arm 간 페어드 차이는 거의 영향받지 않는다.</li>
+  <li><strong>검정력.</strong> <!--KPI_N-->씬은 0.080까지만 분해한다. 더 작은 진짜 차이는 이 설계로
+      보이지 않는다. 난이도 상위 100씬(hard100)은 효과 크기를 ~1.55배 키우므로 후속으로 돌린다.</li>
+  <li><strong>CoC 검정은 사후다.</strong> 5절 참조.</li>
+  <li><strong>한 번의 캘리브레이션 추출.</strong> 두 arm 모두 <code>calib_100</code> 위에서 탐색했다.
+      다른 추출에서도 두 적합도가 같은 곳으로 수렴하는지는 별개의 물음이다 —
+      출력 재구성 계열이 추출에 강건하다는 결과(2026-09-09)가 있어 그럴 가능성이 높지만,
+      측정하지는 않았다.</li>
+  <li><strong>가중치 차이는 2%보다 클 수 있다.</strong> Týr는 refit으로 남긴 가중치를 다시 쓰므로,
+      층의 남긴 집합이 다르면 그 층의 가중치 값 전체가 달라진다. 선택 중첩 97.7%는 "모델이 97.7%
+      같다"는 뜻이 아니라 "같은 유닛을 97.7% 남겼다"는 뜻이다.</li>
+</ul>
+
+<h2>8. 재현</h2>
+
+<p>체크포인트 <code>outputs/slim_tyrK</code>는 <code>tyrK_search_u40/final_config.json</code>의
+레벨 벡터로 만들어졌다. 출하 <code>tyr_u40_r</code>과 헷갈리지 않으려면 층별 kept Q head를
+두 탐색 결과에 대조하면 된다 — <code>kept = 19 − level</code>로, tyrK는 36/36,
+<code>tyr_search_u40</code>은 16/36 일치한다.</p>
+
+<pre style="background:#EFEDE5;padding:14px 16px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.6"># 폐루프 (Ada 4-7, 샤드당 카드 1장)
+DRIVER_OMP_THREADS=8 bash experiments/head_analysis/launch_alpasim_shards.sh \
+    slim_tyrK 150 2 "4 5 6 7"
+python experiments/head_analysis/merge_alpasim_shards.py --runs-root $RUNS \
+    --shards m2601_slim_tyrK_sh{0,1,2,3} --out m2601_merged_slim_tyrK --expect-scenes 150
+
+# baseline 대비 3-arm (alpasim venv)
+cd $ALPASIM &amp;&amp; uv run python $REPO/experiments/head_analysis/analyze_alpasim.py \
+    --runs-root $RUNS --prefix m2601_merged_ \
+    --configs baseline slim_tyr_u40_r slim_tyrK --out $REPO/outputs/tyrK_closedloop
+
+# arm 간 전 쌍 + 게이트 + 선택 중첩
+.venv/bin/python experiments/evaluation/analyze_calibsize.py \
+    --runs-root $RUNS --coc-from outputs/tyrK_closedloop/metrics.json \
+    --out outputs/tyrK_pairs \
+    --arm baseline m2601_merged_baseline - "무압축" \
+    --arm tyr_c100 m2601_merged_slim_tyr_u40_r slim_tyr_u40_r "탐색 적합도 KL_coc + MSE_vf" \
+    --arm tyrK     m2601_merged_slim_tyrK      slim_tyrK      "탐색 적합도 KL_coc 단독"
+
+# CoC 씬별 값 (alpasim venv, ASL 900개 ~10분)
+cd $ALPASIM &amp;&amp; uv run python $REPO/experiments/evaluation/coc_paired_tyrk.py \
+    --out $REPO/outputs/tyrK_pairs</pre>
+
+<p class="sub" style="margin-top:32px;padding-top:16px;border-top:1px solid var(--rule)">
+세 arm 모두 rollout 300 / 씬 150 / 씬당 2로 검증했고 씬 집합이 완전히 일치한다.
+전부 같은 아키텍처(Ada)에서 측정했다 — 연속 지표는 아키텍처 간 오차가 ~0.01이지만
+CoC 퇴화율 같은 <em>이산·임계값</em> 지표는 아키텍처에 따라 움직이므로, 5절의 비교는
+같은 카드에서만 유효하다.</p>
+
+</div>

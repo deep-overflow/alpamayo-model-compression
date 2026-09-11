@@ -32,8 +32,11 @@ REPO = Path(__file__).resolve().parents[2]
 
 def write_run(out_dir, per_clip, rows, src_cfg, clip_ids, note):
     out_dir.mkdir(parents=True, exist_ok=True)
+    # float64 before the mean, matching run_importance's acc/n and merge_importance:
+    # these gradients sit near 1e-7 and the per-clip arrays are stored fp32, so summing
+    # thousands of them in fp32 loses digits the selection can see
     np.savez(out_dir / "importance.npz",
-             **{k: v[rows].mean(axis=0) for k, v in per_clip.items()})
+             **{k: v[rows].astype(np.float64).mean(axis=0) for k, v in per_clip.items()})
     cfg = dict(src_cfg)
     cfg.update({"num_clips": len(rows), "clip_ids": clip_ids, "derived_from": note})
     (out_dir / "config.json").write_text(json.dumps(cfg, indent=2))

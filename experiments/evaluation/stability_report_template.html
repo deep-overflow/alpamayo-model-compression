@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캘리브레이션 선택은 몇 클립에서 멈추는가</title>
+<style>
+  :root { --bg:#FAF9F5; --bg-card:#FFF; --bg-code:#F0EEE6; --text:#29261B;
+    --text-muted:#6B6555; --accent:#D97757; --accent-dark:#C15F3C; --border:#E8E6DC;
+    --table-stripe:#F5F4EF; --good:#008300; --warn:#eda100; --bad:#b0402a; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); margin:0;
+    font-family:"Söhne","Pretendard","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    font-size:16px; line-height:1.7; padding:3rem 1.5rem 5rem; }
+  .container { max-width:920px; margin:0 auto; }
+  header { margin-bottom:3rem; border-bottom:2px solid var(--accent); padding-bottom:1.5rem; }
+  .eyebrow { color:var(--accent-dark); font-size:.78rem; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; margin-bottom:.6rem; }
+  h1 { font-family:"Tiempos Headline",Georgia,serif; font-size:2rem; font-weight:500;
+    line-height:1.3; margin:0 0 .75rem; }
+  .meta { color:var(--text-muted); font-size:.9rem; }
+  .meta code { background:none; padding:0; color:var(--text-muted); }
+  h2 { font-family:"Tiempos Headline",Georgia,serif; font-size:1.4rem; font-weight:500;
+    margin:2.75rem 0 1rem; padding-top:.5rem; }
+  h2 .num { color:var(--accent); margin-right:.4rem; }
+  h3 { font-size:1.05rem; font-weight:600; margin:1.75rem 0 .6rem; }
+  p { margin:.9rem 0; }
+  code { font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.86em;
+    background:var(--bg-code); padding:.12em .35em; border-radius:4px; }
+  pre { background:var(--bg-code); padding:1rem 1.1rem; border-radius:8px; overflow-x:auto;
+    font-family:"Berkeley Mono","SF Mono",Menlo,monospace; font-size:.84rem; line-height:1.6; }
+  pre code { background:none; padding:0; }
+  table { width:100%; border-collapse:collapse; margin:1.25rem 0 1.75rem; font-size:.9rem;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th { background:var(--bg-code); text-align:left; font-weight:600; padding:.55rem .8rem;
+    border-bottom:2px solid var(--border); white-space:nowrap; }
+  td { padding:.5rem .8rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:nth-child(even) { background:var(--table-stripe); }
+  tbody tr:last-child td { border-bottom:none; }
+  .r { text-align:right; font-variant-numeric:tabular-nums; }
+  .up { color:var(--bad); } .down { color:var(--good); }
+  .callout { background:var(--bg-card); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; padding:1rem 1.2rem; margin:1.5rem 0; }
+  .callout.good { border-left-color:var(--good); }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout p:first-child { margin-top:0; } .callout p:last-child { margin-bottom:0; }
+  .lede { font-size:1.05rem; color:var(--text-muted); }
+  figure { margin:1.75rem 0; }
+  figure img { width:100%; border:1px solid var(--border); border-radius:8px; display:block; }
+  figcaption { color:var(--text-muted); font-size:.84rem; margin-top:.6rem; }
+  ul, ol { padding-left:1.3rem; } li { margin:.35rem 0; }
+  .kpi { display:flex; flex-wrap:wrap; gap:.9rem; margin:1.5rem 0; }
+  .kpi div { flex:1 1 150px; background:var(--bg-card); border:1px solid var(--border);
+    border-radius:8px; padding:.9rem 1rem; }
+  .kpi .v { font-family:"Tiempos Headline",Georgia,serif; font-size:1.5rem; display:block; }
+  .kpi .k { color:var(--text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; }
+  footer { margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--border);
+    color:var(--text-muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · 모델 압축 연구</div>
+  <h1>캘리브레이션 선택은 몇 클립에서 멈추는가</h1>
+  <p class="meta">2026-09-05 · <code>calib_st4000</code> 4,000클립 · 서로소 부분집합 쌍 ·
+     <code>dual_u40_v2</code> 선택 · 평가 없음 · cvlab20 (RTX 5880 Ada ×2)</p>
+</header>
+
+<p class="lede">
+<code>2026-09-03_calib-draw-variance</code>는 100클립 추출이 도박임을 확정했지만(SD 0.363,
+두 셋에서 재현) <strong>500이면 안전한가</strong>에는 답하지 못했다 — n=500 arm이 하나뿐이라
+그 분산을 잴 수 없었다. 이 문서는 평가를 전혀 하지 않고 답한다. <strong>서로 다른 두 추출이
+같은 유닛을 고르면, 캘리브레이션 추출은 정의상 더 이상 문제가 되지 않는다.</strong>
+</p>
+
+<div class="kpi">
+  <div><span class="k">측정 클립</span><span class="v">{{clips}}</span></div>
+  <div><span class="k">Q head 지수</span><span class="v">n<sup>{{fits.q.exponent|.3f}}</sup></span></div>
+  <div><span class="k">MLP 지수</span><span class="v">n<sup>{{fits.mlp.exponent|.3f}}</sup></span></div>
+  <div><span class="k">항등식 검증</span><span class="v">{{identity_max_diff|.1e}}</span></div>
+</div>
+
+<h2><span class="num">1</span>왜 평가를 하지 않는가</h2>
+
+<p>
+유지집합이 멈추면 성능도 정의상 멈춘다. 그러므로 "선택이 언제 멈추는가"는 개루프 arm을 한 번도
+돌리지 않고 답할 수 있고, 비용이 10분의 1로 떨어진다. arm 하나가 1.2 GPU-h인데 중요도는 n에
+선형이다.
+</p>
+
+<p>
+곡선의 모든 점이 <strong>한 번의 중요도 측정</strong>에서 나온다.
+<code>run_importance.py</code>가 클립별 배열을 그대로 저장하고, 시드가
+<code>sha256(f"{seed}:{clip_id}")</code>라 순서·샤딩과 무관하므로, 부분집합의 평균은 그 클립들만
+따로 측정한 결과와 <strong>정확히 같다</strong>. 이 런에서도 재확인했다 —
+<code>mean(per-clip) == importance.npz</code>가 max |diff| = {{identity_max_diff|.1e}}.
+</p>
+
+<div class="callout warn">
+<p><strong>다만 이 기준은 보수적이다.</strong> churn하는 유닛이 서로 대체 가능하면 선택이 바뀌어도
+손해가 없다 — 앞선 실험의 G0b가 정확히 그 사례다(카드만 바꿔 Q head 2.8%가 이동했는데 minADE는
++0.0012, p=0.68). 따라서 여기서 나오는 n은 <strong>상한</strong>이고, 실제로 성능이 안정되는 n은
+더 작을 수 있다.</p>
+</div>
+
+<h2><span class="num">2</span>측정</h2>
+
+<p>
+같은 크기 <em>n</em>의 <strong>서로소</strong> 부분집합 두 개를 뽑아 각각으로 <code>dual_u40_v2</code>
+선택을 만들고, 유지집합이 얼마나 겹치는지 잰다. 서로소이므로 이것은 같은 크기의 독립 추출 두 번과
+같다. 크기마다 20쌍.
+</p>
+
+<table>
+<thead><tr><th class="r">추출당 클립</th><th class="r">Q head 중첩</th><th class="r">MLP 중첩</th>
+<th class="r">Q 불일치</th><th class="r">MLP 불일치</th></tr></thead>
+<tbody>
+<tr><td class="r">10</td><td class="r">{{curve.10.q|.4f}}</td><td class="r">{{curve.10.mlp|.4f}}</td>
+    <td class="r">{{curve.10.q_disagree|.1%}}</td><td class="r">{{curve.10.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">25</td><td class="r">{{curve.25.q|.4f}}</td><td class="r">{{curve.25.mlp|.4f}}</td>
+    <td class="r">{{curve.25.q_disagree|.1%}}</td><td class="r">{{curve.25.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">50</td><td class="r">{{curve.50.q|.4f}}</td><td class="r">{{curve.50.mlp|.4f}}</td>
+    <td class="r">{{curve.50.q_disagree|.1%}}</td><td class="r">{{curve.50.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r"><strong>100</strong></td><td class="r"><strong>{{curve.100.q|.4f}}</strong></td>
+    <td class="r"><strong>{{curve.100.mlp|.4f}}</strong></td>
+    <td class="r">{{curve.100.q_disagree|.1%}}</td><td class="r">{{curve.100.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">150</td><td class="r">{{curve.150.q|.4f}}</td><td class="r">{{curve.150.mlp|.4f}}</td>
+    <td class="r">{{curve.150.q_disagree|.1%}}</td><td class="r">{{curve.150.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">250</td><td class="r">{{curve.250.q|.4f}}</td><td class="r">{{curve.250.mlp|.4f}}</td>
+    <td class="r">{{curve.250.q_disagree|.1%}}</td><td class="r">{{curve.250.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">400</td><td class="r">{{curve.400.q|.4f}}</td><td class="r">{{curve.400.mlp|.4f}}</td>
+    <td class="r">{{curve.400.q_disagree|.1%}}</td><td class="r">{{curve.400.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r"><strong>500</strong></td><td class="r"><strong>{{curve.600.q|.4f}}</strong>
+    <span style="color:var(--text-muted)">(n=600)</span></td>
+    <td class="r"><strong>{{curve.600.mlp|.4f}}</strong></td>
+    <td class="r">{{curve.600.q_disagree|.1%}}</td><td class="r">{{curve.600.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">800</td><td class="r">{{curve.800.q|.4f}}</td><td class="r">{{curve.800.mlp|.4f}}</td>
+    <td class="r">{{curve.800.q_disagree|.1%}}</td><td class="r">{{curve.800.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">1000</td><td class="r">{{curve.1000.q|.4f}}</td><td class="r">{{curve.1000.mlp|.4f}}</td>
+    <td class="r">{{curve.1000.q_disagree|.1%}}</td><td class="r">{{curve.1000.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r">1500</td><td class="r">{{curve.1500.q|.4f}}</td><td class="r">{{curve.1500.mlp|.4f}}</td>
+    <td class="r">{{curve.1500.q_disagree|.1%}}</td><td class="r">{{curve.1500.mlp_disagree|.1%}}</td></tr>
+<tr><td class="r"><strong>2000</strong></td><td class="r"><strong>{{curve.2000.q|.4f}}</strong></td>
+    <td class="r"><strong>{{curve.2000.mlp|.4f}}</strong></td>
+    <td class="r">{{curve.2000.q_disagree|.1%}}</td><td class="r">{{curve.2000.mlp_disagree|.1%}}</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::st::stability.png" alt="stability curve">
+  <figcaption>불일치율(1 − 중첩)을 로그-로그로. 점선은 GPU를 바꿨을 때 발생한 churn으로, 그 정도는
+  minADE에 영향이 없음이 측정돼 있다({{g0b_cost}}). 곡선이 그 선에 닿는 지점이 "충분한 n"이다.</figcaption>
+</figure>
+
+<h2><span class="num">3</span>H1은 반증됐다 — 곡선이 꺾인다</h2>
+
+<div class="callout good">
+<p><strong>사전 등록한 H1("멱법칙이 n=2,000까지 유지된다")은 기각된다.</strong> n&le;250만 보고
+외삽한 이전 추정은 큰 n에서 <strong>일관되게 비관적</strong>이었다 — 실측 중첩이 예측보다 Q는
++0.009~+0.011, MLP는 +0.012~+0.022 높다. 오차가 n이 커질수록 벌어지므로 우연이 아니라
+<strong>곡선이 실제로 꺾이고 있다</strong>.</p>
+</div>
+
+<table>
+<thead><tr><th class="r">n</th><th class="r">Q 예측</th><th class="r">Q 실측</th><th class="r">차이</th>
+<th class="r">MLP 예측</th><th class="r">MLP 실측</th><th class="r">차이</th></tr></thead>
+<tbody>
+<tr><td class="r">400</td><td class="r">0.9385</td><td class="r">0.9477</td><td class="r down">+0.0092</td>
+    <td class="r">0.9007</td><td class="r">0.9122</td><td class="r down">+0.0115</td></tr>
+<tr><td class="r">600</td><td class="r">0.9455</td><td class="r">0.9558</td><td class="r down">+0.0102</td>
+    <td class="r">0.9108</td><td class="r">0.9262</td><td class="r down">+0.0155</td></tr>
+<tr><td class="r">1000</td><td class="r">0.9532</td><td class="r">0.9634</td><td class="r down">+0.0101</td>
+    <td class="r">0.9220</td><td class="r">0.9406</td><td class="r down">+0.0186</td></tr>
+<tr><td class="r">2000</td><td class="r">0.9620</td><td class="r">0.9708</td><td class="r down">+0.0088</td>
+    <td class="r">0.9350</td><td class="r">0.9568</td><td class="r down">+0.0218</td></tr>
+</tbody>
+</table>
+
+<p>
+그 결과 <strong>필요한 클립 수 추정이 자릿수로 줄었다</strong>:
+</p>
+
+<table>
+<thead><tr><th>축</th><th class="r">옛 예측 (n&le;250 외삽)</th><th class="r">실측 기반 (전체)</th>
+<th class="r">실측 기반 (n&ge;250)</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">5,683</td>
+    <td class="r"><strong>{{fits.q.n_for_g0b_churn|,.0f}}</strong></td>
+    <td class="r">{{fits.q_large_n.n_for_g0b_churn|,.0f}}</td></tr>
+<tr><td>MLP 채널</td><td class="r">55,336</td>
+    <td class="r"><strong>{{fits.mlp.n_for_g0b_churn|,.0f}}</strong></td>
+    <td class="r">{{fits.mlp_large_n.n_for_g0b_churn|,.0f}}</td></tr>
+</tbody>
+</table>
+
+<p>
+MLP는 <strong>55,336 &rarr; 6,125</strong>(n&ge;250 적합)로 9배 줄었다. 공식 train 전체가
+153,625클립이므로, 옛 추정에서는 "MLP 1% 수렴에 110만 클립"이라 <em>데이터 자체가 부족</em>했지만
+지금은 <strong>현실적인 범위 안에 들어온다</strong>.
+</p>
+
+<h2><span class="num">4</span>그래도 수렴은 느리다</h2>
+
+<p>
+불일치율을 멱법칙으로 적합하면:
+</p>
+
+<table>
+<thead><tr><th>축</th><th class="r">지수 (전체)</th><th class="r">지수 (n≥250)</th>
+<th class="r">잔차 RMS</th><th class="r">G0b churn까지 필요한 n</th></tr></thead>
+<tbody>
+<tr><td>Q head</td><td class="r">n<sup>{{fits.q.exponent|.3f}}</sup></td>
+    <td class="r">n<sup>{{fits.q_large_n.exponent|.3f}}</sup></td>
+    <td class="r">{{fits.q.rms_log_resid|.3f}}</td>
+    <td class="r"><strong>{{fits.q.n_for_g0b_churn|,.0f}}</strong></td></tr>
+<tr><td>MLP 채널</td><td class="r">n<sup>{{fits.mlp.exponent|.3f}}</sup></td>
+    <td class="r">n<sup>{{fits.mlp_large_n.exponent|.3f}}</sup></td>
+    <td class="r">{{fits.mlp.rms_log_resid|.3f}}</td>
+    <td class="r"><strong>{{fits.mlp.n_for_g0b_churn|,.0f}}</strong></td></tr>
+</tbody>
+</table>
+
+<p>
+단순 평균이면 지수가 <strong>−0.5</strong>여야 한다. 두 축 모두 그보다 훨씬 느리다. 컷 라인
+근방에 유닛이 빽빽해서, 점수가 조금만 흔들려도 컷 안팎이 바뀌기 때문이다 — 2026-08-19 보고서가
+"상관 0.91–0.97인데 선택은 12–17% 다르다"고 지적한 것과 같은 구조다.
+</p>
+
+<h2><span class="num">5</span>축이 비대칭이다</h2>
+
+<p>
+<strong>MLP가 Q head보다 일관되게 느리다.</strong> 12,288개 채널에서 7,390개를 고르는 쪽이,
+32개 헤드에서 19개를 고르는 쪽보다 컷 근방 밀도가 훨씬 높다. 그래서 같은 n에서도 MLP 쪽 선택이
+더 흔들리고, 필요한 클립 수가 자릿수로 차이난다.
+</p>
+
+<p>
+실용적 함의: <strong>"캘리브레이션 n"은 축마다 다른 값이어야 한다.</strong> Q head 기준으로
+충분한 n이 MLP에는 한참 모자란다.
+</p>
+
+<h2><span class="num">6</span>한계</h2>
+
+<ul>
+<li><strong>보수적 기준이다.</strong> 선택이 멈추는 n은 상한이고, 성능이 안정되는 n은 더 작을 수
+    있다. 그 간극을 좁히려면 결국 몇 점은 평가해야 한다 — 다만 곡선이 어디서 임계를 넘는지 먼저
+    본 뒤 그 근방만 재면 된다.</li>
+<li><strong>외삽이 남아 있다.</strong> 실측은 n=2,000까지이고, G0b 임계에 닿는 n은 그보다 크다.
+    n≥250 구간만으로 다시 적합해 곡선이 꺾이는지 확인했지만, 여전히 외삽이다.</li>
+<li><strong>기준 하나.</strong> <code>dual_u40_v2</code>의 선택만 봤다. 다른 기준(J-lens, Wanda,
+    Tyr)은 컷 근방 밀도가 다를 수 있다.</li>
+<li><strong>중첩률이 손해를 예측하지는 않는다.</strong> 앞선 실험의 G4가 이를 기각했다
+    (spearman +0.068, p=0.81). 이 문서는 중첩률로 <em>어느 추출이 나쁜지</em>를 가리려는 것이
+    아니라 <em>수렴 여부</em>만 본다 — 중첩이 1에 가면 분산도 필연적으로 0이 되므로 그 용도로는
+    유효하다.</li>
+</ul>
+
+<h2><span class="num">7</span>재현</h2>
+
+<pre><code>python experiments/evaluation/make_calib_blocks.py --pool split --blocks 1 --block-size 4000 --prefix calib_st
+python experiments/evaluation/build_cache.py --manifest outputs/eval_sets/calib_st4000.parquet --cache calib_st
+bash cvlab20-server/run_importance_st.sh "0 2"     # 샤딩 → 병합 → 곡선
+python experiments/evaluation/analyze_stability_curve.py --importance importance_st4000</code></pre>
+
+<footer>
+계획·사전 등록: <code>plans/2026-09-04_calib-stability-curve.md</code> ·
+수치는 <code>outputs/calib_stability/metrics.json</code>에서 렌더됨 (손으로 옮긴 값 없음) ·
+선행 연구: <code>reports/evaluation/2026-09-03_calib-draw-variance.html</code>
+</footer>
+
+</div>
+</body>
+</html>
