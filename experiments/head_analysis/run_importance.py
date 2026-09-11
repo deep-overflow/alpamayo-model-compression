@@ -134,6 +134,7 @@ def process_clip(model, processor, data, args, seed, acc):
         fm_loss, grads, leaves = pl.expert_fm_grads(
             model, cache, rope_deltas, x1, args.fm_steps, seed, prefill,
             k_draws=args.k_draws if args.traj_target == "gtk" else 1,
+            dims=args.traj_dims,
         )
     acc["traj"]["exp_q"] += expert_gates.q_scores()
     acc["traj"]["exp_mlp"] += expert_gates.mlp_scores()
@@ -194,6 +195,14 @@ def main():
                          "produces; independent: a fresh eps per step. G1 measured tied "
                          "at 29.9% of the GT-anchored loss (not degenerate, because the "
                          "flow is not straight), so tied is the default")
+    ap.add_argument("--traj-dims", default=None,
+                    help="restrict the flow-matching loss to these action channels, "
+                         "comma-separated (the action is unicycle (accel, curvature), so "
+                         "'0' and '1' give each component its own importance map). "
+                         "Omit for the shipped both-channel loss. The CoC half is "
+                         "unaffected, which makes two --traj-dims runs their own "
+                         "reproducibility control: their coc arrays should agree to the "
+                         "run-to-run floor while the traj arrays are the measurement")
     ap.add_argument("--n-best", type=int, default=6,
                     help="--traj-target bestn only: draws to pick the target from. "
                          "6 matches the minADE@6 the evaluation protocol reads")
@@ -219,6 +228,12 @@ def main():
                          "before the per-clip gates, so a masked unit's gate gradient is "
                          "exactly zero and it cannot re-enter a ranking")
     args = ap.parse_args()
+    if args.traj_dims is not None:
+        if args.traj_mode != "fm" or args.traj_target != "gt":
+            # only the shipped fm/gt branch threads dims through; anywhere else it
+            # would be accepted and silently ignored
+            ap.error("--traj-dims applies to --traj-mode fm --traj-target gt only")
+        args.traj_dims = [int(d) for d in str(args.traj_dims).split(",") if d != ""]
     if args.traj_mode == "infer" and args.traj_target != "gt":
         # the infer branch is matched first, so this combination would silently measure
         # the rollout path against the GT and ignore --traj-target entirely
@@ -309,6 +324,7 @@ def main():
         "k_draws": (args.k_draws if args.traj_mode == "infer"
                     or args.traj_target in ("self", "gtk") else None),
         "n_best": args.n_best if args.traj_target == "bestn" else None,
+        "traj_dims": args.traj_dims,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
 
