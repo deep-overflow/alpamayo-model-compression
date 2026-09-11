@@ -349,6 +349,52 @@ def main():
     fig.savefig(out / "plots" / "p2_arm_separation.png", dpi=150)
     plt.close(fig)
 
+    # p3 -- the headline negative: self-consistency does not order the arms
+    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    for cfg in args.configs:
+        ax.scatter(res[cfg]["d"][10], scores[cfg], s=70, color=colours[cfg], zorder=3)
+        ax.annotate(cfg.replace("slim_", ""), (res[cfg]["d"][10], scores[cfg]),
+                    textcoords="offset points", xytext=(7, -3), fontsize=8.5, color=INK)
+    ax.set_xlabel("d(1 s): plan self-consistency  (m, lower = more consistent)")
+    ax.set_ylabel("closed-loop score")
+    ax.set_title("A more self-consistent planner does not drive better")
+    ax.margins(x=0.22, y=0.18)
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "p3_consistency_vs_score.png", dpi=150)
+    plt.close(fig)
+
+    # p4 -- the confound: the same association, within-arm vs paired against baseline
+    from scipy.stats import spearmanr
+
+    by = {}
+    for r in per_rollout:
+        by.setdefault(r["config"], {})[r["scene"]] = r
+    common = sorted(set.intersection(*[set(v) for v in by.values()]))
+    base_d = np.array([by[base][s]["d_10"] for s in common], dtype=float)
+    base_s = np.array([by[base][s]["score"] for s in common], dtype=float)
+    rw, rp = [], []
+    for cfg in args.configs[1:]:
+        d1 = np.array([by[cfg][s]["d_10"] for s in common], dtype=float)
+        sc = np.array([by[cfg][s]["score"] for s in common], dtype=float)
+        ok = np.isfinite(d1) & np.isfinite(sc)
+        rw.append(spearmanr(d1[ok], sc[ok])[0])
+        ok2 = np.isfinite(d1 - base_d) & np.isfinite(sc - base_s)
+        rp.append(spearmanr((d1 - base_d)[ok2], (sc - base_s)[ok2])[0])
+    x = np.arange(len(args.configs) - 1)
+    fig, ax = plt.subplots(figsize=(6.8, 4.0))
+    ax.bar(x - 0.19, rw, width=0.36, color=C3, label="within arm (confounded)")
+    ax.bar(x + 0.19, rp, width=0.36, color=C1, label="paired vs baseline (control)")
+    ax.axhline(0, color=MUTED, lw=0.9)
+    ax.set_xticks(x)
+    ax.set_xticklabels([c.replace("slim_", "") for c in args.configs[1:]],
+                       rotation=12, fontsize=8.5)
+    ax.set_ylabel("Spearman rho with closed-loop score")
+    ax.set_title("Scene difficulty, not a link: the association does not survive pairing")
+    ax.legend(frameon=False, fontsize=8.5)
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "p4_confound.png", dpi=150)
+    plt.close(fig)
+
     metrics = {cfg: {"d": res[cfg]["d"].tolist(), "c": res[cfg]["c"].tolist(),
                      "v_null": res[cfg]["v"].tolist(),
                      "d_count": res[cfg]["d_cnt"].tolist(),
