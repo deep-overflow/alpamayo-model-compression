@@ -452,7 +452,79 @@ kept set 0.997 천장이 성능으로 새지 않는다. (3) cvlab20을 평가에
 에서 이미 기록한 패턴이다.</p>
 </div>
 
-<h2><span class="num">9</span>결론</h2>
+<h2><span class="num">9</span>평균 기준 전체 표</h2>
+
+<p>
+프로토콜의 1차 판정은 중앙값이다 — minADE 델타가 heavy-tailed라서다. 여기는 같은 데이터를
+<strong>평균으로만</strong> 본 것이고, 한 곳에서 판정이 달라진다.
+</p>
+
+<table>
+<thead><tr><th>minADE@6 평균 (m)</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">0.8236</td><td class="r">0.8417</td><td class="r">0.9995</td></tr>
+<tr><td>출하 <code>dual</code> (K=1)</td><td class="r">0.8904</td><td class="r">0.9498</td><td class="r">1.1192</td></tr>
+<tr><td><code>gtref</code> (K=1)</td><td class="r">0.8971</td><td class="r">0.9684</td><td class="r">1.1444</td></tr>
+<tr><td><code>gtk3</code> (K=3)</td><td class="r">0.8896</td><td class="r">0.9945</td><td class="r">1.1141</td></tr>
+<tr><td><code>gtk5</code> (K=5)</td><td class="r">0.9222</td><td class="r">0.9929</td><td class="r">1.1772</td></tr>
+<tr><td><code>gtk10</code> (K=10)</td><td class="r">0.9053</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><strong><code>self</code></strong></td><td class="r sig">1.1716</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><strong><code>bestn6</code></strong></td><td class="r sig">1.2275</td><td class="r">—</td><td class="r">—</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>minFDE@6 평균 (m)</th><th class="r">val500</th><th class="r">test500</th><th class="r">OOD-val</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td class="r">2.2050</td><td class="r">2.2673</td><td class="r">2.4959</td></tr>
+<tr><td>출하 <code>dual</code> (K=1)</td><td class="r">2.3304</td><td class="r">2.5459</td><td class="r">2.8514</td></tr>
+<tr><td><code>gtref</code> (K=1)</td><td class="r">2.3332</td><td class="r">2.5859</td><td class="r">2.8979</td></tr>
+<tr><td><code>gtk3</code> (K=3)</td><td class="r">2.3501</td><td class="r">2.6505</td><td class="r">2.8040</td></tr>
+<tr><td><code>gtk5</code> (K=5)</td><td class="r">2.4427</td><td class="r">2.6470</td><td class="r">2.9162</td></tr>
+<tr><td><code>gtk10</code> (K=10)</td><td class="r">2.3826</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><strong><code>self</code></strong></td><td class="r sig">3.1470</td><td class="r">—</td><td class="r">—</td></tr>
+<tr><td><strong><code>bestn6</code></strong></td><td class="r sig">3.4304</td><td class="r">—</td><td class="r">—</td></tr>
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>압축 비용 — 평균 (baseline 대비)</th><th class="r">minADE@6 val / test / OOD</th><th class="r">minFDE@6 val / test / OOD</th></tr></thead>
+<tbody>
+<tr><td>출하 <code>dual</code></td><td class="r">+0.067 / +0.108 / +0.120</td><td class="r">+0.125 / +0.279 / +0.356</td></tr>
+<tr><td><code>gtref</code></td><td class="r">+0.074 / +0.127 / +0.145</td><td class="r">+0.128 / +0.319 / +0.402</td></tr>
+<tr><td><code>gtk3</code></td><td class="r">+0.066 / +0.153 / +0.115</td><td class="r">+0.145 / +0.383 / +0.308</td></tr>
+<tr><td><code>gtk5</code></td><td class="r">+0.099 / +0.151 / +0.178</td><td class="r">+0.238 / +0.380 / +0.420</td></tr>
+<tr><td><strong><code>self</code></strong></td><td class="r sig">+0.348</td><td class="r sig">+0.942</td></tr>
+<tr><td><strong><code>bestn6</code></strong></td><td class="r sig">+0.404</td><td class="r sig">+1.226</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<p><strong>평균으로 보면 K 효과가 완전히 사라진다.</strong> 중앙값에서 유일하게 CI가 0을
+배제했던 test500 <code>gtk3</code>(+0.0147 ✱)가 평균으로는 <strong>+0.0261
+[−0.0114, +0.0660]</strong>으로 0을 포함한다. minFDE의 test500 두 칸도 마찬가지다.
+<strong>평균 기준 12개 비교 전부 CI에 0이 들어간다</strong>. 5절의 기각 결론이 평균 쪽에서
+더 깨끗하다.</p>
+</div>
+
+<div class="callout warn">
+<p><strong>평균 차이의 상당 부분은 꼬리다.</strong> 10% 절사평균과 나란히 보면:</p>
+<table>
+<thead><tr><th><code>gtref K=1</code> 대비</th><th class="r">평균 차이</th><th class="r">10% 절사평균</th></tr></thead>
+<tbody>
+<tr><td><code>gtk5</code> val500</td><td class="r">+0.0251</td><td class="r">+0.0075</td></tr>
+<tr><td><code>gtk3</code> OOD-val</td><td class="r">−0.0303</td><td class="r sig">+0.0387</td></tr>
+<tr><td><code>self</code> val500</td><td class="r">+0.2745</td><td class="r">+0.1256</td></tr>
+<tr><td><code>bestn6</code> val500</td><td class="r">+0.3304</td><td class="r">+0.2252</td></tr>
+</tbody>
+</table>
+<p>OOD의 <code>gtk3</code>는 평균이 −0.0303(좋아 보임)인데 절사평균은 +0.0387로 <strong>부호가
+뒤집힌다</strong> — 262클립에서 극단 몇 개가 평균을 끌어내린 것이다. 이래서 프로토콜이 중앙값을
+1차로 쓴다. 반면 <code>self</code>와 <code>bestn6</code>는 절사 후에도 +0.126 / +0.225가 남아
+<strong>꼬리만의 현상이 아니다</strong>.</p>
+</div>
+
+<h2><span class="num">10</span>결론</h2>
 
 <div class="callout bad">
 <p><strong>궤적 기준의 GT 앵커는 유지한다.</strong> 타깃을 모델 쪽으로 옮기는 두 방식(무작위
@@ -498,7 +570,7 @@ draw, GT 최근접 draw)은 개루프에서 유의하게 나쁘고 손해가 압
 제거해야 할 잡음이라는 함의는 <strong>틀렸다</strong>.
 </p>
 
-<h2><span class="num">10</span>한계</h2>
+<h2><span class="num">11</span>한계</h2>
 
 <ul>
 <li><strong>G3는 표본 수와 분리되지 않았다</strong>(4절). 자기 앵커의 안정성 이득이 앵커 때문인지
@@ -514,7 +586,7 @@ test500 · OOD-val은 측정하지 않았다. 효과 크기가 판별 한계의 
 그것을 검정한다.</li>
 </ul>
 
-<h2><span class="num">11</span>재현</h2>
+<h2><span class="num">12</span>재현</h2>
 
 <pre><code># G1: 결합 선택 (기울기 없음, forward만)
 .venv/bin/python experiments/head_analysis/run_selftraj_probe.py --gpu 0 --num-clips 100
