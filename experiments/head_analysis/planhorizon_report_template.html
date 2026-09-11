@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>폐루프의 실효 지평 — 지평 불일치는 실재하지만 서열을 설명하지 못한다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DDD8CC;
+    --c1: #2a78d6; --c2: #008300; --c3: #e87ba4; --c4: #eda100;
+    --good: #eef6ee; --warn: #fdf3e3; --bad: #fdeef2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.72 -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 22px 80px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 34px; }
+  h2 { font-size: 19px; margin: 46px 0 14px; padding-top: 18px;
+       border-top: 1px solid var(--rule); }
+  h2 .num { display: inline-block; min-width: 28px; color: var(--c1); font-weight: 700; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; }
+  p { margin: 11px 0; }
+  code { background: #F0EEE6; padding: 1px 5px; border-radius: 3px;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: #F0EEE6; padding: 13px 15px; border-radius: 6px; overflow-x: auto;
+        font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px;
+       text-transform: uppercase; letter-spacing: 0.04em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.hi td { background: #F3F1E9; font-weight: 600; }
+  .sig { color: var(--c1); font-weight: 600; }
+  .neg { color: #b0552f; }
+  figure { margin: 22px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; }
+  figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .callout { padding: 13px 17px; border-radius: 6px; margin: 18px 0;
+             border-left: 3px solid var(--muted); background: #F3F1E9; }
+  .callout.good { background: var(--good); border-left-color: var(--c2); }
+  .callout.warn { background: var(--warn); border-left-color: var(--c4); }
+  .callout.bad  { background: var(--bad);  border-left-color: var(--c3); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 16px; }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 640px) { .wrap { padding: 30px 15px 60px; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>폐루프의 실효 지평 — 지평 불일치는 실재하지만 서열을 설명하지 못한다</h1>
+<div class="sub">
+  2026-09-11 · 150씬 × 5 arm · arm당 27,130개 계획 · <strong>GPU 0, 재실행 0</strong> ·
+  이미 저장된 폐루프 로그만 사용 · 계획 <code>plans/2026-09-11_effective-plan-horizon.md</code>
+</div>
+
+<div class="callout lede">
+<p><strong>질문.</strong> 개루프는 6.4초 궤적을 채점하는데 폐루프는 0.1초마다 정책을 다시
+묻고 한 스텝만 전진한다. 그렇다면 <strong>기준 간 차이가 실행되지 않는 먼 지평에 살고
+있어서</strong> 폐루프가 그 차이를 못 보는 것 아닌가? hard100에서 방법 간 서열이 소멸한 것도
+그래서 아닐까?</p>
+<p><strong>답.</strong> 지평 불일치는 실재한다(계획은 6.4초 중 <strong>1.9초</strong>까지만
+현실을 기술한다). 그러나 <strong>차이는 먼 지평이 아니라 실행되는 앞 구간에 몰려 있다</strong>
+— arm 간 분산이 1.0초에서 최대고 6.4초로 갈수록 줄어든다. 전제는 참인데 결론으로 가는 다리가
+없다.</p>
+</div>
+
+<h2><span class="num">1</span>왜 무료인가 — 이미 다 기록되어 있다</h2>
+
+<p>폐루프 롤아웃은 매 정책 스텝마다 <strong>계획 전체를 로그에 남긴다</strong>.
+<code>ALPASIM_ASL_SKIP_IMAGES=1</code>로 카메라 프레임을 버려도 드라이버 응답은 남기기
+때문에, 9,000개 롤아웃 전부가 이미 디스크에 있다.</p>
+
+<table>
+<thead><tr><th>ASL 메시지</th><th>내용</th><th class="r">롤아웃당</th></tr></thead>
+<tbody>
+<tr><td><code>driver_return.trajectory.poses</code></td>
+    <td><strong>계획</strong> — 65 pose, 0.1초 간격, span 정확히 6,400,000 us</td><td class="r">~180</td></tr>
+<tr><td><code>controller_return.states[*]</code></td>
+    <td><strong>실현 경로</strong> — <code>pose_local_to_rig</code>, 10 Hz</td><td class="r">~197</td></tr>
+</tbody>
+</table>
+
+<p>설정에서 미리 확인된 것(측정 대상이 아니다): 제어 주기
+<code>control_timestep_us = 100_000</code> = <strong>0.1초</strong>, 컨트롤러 전진량
+<code>future_time_us − state.timestamp_us</code> = 0.1초, 컨트롤러는 계획을
+<strong>전체로</strong> 받는다(비-force-GT 구간에서 절단 없음), 그리고 폐루프는
+<code>num_traj_samples = 1</code> — <strong>개루프의 minADE@6과 달리 draw 하나를 실행한다</strong>.</p>
+
+<h2><span class="num">2</span>측정량</h2>
+
+<p>시각 <code>t</code>에 발행된 계획 <code>P_t</code>(타임스탬프 τ₀..τ₆₄)와, 같은 타임스탬프에서
+실제로 일어난 경로 <code>R</code>를 비교한다. 둘 다 같은 local 프레임이라 좌표 변환이 없다.</p>
+
+<table>
+<thead><tr><th>곡선</th><th>정의</th><th>읽는 법</th></tr></thead>
+<tbody>
+<tr><td><code>d(k)</code></td><td>‖P_t[k] − R(τ_k)‖</td>
+    <td>계획이 실제로 일어난 일을 몇 초 앞까지 기술하는가</td></tr>
+<tr><td><code>c(k)</code></td><td>‖P_t[k+1] − P_{t+1}[k]‖</td>
+    <td>0.1초 뒤 다시 물었을 때 먼 지평이 얼마나 바뀌는가</td></tr>
+<tr><td><code>v(k)</code></td><td>등속 외삽 대비 같은 괴리</td>
+    <td><strong>널</strong> — 일치가 공짜인지 판별</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<p><strong><code>v(k)</code>가 <code>d(k)</code>를 정직하게 만든다.</strong> <code>d</code>가
+작다는 건 계획이 실제와 <em>일치했다</em>는 뜻이지 계획이 그 결과를 <em>만들었다</em>는 뜻이
+아니다. 등속 직진 중이면 어떤 멀쩡한 계획도 몇 초는 맞는다. 그래서 <code>d</code> 단독이 아니라
+<strong><code>d/v</code></strong>를 읽는다.</p>
+</div>
+
+<h3>k는 정확히 0.1초 단위다 — 그리고 그걸 확인했다</h3>
+
+<p><code>poses[0]</code>이 질문한 순간이므로 <code>k=10</code>이 정확히 1.0초 앞이다. 가정하지
+않고 쟀다: <strong>V1 — <code>k=0</code>에서의 거리가 0.0002 m</strong>. 프레임이 어긋났다면
+여기서 큰 상수 오프셋이 나왔을 것이다. 이 한 숫자가 나머지 전부를 지탱한다.</p>
+
+<h2><span class="num">3</span>H1 — 실효 지평은 1.9초. 사전 등록 기준으로는 미결</h2>
+
+<table>
+<thead><tr><th>임계</th><th class="r">계획 <code>d(k)</code></th><th class="r">등속 널 <code>v(k)</code></th></tr></thead>
+<tbody>
+<tr class="hi"><td>0.5 m</td><td class="r">19 스텝 = <strong>1.9 s</strong></td><td class="r">12 스텝 = 1.2 s</td></tr>
+<tr><td>1.0 m</td><td class="r">27 스텝 = 2.7 s</td><td class="r">—</td></tr>
+<tr><td>2.0 m</td><td class="r">37 스텝 = 3.7 s</td><td class="r">—</td></tr>
+</tbody>
+</table>
+
+<p>사전 등록한 경계는 <strong>≤1.0초(전제 성립) / ≥3.0초(전제 붕괴)</strong>였고 1.9초는 그
+사이다. <strong>미결로 기록한다</strong> — 사후에 경계를 옮기지 않는다.</p>
+
+<p>내용으로 보면 어느 쪽 극단도 아니다. 실행되는 0.1초 구간은 계획과 사실상 동일하고
+(<code>d</code> = 0.003 m), 계획은 약 2초까지 현실을 0.5 m 안에서 기술하며, 6.4초 끝에서는
+6.1 m 벗어난다.</p>
+
+<figure>
+  <img src="PLOT::ph::p1_horizon_curves.png" alt="d(k)와 c(k) 곡선">
+  <figcaption>왼쪽: <code>d(k)</code>와 등속 널(점쇄선). 점선은 0.5 / 1 / 2 m 임계,
+  세로 파선이 실제로 실행되는 0.1초. 오른쪽: <code>c(k)</code> — 0.1초 간격 연속 계획 사이의
+  변화량.</figcaption>
+</figure>
+
+<div class="callout">
+<p><strong>계획의 우위는 가까울수록 크다.</strong> <code>d/v</code>가
+<strong>0.26(0.5초) → 0.32(1초) → 0.48(3초) → 0.55(6.4초)</strong>. 널도 1.2초까지는 0.5 m
+안에 있으므로, 2초까지의 일치 중 상당 부분은 "직진 중이라 맞은 것"이다. 계획이 널 대비 실제로
+벌어들이는 정보는 <strong>앞쪽에 몰려 있다</strong>.</p>
+</div>
+
+<h2><span class="num">4</span>H2 — 기각. 그리고 방향이 반대다</h2>
+
+<p>가설이 성립하려면 arm 간 차이가 <strong>먼 지평</strong>에 있어야 한다. 정반대다.</p>
+
+<table>
+<thead><tr><th>리드 시간</th><th class="r"><code>dual</code></th><th class="r"><code>tyr_r</code></th>
+<th class="r"><code>dual+h4</code></th><th class="r"><code>traj</code></th>
+<th class="r">arm 간 분산 / 평균</th></tr></thead>
+<tbody>
+<tr><td>0.1 s</td><td class="r">+0.203</td><td class="r">+0.013</td><td class="r">+0.094</td><td class="r">+0.308</td><td class="r">0.274</td></tr>
+<tr><td>0.3 s</td><td class="r">+0.266</td><td class="r">−0.015</td><td class="r">+0.100</td><td class="r">+0.414</td><td class="r">0.372</td></tr>
+<tr><td>0.5 s</td><td class="r">+0.250</td><td class="r">−0.067</td><td class="r">+0.096</td><td class="r">+0.421</td><td class="r">0.427</td></tr>
+<tr class="hi"><td>1.0 s</td><td class="r">+0.181</td><td class="r">−0.145</td><td class="r">+0.096</td><td class="r">+0.385</td><td class="r"><strong>0.481</strong></td></tr>
+<tr><td>2.0 s</td><td class="r">+0.111</td><td class="r">−0.187</td><td class="r">+0.110</td><td class="r">+0.298</td><td class="r">0.455</td></tr>
+<tr><td>3.0 s</td><td class="r">+0.080</td><td class="r">−0.194</td><td class="r">+0.111</td><td class="r">+0.231</td><td class="r">0.407</td></tr>
+<tr><td>4.5 s</td><td class="r">+0.063</td><td class="r">−0.196</td><td class="r">+0.098</td><td class="r">+0.163</td><td class="r">0.349</td></tr>
+<tr><td>6.4 s</td><td class="r">+0.038</td><td class="r">−0.186</td><td class="r">+0.094</td><td class="r">+0.130</td><td class="r">0.311</td></tr>
+</tbody>
+</table>
+<p style="color:var(--muted);font-size:13px;margin-top:-6px">
+값은 <code>(arm − baseline) / baseline</code>.</p>
+
+<figure>
+  <img src="PLOT::ph::p2_arm_separation.png" alt="arm 분리의 지평 의존성">
+  <figcaption>baseline 기준 arm 분리. 세로 파선이 실행되는 0.1초. 분리가 앞쪽에서 벌어지고
+  뒤로 갈수록 좁아진다.</figcaption>
+</figure>
+
+<div class="callout bad">
+<p><strong>잘려나가는 구간은 오히려 arm들이 서로 비슷한 구간이다.</strong> 그러므로
+hard100에서 서열이 소멸한 것(여섯 쌍 전부 p ≥ 0.38)을 지평 불일치로 설명할 수 없다. 폐루프는
+방법들이 가장 많이 다른 곳을 정확히 보고 있다.</p>
+</div>
+
+<h2><span class="num">5</span>계획에 없던 결과 — 계획 자기 일관성은 주행을 예측하지 못한다</h2>
+
+<p><code>d(1 s)</code>는 <strong>자기</strong> 일관성이다. 양쪽이 같은 모델에서 나온다 — 예측도
+모델 것이고, 실현 경로도 그 모델이 그 사이 10번 더 답한 결과다. GT가 개입하지 않는다.</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">폐루프 점수</th><th class="r"><code>d(1 s)</code></th></tr></thead>
+<tbody>
+<tr class="hi"><td><code>slim_dual_u40_v2</code></td><td class="r"><strong>0.8283</strong></td><td class="r">0.1394</td></tr>
+<tr><td><code>slim_tyr_u40_r</code></td><td class="r">0.7864</td><td class="r"><strong>0.1009</strong></td></tr>
+<tr><td><code>slim_traj_u40_v2</code></td><td class="r">0.7830</td><td class="r">0.1635</td></tr>
+<tr><td>baseline</td><td class="r">0.7496</td><td class="r">0.1181</td></tr>
+<tr><td><code>slim_dual_u40_qcut4_v2</code></td><td class="r">0.7371</td><td class="r">0.1294</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::ph::p3_consistency_vs_score.png" alt="자기 일관성 대 주행 점수">
+  <figcaption><code>tyr_r</code>이 가장 자기 일관적인데(<code>dual</code>보다 1초 격차가 28%
+  작다) 주행은 <code>dual</code>이 이긴다. 두 축이 단조가 아니다.</figcaption>
+</figure>
+
+<div class="callout warn">
+<p><strong>기전.</strong> <code>d(1 s)</code>는 <strong>우유부단</strong>(나쁨)과
+<strong>새 관측에 대한 반응</strong>(좋음)을 구별하지 못한다. 잘 모는 차는 보행자가 나오거나
+앞차가 제동하면 1초 전 계획을 <em>어겨야</em> 한다. 극단적으로, "현재 속도로 영원히 직진"만
+계획하는 모델은 자기 일관성이 거의 완벽하면서 최악의 운전자다.</p>
+</div>
+
+<p>이것은 이 저장소의 <strong>"X는 능력을 예측하지 못한다" 계열 네 번째 사례</strong>다 —
+유지집합 겹침, 재구성 오차, 추정량 안정성에 이어 계획 자기 일관성.</p>
+
+<h3>같이 기록하는 함정: 씬 난이도 교락</h3>
+
+<p>arm <em>안에서</em> 보면 관계가 깨끗해 보인다 — ρ(<code>d(1 s)</code>, 점수)가
+<strong>−0.45 ~ −0.57, p ≤ 1e-8</strong>. 그런데 씬별로 baseline과 차분하면 무너진다.</p>
+
+<table>
+<thead><tr><th>arm</th><th class="r">ρ (arm 내부)</th><th class="r">p</th>
+<th class="r">ρ (baseline 페어드)</th><th class="r">p</th>
+<th class="r">중앙값 Δd(1 s)</th></tr></thead>
+<tbody>
+<tr><td><code>dual</code></td><td class="r">−0.574</td><td class="r">1.5e-14</td>
+    <td class="r">−0.080</td><td class="r">0.33</td><td class="r sig">+0.0128</td></tr>
+<tr><td><code>tyr_r</code></td><td class="r">−0.450</td><td class="r">7.6e-09</td>
+    <td class="r neg">−0.331</td><td class="r">3.6e-05</td><td class="r sig">−0.0096</td></tr>
+<tr><td><code>dual+h4</code></td><td class="r">−0.496</td><td class="r">1.1e-10</td>
+    <td class="r">−0.091</td><td class="r">0.27</td><td class="r sig">+0.0092</td></tr>
+<tr><td><code>traj</code></td><td class="r">−0.534</td><td class="r">2.1e-12</td>
+    <td class="r">−0.041</td><td class="r">0.62</td><td class="r sig">+0.0297</td></tr>
+</tbody>
+</table>
+
+<figure>
+  <img src="PLOT::ph::p4_confound.png" alt="교락된 상관과 페어드 대조">
+  <figcaption>같은 양을 두 방식으로 잰 것. 어려운 씬이 계획 격차를 키우고 점수를 낮추므로,
+  arm 내부 상관은 대부분 씬 난이도다.</figcaption>
+</figure>
+
+<p><code>analyze_lateral_score_join</code>이 lateral 지표에서 찾아낸 것과 <strong>같은
+함정</strong>이다: 같은 롤아웃 쌍에서 뽑은 두 양은 씬 잡음을 공유한다. 다만 중앙값 차이 자체는
+유의하므로(Wilcoxon 1e-4 ~ 9e-15) <strong>프루닝이 짧은 지평 계획 일관성을 체계적으로 바꾸는
+것은 사실</strong>이다 — 그게 주행을 사주지 못할 뿐이다.</p>
+
+<h2><span class="num">6</span>이 측정이 답하지 못하는 것</h2>
+
+<div class="callout">
+<p><strong>컨트롤러 내부 lookahead는 관측 불가.</strong> 컨트롤러는 계획 전체를 받지만 그중
+어디를 읽는지는 닫힌 VDC 서비스 안에 있다. 이 측정은 계획의 어느 구간이
+<strong>실현되는가</strong>를 답하지, 어느 구간을 <strong>읽는가</strong>를 답하지 않는다.</p>
+<p><strong>상대 척도를 골랐다.</strong> "1.0초에서 최대"는 baseline 대비 비율이다. 절대
+미터로는 6.4초 쪽 폭이 크다(1.93 m vs 0.06 m). 1초의 센티미터와 6.4초의 미터 중 무엇이 주행에
+더 중요한지는 이 측정이 정하지 못한다. H2 결론이 그래도 서는 이유는 따로 있다 — 페어드
+분석에서 이 양이 <strong>어느 지평에서도</strong> 점수를 예측하지 못했다.</p>
+<p><strong>표본이 독립이 아니다.</strong> 한 롤아웃 안 연속 계획들은 겹치는 미래를 본다.
+그래서 <code>d(k)</code> 자체에는 CI를 붙이지 않았고, 유의성은 롤아웃 단위로 집계한 뒤 씬별로
+페어드 비교한 곳에서만 주장했다.</p>
+</div>
+
+<h2><span class="num">7</span>결론과 다음</h2>
+
+<p>가설의 <strong>기전은 실재하지만 설명력이 없다</strong>. (가) 지평 불일치는 참이고 크다
+(6.4초 중 실효 1.9초, 실행은 0.1초). (나) 그러나 차이가 먼 지평에 산다는 두 번째 항이 데이터와
+반대다. 시험이 앞쪽 절반만 채점하는 건 사실인데, 학생들 실력 차가 원래 앞쪽 절반에서 드러난다면
+그것으로 등수를 설명할 수 없다.</p>
+
+<p><code>dual+h4</code>가 이미 같은 방향의 반례였다 — 개루프는 해를 못 보고(평균 델타 CI가 세
+세트 모두 0 포함) 폐루프는 <strong>−0.091 [−0.134, −0.050], p = 3e−06</strong>, 기전은 최장
+차선 이탈 4.87 → 5.64초. 제어 주기가 0.1초여도 폐루프는 <strong>재계획을 가로질러</strong>
+오차를 누적한다. 폐루프는 "지평이 잘린 개루프"가 아니라 다른 오차 과정이다.</p>
+
+<div class="callout good">
+<p><strong>다음에 무엇을 할까.</strong> 지평 절단 개루프 ADE(<code>run_baseline.py</code>가
+waypoint를 저장하지 않아 재실행이 필요한 <em>유료</em> 시험)는 <strong>지금 돌릴 이유가
+없다</strong> — 그 전제가 방금 반증됐다.</p>
+<p>대신 <strong>표본 수 축</strong>이 미검정으로 남는다. 폐루프는 <code>num_traj_samples = 1</code>로
+draw 하나를 실행하고, 개루프는 6개 중 최솟값(minADE@6)을 본다. 순서통계량 대 분포의 차이이고,
+이번 측정이 반대하는 바가 없으며, 앵커 연구에서 best-of-6이 가장 나빴던 것과 같은 축이다.</p>
+</div>
+
+<h2><span class="num">8</span>재현</h2>
+
+<pre><code># alpasim의 venv로 실행한다 (protobuf 로그를 읽으려면 alpasim_utils 필요)
+cd /home/cvlab21/project/chan/alpasim &amp;&amp; uv run python \
+    &lt;repo&gt;/experiments/head_analysis/analyze_planhorizon.py \
+    --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    --configs baseline slim_dual_u40_v2 slim_tyr_u40_r \
+              slim_dual_u40_qcut4_v2 slim_traj_u40_v2 \
+    --n-scenes 150 --out &lt;abs&gt;/outputs/planhorizon</code></pre>
+
+<p>GPU를 쓰지 않고 약 12분. 검증 항목: <strong>V1</strong> 프레임 일치(k=0에서 0.0002 m),
+<strong>V2</strong> 격자(모든 계획 65 pose / 6,400,000 us, 위반 0), <strong>V3</strong>
+force-GT 구간은 계획이 없어 자동 제외, <strong>V4</strong> 롤아웃 끝을 넘는 구간은 외삽하지 않고
+제외하며 k별 표본 수를 <code>metrics.json</code>에 기록.</p>
+
+<footer>
+  Alpamayo 1.5 구조적 프루닝 · 2026-09-11 ·
+  계획 <code>plans/2026-09-11_effective-plan-horizon.md</code> ·
+  분석 <code>experiments/head_analysis/analyze_planhorizon.py</code> ·
+  데이터 <code>outputs/planhorizon/</code> ·
+  관련 <code>2026-09-10_head-vs-mlp-budget</code>, <code>2026-09-05_hard100-closedloop</code>,
+  <code>2026-09-10_selftraj-anchor</code>
+</footer>
+
+</div>
+</body></html>
