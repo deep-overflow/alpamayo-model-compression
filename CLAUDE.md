@@ -283,6 +283,21 @@ avoid repeating that.
   `--mode couple` groups by whether the CoC text differs from the reference arm's, a property of
   the pair rather than of either arm's own score.
 
+- `label_actions.py` / `make_calib_strat.py` / `analyze_strat_calib.py` / `launch_strat_calib.sh`
+  (2026-09-11) — calibration draws **by rule instead of greedy matching**. `label_actions.py
+  --candidates N` labels random official-train clips with `bucket5` from the egomotion zips at
+  the calibration t0 (the bucket is a property of (clip, t0): `make_calib_blocks` re-picking the
+  window is how the `tr` sets silently lost their 20%/bucket balance and ended at 35–47% cruise);
+  `--raw-from-cache` rebuilds `traj_to_action` (64, 2) on CPU from the npz to check the strata in
+  the space `I_traj` is fitted on. `make_calib_strat.py --rules rd:c se:abc su:abc` draws disjoint
+  sets (random / stratified to the test500 mix 56/13/15/9/7 / uniform 20×5), asserting quotas and
+  disjointness from every `calib_*` manifest and eval set. The launcher runs importance → slim
+  (`--no-state`, ~30 s) → test500 as K-worker pools that claim only **empty** cards; `DIRECT_ENV`
+  makes it usable on cvlab20 (no `run_retry_host.sh` there). Two traps it encodes: a run is
+  complete only when `metrics.json` says `n_clips == 100` (`run_importance.save()` checkpoints
+  every 10 clips, so `importance.npz` exists at clip 10), and `pkill -f` on a launcher leaves its
+  python child running on the card. Result and recommendation are in the report row above.
+
 Determinism: `CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA init, `use_deterministic_algorithms`,
 cudnn deterministic, TF32 off. Two runs agree bitwise **within one GPU architecture** — the same
 clip and seed gave 0.286 on Ada and 0.291 on Blackwell, and 3–4% of clips produce different CoC
@@ -785,6 +800,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-09-09_balance-openloop.html` | `evaluation/balance_openloop_report_template.html` | 위 예측의 개루프 검정. δ=+0.10은 세 세트 모두 `dual`과 구별 불가(+0.0001/−0.0023/+0.0086, 여섯 CI 전부 0 포함)이고 δ=+0.20은 val500에서 +0.0102 [+0.0005,+0.0240]이나 **미재현**(여덟 비교 중 한 칸, test500 replication 미실행). 곱셈형 파라미터화는 **다이얼이 아니라 스위치**다 — rank가 균등이라 λ∈[0.4,0.6] 밖에서 포화하므로 가법형(δ)을 쓸 것 |
 | `2026-09-10_selftraj-anchor.html` | `evaluation/selftraj_report_template.html` | `I_CoC`는 모델 자신의 rollout인데 `I_traj`만 GT 앵커인 비대칭을 없애는 5 arm × 3세트. 2026-08-23 취소 근거(*"dense의 x̂₁ ≈ GT"*)는 **거짓** — 단일 draw는 GT에서 1.76 m(minADE@6은 0.824), 8 draw가 2.65 m 범위. **타깃을 모델 쪽으로 옮기면 세 세트 확정 기각**(`self` +0.054/+0.105/+0.119, `bestn6` +0.130/+0.164/+0.147, 12개 CI 전부 0 배제, 10% 절사 후에도 +0.126~+0.225), 반대로 **GT 유지 + 노이즈 K배는 재현되는 효과 없음**. best-of-6이 가장 나쁜 것이 결과를 재정의한다 — 타깃은 on-manifold가 아니라 **전형적**이어야 하고, best-of-n은 순서통계량이라 어느 분포의 전형도 아니다. 규칙 둘: **추정량의 안정성은 선택의 품질을 예측하지 못하고**(split-half +0.036인데 개루프 +0.054), **`\|Σ\|` 추정량은 표본으로 정밀도를 못 산다**(K 10배 → 크기 8.8배, 분산 불변, `rank_norm`이 스케일 불변이라 순위 no-op). 부수 검증: `dualgtref`(같은 기준 재측정)가 세 세트에서 출하본과 구별 불가라 **중요도 측정은 한 번이면 되고, `run_importance`의 비결정성(유지집합 0.997 천장)은 무해하며, cvlab20을 평가에 써도 된다**(1,262클립) |
 | `2026-09-11_effective-plan-horizon.html` | `head_analysis/planhorizon_report_template.html` | 개루프는 6.4초를 채점하는데 폐루프는 0.1초마다 재계획한다 — 그래서 기준 간 차이를 못 보는가? **이미 저장된 롤아웃 로그만으로**(GPU 0, 12분, arm당 27,130개 계획) 잰다: 매 정책 스텝이 계획 전체를 `driver_return.trajectory`(65 pose, span 정확히 6.4 s)로 남기고 실현 경로는 `controller_return.states`에 있으며 **둘 다 같은 local 프레임**(k=0 거리 0.0002 m로 확인). **지평 불일치는 실재**하지만(계획이 현실을 0.5 m 안에서 기술하는 건 6.4초 중 **1.9초**, 실행은 0.1초) **차이가 먼 지평에 산다는 두 번째 항이 반대**다 — arm 간 분산이 **1.0초에서 최대(0.481)**, 6.4초에서 0.311로 줄어든다. 그래서 hard100의 서열 소멸을 지평으로 설명할 수 없다. 등속 널이 필수다(널도 1.2초까지 0.5 m 안, `d/v` 0.26→0.55로 계획의 우위는 **가까울수록 크다**). 부수 결과가 더 오래 남는다 — **계획 자기 일관성은 주행을 예측하지 못한다**: `tyr_r`이 가장 자기 일관적인데(`d(1s)` 0.1009 vs `dual` 0.1394) 주행은 `dual`이 이긴다(0.8283 vs 0.7864). `d(1s)`가 우유부단과 **새 관측에 대한 반응**을 구별하지 못하기 때문이고, 겹침·재구성 오차·추정량 안정성에 이은 **네 번째 "X는 능력을 예측 못 한다"**. 함정도 같이 기록 — arm 내부 ρ=−0.45~−0.57(p≤1e-8)이 **씬별 페어드로는 −0.04~−0.09(p=0.27~0.62)로 소멸**(씬 난이도 교락, `analyze_lateral_score_join`과 같은 함정) |
+| `2026-09-12_action-stratified-calib.html` | `evaluation/strat_calib_report_template.html` | 캘리브레이션 100클립의 **추출 규칙** 3종 × 3 seed(rd 무작위 / se 평가셋 조성 bucket5 층화 / su 균등 층화), test500. **se가 rd보다 네 버킷 전부 유의하게 좋고**(−0.153 [−0.190,−0.117], SD 절반) 사전 등록 H4("조성 통제는 무효")를 뒤집었다; su는 turn만 −0.253 사고 se 대비 cruise +0.165·stop +0.134를 잃는다(G2 기각); 출하 프로토콜인 순차 그리디 6축 매칭(nt)은 최악이고 손해는 전부 cruise. **9 arm의 dual 유지집합 중첩은 규칙과 무관하게 Q ~90.7% / MLP ~85.4%** — 선택은 같은데 성능이 0.15–0.19 갈리는 네 번째 사례. 권고: 표준 추출을 `se`로, 단 hard100 폐루프 1회 조건 |
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
 `ls reports/evaluation/` is the full set (61 entries as of 2026-09-11: 59 html + 2 tex).
 

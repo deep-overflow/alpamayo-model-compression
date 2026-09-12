@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-09-12</div>
+  <h1>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</h1>
+  <div class="meta">
+    3 추출 규칙 &times; 3 seed = 9 <code>dual_u40_v2</code> arm, test500 minADE@6, cvlab20 (Ada), 무압축 <code>baseline_ada_ps_test</code>와 페어드.
+    플랜 <code>plans/2026-09-11_action-stratified-calib.md</code> &middot; 분석 <code>experiments/evaluation/analyze_strat_calib.py</code> &middot; 산출물 <code>outputs/strat_calib/</code>
+  </div>
+</header>
+
+<h2><span class="num">0</span>요약</h2>
+
+<div class="callout">
+  <strong>캘리브레이션 100클립을 <em>어떻게 뽑느냐</em>가 24% 프루닝의 대가를 0.15&ndash;0.19 m 움직인다 &mdash; 그런데 어느 규칙도 dual 유지집합을 n=100 잡음 바닥(Q ~90.7% / MLP ~85.4%) 이상으로 바꾸지 않는다.</strong>
+  평가셋 조성(56/13/15/9/7)으로 층화한 무작위 추출 <code>se</code>는 순수 무작위 <code>rd</code>보다 <b>네 버킷 전부에서 유의하게</b> 좋고(전체 &minus;0.153 [&minus;0.190,&minus;0.117], p=2e-21) seed 간 SD가 절반이다(0.083 vs 0.177). 균등 층화 <code>su</code>(20%&times;5)는 turn만 산다(&minus;0.253, p=0.002)&mdash;대신 <code>se</code> 대비 cruise +0.165, stop +0.134를 잃는다. 출하 프로토콜인 순차 그리디 6축 매칭(<code>nt</code> 블록)은 세 규칙 중 최악이고(평균 1.384, SD 0.354) 손해는 전부 cruise 붕괴다.
+</div>
+
+<table>
+  <tr><th>게이트 (사전 등록)</th><th>판정</th><th>근거</th></tr>
+  <tr><td>G0 무결성 (a&ndash;d)</td><td class="good">PASS</td><td>쿼터 정확, 9세트 서로소, 라벨=캐시 700/700, raw action 층 분리 (mean|&kappa;| turn 0.035 vs cruise 0.0008)</td></tr>
+  <tr><td>G1 6축 매칭은 무의미?</td><td class="bad">"해롭다"</td><td>rd &minus; nt = &minus;0.190 [&minus;0.234,&minus;0.147], 전부 cruise(&minus;0.365). 단 매칭과 순차 배제는 미분리</td></tr>
+  <tr><td>G2 다양성 &rarr; 비-cruise</td><td class="bad">기각 (1/3)</td><td>su &minus; rd: turn &minus;0.253* 만. accel &minus;0.069 n.s., stop +0.034 n.s.</td></tr>
+  <tr><td>G3 cruise 대가</td><td>없음 (rd 대비)</td><td>su &minus; rd cruise &minus;0.015 n.s.; 대가는 se 대비에서 +0.165*</td></tr>
+  <tr><td>G4 평가셋 매칭 층화 = 무효?</td><td class="bad">기각, 반대 방향</td><td>se &minus; rd 전 버킷 음수·유의. H4(null 예측)가 틀렸다</td></tr>
+  <tr><td>G5 seed 간 SD (참고)</td><td>&mdash;</td><td>nt 0.354 &gt; rd 0.177 &gt; su 0.076 &asymp; se 0.083</td></tr>
+</table>
+
+<h2><span class="num">1</span>왜 이 실험인가</h2>
+
+<p>캘리브레이션 추출(<code>make_eval_sets.py</code> / <code>make_calib_blocks.py</code>)은 country&middot;platform&middot;time_of_day&middot;season&middot;month&middot;radar 6축을 그리디로 맞출 뿐 <b>action은 보지 않는다</b>. 그 상태에서 n=100 추출을 바꾸면 test500 minADE가 0.95&ndash;1.77로 흔들리고(SD 0.363, <code>2026-09-03_calib-draw-variance</code>), 기전 후보 21개가 전부 기각됐다(<code>2026-09-07_draw-order</code>). 이 실험 직전에 저장된 레코드만으로 세 가지를 더 쟀다(<code>outputs/calib_buckets/action_mix_2026-09-11.parquet</code>):</p>
+<ol>
+  <li><b>추출 분산은 cruise 버킷의 현상이다.</b> 자연 추출 5개의 손해를 버킷별로 나누면 cruise +0.736 (추출 간 SD 0.569)인데 decel_stop/accel/turn은 +0.23&ndash;0.30 (SD 0.04&ndash;0.11).</li>
+  <li><b><code>tr</code> 계열은 버킷 균형이 아니었다.</b> 회복 풀은 (clip, t0) 행 기준 20%씩이지만 캘리브레이션 창(t0=5.1 s)을 다시 고르면서 cruise 35&ndash;47%가 됐다. tr을 구분하는 건 균형이 아니라 난이도(느리고, 세게 서고, 크게 돔).</li>
+  <li>자연 추출 안에서는 <b>버킷 조성이 결과를 설명하지 못한다</b>(가장 다양한 nt_e가 최악).</li>
+</ol>
+<p>그래서 "action 다양성이 캘리브레이션을 돕는가"는 한 번도 깨끗하게 측정된 적이 없었고, 6축 매칭 자체도 무작위 대조가 없었다(<code>calib_rd100_a/b</code>는 캐시까지 만들고 <code>dual</code>로 평가된 적이 없다). 그리디는 복제도 망친다 &mdash; <code>calib_100 &rarr; nt_a &rarr; &hellip;</code>는 같은 seed로 앞 세트를 빼고 다시 그리디한 순차 계열이라 교환 가능하지 않고, 결과가 그 순서를 따른다(&rho; +0.943).</p>
+
+<h2><span class="num">2</span>설계</h2>
+
+<p>모든 arm은 <code>dual_u40_v2</code> 레시피 &mdash; 같은 기준 <code>max(rank I_traj, rank I_CoC)</code>, 같은 예산(uniform 0.3985632694, 정확히 2,657,452,032 파라미터 제거), VLM만, expert&middot;KV 불변, <code>jlens_v2</code>. <b>오직 캘리브레이션 100클립을 어떤 규칙으로 뽑았는가만 다르다.</b></p>
+
+<table>
+  <tr><th>규칙</th><th>정의</th><th>세트</th></tr>
+  <tr><td><code>rd</code> random</td><td>풀에서 균등 무작위 100 (층화 없음, 매칭 없음)</td><td>기존 <code>calib_rd100_a/b</code> + 신규 <code>_c</code></td></tr>
+  <tr><td><code>se</code> strat-eval</td><td>bucket5 층화, 쿼터 = test500 조성 <b>56/13/15/9/7</b> (cruise/stop/accel/turnL/turnR), 층 안 무작위</td><td><code>calib_se100_a/b/c</code></td></tr>
+  <tr><td><code>su</code> strat-uniform</td><td>bucket5 층화, 쿼터 <b>20/20/20/20/20</b>, 층 안 무작위</td><td><code>calib_su100_a/b/c</code></td></tr>
+</table>
+
+<ul>
+  <li><b>라벨</b>: 공식 train 153,625 &minus; 홀드아웃 7,004(기존 calib_* 21개 + 평가셋 + OOD) = 146,621에서 무작위 3,000클립을 뽑아 egomotion 라벨 zip만 읽고(비디오 디코딩 없음) t0=5.1 s에서 <code>make_train_set.bucket5</code>를 붙였다(16 workers 16.1분, 실패 0). 후보 조성 cruise 56.3 / stop 13.1 / accel 15.1 / turnL 7.7 / turnR 7.8% &mdash; test500과 같다.</li>
+  <li><b>bucket5는 GT egomotion의 함수</b>이고 모델 출력은 어디에도 들어가지 않는다. 캐시 빌드 후 <code>model.action_space.traj_to_action</code>(순수 <code>nn.Module</code>, CPU)으로 <code>I_traj</code>의 raw flow-matching 타깃 (64, 2)도 계산해, bucket5 층이 실제 action 공간에서 갈라지는지 검증했다(G0-d).</li>
+  <li>9세트는 서로&middot;기존 전 세트&middot;평가셋과 서로소(assert). seed는 <code>default_rng([20260911, rule_idx, letter_idx])</code>. 6축 weighted L1은 0.13&ndash;0.20으로 전부 랜덤 수준(그리디 0.031).</li>
+  <li><b>파이프라인</b>: <code>label_actions.py</code> &rarr; <code>make_calib_strat.py</code> &rarr; <code>build_cache.py</code>(700클립 3.74 GB) &rarr; <code>run_importance.py</code>(100클립, 40.5 GB, ~12분) &rarr; <code>make_slim.py --no-state</code>(~30초) &rarr; <code>run_baseline.py --set test</code>(2 shard). GPU 단계는 cvlab20에서 <code>launch_strat_calib.sh</code>(빈 카드 claim/release 풀)로, cvlab21과 비트 동일(2026-09-08 검증)이라 cvlab21의 baseline과 페어링.</li>
+  <li><b>검정력</b>: 기존 n=100 arm 쌍의 클립별 &Delta; SD 중앙값 0.808 &rarr; 규칙 쌍(클립별 3-seed 평균) SE 0.021, MDE 0.04 전체 / 0.06&ndash;0.10 버킷. arm 단위 SD는 n=3이라 해상도가 없어 게이트에서 뺐다.</li>
+</ul>
+
+<h2><span class="num">3</span>결과 (사실)</h2>
+
+<h3>3.1 arm 단위</h3>
+<table>
+  <tr><th>규칙</th><th>seed a</th><th>seed b</th><th>seed c</th><th class="num">평균</th><th class="num">SD</th><th class="num">범위</th></tr>
+  <tr><td><code>rd</code></td><td>1.379 (CoC 2.0%)</td><td>1.180 (<b>6.8%</b>)</td><td>1.025 (1.0%)</td><td class="num">1.195</td><td class="num">0.177</td><td class="num">0.354</td></tr>
+  <tr><td><code>se</code></td><td>1.008 (1.8%)</td><td>1.136 (1.6%)</td><td><b>0.981</b> (1.0%)</td><td class="num"><b>1.042</b></td><td class="num"><b>0.083</b></td><td class="num">0.156</td></tr>
+  <tr><td><code>su</code></td><td>1.184 (1.2%)</td><td>1.051 (1.6%)</td><td>1.181 (3.0%)</td><td class="num">1.139</td><td class="num">0.076</td><td class="num">0.132</td></tr>
+  <tr><td>(참조) <code>nt</code> 그리디 순차</td><td colspan="3">1.022 / 1.060 / 1.348 / 1.774 / 1.718</td><td class="num">1.384</td><td class="num">0.354</td><td class="num">0.752</td></tr>
+  <tr><td>(참조) <code>tr</code> 하드 풀</td><td colspan="3">1.214 / 1.146 / 1.101 / 1.169 / 1.251</td><td class="num">1.176</td><td class="num">0.059</td><td class="num">0.151</td></tr>
+  <tr><td>(참조) <code>calib_100</code> 출하본</td><td colspan="3">0.950 (CoC 3.0%)</td><td class="num">&mdash;</td><td class="num"></td><td class="num"></td></tr>
+</table>
+<p class="small">무압축 0.8417. test500 minADE@6, k=8 seed 42 결정론, Ada. CoC 퇴화율은 <code>eval_lib.coc_degenerate</code>.</p>
+
+<figure>
+  <img src="PLOT::strat::arm_minade_by_rule.png" alt="arm-level minADE by draw rule">
+  <figcaption>규칙별 arm 단위 test500 minADE@6. 가로선은 규칙 평균. 순차 그리디(nt)의 꼬리(1.35&ndash;1.77)가 무작위 규칙엔 없고, 층화 두 규칙은 퍼짐이 절반이다.</figcaption>
+</figure>
+
+<h3>3.2 규칙별 손해를 버킷으로 (무압축 대비 클립별 &Delta;, 규칙 = seed 평균)</h3>
+<table>
+  <tr><th>규칙</th><th class="num">전체 (500)</th><th class="num">cruise (278)</th><th class="num">decel_stop (65)</th><th class="num">accel (75)</th><th class="num">turn (82)</th></tr>
+  <tr><td><code>rd</code></td><td class="num">+0.353</td><td class="num">+0.381</td><td class="num">+0.250</td><td class="num">+0.207</td><td class="num">+0.472</td></tr>
+  <tr><td><code>se</code></td><td class="num"><b>+0.200</b></td><td class="num"><b>+0.201</b></td><td class="num"><b>+0.150</b></td><td class="num"><b>+0.119</b></td><td class="num">+0.311</td></tr>
+  <tr><td><code>su</code></td><td class="num">+0.297</td><td class="num">+0.366</td><td class="num">+0.284</td><td class="num">+0.139</td><td class="num"><b>+0.219</b></td></tr>
+  <tr><td><code>nt</code></td><td class="num">+0.543</td><td class="num">+0.746</td><td class="num">+0.272</td><td class="num">+0.233</td><td class="num">+0.352</td></tr>
+  <tr><td><code>tr</code></td><td class="num">+0.335</td><td class="num">+0.410</td><td class="num">+0.221</td><td class="num">+0.146</td><td class="num">+0.342</td></tr>
+</table>
+
+<h3>3.3 규칙 간 페어드 대조 (클립별 3-seed 평균의 차, 평균 [95% 부트스트랩 CI], 중앙값, Wilcoxon p)</h3>
+<table>
+  <tr><th>대조</th><th>전체</th><th>cruise</th><th>decel_stop</th><th>accel</th><th>turn</th></tr>
+  <tr><td>rd &minus; nt</td><td><b>&minus;0.190</b> [&minus;0.234,&minus;0.147] med &minus;0.108 p=3e-23</td><td><b>&minus;0.365</b> [&minus;0.423,&minus;0.307]</td><td>&minus;0.022 n.s.</td><td>&minus;0.026 n.s.</td><td>+0.120 [+0.016,+0.237] med +0.011 p=0.12</td></tr>
+  <tr><td>se &minus; rd</td><td><b>&minus;0.153</b> [&minus;0.190,&minus;0.117] med &minus;0.087 p=2e-21</td><td><b>&minus;0.180</b> [&minus;0.226,&minus;0.136]</td><td><b>&minus;0.100</b> [&minus;0.175,&minus;0.030] p=0.008</td><td><b>&minus;0.088</b> [&minus;0.161,&minus;0.022] p=0.009</td><td><b>&minus;0.161</b> [&minus;0.305,&minus;0.035] p=0.011</td></tr>
+  <tr><td>su &minus; rd</td><td>&minus;0.056 [&minus;0.096,&minus;0.018] med &minus;0.012 p=0.13</td><td>&minus;0.015 n.s.</td><td>+0.034 n.s.</td><td>&minus;0.069 [&minus;0.173,+0.018] p=0.08</td><td><b>&minus;0.253</b> [&minus;0.403,&minus;0.119] p=0.0016</td></tr>
+  <tr><td>su &minus; se</td><td><b>+0.097</b> [+0.058,+0.136] med +0.051 p=2e-10</td><td><b>+0.165</b> [+0.119,+0.213]</td><td>+0.134 [+0.023,+0.273] p=0.07</td><td>+0.019 n.s.</td><td>&minus;0.092 [&minus;0.218,+0.021] n.s.</td></tr>
+</table>
+
+<figure>
+  <img src="PLOT::strat::rule_contrasts.png" alt="rule contrasts by bucket">
+  <figcaption>세 대조의 버킷별 평균과 95% CI(파랑 = CI가 0 배제). rd&minus;nt는 cruise 한 칸이 전부이고, se&minus;rd는 네 칸 모두 음수, su&minus;rd는 turn 한 칸이다.</figcaption>
+</figure>
+
+<h3>3.4 선택 수준 &mdash; 유지집합 중첩 (dual_u40_v2, Q head / MLP)</h3>
+<table>
+  <tr><th>쌍</th><th class="num">Q heads</th><th class="num">MLP</th></tr>
+  <tr><td>규칙 내 rd / se / su / nt</td><td class="num">90.6 / 90.9 / 90.7 / 91.1%</td><td class="num">85.4 / 85.3 / 85.8 / 85.7%</td></tr>
+  <tr><td>규칙 간 rd&ndash;se / rd&ndash;su / se&ndash;su</td><td class="num">90.7 / 90.3 / 90.6%</td><td class="num">85.3 / 85.1 / 85.3%</td></tr>
+  <tr><td>각 규칙 &ndash; nt (15쌍씩)</td><td class="num">90.5&ndash;91.2%</td><td class="num">85.4&ndash;85.5%</td></tr>
+  <tr><td>각 arm &ndash; calib_100</td><td class="num">89.5&ndash;91.4%</td><td class="num">83.9&ndash;84.8%</td></tr>
+</table>
+<p>cruise 56%&rarr;20%인 <code>su</code>와 <code>rd</code>의 쌍 중첩(90.3%)이 <code>rd</code> 안의 쌍(90.6%)과 같다. <b>추출 규칙은 선택을 n=100 잡음 바닥 이상으로 전혀 움직이지 않았는데 성능은 0.15&ndash;0.19 갈렸다.</b> <code>2026-09-03</code> &sect;7("시나리오 재가중은 선택을 무작위 이상으로 못 바꾼다")의 전향적 재현이고, 이 레포에서 중첩이 능력을 예측하지 못한 네 번째 사례다(<code>dual_st2000</code> 92.1% &rarr; +0.1105, <code>maxstep11</code> 92.5% &rarr; n.s.).</p>
+
+<h2><span class="num">4</span>해석 (의견)</h2>
+
+<div class="callout opinion">
+  <strong>사후 판독임을 밝힌다.</strong> 사전 등록 결정표에는 "se &gt; rd" 칸이 없었다 &mdash; H4는 "조성 통제는 무효"를 예측했고 그것이 틀렸다.
+</div>
+
+<ol>
+  <li><b>action 조성은 품질을 움직이고, 목표는 다양성이 아니라 평가 분포다.</b> 순수 무작위는 희귀 action을 가끔 놓친다 &mdash; 최악 arm <code>rd_a</code>(1.379)의 조성은 cruise 65, turn_left 2, turn_right 4였고, 그 한 번의 결손이 전체를 끌어내렸다. 조성을 평가셋에 고정하면 그 분산이 사라지고(SD 절반), 네 버킷이 함께 좋아진다. 균등 층화는 turn을 사되(&minus;0.25) cruise&middot;stop을 잃는다(se 대비 +0.165 / +0.134) &mdash; 다양성은 "평균"의 노브가 아니라 "분포 모양"의 노브다.</li>
+  <li><b>순차 그리디는 두 가지 이유로 나쁘다.</b> 6축 매칭이 action을 안 보므로 조성이 흘러가고, 순차 배제 때문에 복제가 교환 가능하지 않다(후반 블록의 cruise 붕괴). 이 실험은 둘을 분리하지 않는다 &mdash; G1의 "해롭다"는 <em>순차 그리디 프로토콜</em>에 대한 판정이지 매칭 자체에 대한 판정이 아니다. 첫 그리디 픽인 <code>calib_100</code>(0.950)이 여전히 전 arm 중 최고라는 사실이 그 한계를 상기시킨다(<code>2026-09-07_draw-order</code>의 순서 가설은 미해결).</li>
+  <li><b>선택 중첩은 또 아무것도 예측하지 못했다.</b> 규칙이 어느 10%의 head를 바꾸는지가 중요하지, 몇 %를 바꾸는지는 중요하지 않다.</li>
+</ol>
+
+<h2><span class="num">5</span>권고와 다음 단계</h2>
+<ul>
+  <li><b>표준 캘리브레이션 추출을 <code>se</code>(평가셋 조성 bucket5 층화 + 층 안 무작위)로 바꿀 것을 권고한다.</b> 그리디 대비 평균 0.34, 무작위 대비 0.15 좋고, seed 복제가 교환 가능하며 SD가 절반이다. 단 <b>개루프 근거뿐</b>이므로(head vs MLP 전례: 개루프가 못 본 &minus;0.091을 폐루프가 봤다) 표준 변경 전 hard100 폐루프 1회 &mdash; <code>se_c</code> vs <code>rd_c</code>, 또는 <code>se_c</code> vs <code>calib_100</code>.</li>
+  <li>seed 3은 기대값 비교(MDE 0.04)에는 충분했지만 arm 단위 SD에는 부족하다. 규칙별 seed 5로 늘리면 G5가 게이트가 된다.</li>
+  <li><code>su</code>의 turn 이득이 폐루프 lane-keeping(<code>analyze_lateral.py</code>)과 연결되는지는 별도 질문이다.</li>
+  <li><code>rd_b</code>의 CoC 퇴화 6.8%(다른 8 arm 1.0&ndash;3.0%)는 minADE와 무관하게 따로 볼 항목이다.</li>
+  <li>raw action 셀(mean|a| &times; mean|&kappa;| 3&times;3) 층화는 bucket5가 신호를 보였으므로 다음 1요인 실험 후보다.</li>
+</ul>
+
+<h2><span class="num">6</span>한계와 함정</h2>
+<ul>
+  <li>test500만 봤다(56% cruise). 게이트를 버킷별로 둔 이유이고, val500 재현은 미실행.</li>
+  <li>tr(하드 풀)은 여전히 균형&times;난이도가 교락된 참조일 뿐이다.</li>
+  <li>함정 셋을 밟았다: <code>build_cache.py</code>는 토큰을 환경에서만 읽어 익명이면 429로 700/700 실패하면서 exit 0; <code>pkill -f</code>는 런처 bash만 죽이고 파이썬 자식은 남긴다; <code>importance.npz</code> 존재는 완료가 아니다(10클립마다 체크포인트) &mdash; 완료 판정은 <code>metrics.json</code>의 <code>n_clips==100</code>. 회수 스크립트가 부분 체크포인트를 가져온 채 중첩을 재면 81%/77%가 나온다.</li>
+</ul>
+
+<h2><span class="num">7</span>재현</h2>
+<pre><code># 1. 라벨 + 추출 (CPU)
+python experiments/evaluation/label_actions.py --candidates 3000 --seed 20260911
+python experiments/evaluation/make_calib_strat.py --rules rd:c se:abc su:abc --seed 20260911
+python experiments/evaluation/build_cache.py --manifest outputs/eval_sets/calib_strat700.parquet --cache calib_strat
+python experiments/evaluation/label_actions.py --raw-from-cache --sets se_a=calib_se100_a:calib_strat ...   # G0-c/d
+# 2. GPU (cvlab20): importance -> slim --no-state -> test500, 빈 카드만
+bash cvlab20-server/run_strat_chain.sh          # = launch_strat_calib.sh importance|slim|eval
+bash cvlab20-server/fetch_strat_results.sh      # importance, slim_meta, 평가 레코드 회수
+# 3. 분석
+python experiments/evaluation/analyze_strat_calib.py --out outputs/strat_calib</code></pre>
+<p class="small">매니페스트 <code>outputs/eval_sets/calib_{rd100_c,se100_a..c,su100_a..c}.parquet</code>, 라벨 <code>outputs/strat_calib/labels.parquet</code>, raw action <code>outputs/strat_calib/raw_actions.parquet</code>, 게이트 <code>outputs/strat_calib/metrics.json</code>.</p>
+
+</div>
+</body>
+</html>
