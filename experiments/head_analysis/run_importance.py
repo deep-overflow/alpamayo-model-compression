@@ -54,6 +54,8 @@ def traj_weight(kind, n_tok, device):
     t = torch.arange(n_tok, dtype=torch.float32, device=device)
     if kind == "lin":
         return n_tok - t  # (64,) 64..1
+    if kind == "exp":
+        return torch.exp(-t / 19.0)  # tau = the same measured horizon, softened
     return (t < 19).float()  # (64,) 1 for the first 1.9 s, else 0
 
 
@@ -211,14 +213,20 @@ def main():
                          "produces; independent: a fresh eps per step. G1 measured tied "
                          "at 29.9% of the GT-anchored loss (not degenerate, because the "
                          "flow is not straight), so tied is the default")
-    ap.add_argument("--traj-weight", default=None, choices=["lin", "h19"],
+    ap.add_argument("--traj-weight", default=None, choices=["lin", "exp", "h19"],
                     help="weight the 64 trajectory waypoints in the flow-matching loss "
                          "instead of weighting them equally. 'lin' is w_t = (64-t), the "
                          "number of positions each action displaces, i.e. position-space "
                          "influence; 'h19' keeps only the first 19 waypoints, the 1.9 s "
                          "effective horizon measured in "
-                         "plans/2026-09-11_effective-plan-horizon.md. Both are derived, "
-                         "not tuned. Omit for the shipped equal weighting")
+                         "plans/2026-09-11_effective-plan-horizon.md; 'exp' is "
+                         "exp(-t/19), that same horizon as a soft decay. Every shape is "
+                         "derived -- there is no free constant to search, which is what "
+                         "keeps a win from being 'we tuned it until it won'. Together "
+                         "they put 50.2 / 65.5 / 100% of the loss mass inside the "
+                         "measured horizon against the shipped 29.7%, so the three read "
+                         "as a dose-response ladder rather than three guesses. "
+                         "Omit for the shipped equal weighting")
     ap.add_argument("--traj-dims", default=None,
                     help="restrict the flow-matching loss to these action channels, "
                          "comma-separated (the action is unicycle (accel, curvature), so "
