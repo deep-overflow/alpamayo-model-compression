@@ -9,8 +9,14 @@ Every number is read from an artifact, never retyped: open-loop rows from the pe
 JSON at K=6, closed-loop rows from analyze_calibsize's metrics.json, and the dual+h4 rows
 from the headmlp_split analysis that measured them.
 
-    python experiments/evaluation/mlpwidth_report.py \
+The ladder's own result is that it is NOT a dose-response: the three cut rungs do not
+separate from each other (every pair's CI spans zero) while all three sit below dual with
+higher offroad. An earlier edition of this report claimed a monotone descent from the two
+rungs that existed at the time; em75 falsified it by landing below both.
+
+    python experiments/evaluation/mlpwidth_report.py --pairs emladder_pairs \
         --out reports/evaluation/2026-09-12_mlp-width-dissociation.html
+
 """
 
 import argparse
@@ -205,6 +211,30 @@ def cl_table(cl):
     return f"<div class='scroll'><table><thead>{head}</thead><tbody>{body}</tbody></table></div>"
 
 
+def cut_pairs_table(m):
+    """The cut rungs against each other. The dual-relative rows in cl_table answer "does
+    cutting lose?"; these answer whether the ladder is a dose-response or a step."""
+    cuts = [n for n, _, _, _ in LADDER if n != "dual"]
+    body = ""
+    for key, pr in m["pairs"].items():
+        a, b = key.split(" - ")
+        if a not in cuts or b not in cuts:
+            continue
+        sep = pr["ci_lo"] > 0 or pr["ci_hi"] < 0
+        body += (f"<tr><td><code>{a}</code> &minus; <code>{b}</code></td>"
+                 f"<td>{pr['delta']:+.4f}</td>"
+                 f"<td class='ci'>[{pr['ci_lo']:+.4f}, {pr['ci_hi']:+.4f}]</td>"
+                 f"<td>{pr['wilcoxon_p']:.2f}</td>"
+                 f"<td class='dim'>{pr['better']}/{pr['worse']}/{pr['tie']}</td>"
+                 f"<td class='{'bad' if sep else 'dim'}'>"
+                 f"{'구분됨' if sep else '구분 안 됨'}</td></tr>")
+    if not body:
+        return ""
+    return ("<div class='scroll'><table><thead><tr><th>쌍</th><th>델타</th><th>95% CI</th>"
+            "<th>Wilcoxon p</th><th>W/L/T</th><th>판정</th></tr></thead>"
+            f"<tbody>{body}</tbody></table></div>")
+
+
 CSS = """
 :root{--bg:#FAF9F5;--card:#FFF;--code:#F0EEE6;--ink:#29261B;--muted:#6B6555;
 --acc:#D97757;--bd:#E8E6DC;--stripe:#F5F4EF;--good:#008300;--bad:#b0402a;--warn:#eda100}
@@ -255,7 +285,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:.5rem;line-height:1.6}
 """
 
 
-def build(ol, cl, plot_dir, date):
+def build(ol, cl, m, plot_dir, date):
     pend = [n for n, _, _, _ in LADDER if n != "dual" and n not in cl["_abs"]]
     pend_note = ""
     if pend:
@@ -292,8 +322,8 @@ def build(ol, cl, plot_dir, date):
     <div class="l">같은 arm의 폐루프 손해 (score)</div></div>
   <div class="kpi"><div class="v">4 / 4</div>
     <div class="l">개루프가 "공짜"라 한 MLP 절단 중 폐루프가 뒤집은 수</div></div>
-  <div class="kpi"><div class="v">96 / 150</div>
-    <div class="l">동점 씬 &mdash; 순위 검정에 재료가 없는 이유</div></div>
+  <div class="kpi"><div class="v">0 / 3</div>
+    <div class="l">서로 구분되는 절단 칸 쌍 &mdash; 손해는 양이 아니라 여부다</div></div>
 </div>
 
 {pend_note}
@@ -336,16 +366,24 @@ expert <code>down_proj</code> 입력의 곱셈 게이트에 대한 flow-matching
 <h2><span class="num">4.</span>폐루프 (사실)</h2>
 {cl_table(cl)}
 <figure><img src="data:image/png;base64,{b64(plot_dir / 'dissociation.png')}"
-  alt="개루프는 평평하고 폐루프는 단조 하강한다">
+  alt="개루프는 평평하고 폐루프는 한 단 내려간 뒤 평평하다">
 <figcaption>같은 체크포인트, 같은 가로축, <strong>같은 세로축 범위</strong>. 왼쪽은 세 세트의
-개루프 델타로 전부 0선에 붙어 있고, 오른쪽은 폐루프 델타로 채널이 줄수록 단조 하강한다.
-스케일을 맞춰도 왼쪽에는 아무것도 보이지 않는다는 것이 이 그림의 요점이다.</figcaption>
+개루프 델타로 전부 0선에 붙어 있고, 오른쪽은 폐루프 델타로 <strong>첫 칸에서 한 단
+떨어진 뒤 평평하다</strong>. 스케일을 맞춰도 왼쪽에는 아무것도 보이지 않는다는 것이 이 그림의
+요점이고, 오른쪽 세 점이 서로 구분되지 않는다는 것이 두 번째 요점이다.</figcaption>
 </figure>
+<h3>4.1 자른 칸끼리는 구분되지 않는다</h3>
+<p>위 표의 <code>vs dual</code> 열은 "자르면 지는가"를 묻는다. 사다리가
+<strong>용량-반응인가 계단인가</strong>는 자른 칸끼리의 비교가 답한다.</p>
+{cut_pairs_table(m)}
+<p>세 쌍 전부 CI가 0을 포함하고 92&ndash;96씬이 동점이다. 채널을 2064에서 516으로
+<strong>4배</strong> 더 줄여도 폐루프 점수는 구분되지 않는다.</p>
+
 <figure><img src="data:image/png;base64,{b64(plot_dir / 'closedloop.png')}"
   alt="폐루프 점수와 offroad 게이트">
 <figcaption>왼쪽 오차막대는 씬 단위 bootstrap 95% CI다. 모든 칸이 무압축보다는 낫지만
-<code>dual</code>보다는 못하다. 오른쪽이 손해의 내용물 &mdash; offroad가 단조로 오르고,
-<code>dual</code>만 baseline보다 낮다.</figcaption>
+<code>dual</code>보다는 못하다. 오른쪽이 손해의 내용물 &mdash; 자른 칸은 모두 offroad가
+<code>dual</code>보다 높고, <code>dual</code>만 baseline보다 낮다. 칸끼리의 순서는 없다.</figcaption>
 </figure>
 
 <h2><span class="num">5.</span>해석 (의견)</h2>
@@ -357,15 +395,28 @@ expert <code>down_proj</code> 입력의 곱셈 게이트에 대한 flow-matching
   벗어난 궤적과 차선을 넘은 궤적은 거리로 구분되지 않는다. 개루프에서 이탈을 대신 잴 방법도
   없다: <code>features.csv</code> 전체에 차선&middot;도로경계&middot;주행가능영역 라벨이 없어
   "도로를 벗어났다"를 판정할 기준 자체가 존재하지 않는다.</p>
-  <p><strong>결론 2 &mdash; 믿을 것은 개별 p값이 아니라 정렬이다.</strong>
-  개별 쌍은 어느 것도 확실하지 않다. 150씬 페어드 델타의 해상도는 0.080인데 관측치는
-  0.017&ndash;0.036이고, 게다가 <strong>150씬 중 96씬이 동점</strong>이라 순위 검정에 재료가
-  거의 없다. 증거는 계단이 같은 방향으로 거의 등간격으로 정렬한다는 것과, offroad가 같은
-  순서로 오른다는 것이다. 이 보고서는 그 이상을 주장하지 않는다.</p>
+  <p><strong>결론 2 &mdash; 용량-반응이 아니라 계단이다.</strong>
+  자른 세 칸은 <em>서로 구분되지 않는다</em> &mdash; 세 쌍 모두 CI가 0을 포함하고
+  (<code>em87p5&minus;em75</code> +0.0221, <code>em93p75&minus;em75</code> +0.0033,
+  <code>em93p75&minus;em87p5</code> &minus;0.0188), 92&ndash;96씬이 동점이다. 그런데 셋 다
+  <code>dual</code>보다 아래이고 셋 다 offroad가 <code>dual</code>보다 높다. 읽히는 신호는
+  <strong>"얼마나 자르느냐"가 아니라 "자르느냐 마느냐"</strong>다 &mdash; 2064채널만 남겨도
+  손해가 이미 다 발생하고, 거기서 4배 더 잘라도 더 나빠지지 않는다.</p>
+  <p class="note"><strong>이 결론은 한 번 틀렸다가 고쳐진 것이다.</strong> 초판은
+  <code>em87p5</code>(&minus;0.0166)와 <code>em93p75</code>(&minus;0.0355) 두 점만 가지고
+  "계단이 거의 등간격으로 정렬한다"고 썼다. 두 점은 언제나 직선 위에 있다. 세 번째 점
+  <code>em75</code>가 &minus;0.0388로 들어오면서 그 직선은 반증됐다 &mdash; <strong>가장 적게
+  자른 칸이 가장 나빴다.</strong> 물리적으로는 이상하지만(유지집합이 포함 관계라
+  <code>em75</code>는 엄격히 더 많은 채널을 갖는다) 순서가 뒤집힌 것이 아니라 세 칸이
+  애초에 구분되지 않는 것이다. 150씬의 페어드 델타 해상도는 0.080인데 칸 사이 관측치는
+  0.003&ndash;0.022다. 두 점으로 추세를 주장하면 안 된다는 것을, 이 저장소는
+  <code>maxstep11</code>의 꼬리 이득에서 한 번 배웠고 여기서 한 번 더 배웠다.</p>
   <p><strong>결론 3 &mdash; 재배분과 적층이 같은 곳에서 무너진다.</strong>
   <code>dual+h4</code>는 예산을 head에서 VLM MLP로 <em>옮겼고</em>, 이 사다리는 expert MLP를
   <em>덧붙여</em> 잘랐다. 개루프에서 전자는 오히려 좋아 보이고 후자는 중립인데, 폐루프에서는
-  둘 다 지고 둘 다 offroad가 오른다. 공통점은 MLP 폭이다.</p>
+  둘 다 지고 둘 다 offroad가 오른다. 공통점은 MLP 폭이다. 그리고 양쪽 다 <em>양</em>이 아니라
+  <em>여부</em>가 문제였다 &mdash; <code>dual+h4</code>는 head를 13개에서 4개로 줄이는 한 번의
+  이동으로 0.091을 잃었고, 이 사다리는 첫 칸에서 손해를 다 치른다.</p>
 </div>
 
 <h3>5.1 <code>dual+h4</code>와 나란히 &mdash; 예산을 고정한 1요인</h3>
@@ -481,7 +532,7 @@ def main():
     plots(ol, cl, plot_dir)
     out = args.out if args.out.is_absolute() else Path.cwd() / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(ol, cl, plot_dir, args.date))
+    out.write_text(build(ol, cl, m, plot_dir, args.date))
     print(f"wrote {out}  ({out.stat().st_size // 1024} KB)")
 
 
