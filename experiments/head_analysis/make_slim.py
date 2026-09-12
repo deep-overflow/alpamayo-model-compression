@@ -53,6 +53,13 @@ Configs:
                       reasoning half from 46.5% to 25.9% of retained Q heads while removing
                       the identical 2,657,452,032 params.
                       reports/evaluation/2026-09-09_criterion-balance.html.
+  maskfile_<exp-id> -- VLM masks read verbatim from outputs/<exp-id>/masks.npz, for a
+                      selection computed by a tool outside this repo. The npz must carry
+                      `qhead` (L, H) and `mlp` (L, I) keep-masks (1 = keep); expert and KV
+                      are left whole. Nothing is recomputed, so the checkpoint is exactly
+                      the external selection -- which is the point: it is the only way to
+                      run someone else's arm through our closed loop without reproducing
+                      their scorer.
   dualexp_u40_em<M> -- the same VLM half + expert MLP-ONLY at M% (expert Q heads and KV
                       untouched); M may carry a decimal written with `p` (em93p75 =
                       93.75%). The expert score comes from --expert-importance, so the
@@ -156,6 +163,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                                ec.intermediate_size)
     eq, em = expert_masks(imp, emag, ec.num_hidden_layers, "magnitude")
     it = re.match(r"^(.+)_u40_it(\d+)$", cfg_name)
+    # externally computed masks, loaded verbatim; see the docstring
+    maskfile = re.match(r"^maskfile_(.+)$", cfg_name)
     # the optional _qcut<N> trades Q heads for MLP channels at the SAME parameter
     # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
     # the difference into channels (plans/2026-09-05_axis-allocation.md)
@@ -168,7 +177,30 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     # must be matched before `uni`, whose (.+)_u(\d+)_v2 also accepts dualmass_u40_v2
     mass = re.match(r"^dualmass(?:_f(\d+))?_u40_v2$", cfg_name)
     dualrc = re.match(r"^dualrc_u40_s(\d+)(?:_em(\d+(?:p\d+)?))?$", cfg_name)
-    if vaxis:
+    if maskfile:
+        # Masks from another tool. The only thing this branch does is check that they fit
+        # this model -- a mask with the wrong width would otherwise be caught much later,
+        # by apply_surgery, after the weights are already loaded.
+        src = REPO / "outputs" / maskfile.group(1) / "masks.npz"
+        z = dict(np.load(src))
+        try:
+            vq, vm = z["qhead"], z["mlp"]
+        except KeyError:
+            vq, vm = z["vq"], z["vm"]          # the other convention this repo writes
+        want_q = (tc.num_hidden_layers, tc.num_attention_heads)
+        want_m = (tc.num_hidden_layers, tc.intermediate_size)
+        if vq.shape != want_q or vm.shape != want_m:
+            raise ValueError(f"{src}: masks are {vq.shape} / {vm.shape}, "
+                             f"this model wants {want_q} / {want_m}")
+        # parenthesised: `-` binds tighter than `|`, so without these the check
+        # subtracts only from vm's values and reports every value of vq as bad
+        bad = sorted((set(np.unique(vq)) | set(np.unique(vm))) - {0.0, 1.0})
+        if bad:
+            raise ValueError(f"{src}: masks must be 0/1 keep-masks, found {bad[:4]}")
+        vq, vm = vq.astype(np.float64), vm.astype(np.float64)
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif vaxis:
         # The VLM twin of the expert-axis decomposition
         # (plans/2026-08-30_axis-taylor-comparability.md). dual_u40_v2's own masks are
         # already axis-separable -- vq and vm come from two independent
