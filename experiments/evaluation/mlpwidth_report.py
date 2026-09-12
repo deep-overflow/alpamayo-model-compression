@@ -360,8 +360,20 @@ expert <code>down_proj</code> 입력의 곱셈 게이트에 대한 flow-matching
 이 사다리 전체가 그 비용의 <strong>3% 미만</strong>이다. CoC 퇴화율은 소수점까지
 <code>dual</code>과 같다(val 1.4% / test 3.0% / OOD 3.4%).</p>
 <p class="note">0을 배제하는 칸이 하나 있다 &mdash; val500의 <strong>minFDE</strong>
-(<code>em87p5</code> +0.0115, <code>em93p75</code> +0.0180). test500과 OOD-val은 부호가
-반대이므로 세 세트 중 하나이고, 끝점 비용의 증거로 읽지 않는다.</p>
+(<code>em75</code> +0.0073, <code>em87p5</code> +0.0115, <code>em93p75</code> +0.0180).
+test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝점 비용의 증거로 읽지 않는다.</p>
+<div class="warn">
+  <p><strong>val500의 깔끔한 단조성을 믿으면 안 된다.</strong> 그 세트에서는 세 칸이 채널
+  순서대로 +0.0013 &rarr; +0.0019 &rarr; +0.0033으로 정렬한다. 보기에는 용량-반응이지만,
+  (a) 세 값 전부 CI가 0을 포함하고, (b) <strong>test500과 OOD-val에서는 부호가 뒤집혀</strong>
+  <code>em75</code>가 <code>dual</code>보다 오히려 좋고(&minus;0.0002 / &minus;0.0010),
+  (c) 규모가 0.001&ndash;0.003으로 같은 세트에서 24% 압축이 쓰는 0.067&ndash;0.120의
+  2&ndash;4%다.</p>
+  <p>세 세트 중 하나에서만 나타나고 나머지 둘은 부호가 반대인 정렬은 추세가 아니다.
+  이 보고서의 초판이 폐루프에서 두 점으로 선을 긋고 <code>em75</code>에 반증당한 것과
+  <strong>같은 종류의 함정</strong>이며, 여기 적어 두는 이유는 다음에 이 표를 보는 사람이
+  같은 선을 긋지 않게 하기 위해서다.</p>
+</div>
 
 <h2><span class="num">4.</span>폐루프 (사실)</h2>
 {cl_table(cl)}
