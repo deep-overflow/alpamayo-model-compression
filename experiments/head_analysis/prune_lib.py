@@ -412,7 +412,8 @@ def best_of_n_target(model, cache, rope_deltas, prefill, gt_xy, hist_xyz, hist_r
                   "ade_mean": float(np.mean(ades)), "argbest": int(np.argmin(ades))}
 
 
-def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1):
+def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1,
+                    dims=None):
     """Run the FM loss backward through the expert onto detached cache leaves.
 
     Returns the accumulated dL/d(cache) so a single VLM backward can follow, and
@@ -425,6 +426,13 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
     evaluations as expert_selffm_grads, whose k_draws x fm_steps sweep would otherwise
     make any stability comparison a comparison of sample counts
     (plans/2026-09-10_self-anchored-traj-importance.md).
+
+    dims restricts the loss to a subset of the action channels -- the action is
+    (1, 64, 2) in unicycle space, so dims=[0] and dims=[1] give the two components their
+    own importance map. The reduction stays a mean over the kept elements, so a
+    single-channel loss is that channel's MSE rather than a halved total; raw magnitudes
+    are therefore comparable across dims, and rank_norm makes the selection insensitive
+    to the choice either way. dims=None is the shipped path bit-for-bit.
     """
     device = x1.device
     n_layers = len(model.expert.layers)
@@ -467,7 +475,12 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
                 )
                 cache.crop(prefill)
                 pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
-            loss = F.mse_loss(pred.float(), v_target)
+            if dims is None:
+                loss = F.mse_loss(pred.float(), v_target)
+            else:
+                idx = torch.as_tensor(dims, device=device, dtype=torch.long)
+                loss = F.mse_loss(pred.float().index_select(-1, idx),
+                                  v_target.index_select(-1, idx))
             loss.backward()
             losses.append(loss.item())
 

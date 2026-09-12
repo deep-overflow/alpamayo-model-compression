@@ -110,7 +110,7 @@ import tyr_lib as tyr  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
 from run_cocsafe import rank_norm  # noqa: E402
 from run_eval import eval_config  # noqa: E402
-from run_grid import allocations, grid_configs  # noqa: E402
+from run_grid import P_HEAD, P_MLPC, allocations, grid_configs  # noqa: E402
 from run_integrated import expert_masks, vlm_combined_masks  # noqa: E402
 
 from alpamayo1_5 import helper  # noqa: E402
@@ -165,6 +165,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
     axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
     vaxis = re.match(r"^dual([qm])_u40_v2$|^dualm_c(\d+)$", cfg_name)
+    # must be matched before `uni`, whose (.+)_u(\d+)_v2 also accepts dualmass_u40_v2
+    mass = re.match(r"^dualmass(?:_f(\d+))?_u40_v2$", cfg_name)
     dualrc = re.match(r"^dualrc_u40_s(\d+)(?:_em(\d+(?:p\d+)?))?$", cfg_name)
     if vaxis:
         # The VLM twin of the expert-axis decomposition
@@ -426,6 +428,82 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 vm[i] = (col > 0).cpu().numpy().astype(float)
             else:
                 vq[i] = (col.reshape(nh, hd).sum(1) > 0).cpu().numpy().astype(float)
+        eq, em = np.ones_like(eq), np.ones_like(em)
+        kvonly = ()
+    elif mass:
+        # Mass-threshold ("nucleus") allocation: per layer, keep units in descending
+        # importance until they cover `thresh` of that layer's normalised mass, for each
+        # objective separately, then keep the union. Within a layer that set IS the top-k
+        # set -- the order is unchanged -- so this varies ONLY the per-layer budget, which
+        # makes it a fifth allocation alongside uniform/late/agree/depthprior rather than
+        # a new criterion.
+        #
+        # Normalisation is x/sum(x), NOT softmax. These scores live at 1e-2 (q) and 1e-4
+        # (mlp), so exp(x) ~ 1+x and softmax is numerically flat: measured max/uniform is
+        # 1.045 (q) and 1.007 (mlp), which makes "cover 0.7 of the mass" keep exactly 70%
+        # of every layer regardless of the data -- a uniform prune carrying no signal.
+        # Mass share instead reaches 5.1x and 43.4x, i.e. MLP importance is genuinely
+        # concentrated.
+        #
+        # `thresh` is SOLVED for, not set, so the budget matches dual_u40_v2 exactly and
+        # the comparison is one-factor. The optional _f<N> floors each layer at N% of its
+        # units: without it the concentration in layers 1-5 keeps as few as 110/12288
+        # channels (99.1% of one layer removed), which turns a width sweep into a depth
+        # sweep -- the thing per-layer selection exists to prevent.
+        floor = int(mass.group(1)) / 100 if mass.group(1) else 0.0
+        ref_meta = json.loads(
+            (REPO / "outputs" / "slim_integrated_mag" / "slim_meta.json").read_text())
+        _, ainfo = allocations(imp, ref_meta, tc.num_hidden_layers,
+                               tc.num_attention_heads, tc.intermediate_size, 0.5)
+        target = ainfo["target_removed"]
+        n_l, n_h, n_i = tc.num_hidden_layers, tc.num_attention_heads, tc.intermediate_size
+
+        def union_keep(thresh):
+            out = {}
+            for axis, n_unit in (("vlm_q", n_h), ("vlm_mlp", n_i)):
+                sets = []
+                for i in range(n_l):
+                    idx = []
+                    for obj in ("traj", "coc"):
+                        v = imp[f"{obj}_{axis}"][i].astype(np.float64)
+                        s = v.sum()
+                        p = v / s if s > 0 else np.full(n_unit, 1.0 / n_unit)
+                        order = np.argsort(-p)
+                        k = int(np.searchsorted(np.cumsum(p[order]), thresh) + 1)
+                        k = max(k, round(floor * n_unit))
+                        idx.append(set(order[:k].tolist()))
+                    sets.append(idx[0] | idx[1])
+                out[axis] = sets
+            return out
+
+        def removed(keep):
+            kq = sum(len(s) for s in keep["vlm_q"])
+            km = sum(len(s) for s in keep["vlm_mlp"])
+            full = n_l * (n_h * P_HEAD + n_i * P_MLPC)
+            return 1 - (kq * P_HEAD + km * P_MLPC) / full
+
+        lo, hi = 1e-4, 1.0 - 1e-9
+        for _ in range(60):  # removed() is monotone decreasing in thresh
+            mid = 0.5 * (lo + hi)
+            if removed(union_keep(mid)) > target:
+                lo = mid
+            else:
+                hi = mid
+        thresh = 0.5 * (lo + hi)
+        keep = union_keep(thresh)
+        got = removed(keep)
+        print(f"  mass allocation: floor={floor:.2f} thresh={thresh:.6f} "
+              f"removed={got:.6f} (target {target:.6f})")
+        assert abs(got - target) < 2e-3, f"budget not matched: {got} vs {target}"
+
+        vq = np.zeros((n_l, n_h))
+        vm = np.zeros((n_l, n_i))
+        for i in range(n_l):
+            vq[i, sorted(keep["vlm_q"][i])] = 1.0
+            vm[i, sorted(keep["vlm_mlp"][i])] = 1.0
+        print(f"  per-layer keep  Q {vq.sum(1).min():.0f}-{vq.sum(1).max():.0f} "
+              f"(mean {vq.sum(1).mean():.1f})   MLP {vm.sum(1).min():.0f}-"
+              f"{vm.sum(1).max():.0f} (mean {vm.sum(1).mean():.0f})")
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
     elif uni:
