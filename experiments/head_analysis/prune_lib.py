@@ -413,7 +413,7 @@ def best_of_n_target(model, cache, rope_deltas, prefill, gt_xy, hist_xyz, hist_r
 
 
 def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1,
-                    dims=None):
+                    dims=None, wt=None):
     """Run the FM loss backward through the expert onto detached cache leaves.
 
     Returns the accumulated dL/d(cache) so a single VLM backward can follow, and
@@ -433,6 +433,14 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
     single-channel loss is that channel's MSE rather than a halved total; raw magnitudes
     are therefore comparable across dims, and rank_norm makes the selection insensitive
     to the choice either way. dims=None is the shipped path bit-for-bit.
+
+    wt is an optional (n_tok,) weight over the 64 trajectory waypoints -- a different axis
+    from the fm_steps denoising axis that znorm11/maxstep11 decompose. The shipped loss
+    weights waypoints equally, which under-weights early actions relative to their effect
+    on the path: an action error at step t displaces every position after t, so its
+    position-space influence goes as (n_tok - t). Closed loop points the same way -- it
+    executes 0.1 s per plan and only ~1.9 s of the 6.4 s is realised at all
+    (plans/2026-09-11_effective-plan-horizon.md). wt=None is the shipped path.
     """
     device = x1.device
     n_layers = len(model.expert.layers)
@@ -475,12 +483,19 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
                 )
                 cache.crop(prefill)
                 pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
-            if dims is None:
-                loss = F.mse_loss(pred.float(), v_target)
-            else:
+            p_, t_ = pred.float(), v_target
+            if dims is not None:
                 idx = torch.as_tensor(dims, device=device, dtype=torch.long)
-                loss = F.mse_loss(pred.float().index_select(-1, idx),
-                                  v_target.index_select(-1, idx))
+                p_, t_ = p_.index_select(-1, idx), t_.index_select(-1, idx)
+            if wt is None:
+                loss = F.mse_loss(p_, t_)
+            else:
+                # weighted over the 64 trajectory waypoints. Normalised to sum to n_tok so
+                # the loss keeps the scale of the unweighted one -- the gate score is
+                # |sum_s dL/dg| and rank_norm is scale-invariant, but the reported fm_loss
+                # would otherwise not be comparable across arms.
+                w = wt.to(p_.device).view(1, -1, 1)
+                loss = ((p_ - t_) ** 2 * w).sum() / (w.expand_as(p_).sum())
             loss.backward()
             losses.append(loss.item())
 

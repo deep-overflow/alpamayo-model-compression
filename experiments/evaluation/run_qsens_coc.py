@@ -176,6 +176,11 @@ def coc_backward(model, processor, data, seed, max_gen, checkpoint):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="baseline",
+                    help="'baseline' or a slim ckpt dir. A quantization spec is a per-row "
+                         "bit vector bound to the shapes it was written for, so composing "
+                         "quantization with pruning needs the sensitivity measured on the "
+                         "pruned model, not on the dense one")
     ap.add_argument("--exp-id", default="qsens_coc_v1")
     ap.add_argument("--num-clips", type=int, default=100)
     ap.add_argument("--calib-manifest", default="calib_100")
@@ -200,11 +205,20 @@ def main():
     device = reserve_gpu(args.reserve_gb, devices=devices)
     print(f"using {device}", flush=True)
 
-    model = Alpamayo1_5.from_pretrained(
-        "nvidia/Alpamayo-1.5-10B", revision=MODEL_REV, dtype=torch.bfloat16).to("cuda")
-    model.eval()
-    for p in model.parameters():
-        p.requires_grad_(False)
+    if args.model == "baseline":
+        model = Alpamayo1_5.from_pretrained(
+            "nvidia/Alpamayo-1.5-10B", revision=MODEL_REV, dtype=torch.bfloat16).to("cuda")
+        model.eval()
+        for p in model.parameters():
+            p.requires_grad_(False)
+    else:
+        # a per-row bit spec is bound to the shapes it was written for, and pruning
+        # changes out_features (run_baseline.py refuses the mismatch outright). So a
+        # spec for a slim checkpoint has to be measured ON that checkpoint.
+        import slim_lib as sl
+        model = sl.load_slim(REPO / args.model, device="cuda")
+        for p in model.parameters():
+            p.requires_grad_(False)
     processor = helper.get_processor(model.tokenizer)
     lib.set_vlm_attn_impl(model, "sdpa")
     lib.set_expert_attn_impl(model, "sdpa")
@@ -225,7 +239,7 @@ def main():
     if not args.probe:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "config.json").write_text(json.dumps({
-            "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
+            "model": args.model, "model_revision": MODEL_REV,
             "purpose": "row-level quantization sensitivity from the CoC loss only",
             "objective": "CoC NLL of the model's own rollout (label-free)",
             "trajectory_loss_used": False,

@@ -41,6 +41,22 @@ def flat(pairs):
     return [t for kv in pairs for t in kv]
 
 
+def traj_weight(kind, n_tok, device):
+    """(n_tok,) waypoint weights, or None for the shipped equal weighting.
+
+    Neither shape has a free parameter: `lin` is the count of positions an action at step
+    t displaces, `h19` is the effective horizon measured from the closed-loop logs. That
+    matters because "we tuned a decay constant until it won" is the failure mode this
+    repo has already paid for on the calibration axis.
+    """
+    if kind is None:
+        return None
+    t = torch.arange(n_tok, dtype=torch.float32, device=device)
+    if kind == "lin":
+        return n_tok - t  # (64,) 64..1
+    return (t < 19).float()  # (64,) 1 for the first 1.9 s, else 0
+
+
 def process_clip(model, processor, data, args, seed, acc):
     inputs = lib.build_inputs(model, processor, data, "cuda")
     prompt_len = inputs["input_ids"].shape[1]
@@ -134,7 +150,7 @@ def process_clip(model, processor, data, args, seed, acc):
         fm_loss, grads, leaves = pl.expert_fm_grads(
             model, cache, rope_deltas, x1, args.fm_steps, seed, prefill,
             k_draws=args.k_draws if args.traj_target == "gtk" else 1,
-            dims=args.traj_dims,
+            dims=args.traj_dims, wt=traj_weight(args.traj_weight, x1.shape[1], x1.device),
         )
     acc["traj"]["exp_q"] += expert_gates.q_scores()
     acc["traj"]["exp_mlp"] += expert_gates.mlp_scores()
@@ -195,6 +211,14 @@ def main():
                          "produces; independent: a fresh eps per step. G1 measured tied "
                          "at 29.9% of the GT-anchored loss (not degenerate, because the "
                          "flow is not straight), so tied is the default")
+    ap.add_argument("--traj-weight", default=None, choices=["lin", "h19"],
+                    help="weight the 64 trajectory waypoints in the flow-matching loss "
+                         "instead of weighting them equally. 'lin' is w_t = (64-t), the "
+                         "number of positions each action displaces, i.e. position-space "
+                         "influence; 'h19' keeps only the first 19 waypoints, the 1.9 s "
+                         "effective horizon measured in "
+                         "plans/2026-09-11_effective-plan-horizon.md. Both are derived, "
+                         "not tuned. Omit for the shipped equal weighting")
     ap.add_argument("--traj-dims", default=None,
                     help="restrict the flow-matching loss to these action channels, "
                          "comma-separated (the action is unicycle (accel, curvature), so "
@@ -228,6 +252,10 @@ def main():
                          "before the per-clip gates, so a masked unit's gate gradient is "
                          "exactly zero and it cannot re-enter a ranking")
     args = ap.parse_args()
+    if args.traj_weight is not None and (args.traj_mode != "fm" or args.traj_target != "gt"):
+        # only the shipped fm/gt branch threads wt through; elsewhere it would be
+        # accepted and silently ignored, which is the trap --traj-target hit before
+        ap.error("--traj-weight applies to --traj-mode fm --traj-target gt only")
     if args.traj_dims is not None:
         if args.traj_mode != "fm" or args.traj_target != "gt":
             # only the shipped fm/gt branch threads dims through; anywhere else it
@@ -325,6 +353,7 @@ def main():
                     or args.traj_target in ("self", "gtk") else None),
         "n_best": args.n_best if args.traj_target == "bestn" else None,
         "traj_dims": args.traj_dims,
+        "traj_weight": args.traj_weight,
         "gpu": torch.cuda.get_device_name(device), "shapes": {k: list(v) for k, v in shapes.items()},
     }, indent=2))
 
