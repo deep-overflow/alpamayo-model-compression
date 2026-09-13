@@ -146,6 +146,39 @@ test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝
 <code>dual</code>보다 높고, <code>dual</code>만 baseline보다 낮다. 칸끼리의 순서는 없다.</figcaption>
 </figure>
 
+<h3>4.2 같은 계단이 헤드 축에서도 나온다</h3>
+<p>여기까지는 expert MLP 축이었다. 같은 질문을 <strong>VLM의 헤드 축</strong>에 물으면
+&mdash; 24% 예산을 헤드에서 몇 개나 가져오는가 &mdash; 모양이 반복된다. 아래 네 arm은
+모두 <strong>같은 2,657,452,032 파라미터</strong>를 지우고, 헤드를 13개 / 4개 / 0개 자른다.</p>
+<div class='scroll'><table><thead><tr><th>arm</th><th>자른 head</th><th>기준</th><th>score</th><th>vs dual</th><th>offroad</th><th>과실충돌</th><th>CoC 퇴화</th></tr></thead><tbody><tr><td><code>dual</code></td><td>13</td><td class='dim'>우리 dual (gate Taylor)</td><td><strong>0.828</strong></td><td><span class='dim'>기준</span></td><td>6.7%</td><td>2.3%</td><td>2.72%</td></tr><tr><td><code>baseline</code></td><td>&mdash;</td><td class='dim'>무압축</td><td><span>0.750</span></td><td class='bad'>-0.0787<br><span class='ci'>p=1.1e-04</span></td><td>7.0%</td><td>4.0%</td><td>0.55%</td></tr><tr><td><code>dual+h4</code></td><td>4</td><td class='dim'>우리 dual (gate Taylor)</td><td><span>0.737</span></td><td class='bad'>-0.0912<br><span class='ci'>p=3.1e-06</span></td><td>9.3%</td><td>3.3%</td><td>0.36%</td></tr><tr><td><code>spg</code></td><td>0</td><td class='dim'>dual_param_first (CoC+궤적)</td><td><span>0.733</span></td><td class='bad'>-0.0955<br><span class='ci'>p=9.2e-07</span></td><td>8.0%</td><td>4.3%</td><td>0.84%</td></tr><tr><td><code>act_h0</code></td><td>0</td><td class='dim'>traj_param_first (궤적만)</td><td><span>0.727</span></td><td class='bad'>-0.1009<br><span class='ci'>p=4.0e-06</span></td><td>9.0%</td><td>5.0%</td><td>2.14%</td></tr></tbody></table></div>
+<p><code>dual</code>만 무압축을 이긴다. 헤드를 13개에서 4개로 줄이는 순간 &minus;0.091이
+발생하고, 0개로 더 줄여도 그 자리에 머문다.</p>
+<div class='scroll'><table><thead><tr><th>쌍</th><th>델타</th><th>95% CI</th><th>Wilcoxon p</th><th>W/L/T</th><th>판정</th></tr></thead><tbody><tr><td><code>spg</code> &minus; <code>act_h0</code></td><td>+0.0054</td><td class='ci'>[-0.0310, +0.0421]</td><td>0.96</td><td class='dim'>38/40/72</td><td class='dim'>구분 안 됨</td></tr><tr><td><code>spg</code> &minus; <code>dual_h4</code></td><td>-0.0043</td><td class='ci'>[-0.0402, +0.0326]</td><td>0.63</td><td class='dim'>38/43/69</td><td class='dim'>구분 안 됨</td></tr><tr><td><code>act_h0</code> &minus; <code>dual_h4</code></td><td>-0.0097</td><td class='ci'>[-0.0515, +0.0306]</td><td>0.89</td><td class='dim'>42/37/71</td><td class='dim'>구분 안 됨</td></tr><tr><td><code>spg</code> &minus; <code>baseline</code></td><td>-0.0168</td><td class='ci'>[-0.0569, +0.0223]</td><td>0.68</td><td class='dim'>46/42/62</td><td class='dim'>구분 안 됨</td></tr><tr><td><code>act_h0</code> &minus; <code>baseline</code></td><td>-0.0222</td><td class='ci'>[-0.0664, +0.0220]</td><td>0.40</td><td class='dim'>39/42/69</td><td class='dim'>구분 안 됨</td></tr><tr><td><code>dual_h4</code> &minus; <code>baseline</code></td><td>-0.0125</td><td class='ci'>[-0.0525, +0.0267]</td><td>0.64</td><td class='dim'>40/44/66</td><td class='dim'>구분 안 됨</td></tr></tbody></table></div>
+<p class="note">여섯 쌍 중 <code>*&nbsp;&minus;&nbsp;dual</code>만 구분되고 나머지는 전부
+구분되지 않는다. expert MLP 사다리에서 본 것과 같다 &mdash; <strong>손해는 양이 아니라
+여부</strong>다.</p>
+
+<h3>4.3 목적 함수를 바꿔도 회복되지 않는다 (1요인)</h3>
+<p>위 표의 <code>spg</code>와 <code>act_h0</code>은 이 연구에서 가장 깨끗한 1요인 쌍이다.
+두 마스크는 <strong>층별 예산·head 마스크·캘리브레이션·제거 파라미터가 전부 동일</strong>하고,
+고르는 채널만 다르다(유지집합 겹침 83.5%). 다른 것은 점수 함수 하나뿐이다 &mdash;
+<code>traj_param_first</code>(궤적만) 대 <code>dual_param_first</code>(CoC+궤적). 빌드 시
+G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
+<pre>spg &minus; act_h0   +0.0054 [&minus;0.0310, +0.0421]   p=0.96</pre>
+<p><strong>목적에 CoC를 더한 효과가 없다.</strong> 그러므로 이 축의 손해는 "궤적만 보는
+기준"의 결함이 아니라 <strong>MLP-only 배분 자체</strong>다. 헤드를 4개 자르든 0개 자르든,
+목적에 CoC를 넣든 말든 같은 자리(&minus;0.09&nbsp;~&nbsp;&minus;0.10)에 앉는다.</p>
+<div class="callout">
+  <p><strong>그런데 CoC 생성 품질은 실제로 지켰다.</strong> <code>spg</code>의 CoC 퇴화율은
+  0.84%로 <code>act_h0</code>(2.14%)와 <code>dual</code>(2.72%)보다 훨씬 낮고 무압축(0.55%)에
+  가깝다. 목적에 CoC를 넣은 것이 <em>CoC에는 효과가 있었는데 주행 점수는 하나도 못 살렸다.</em>
+  이 저장소가 따로 기록해 둔 "CoC 건강은 안전 대리지표가 아니다"의 또 한 사례다.</p>
+</div>
+<p class="note">한 가지 덧붙일 것: <code>act_h0</code>과 <code>spg</code>는 예산·배분만
+우리 <code>dual</code>과 같고 기준과 캘리브레이션이 다르다(유지집합 겹침 MLP 71.9% / 75.9%).
+그래서 <strong>이 둘과 <code>dual</code>의 차이는 1요인이 아니다</strong> &mdash; 1요인인 것은
+둘 사이의 비교, 그리고 <code>dual+h4</code>와 <code>dual</code>의 비교다.</p>
+
 <h2><span class="num">5.</span>해석 (의견)</h2>
 <div class="callout">
   <p><strong>결론 1 &mdash; 개루프는 이 축에 구조적으로 눈이 멀었다.</strong>
@@ -155,13 +188,18 @@ test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝
   벗어난 궤적과 차선을 넘은 궤적은 거리로 구분되지 않는다. 개루프에서 이탈을 대신 잴 방법도
   없다: <code>features.csv</code> 전체에 차선&middot;도로경계&middot;주행가능영역 라벨이 없어
   "도로를 벗어났다"를 판정할 기준 자체가 존재하지 않는다.</p>
-  <p><strong>결론 2 &mdash; 용량-반응이 아니라 계단이다.</strong>
+  <p><strong>결론 2 &mdash; 용량-반응이 아니라 계단이고, 축을 바꿔도 같다.</strong>
   자른 세 칸은 <em>서로 구분되지 않는다</em> &mdash; 세 쌍 모두 CI가 0을 포함하고
   (<code>em87p5&minus;em75</code> +0.0221, <code>em93p75&minus;em75</code> +0.0033,
   <code>em93p75&minus;em87p5</code> &minus;0.0188), 92&ndash;96씬이 동점이다. 그런데 셋 다
   <code>dual</code>보다 아래이고 셋 다 offroad가 <code>dual</code>보다 높다. 읽히는 신호는
   <strong>"얼마나 자르느냐"가 아니라 "자르느냐 마느냐"</strong>다 &mdash; 2064채널만 남겨도
   손해가 이미 다 발생하고, 거기서 4배 더 잘라도 더 나빠지지 않는다.</p>
+  <p>4.2와 4.3이 같은 모양을 두 축에서 더 보여준다. <strong>헤드 축</strong>(13&rarr;4&rarr;0)은
+  4개에서 &minus;0.091이 완결되고 0개도 그 자리이며(p=0.89), <strong>목적 함수</strong>
+  (궤적만&rarr;궤적+CoC)는 아예 움직이지 않는다(+0.0054, p=0.96). 세 축 어느 쪽도 첫 칸
+  이후로는 반응이 없다. <code>dual</code>이 헤드를 13개 자른다는 사실 하나가 &minus;0.09를
+  지키고 있고, 그 선을 넘으면 더 적게 자르는 것도 목적을 보강하는 것도 되돌리지 못한다.</p>
   <p class="note"><strong>이 결론은 한 번 틀렸다가 고쳐진 것이다.</strong> 초판은
   <code>em87p5</code>(&minus;0.0166)와 <code>em93p75</code>(&minus;0.0355) 두 점만 가지고
   "계단이 거의 등간격으로 정렬한다"고 썼다. 두 점은 언제나 직선 위에 있다. 세 번째 점
@@ -217,6 +255,11 @@ THW&lt;1s 비율 &minus;0.032 (셋 다 유의). 나빠지는 것은 측면이다
   <p><strong>절대 이탈률&middot;충돌률을 suite 전체로 일반화하지 않는다.</strong> 150씬 표본은
   <code>public_2601</code> 913씬보다 쉽다 &mdash; 무압축 0.742 대 0.660, 과실 충돌 2.0% 대
   5.5%. 여기서 읽는 것은 대응 델타이지 절대값이 아니다.</p>
+  <p><strong>4.2의 다섯 arm이 모두 1요인이라고 말하지 않는다.</strong>
+  <code>act_h0</code>과 <code>spg</code>는 기준과 캘리브레이션이 우리 <code>dual</code>과
+  다르다(유지집합 겹침 MLP 71.9% / 75.9%). 그 둘과 <code>dual</code>의 차이에는 축과 기준이
+  함께 들어 있다. 1요인인 것은 <strong>둘 사이</strong>(4.3)와
+  <strong><code>dual+h4</code> 대 <code>dual</code></strong> 둘뿐이며, 나머지 행은 맥락이다.</p>
   <p><strong>expert MLP를 자르지 말라고 말하지 않는다.</strong> 모든 칸이 무압축을
   <em>이긴다</em>. 말하는 것은 두 가지다 &mdash; (a) 이 결정을 개루프로 내리면 안 되고,
   (b) 압축률이 절대적으로 필요한 상황이 아니라면 <code>dual</code>을 유지하는 편이 낫다.</p>
