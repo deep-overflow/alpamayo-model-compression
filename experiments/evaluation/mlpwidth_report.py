@@ -235,11 +235,12 @@ def cut_pairs_table(m):
             f"<tbody>{body}</tbody></table></div>")
 
 
-HEAD_AXIS = [("dual", "dual", "13", "우리 dual (gate Taylor)"),
-             ("baseline", "baseline", "&mdash;", "무압축"),
-             ("dual_h4", "dual+h4", "4", "우리 dual (gate Taylor)"),
-             ("spg", "spg", "0", "dual_param_first (CoC+궤적)"),
-             ("act_h0", "act_h0", "0", "traj_param_first (궤적만)")]
+HEAD_AXIS = [("dual", "dual", "13", "24.0%", "우리 dual (gate Taylor)"),
+             ("baseline", "baseline", "&mdash;", "&mdash;", "무압축"),
+             ("dual_h4", "dual+h4", "4", "24.0%", "우리 dual (gate Taylor)"),
+             ("spg", "spg", "0", "24.0%", "dual_param_first"),
+             ("act_h0", "act_h0", "0", "24.0%", "traj_param_first"),
+             ("pr70", "pr_mlp70", "0", "33.4%", "dual_param_first")]
 
 
 def head_axis_tables(m2):
@@ -256,7 +257,7 @@ def head_axis_tables(m2):
         return 100 * hit / n
 
     body = ""
-    for key, label, heads, crit in HEAD_AXIS:
+    for key, label, heads, budget, crit in HEAD_AXIS:
         if key not in a:
             continue
         # analyze_calibsize names each pair once, in the order the arms were passed, so
@@ -273,19 +274,20 @@ def head_axis_tables(m2):
             cls = " class='bad'" if v["ci_hi"] < 0 else ""
         strong = "strong" if key == "dual" else "span"
         body += (f"<tr><td><code>{label}</code></td><td>{heads}</td>"
-                 f"<td class='dim'>{crit}</td>"
+                 f"<td>{budget}</td><td class='dim'>{crit}</td>"
                  f"<td><{strong}>{a[key]['score']:.3f}</{strong}></td><td{cls}>{vd}</td>"
                  f"<td>{gate(key, 'offroad'):.1f}%</td>"
                  f"<td>{gate(key, 'collision_at_fault'):.1f}%</td>"
                  f"<td>{100 * a[key]['coc_degenerate']:.2f}%</td></tr>")
     t1 = ("<div class='scroll'><table><thead><tr><th>arm</th><th>자른 head</th>"
-          "<th>기준</th><th>score</th><th>vs dual</th><th>offroad</th><th>과실충돌</th>"
-          "<th>CoC 퇴화</th></tr></thead>"
+          "<th>총 제거</th><th>기준</th><th>score</th><th>vs dual</th><th>offroad</th>"
+          "<th>과실충돌</th><th>CoC 퇴화</th></tr></thead>"
           f"<tbody>{body}</tbody></table></div>")
 
     body = ""
-    for key in ("spg - act_h0", "spg - dual_h4", "act_h0 - dual_h4", "spg - baseline",
-                "act_h0 - baseline", "dual_h4 - baseline"):
+    for key in ("spg - act_h0", "pr70 - spg", "pr70 - act_h0", "spg - dual_h4",
+                "act_h0 - dual_h4", "pr70 - dual_h4", "spg - baseline",
+                "act_h0 - baseline", "pr70 - baseline", "dual_h4 - baseline"):
         if key not in pr:
             continue
         v = pr[key]
@@ -501,6 +503,40 @@ G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
 그래서 <strong>이 둘과 <code>dual</code>의 차이는 1요인이 아니다</strong> &mdash; 1요인인 것은
 둘 사이의 비교, 그리고 <code>dual+h4</code>와 <code>dual</code>의 비교다.</p>
 
+<div class="warn">
+  <p><strong><code>spg</code>는 "우리 <code>dual</code>의 h0 버전"이 아니다.</strong>
+  두 기준 모두 CoC와 궤적을 함께 보지만 재는 양이 다르다 &mdash; 우리 것은 곱셈 <em>게이트</em>를
+  미분해 <code>max(rank I_traj, rank I_CoC)</code>로 합집합을 취하고, <code>dual_param_first</code>는
+  <em>가중치</em>를 미분해 부호를 유지한 채 더한다. 확인해 봤다: 우리 dual 점수로
+  <code>spg</code>와 <strong>똑같은 층별 예산</strong>을 뽑으면 36개 층 중
+  <strong>1개만</strong> 일치한다(그 1개는 아무것도 자르지 않는 층 35다). 겹침 83.9%로
+  무작위(51.1%)보다는 훨씬 높으니 비슷한 것을 보긴 하지만, 같은 기준은 아니다.
+  <strong>우리 기준의 진짜 h0 arm은 아직 없다</strong> &mdash; <code>dual+h4</code>가 가장 극단이다.</p>
+</div>
+
+<h3>4.4 더 깊이 파면: 점수는 포화하고 게이트는 포화하지 않는다</h3>
+<p><code>pr_mlp70</code>은 <code>spg</code>와 같은 기준으로 같은 축을 더 깊이 판 칸이다
+&mdash; MLP 폭의 50.3%가 아니라 <strong>70.0%</strong>를 잘라 총 제거가 24.0%에서 33.4%가
+된다. 유지집합이 <code>spg</code>의 유지집합에 <strong>36/36 층 완전히 포함</strong>되므로
+"더 잘라서"와 "다른 채널을 골라서"가 섞이지 않는다(빌드 게이트 G0g&ndash;G0i로 확인).</p>
+<pre>pr70 &minus; spg      &minus;0.0178 [&minus;0.0636, +0.0275]   p=0.81
+pr70 &minus; baseline &minus;0.0346 [&minus;0.0838, +0.0147]   p=0.31</pre>
+<p><strong>종합 점수로는 두 번째 단이 없다.</strong> 예산을 1.4배로 늘려도 CI가 0을 넉넉히
+포함한다. 이 축은 24%에서 이미 바닥이라는 뜻이다.</p>
+<div class="callout">
+  <p><strong>그런데 게이트는 다르다.</strong> 과실 충돌이 <code>spg</code> 4.3%에서
+  <code>pr70</code> <strong>9.0%</strong>로 2.1배가 된다 &mdash; 무압축(4.0%)의 2.25배,
+  <code>dual</code>(2.3%)의 3.9배다. CoC 퇴화도 0.84% &rarr; <strong>6.48%</strong>로 함께 뛴다.
+  Wilson CI가 겨우 겹치는 수준이라 단독 검정력은 약하지만 두 지표의 방향이 같다.</p>
+  <p><strong>종합 점수가 포화한 이유는 점수의 구조에 있다.</strong> <code>score_criteria</code>는
+  <code>collision_at_fault</code>와 <code>offroad</code>를 <em>하드 게이트</em>로 쓰고 나머지를
+  progress로 채운다. 이미 게이트에 걸리는 씬이 많은 구간에서는 충돌이 더 늘어도 점수를 더
+  깎을 자리가 없다. 실제로 <code>pr70</code>의 <strong>중앙값은 0.937로 <code>spg</code>의
+  0.856보다 높다</strong> &mdash; 잘 가는 씬은 더 잘 가고 망하는 씬은 더 크게 망하는 분포다.</p>
+  <p>그러므로 이 축에서 <strong>종합 점수 하나로 "더 잘라도 괜찮다"고 읽으면 안 된다.</strong>
+  앞의 세 축에서는 점수와 게이트가 같은 방향이었지만, 여기서는 갈린다.</p>
+</div>
+
 <h2><span class="num">5.</span>해석 (의견)</h2>
 <div class="callout">
   <p><strong>결론 1 &mdash; 개루프는 이 축에 구조적으로 눈이 멀었다.</strong>
@@ -522,6 +558,11 @@ G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
   (궤적만&rarr;궤적+CoC)는 아예 움직이지 않는다(+0.0054, p=0.96). 세 축 어느 쪽도 첫 칸
   이후로는 반응이 없다. <code>dual</code>이 헤드를 13개 자른다는 사실 하나가 &minus;0.09를
   지키고 있고, 그 선을 넘으면 더 적게 자르는 것도 목적을 보강하는 것도 되돌리지 못한다.</p>
+  <p><strong>단, 이 "계단"은 종합 점수의 성질이다.</strong> 4.4가 그 한계를 보여준다 &mdash;
+  MLP를 70%까지 파도 점수는 안 움직이는데(p=0.81) 과실 충돌은 2.1배가 되고 CoC 퇴화는
+  7.7배가 된다. 점수가 게이트를 하드 컷으로 쓰기 때문에 이미 걸린 씬에서는 추가 실패가
+  점수에 반영되지 않는다. <strong>계단이라는 결론은 "더 잘라도 안전하다"가 아니라
+  "종합 점수로는 더 이상 구분되지 않는다"이다.</strong></p>
   <p class="note"><strong>이 결론은 한 번 틀렸다가 고쳐진 것이다.</strong> 초판은
   <code>em87p5</code>(&minus;0.0166)와 <code>em93p75</code>(&minus;0.0355) 두 점만 가지고
   "계단이 거의 등간격으로 정렬한다"고 썼다. 두 점은 언제나 직선 위에 있다. 세 번째 점
