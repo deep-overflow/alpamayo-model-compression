@@ -238,8 +238,9 @@ def cut_pairs_table(m):
 HEAD_AXIS = [("dual", "dual", "13", "24.0%", "우리 dual (gate Taylor)"),
              ("baseline", "baseline", "&mdash;", "&mdash;", "무압축"),
              ("dual_h4", "dual+h4", "4", "24.0%", "우리 dual (gate Taylor)"),
-             ("spg", "spg", "0", "24.0%", "dual_param_first"),
              ("act_h0", "act_h0", "0", "24.0%", "traj_param_first"),
+             ("spg", "spg", "0", "24.0%", "dual_param_first"),
+             ("act70", "act_mlp70", "0", "33.4%", "traj_param_first"),
              ("pr70", "pr_mlp70", "0", "33.4%", "dual_param_first")]
 
 
@@ -285,9 +286,11 @@ def head_axis_tables(m2):
           f"<tbody>{body}</tbody></table></div>")
 
     body = ""
-    for key in ("spg - act_h0", "pr70 - spg", "pr70 - act_h0", "spg - dual_h4",
-                "act_h0 - dual_h4", "pr70 - dual_h4", "spg - baseline",
-                "act_h0 - baseline", "pr70 - baseline", "dual_h4 - baseline"):
+    # the four edges of the 2x2 first, then everything against the uncompressed baseline
+    for key in ("spg - act_h0", "pr70 - act70", "act70 - act_h0", "pr70 - spg",
+                "act70 - spg", "pr70 - act_h0",
+                "act_h0 - baseline", "spg - baseline", "act70 - baseline",
+                "pr70 - baseline", "dual_h4 - baseline"):
         if key not in pr:
             continue
         v = pr[key]
@@ -514,27 +517,55 @@ G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
   <strong>우리 기준의 진짜 h0 arm은 아직 없다</strong> &mdash; <code>dual+h4</code>가 가장 극단이다.</p>
 </div>
 
-<h3>4.4 더 깊이 파면: 점수는 포화하고 게이트는 포화하지 않는다</h3>
-<p><code>pr_mlp70</code>은 <code>spg</code>와 같은 기준으로 같은 축을 더 깊이 판 칸이다
-&mdash; MLP 폭의 50.3%가 아니라 <strong>70.0%</strong>를 잘라 총 제거가 24.0%에서 33.4%가
-된다. 유지집합이 <code>spg</code>의 유지집합에 <strong>36/36 층 완전히 포함</strong>되므로
-"더 잘라서"와 "다른 채널을 골라서"가 섞이지 않는다(빌드 게이트 G0g&ndash;G0i로 확인).</p>
-<pre>pr70 &minus; spg      &minus;0.0178 [&minus;0.0636, +0.0275]   p=0.81
-pr70 &minus; baseline &minus;0.0346 [&minus;0.0838, +0.0147]   p=0.31</pre>
-<p><strong>종합 점수로는 두 번째 단이 없다.</strong> 예산을 1.4배로 늘려도 CI가 0을 넉넉히
-포함한다. 이 축은 24%에서 이미 바닥이라는 뜻이다.</p>
+<h3>4.4 기준 &times; 깊이: 두 요인은 독립이 아니다</h3>
+<p>MLP-only arm 네 개가 <strong>완전 교차된 2&times;2</strong>를 이룬다. 배분·캘리브레이션
+(<code>lp_c100s1</code>)·head 0개·층 35 보존이 전부 고정되고, 점수 함수와 깊이만 움직인다.
+각 칸의 중첩과 예산 일치는 빌드 게이트로 확인한 뒤 돌렸다.</p>
+<div class="scroll"><table><thead><tr><th></th>
+<th><code>traj_param_first</code></th><th><code>dual_param_first</code></th></tr></thead><tbody>
+<tr><td><strong>MLP 50.3%</strong> (총 24.0%)</td><td>act_h0 <strong>0.727</strong></td>
+    <td>spg <strong>0.733</strong></td></tr>
+<tr><td><strong>MLP 70.0%</strong> (총 33.4%)</td>
+    <td>act_mlp70 <strong class="good">0.765</strong></td>
+    <td>pr_mlp70 <strong class="bad">0.715</strong></td></tr>
+</tbody></table></div>
+<pre>기준 효과  얕게  spg &minus; act_h0    +0.0054 [&minus;0.0310, +0.0421]  p=0.96     무관
+          깊게  pr70 &minus; act70    &minus;0.0499 [&minus;0.0874, &minus;0.0131]* p=0.0091   유의
+깊이 효과  traj  act70 &minus; act_h0  +0.0375 [&minus;0.0001, +0.0755]  p=0.025    좋아짐
+          dual  pr70 &minus; spg      &minus;0.0178 [&minus;0.0636, +0.0275]  p=0.81     무변화</pre>
+<p><strong>얕게 자를 때는 기준이 무관한데(p=0.96) 깊게 자르면 갈린다(p=0.0091).</strong>
+앞 절들이 세 축에서 얻은 "계단" 요약은 <em>깊이가 얕을 때의 성질</em>이었다. 70%까지 가면
+어느 점수로 골랐는지가 0.05를 가른다.</p>
+
+<div class="warn">
+  <p><strong><code>act_mlp70</code>의 0.765를 "더 자르면 좋아진다"로 읽으면 안 된다.</strong>
+  이 arm은 MLP-only 중 유일하게 무압축을 넘지만(+0.0153, p=0.11), <strong>CoC 퇴화율이
+  20.73%</strong>다 &mdash; empty 15.0% + soup 5.7%, 출하 <code>dual</code>(2.72%)의 7.6배,
+  무압축(0.55%)의 38배. 다섯 rollout 중 하나꼴로 추론이 붕괴한다.</p>
+  <p>서명이 분명하다: <strong>progress는 0.784로 전 arm 최고</strong>이고 중앙값이 1.000인데,
+  <strong>게이트는 최악</strong>이다(offroad 9.3%, 과실충돌 4.7% &mdash; 무압축 4.0%보다 높다).
+  추론을 포기하고 전진을 번 형태이고, 종합 점수는 그 거래를 보상한다. 이 저장소가 Tyr
+  폐루프에서 이미 본 모양이다 &mdash; 거기서도 CoC 붕괴는 전부 빈 출력이었고 궤적은
+  baseline 근처였다.</p>
+  <p class="note"><strong>부수 관찰.</strong> <code>act_mlp70</code>의 폐루프는 10시간 18분으로
+  다른 런(7시간 38분&ndash;8시간 21분)보다 2시간 넘게 길었다. CoC 길이가 106으로 다른
+  arm(74&ndash;80)보다 40% 길다 &mdash; <strong>CoC가 붕괴하면 디코딩이 짧아지는 게 아니라
+  길어질 수 있다</strong>(soup은 반복 생성이다). 다른 arm의 실측으로 런타임을 외삽하면
+  이만큼 빗나간다.</p>
+</div>
+
+<p><code>dual_param_first</code> 쪽에서는 이야기가 다르다. 깊이를 늘려도 종합 점수는 움직이지
+않는데(<code>pr70 &minus; spg</code> p=0.81) <strong>과실 충돌이 4.3% &rarr; 9.0%로 2.1배</strong>가
+되고 CoC 퇴화도 0.84% &rarr; 6.48%로 뛴다. 점수가 포화하는 이유는 점수의 구조에 있다 &mdash;
+<code>score_criteria</code>는 <code>collision_at_fault</code>와 <code>offroad</code>를
+<em>하드 게이트</em>로 쓰고 나머지를 progress로 채우므로, 이미 걸린 씬에서는 충돌이 더 늘어도
+깎을 자리가 없다. <code>pr70</code>의 중앙값이 0.937로 <code>spg</code>의 0.856보다
+<em>높다</em>는 것이 그 분포다.</p>
 <div class="callout">
-  <p><strong>그런데 게이트는 다르다.</strong> 과실 충돌이 <code>spg</code> 4.3%에서
-  <code>pr70</code> <strong>9.0%</strong>로 2.1배가 된다 &mdash; 무압축(4.0%)의 2.25배,
-  <code>dual</code>(2.3%)의 3.9배다. CoC 퇴화도 0.84% &rarr; <strong>6.48%</strong>로 함께 뛴다.
-  Wilson CI가 겨우 겹치는 수준이라 단독 검정력은 약하지만 두 지표의 방향이 같다.</p>
-  <p><strong>종합 점수가 포화한 이유는 점수의 구조에 있다.</strong> <code>score_criteria</code>는
-  <code>collision_at_fault</code>와 <code>offroad</code>를 <em>하드 게이트</em>로 쓰고 나머지를
-  progress로 채운다. 이미 게이트에 걸리는 씬이 많은 구간에서는 충돌이 더 늘어도 점수를 더
-  깎을 자리가 없다. 실제로 <code>pr70</code>의 <strong>중앙값은 0.937로 <code>spg</code>의
-  0.856보다 높다</strong> &mdash; 잘 가는 씬은 더 잘 가고 망하는 씬은 더 크게 망하는 분포다.</p>
-  <p>그러므로 이 축에서 <strong>종합 점수 하나로 "더 잘라도 괜찮다"고 읽으면 안 된다.</strong>
-  앞의 세 축에서는 점수와 게이트가 같은 방향이었지만, 여기서는 갈린다.</p>
+  <p><strong>두 칸이 같은 것을 말한다.</strong> 깊게 자르면 종합 점수는 더 이상 믿을 수 없다
+  &mdash; 한쪽(<code>act70</code>)은 추론을 버려 점수를 <em>올리고</em>, 다른 쪽
+  (<code>pr70</code>)은 충돌이 두 배가 되어도 점수가 <em>안 내려간다</em>. 어느 쪽이든
+  <strong>CoC 퇴화율과 게이트를 종합 점수와 함께 읽지 않으면 오독한다.</strong></p>
 </div>
 
 <h2><span class="num">5.</span>해석 (의견)</h2>
@@ -558,7 +589,10 @@ pr70 &minus; baseline &minus;0.0346 [&minus;0.0838, +0.0147]   p=0.31</pre>
   (궤적만&rarr;궤적+CoC)는 아예 움직이지 않는다(+0.0054, p=0.96). 세 축 어느 쪽도 첫 칸
   이후로는 반응이 없다. <code>dual</code>이 헤드를 13개 자른다는 사실 하나가 &minus;0.09를
   지키고 있고, 그 선을 넘으면 더 적게 자르는 것도 목적을 보강하는 것도 되돌리지 못한다.</p>
-  <p><strong>단, 이 "계단"은 종합 점수의 성질이다.</strong> 4.4가 그 한계를 보여준다 &mdash;
+  <p><strong>단, 계단은 얕은 쪽의 성질이다.</strong> 4.4가 그 경계를 보인다 &mdash;
+  MLP를 70%까지 파면 기준 선택이 다시 유의해지고(p=0.0091), 한 칸은 CoC를 버려 점수를 올리고
+  다른 칸은 충돌이 두 배가 되어도 점수가 안 내려간다. 아래 문장은 그 안쪽에서만 성립한다.</p>
+  <p><strong>그리고 이 "계단"은 종합 점수의 성질이다.</strong> 4.4가 그 한계를 보여준다 &mdash;
   MLP를 70%까지 파도 점수는 안 움직이는데(p=0.81) 과실 충돌은 2.1배가 되고 CoC 퇴화는
   7.7배가 된다. 점수가 게이트를 하드 컷으로 쓰기 때문에 이미 걸린 씬에서는 추가 실패가
   점수에 반영되지 않는다. <strong>계단이라는 결론은 "더 잘라도 안전하다"가 아니라
