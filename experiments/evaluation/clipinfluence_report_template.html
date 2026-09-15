@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>캘리브레이션 클립별 영향도 &mdash; 추출 효과는 개별 샘플로 분해되지 않는다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-09-15</div>
+  <h1>캘리브레이션 클립별 영향도 &mdash; 추출 효과는 개별 샘플로 분해되지 않는다</h1>
+  <div class="meta">
+    <code>calib_100</code>의 50클립 여상보 부분집합 64개로 만든 <code>dual_u40_v2</code> 64 arm,
+    val500 앞 150클립 minADE@6, Ada 4&ndash;7, 무압축 <code>baseline_ada_ps_indist</code>와 페어드.
+    계획: <code>plans/2026-09-14_calibration-clip-influence.md</code> ·
+    설계 sha <code>5370213c4b7def33</code> · 분석 <code>experiments/evaluation/analyze_clipinfluence.py</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>한 문장</strong>
+  캘리브레이션 추출 효과는 이 프로젝트에서 측정된 가장 큰 단일 요인인데(같은 100클립의 절반들이
+  <strong>+0.020에서 +0.998까지 50배</strong>), 그 산포에 <strong>개별 클립의 기여는 0%</strong>이고
+  (sd(&tau;) 0.0525 대 귀무 0.0573, p=0.901) 애초에 <strong>가법 구조 자체가 없다</strong>
+  (&chi;&sup2; 144.6/31 df, p=1.3e&minus;16). 클립에 점수를 매겨 고르는 접근은 이 축에서 닫힌다.
+</div>
+
+<h2><span class="num">1</span> 왜 이 실험인가</h2>
+
+<p>
+캘리브레이션 추출은 이 레포에서 측정된 <strong>단일 요인 중 가장 크다</strong>. 기준·예산·축이
+전부 같고 100클립만 바꿨는데 test500 minADE@6가 0.9498에서 1.7742까지 간다
+(<code>outputs/calib_variance</code>, 6개 추출 sd 0.363). 24% 프루닝 자체가 +0.0955이므로
+<strong>추출이 방법보다 크다</strong>.
+</p>
+
+<p>지금까지의 접근은 전부 <strong>세트 단위</strong>였고, 마지막 줄이 이 계획의 출발점이다.</p>
+
+<table>
+  <thead><tr><th>이미 한 것</th><th>결론</th></tr></thead>
+  <tbody>
+    <tr><td>추출 6개 비교 (<code>2026-09-03_calib-draw-variance</code>)</td><td>분산 실재, <code>calib_100</code>이 운 좋은 1위</td></tr>
+    <tr><td>n 사다리 100&rarr;2,000&rarr;4,000 (<code>2026-09-06_calibration-size</code>)</td><td>선택은 수렴하는데 성능은 더 나빠짐</td></tr>
+    <tr><td>추출 규칙 3종 &times; 3 seed (<code>2026-09-12_action-stratified-calib</code>)</td><td><code>se</code>(조성 층화)가 <code>rd</code>보다 &minus;0.153</td></tr>
+    <tr><td>세트 속성 21종 회귀 (<code>plans/2026-09-07_draw-order</code>)</td><td><strong>전부 무상관 또는 복제 실패</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+세트 속성으로 설명하려는 시도가 21번 실패했다면, 남은 길은 상관이 아니라 <strong>개입</strong>이다 &mdash;
+클립 하나하나가 최종 성능에 얼마를 기여하는지 직접 재는 것. 그리고 그건 거의 공짜로 가능했다:
+<code>outputs/importance_v2/importance_perclip.npz</code>에 100클립 각각의 중요도 배열
+(<code>(100, 36, 32)</code>, <code>(100, 36, 12288)</code>, 목적 2종 &times; 축 6종)이 이미 있고,
+집계가 <strong>단순 평균</strong>이라 임의 부분집합의 기준이 GPU 없이 정확히 계산된다.
+</p>
+
+<h2><span class="num">2</span> 설계 &mdash; 여상보 쌍 부분집합</h2>
+
+<p>
+50클립 부분집합 <var>S<sub>m</sub></var> 64개로 <code>dual_u40_v2</code>를 만들고 같은 150클립에서
+평가한 뒤, 클립별 한계기여를 다음으로 추정한다.
+</p>
+
+<pre><code>y_m    = mean over the 150 fit clips of (arm minADE@6 - baseline minADE@6)
+tau_i  = mean(y_m | i in S_m) - mean(y_m | i not in S_m)      # &gt;0 이면 그 클립이 해롭다</code></pre>
+
+<p>
+<strong>왜 50인가.</strong> LOO(99클립)는 신호가 1%라 잴 수 없다. 50은
+<code>outputs/calib_stability</code>가 이미 잰 지점이고(Q 유지집합 중첩 0.884) 선택이 실제로
+움직이는 크기다. 크기는 <strong>정확히 50으로 고정</strong>했다 &mdash; Bernoulli(0.5) 설계는
+|S|가 &plusmn;5 흔들려 크기 효과가 추정 대상과 교락된다.
+</p>
+
+<p>
+<strong>왜 여상보 쌍인가.</strong> 한 쌍 = 100클립의 한 순열을 50/50으로 가른 두 arm이다. 세 가지가 따라온다.
+</p>
+<ul>
+  <li>모든 클립이 정확히 M/2회 등장 &rarr; <strong>모든 &tau;<sub>i</sub>의 분산이 같다</strong>.
+      독립 추출이면 SE 배수가 0.354~0.393으로 갈리는데, max|&tau;| 임계값을 정하는 건 하필 가장 시끄러운 클립이다.</li>
+  <li>&tau;가 <strong>쌍 차이의 평균</strong>으로 환원되어 부분집합 수준 잡음이 상쇄된다.</li>
+  <li>귀무검정이 <strong>근사가 아니라 정확</strong>해진다 &mdash; &ldquo;어느 클립도 중요하지 않다&rdquo; 아래에서
+      한 쌍의 어느 반쪽을 A라 부를지는 임의이므로, 쌍마다 부호를 독립적으로 뒤집으면
+      2<sup>M/2</sup>개 재배치에 대한 무작위화 검정이 된다. 정규성도, 분산 추정도 필요 없다.</li>
+  <li>짝수 길이 <strong>prefix가 그 자체로 균형</strong>이라 M을 32에서 64로 늘리면서 앞 32개를 그대로 썼다.</li>
+</ul>
+
+<h3>계측 게이트 V0 &mdash; 세 겹 전부 통과</h3>
+<p>부분집합 기준을 numpy로 계산하고 <code>apply_surgery</code>를 건너뛰는 지름길이 이 연구의 전제다.</p>
+<table>
+  <thead><tr><th>확인</th><th>결과</th></tr></thead>
+  <tbody>
+    <tr><td>per-clip 평균 vs 출하 <code>importance.npz</code></td><td>max|diff| 1.9e&minus;08 (rel 1.3e&minus;07) &mdash; float32 누적 순서</td></tr>
+    <tr><td>V0a 전체 100클립 레시피 vs 출하 <code>slim_dual_u40_v2</code></td><td><span class="good">unit 단위 완전 일치</span>, 제거 2,657,452,032 동일</td></tr>
+    <tr><td>V0b 배치 빌더 vs <code>make_slim.py --no-state</code></td><td><span class="good">키 단위 완전 일치</span></td></tr>
+    <tr><td>모델 없이 재현한 선택 vs 출하 kept set</td><td><span class="good">Q&middot;MLP 둘 다 일치</span> (LOO churn을 GPU 0으로 계산 가능)</td></tr>
+  </tbody>
+</table>
+<p class="small">
+64개 arm 전부 <strong>2,657,452,032 파라미터를 비트 동일하게</strong> 제거한다(층당 Q head 19/32,
+MLP 7390/12288 유지). 달라지는 것은 어느 캘리브레이션 클립을 썼는지뿐이다.
+</p>
+
+<h2><span class="num">3</span> 사실 &mdash; 집합 효과는 거대하다 (게이트 P0)</h2>
+
+<table>
+  <thead><tr><th>arm</th><th class="num">같은 150클립 minADE@6 델타</th></tr></thead>
+  <tbody>
+    <tr><td>전체 100클립 (출하 <code>dual</code>)</td><td class="num">+0.0345</td></tr>
+    <tr><td>50클립 부분집합 &mdash; 최선</td><td class="num">+0.0200</td></tr>
+    <tr><td>50클립 부분집합 &mdash; 평균 (n=64)</td><td class="num">+0.2259 &nbsp;(<strong>6.6&times;</strong>)</td></tr>
+    <tr><td>50클립 부분집합 &mdash; 최악</td><td class="num"><span class="bad">+0.9977 (28.9&times;)</span></td></tr>
+    <tr><td>sd</td><td class="num">0.2456</td></tr>
+  </tbody>
+</table>
+
+<p>
+64개 중 전체 100개를 이긴 것은 <strong>4개</strong>다. <code>calib_100</code>의 &ldquo;운&rdquo;은
+어느 절반에도 실려 있지 않고 <strong>100개가 함께</strong> 만든다.
+</p>
+
+<p>
+손상의 성질도 갈라두었다. CoC 퇴화율은 arm 평균 1.05%, 최대 4.0%이고 y와 무관하다
+(&rho;=+0.044, p=0.729). <strong>순수 궤적 손상이지 추론 붕괴가 아니다</strong> &mdash;
+<code>dualsafe</code>가 +0.1945를 내면서 퇴화가 불변이었던 것과 같은 양상이다.
+</p>
+
+<h2><span class="num">4</span> 사실 &mdash; 가법성이 없다 (게이트 A2)</h2>
+
+<p>
+여상보 쌍의 두 반쪽은 <code>calib_100</code>을 정확히 가른다. 따라서
+<var>y<sub>S</sub></var> = mean<sub>i&isin;S</sub> <var>e<sub>i</sub></var> 꼴의
+<strong>어떤</strong> 가법 모형에서도 <strong>쌍의 y 합은 모든 쌍에서 같은 상수</strong>여야 한다.
+</p>
+
+<table>
+  <thead><tr><th>쌍</th><th class="num">반쪽 A</th><th class="num">반쪽 B</th><th class="num">합</th></tr></thead>
+  <tbody>
+    <tr><td>23 (최소)</td><td class="num">+0.0381</td><td class="num">+0.0450</td><td class="num">0.0832</td></tr>
+    <tr><td>27</td><td class="num">+0.0200</td><td class="num">+0.1211</td><td class="num">0.1411</td></tr>
+    <tr><td>3</td><td class="num">+0.0743</td><td class="num">+0.9977</td><td class="num">1.0719</td></tr>
+    <tr><td>30 (최대)</td><td class="num"><span class="bad">+0.8605</span></td><td class="num"><span class="bad">+0.8281</span></td><td class="num"><strong>1.6886</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+상수여야 할 값이 <strong>0.0832에서 1.6886까지 20.3배</strong> 벌어진다
+(&chi;&sup2; <strong>144.6</strong> / 31 df, <strong>p = 1.3e&minus;16</strong>; 평가잡음으로
+설명되는 sd는 0.155인데 관측 sd는 0.369).
+</p>
+
+<p>
+쌍 23과 쌍 30을 나란히 보는 것이 이 리포트의 요점이다. <strong>완전히 같은 100개 클립</strong>인데,
+한 번 가르면 양쪽 다 전체 100개 수준(+0.0345)의 모델이 나오고, 다르게 가르면
+<strong>양쪽 다 20배 나쁜 모델</strong>이 나온다.
+</p>
+
+<div class="callout">
+  <strong>측정오차로 지울 수 없다</strong>
+  고정된 150클립에서 y는 결정론적이다(Ada 고정, clip-derived seed, 재실행 비트 동일). 그래서 쌍 합의
+  산포는 구조적이다. &chi;&sup2;는 이 150클립 밖으로 일반화할 때를 위한 <em>보수적</em> 버전으로,
+  각 arm에 자기 페어드 델타의 SE(평균 0.107)를 물린 것이다.
+</div>
+
+<h2><span class="num">5</span> 사실 &mdash; 개별 클립 신호가 0%다 (게이트 A1 / A1b)</h2>
+
+<figure>
+  <img src="PLOT::ci::tau_sorted.png" alt="per-clip tau sorted with the FWER null band">
+  <figcaption>
+    클립 100개의 &tau;를 정렬한 것. 회색 띠는 부호뒤집기 무작위화 검정의 FWER 5% 귀무 구간
+    (&plusmn;0.1726). 색은 행동 버킷. <strong>띠를 벗어나는 클립이 하나도 없다.</strong>
+  </figcaption>
+</figure>
+
+<p>
+<code>max|&tau;|</code> = 0.1275로 FWER 임계 0.1726에 못 미친다 &mdash; <strong>100개 중 0개</strong>.
+그런데 max 통계량은 다중비교 대가를 전부 치르느라 검정력이 낮다. 그래서 100개를 모두 모아
+&ldquo;per-clip 구조가 조금이라도 있는가&rdquo;를 묻는 총괄 검정을 함께 돌렸다(A1b).
+</p>
+
+<table>
+  <thead><tr><th></th><th class="num">M=32</th><th class="num">M=64 (최종)</th></tr></thead>
+  <tbody>
+    <tr><td>관측된 sd(&tau;)</td><td class="num">0.0955</td><td class="num">0.0525</td></tr>
+    <tr><td>부호뒤집기 귀무의 sd</td><td class="num">0.1093</td><td class="num">0.0573</td></tr>
+    <tr><td>p</td><td class="num">0.991</td><td class="num"><strong>0.901</strong></td></tr>
+    <tr><td>추정된 참 per-clip sd</td><td class="num">0.0000</td><td class="num"><strong>0.0000</strong></td></tr>
+    <tr><td>신호 지분</td><td class="num">0%</td><td class="num"><strong>0%</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+관측 산포가 귀무보다 <strong>작다</strong>. &tau;&#770;의 흩어짐은 전부 추정오차다.
+&tau;는 minADE 평균 / 10% 절사평균 / minFDE 사이에서 &rho; = +0.972 / +0.995로 일치하는데,
+이것은 신호의 증거가 <em>아니다</em> &mdash; 세 값이 같은 arm의 같은 클립에서 나오므로 잡음이어도 일치한다.
+</p>
+
+<h3>검정력 부족이 아니다 &mdash; 측정된 천장</h3>
+<p>
+&ldquo;못 찾았다&rdquo;를 상한으로 바꾸면 이렇다. 이 설계가 검출할 수 있는 per-clip sd는 <strong>0.0278</strong>이고
+(귀무 sd의 95분위 0.0637), 가법 모형
+<var>y<sub>S</sub></var> = mean<sub>i&isin;S</sub> <var>e<sub>i</sub></var> 아래에서 100개 중 50개를
+비복원 추출할 때
+</p>
+<pre><code>sd(tau) = (N/(N-1))/n * sd(e)        sd(y) = sd(e) * sqrt((1/n)(1-n/N)(N/(N-1)))</code></pre>
+<p>
+이므로 그만한 가법 구조는 <strong>sd(y)를 0.1382</strong>로 만들었을 것이다. 실제로 존재하는
+구조적 sd(y)는 <strong>0.2198</strong>이다(관측 0.2456에서 평가잡음을 뺀 값). 즉
+<strong>구조적 분산의 39.6% 이상을 설명하는 가법 per-clip 구조라면 검출됐을 것이고, 0을 얻었다.</strong>
+</p>
+
+<h2><span class="num">6</span> 사실 &mdash; 구조를 찾는 세 시도 모두 널</h2>
+
+<figure>
+  <img src="PLOT::ci::influence_structure.png" alt="arm spread, tau by bucket, and churn vs |tau|">
+  <figcaption>
+    왼쪽: 64개 arm의 y 분포(sd 0.246). 가운데: 버킷별 &tau;(가로선은 평균).
+    오른쪽: 게이트 C1 &mdash; LOO 유지집합 churn 대 |&tau;|.
+  </figcaption>
+</figure>
+
+<h3>6.1 행동 버킷 (사전 예상: cruise가 고영향)</h3>
+<p class="small">
+계수는 쌍 차이를 버킷 카운트에 회귀한 것이다. 두 반쪽이 각각 50개라 열들이 정확히 0으로 합해져
+설계가 1만큼 rank-deficient하고, 절대 수준은 식별되지 않는다. lstsq의 최소노름 해는 null 방향
+(1,&hellip;,1)에 직교하므로 계수 합이 0이고, <strong>평균적인 캘리브레이션 클립 대비</strong>로 읽힌다.
+</p>
+<table>
+  <thead><tr><th>버킷</th><th class="num">n</th><th class="num">클립당 효과</th><th class="num">부호뒤집기 p</th></tr></thead>
+  <tbody>
+    <tr><td>cruise</td><td class="num">49</td><td class="num">&minus;0.0013</td><td class="num">0.857</td></tr>
+    <tr><td>decel_stop</td><td class="num">18</td><td class="num">&minus;0.0068</td><td class="num">0.625</td></tr>
+    <tr><td>accel</td><td class="num">16</td><td class="num">&minus;0.0188</td><td class="num">0.301</td></tr>
+    <tr><td>turn_left</td><td class="num">8</td><td class="num">+0.0107</td><td class="num">0.384</td></tr>
+    <tr><td>turn_right</td><td class="num">9</td><td class="num">+0.0162</td><td class="num">0.445</td></tr>
+  </tbody>
+</table>
+
+<h3>6.2 클립 공변량 10종 대 &tau;</h3>
+<p>
+행동 버킷, 그리디 추출 순서, <code>fm_loss</code>, <code>coc_len</code>, GT 경로 여유거리,
+중요도 크기 2종, 비전형성 2종, LOO churn 2종 &mdash; <strong>전부 무상관</strong>(|&rho;| &le; 0.07).
+게이트 C1(유지집합 churn 대 |&tau;|)은 &rho; = +0.110, p = 0.275로 사전 예상대로 널이다.
+이로써 &ldquo;X는 능력을 예측하지 못한다&rdquo;가 겹침 &middot; 재구성 오차 &middot; 추정량 안정성 &middot;
+계획 자기 일관성에 이어 <strong>다섯 번째</strong>가 된다.
+</p>
+
+<h3>6.3 세트 속성 15종 (Stage C)</h3>
+<p>
+<code>draw-order</code>가 n=6에서 기각한 후보들을 <strong>n=64</strong>로 다시 걸었다. 원 p&lt;0.05가
+넷이지만(최강 <code>loo_churn_mlp</code> &rho;=&minus;0.340, p=0.006) <strong>BH 통과 0개</strong>이고
+max|&rho;| 0.340이 순열 FWER 임계 <strong>0.365</strong>에 못 미친다. 버킷 조성도 무관하다
+(<code>n_cruise</code> &rho;=&minus;0.126, p=0.321).
+</p>
+
+<h2><span class="num">7</span> 해석</h2>
+
+<div class="callout opinion">
+  <strong>기전 &mdash; 순위 선택은 선형이 아니다</strong>
+  kept set은 층별 점수의 <strong>top-k argsort</strong>다. 평균 중요도의 선형함수가 아니므로
+  부분집합 &rarr; 성능 사상이 가법일 이유가 없고, A2는 그것을 p=1.3e&minus;16으로 확인한다.
+  가법 분해가 없으면 &tau;는 클립의 성질이 아니라 <strong>비가법 곡면의 투영</strong>이고,
+  A1b가 0%를 주는 것은 그 논리적 귀결이다.
+</div>
+
+<div class="callout opinion">
+  <strong>그래서 무엇이 닫히는가</strong>
+  &ldquo;좋은 캘리브레이션 클립을 골라내자&rdquo;는 방향은 이 축에서 닫힌다. 클립에 점수를 매겨 상위 k개를
+  고르는 어떤 방법도, 매길 점수 자체가 존재하지 않기 때문에 작동하지 않는다. 64개 중 4개가 전체
+  100개를 이겼지만(최선 +0.0200 대 +0.0345) <strong>사전에 식별할 방법이 없다</strong>는 것이 정확히 이 결과다.
+  이것이 <code>draw-order</code>에서 세트 속성 21종이 전부 기각된 이유로 보인다 &mdash;
+  검정력 문제가 아니라 <strong>분해 가능한 구조가 없어서</strong>다.
+</div>
+
+<div class="callout opinion">
+  <strong><code>se</code> 규칙 결과와 모순되지 않는다</strong>
+  <code>2026-09-12_action-stratified-calib</code>은 <strong>풀 자체가 다른</strong> 추출들을 비교했고
+  (공식 train에서 새로 뽑음), 여기는 <strong>고정된 <code>calib_100</code> 안에서</strong> 재추출한다.
+  &ldquo;어떤 클립이 풀에 들어오는가&rdquo;를 바꾸는 규칙은 효과가 있고, &ldquo;고정된 풀의 조성&rdquo;은
+  효과가 없다 &mdash; 양립한다. 레버는 클립 선별이 아니라 추출 규칙 쪽에 있다.
+</div>
+
+<h2><span class="num">8</span> 방법론 &mdash; 이 리포트가 남기는 것</h2>
+
+<h3>8.1 M=12 중간 판독은 틀렸고, 그게 기록될 가치가 있다</h3>
+<p>
+arm 12개(6쌍) 시점에 cruise 버킷이 <strong>&minus;0.0334 (p=0.095)</strong>로 나왔고, 이는
+<code>calib-draw-variance-lives-in-cruise</code>라는 기존 기대와 방향이 맞아 그럴듯해 보였다.
+M=32에서 <strong>+0.0052 (p=0.648)로 부호가 뒤집혔고</strong> M=64에서 &minus;0.0013이다.
+6쌍짜리 추정이었고, 사전 기대와 맞는다는 것은 증거가 아니다.
+</p>
+
+<h3>8.2 max 통계량 말고 총괄 검정을 함께 볼 것</h3>
+<p>
+<code>max|&tau;|</code>만 봤다면 &ldquo;0/100이 임계를 넘었다&rdquo;로 끝났을 것이고, 그건
+&ldquo;검정력이 부족했나?&rdquo;라는 질문을 열어둔 채 끝나는 결론이다. sd(&tau;)를 같은 부호뒤집기
+귀무에 걸면 100개를 전부 모으므로 검정력이 훨씬 크고, 두 분산의 차이가 곧
+<strong>신호 지분의 추정치</strong>가 된다. 널을 보고할 때는 <strong>검출 가능 크기를 함께 보고할 것</strong>.
+</p>
+
+<h3>8.3 여상보 쌍은 가법성 검정을 공짜로 준다</h3>
+<p>
+쌍 설계를 고른 이유는 SE 균일화와 정확 무작위화 검정이었는데, 실제로 결론을 만든 것은
+<strong>계획에 없던 A2</strong>였다. 두 반쪽이 모집단을 정확히 가르면 가법 모형이 쌍 합에 대해
+검정 가능한 제약을 걸고, 그 제약이 깨지는지는 추가 실행 없이 읽힌다.
+</p>
+
+<h3>8.4 잡은 함정 둘</h3>
+<ul>
+  <li><code>run_baseline.py</code>는 <strong>진행 중에도 json을 체크포인트로 쓴다</strong>(150클립 arm이
+  8분 시점에 40클립짜리 읽히는 파일을 갖는다). 런처의 완료 판정을 파일 존재로 두면 중단 후
+  재실행에서 미완성 arm을 영영 건너뛴다. 레코드 수로 판정해야 한다 &mdash;
+  <code>run_importance</code>의 <code>n_clips == 100</code> 마커가 존재하는 이유와 같다.</li>
+  <li>레시피 빌드에 <code>--gpu</code>를 명시하지 않으면 <code>reserve_gpu</code>가 전 카드를 훑어
+  Blackwell을 집어간다. 이 레포의 수치는 Ada 기준이다.</li>
+</ul>
+
+<h2><span class="num">9</span> 한계</h2>
+<ul>
+  <li><strong>개루프 &middot; val500 150클립 &middot; <code>calib_100</code> 풀 하나.</strong> 집합 효과가
+  test500에서 같은 크기로 재현되는지는 아직 확인하지 않았다(최선/최악 부분집합 2 arm, ~1.7 h).</li>
+  <li><strong>&ldquo;가법적이지 않다&rdquo;가 &ldquo;구조가 없다&rdquo;는 아니다.</strong> 쌍 &middot; 삼중 상호작용
+  같은 저차 구조는 이 설계로 검출되지 않는다. 다만 클립별 점수로 선별하는 접근은 어느 쪽이든 닫힌다.</li>
+  <li><strong>후속 가설 하나.</strong> 부분집합 평균 LOO churn이 &rho;=&minus;0.340 (p=0.006, q=0.091)로
+  가장 셌고 M=32&rarr;64에서 부호를 유지했다. 다중비교를 못 넘었으므로 결과가 아니라 가설이다 &mdash;
+  사전 등록하고 독립 표본에서 다시 걸어야 한다.</li>
+  <li><strong>Stage B는 재설계가 필요하다.</strong> 계획서의 <code>drop-worst20</code> 대
+  <code>drop-rand20</code>은 A1b가 &tau;를 잡음이라고 판정한 이상 <em>잡음으로 고른 집합</em>을
+  검정하는 셈이라 널이 예정돼 있다. 같은 GPU 시간이면 최선/최악 부분집합의 test500 재현이 낫다.</li>
+</ul>
+
+<p class="small" style="margin-top:3rem">
+재현: <code>make_subset_recipes.py --design</code> &rarr; <code>--verify --gpu 4</code> &rarr;
+<code>--build --arms 0 64 --gpu 4</code> &rarr;
+<code>launch_clipinfluence.sh fit "4 5 6 7"</code> &rarr;
+<code>analyze_clipinfluence.py --arms 64</code>.
+결과는 <code>outputs/clipinfluence/</code>.
+</p>
+
+</div>
+</body>
+</html>
