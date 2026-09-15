@@ -230,14 +230,100 @@ def bucket_contrast(sign, diff, buckets, n_perm, seed=1):
     return names, coef, p, null
 
 
+def paired_mean(a, b, ids, boot=10000, seed=0):
+    """mean(a - b) over shared clips with a paired bootstrap CI. The protocol's headline
+    is the mean, not the median, so this is the mean version of pn.paired."""
+    d = np.array([pn.at6(a[c], "ade_rollout_k") - pn.at6(b[c], "ade_rollout_k")
+                  for c in ids])
+    rng = np.random.default_rng(seed)
+    bs = np.array([d[rng.integers(0, len(d), len(d))].mean() for _ in range(boot)])
+    lo, hi = np.percentile(bs, [2.5, 97.5])
+    return len(d), float(d.mean()), float(lo), float(hi)
+
+
+def replicate(tags, val_metrics):
+    """Stage B: do the val500-measured subset differences survive on test500?
+
+    Pre-registered expectation (plans/..., written before these runs finished): the 50x
+    spread replicates easily, while "the best half beats the full 100" is a 0.0145 effect
+    against a paired SE of ~0.010 and will probably not resolve. Recording that first is
+    the point -- it is what keeps a null from being reread as a surprise.
+    """
+    base = pn.load("baseline_ada_ps_test", False)
+    full = pn.load("dual_u40_v2_ps_test", False)
+    yval = {a: v for a, v in zip(val_metrics["arms"], val_metrics["y_ade"]["values"])}
+    rows, missing = [], []
+    for t in tags:
+        d = REPO / "outputs" / f"subinf_{t}_test"
+        got = pn.load(d.name, False) if list(d.glob("*_s*of*.json")) else {}
+        if len(got) < 500:
+            missing.append((t, len(got)))
+            continue
+        ids = sorted(set(got) & set(base))
+        n, mean, lo, hi = paired_mean(got, base, ids)
+        rows.append({"arm": t, "y_val": yval[t], "y_test": mean,
+                     "lo": lo, "hi": hi, "n": n, "rows": got})
+    if missing:
+        print("incomplete:", ", ".join(f"{t} ({n}/500)" for t, n in missing))
+    if len(rows) < 2:
+        print("need at least two finished arms")
+        return {}
+    print(f"\n{'arm':>5} {'val y':>9} {'test y':>9}  95% CI")
+    for r in rows:
+        print(f"{r['arm']:>5} {r['y_val']:>+9.4f} {r['y_test']:>+9.4f}  "
+              f"[{r['lo']:+.4f}, {r['hi']:+.4f}]")
+    v = np.array([r["y_val"] for r in rows])
+    t_ = np.array([r["y_test"] for r in rows])
+    rho = spearmanr(v, t_)
+    ids_full = sorted(set(full) & set(base))
+    n_f, m_f, lo_f, hi_f = paired_mean(full, base, ids_full)
+    out = {
+        "arms": [{k: r[k] for k in ("arm", "y_val", "y_test", "lo", "hi", "n")}
+                 for r in rows],
+        "rho_val_test": float(rho.statistic), "p": float(rho.pvalue),
+        "spread_val": float(v.max() - v.min()),
+        "spread_test": float(t_.max() - t_.min()),
+        "full100_test": m_f, "full100_ci": [lo_f, hi_f],
+    }
+    print(f"\nrho(val y, test y) over {len(rows)} arms = {rho.statistic:+.3f} "
+          f"(p={rho.pvalue:.3f})")
+    print(f"spread: val {v.max() - v.min():.4f} -> test {t_.max() - t_.min():.4f}")
+    print(f"full calib_100 on test500: {m_f:+.4f} [{lo_f:+.4f}, {hi_f:+.4f}] (n={n_f})")
+    # the selection question, on the same 500 clips and paired arm-to-arm
+    best = min(rows, key=lambda r: r["y_val"])
+    ids_b = sorted(set(best["rows"]) & set(full))
+    n_b, m_b, lo_b, hi_b = paired_mean(best["rows"], full, ids_b)
+    out["best_minus_full"] = {"arm": best["arm"], "n": n_b, "mean": m_b,
+                              "lo": lo_b, "hi": hi_b,
+                              "resolved": bool(lo_b > 0 or hi_b < 0)}
+    print(f"val-best arm {best['arm']} minus full calib_100 on test500: "
+          f"{m_b:+.4f} [{lo_b:+.4f}, {hi_b:+.4f}] -> "
+          f"{'RESOLVED' if lo_b > 0 or hi_b < 0 else 'inconclusive, as pre-registered'}")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--replicate", nargs="+", default=None,
+                    help="arm ids to read from test500 instead of the fit analysis")
     ap.add_argument("--arms", type=int, default=32)
     ap.add_argument("--fit-limit", type=int, default=150)
     ap.add_argument("--prefix", type=str, default="subinf")
     ap.add_argument("--exp-id", type=str, default="clipinfluence")
     ap.add_argument("--top-k", type=int, default=20, help="Stage B drop-set size")
     args = ap.parse_args()
+
+    if args.replicate:
+        prev = REPO / "outputs" / args.exp_id / "metrics.json"
+        assert prev.exists(), f"run the fit analysis first ({prev})"
+        val_metrics = json.loads(prev.read_text())
+        rep = replicate(args.replicate, val_metrics)
+        if rep:
+            out = REPO / "outputs" / f"{args.exp_id}_replicate"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "metrics.json").write_text(json.dumps(rep, indent=1))
+            print(f"\n-> {out}")
+        return
 
     design = json.loads(
         (REPO / "outputs" / "clipinfluence" / "design.json").read_text())

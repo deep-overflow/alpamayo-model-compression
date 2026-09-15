@@ -59,6 +59,7 @@
   <div class="meta">
     <code>calib_100</code>의 50클립 여상보 부분집합 64개로 만든 <code>dual_u40_v2</code> 64 arm,
     val500 앞 150클립 minADE@6, Ada 4&ndash;7, 무압축 <code>baseline_ada_ps_indist</code>와 페어드.
+    그중 6 arm은 <strong>test500 전체</strong>에서 재현 확인(&sect;9).
     계획: <code>plans/2026-09-14_calibration-clip-influence.md</code> ·
     설계 sha <code>5370213c4b7def33</code> · 분석 <code>experiments/evaluation/analyze_clipinfluence.py</code>
   </div>
@@ -69,7 +70,10 @@
   캘리브레이션 추출 효과는 이 프로젝트에서 측정된 가장 큰 단일 요인인데(같은 100클립의 절반들이
   <strong>+0.020에서 +0.998까지 50배</strong>), 그 산포에 <strong>개별 클립의 기여는 0%</strong>이고
   (sd(&tau;) 0.0525 대 귀무 0.0573, p=0.901) 애초에 <strong>가법 구조 자체가 없다</strong>
-  (&chi;&sup2; 144.6/31 df, p=1.3e&minus;16). 클립에 점수를 매겨 고르는 접근은 이 축에서 닫힌다.
+  (&chi;&sup2; 144.6/31 df, p=1.3e&minus;16). 그 산포는 <strong>test500에서 그대로 재현되지만</strong>
+  (&rho;=+0.943, 산포 0.978&rarr;0.923) <strong>val에서 1등이던 집합의 우위는 재현되지 않는다</strong>
+  (&minus;0.0145 &rarr; +0.0136). 큰 차이는 전이되고 작은 차이는 전이되지 않으니,
+  이 축은 <strong>선별이 아니라 배제</strong>에만 쓸 수 있다.
 </div>
 
 <h2><span class="num">1</span> 왜 이 실험인가</h2>
@@ -424,13 +428,66 @@ M=32에서 <strong>+0.0052 (p=0.648)로 부호가 뒤집혔고</strong> M=64에�
   Blackwell을 집어간다. 이 레포의 수치는 Ada 기준이다.</li>
 </ul>
 
-<h2><span class="num">9</span> 한계</h2>
+<h2><span class="num">9</span> Stage B &mdash; test500 재현: 크기는 옮겨가고, 승자는 옮겨가지 않는다</h2>
+
+<p>
+val y 범위를 가로지르는 6 arm을 <strong>test500 전체</strong>(500클립, <code>baseline_ada_ps_test</code>와
+페어드)에서 다시 쟀다. 검정력 예상은 <strong>돌리기 전에</strong> 계획서에 적어두었다 &mdash;
+산포는 확실히 갈리고 &ldquo;최선 절반이 전체 100개보다 낫다&rdquo;는 1.4 SE라 안 갈릴 것.
+</p>
+
+<table>
+  <thead><tr><th>arm</th><th class="num">val y (150클립)</th><th class="num">test y (500클립)</th><th class="num">95% CI</th></tr></thead>
+  <tbody>
+    <tr><td>54 (val 최선)</td><td class="num">+0.0200</td><td class="num">+0.1216</td><td class="num">[+0.0759, +0.1689]</td></tr>
+    <tr><td>53</td><td class="num">+0.0587</td><td class="num">+0.1956</td><td class="num">[+0.1396, +0.2553]</td></tr>
+    <tr><td>09</td><td class="num">+0.1047</td><td class="num">+0.1738</td><td class="num">[+0.1210, +0.2300]</td></tr>
+    <tr><td>44</td><td class="num">+0.1725</td><td class="num">+0.3638</td><td class="num">[+0.2884, +0.4432]</td></tr>
+    <tr><td>29</td><td class="num">+0.3549</td><td class="num">+0.3814</td><td class="num">[+0.3030, +0.4626]</td></tr>
+    <tr><td>07 (val 최악)</td><td class="num">+0.9977</td><td class="num">+1.0444</td><td class="num">[+0.9086, +1.1907]</td></tr>
+    <tr><td><strong>전체 100개</strong></td><td class="num">+0.0345</td><td class="num"><strong>+0.1081</strong></td><td class="num">[+0.0558, +0.1616]</td></tr>
+  </tbody>
+</table>
+
+<h3>9.1 집합 효과는 실재하고 옮겨간다</h3>
+<p>
+산포가 <strong>0.9777 &rarr; 0.9228</strong>로 거의 그대로이고, 순서도 유지된다 &mdash;
+&rho;(val y, test y) = <strong>+0.943 (p=0.005)</strong>, 뒤집힌 것은 인접한 한 쌍(53&#8596;09,
+val 격차 0.046)뿐이다. test500 전체가 +0.0953만큼 위로 평행이동하지만(150 val 클립이 유리했다)
+그건 arm 공통이다.
+</p>
+<p>
+<strong>따라서 &ldquo;좋은 캘리브레이션 집합&rdquo;은 평가셋을 갈아도 살아남는 집합의 실제 성질이다.</strong>
+&sect;5의 결론과 합쳐 읽어야 한다 &mdash; 실재하고 전이되는데, <strong>구성 클립으로는 설명되지 않는다</strong>.
+</p>
+
+<h3>9.2 그런데 승자는 옮겨가지 않는다</h3>
+<table>
+  <thead><tr><th>arm 54 &minus; 전체 100개</th><th class="num">val150</th><th class="num">test500</th></tr></thead>
+  <tbody>
+    <tr><td>페어드 평균 델타</td><td class="num"><span class="good">&minus;0.0145 (더 좋음)</span></td><td class="num"><span class="bad">+0.0136 (더 나쁨)</span></td></tr>
+    <tr><td>95% CI</td><td class="num">&mdash;</td><td class="num">[&minus;0.0213, +0.0508]</td></tr>
+    <tr><td>전체 100개를 이긴 arm</td><td class="num">1/6</td><td class="num"><strong>0/6</strong></td></tr>
+  </tbody>
+</table>
+<p>
+CI가 0을 포함하므로 &ldquo;더 나쁘다&rdquo;고 말할 수 없다. 말할 수 있는 것은
+<strong>&ldquo;더 좋다&rdquo;가 재현되지 않았고 점추정의 부호가 뒤집혔다</strong>는 것이다.
+결론이 안 난 것 자체는 <strong>사전에 예고한 그대로</strong>다(1.4 SE).
+</p>
+
+<div class="callout opinion">
+  <strong>큰 차이는 전이되고 작은 차이는 안 된다</strong>
+  이 둘을 붙여 놓으면 실무적 함의가 나온다. 64개를 뽑아 val에서 1등을 고르는 절차는
+  <strong>작동하지 않는다</strong> &mdash; 탐색이 이용하는 것은 상위권의 작은 격차인데 그게 정확히
+  재현되지 않는 부분이다. 반면 &ldquo;나쁜 집합을 피한다&rdquo;는 잘 작동한다: +1.04짜리 arm은
+  어느 평가셋에서도 +1.04다. <strong>선별이 아니라 배제가 가능한 축</strong>이다.
+</div>
+
+<h2><span class="num">10</span> 한계</h2>
 <ul>
-  <li><strong>개루프 &middot; val500 150클립 &middot; <code>calib_100</code> 풀 하나.</strong> val 범위를
-  가로지르는 6 arm(54 / 53 / 09 / 44 / 29 / 07, val y +0.0200~+0.9977)의 <strong>test500 재현이
-  진행 중</strong>이다. 50배 산포가 재현되는지는 확실히 갈리지만, &ldquo;최선 절반(+0.0200)이
-  전체 100개(+0.0345)보다 정말 낫다&rdquo;는 칸은 <strong>사전 계산상 1.4 SE라 결론이 안 날 가능성이
-  크다</strong>(페어드 sd ~0.23, n=500 &rarr; SE 0.010).</li>
+  <li><strong>개루프 &middot; <code>calib_100</code> 풀 하나.</strong> 폐루프는 보지 않았다.
+  이 레포에서 개루프와 폐루프가 갈린 전례가 <code>dual+h4</code>다.</li>
   <li><strong>n=50 대 n=100의 크기 효과가 분리되지 않았다.</strong> <code>calib_100</code> 안에서
   n=25/50/75 사다리를 돌리면 갈린다.</li>
   <li><strong>&ldquo;가법적이지 않다&rdquo;가 &ldquo;구조가 없다&rdquo;는 아니다.</strong> 쌍 &middot; 삼중 상호작용
@@ -438,9 +495,14 @@ M=32에서 <strong>+0.0052 (p=0.648)로 부호가 뒤집혔고</strong> M=64에�
   <li><strong>후속 가설 하나.</strong> 부분집합 평균 LOO churn이 &rho;=&minus;0.340 (p=0.006, q=0.091)로
   가장 셌고 M=32&rarr;64에서 부호를 유지했다. 다중비교를 못 넘었으므로 결과가 아니라 가설이다 &mdash;
   사전 등록하고 독립 표본에서 다시 걸어야 한다.</li>
-  <li><strong>Stage B는 재설계가 필요하다.</strong> 계획서의 <code>drop-worst20</code> 대
+  <li><strong>&sect;9.2는 결론이 아니라 미결이다.</strong> arm 54가 전체 100개보다 나쁘다고는
+  말할 수 없다 &mdash; CI가 0을 포함한다. 이 칸을 가르려면 0.014짜리 효과에 대해
+  n&thinsp;&asymp;&thinsp;2,000 규모의 평가셋이 필요하다.</li>
+  <li><strong>&sect;6.4의 중첩 예측은 사후 탐색이다.</strong> 사전 등록 후 독립 표본에서 다시
+  걸어야 결과가 된다.</li>
+  <li><strong>계획서의 원래 Stage B는 실행하지 않았다.</strong> <code>drop-worst20</code> 대
   <code>drop-rand20</code>은 A1b가 &tau;를 잡음이라고 판정한 이상 <em>잡음으로 고른 집합</em>을
-  검정하는 셈이라 널이 예정돼 있다. 같은 GPU 시간이면 최선/최악 부분집합의 test500 재현이 낫다.</li>
+  검정하는 셈이라 널이 예정돼 있어, 같은 GPU 시간을 &sect;9에 썼다.</li>
 </ul>
 
 <p class="small" style="margin-top:3rem">
