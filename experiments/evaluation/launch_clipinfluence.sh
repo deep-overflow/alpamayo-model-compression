@@ -136,6 +136,24 @@ fit)
   job_pool "$Q" "${2-"4 5 6 7"}"
   ;;
 
+replicate)
+  # `replicate <arm ids...>`: the named subset arms on the FULL test500, to see whether
+  # what val500 measured survives a held-out set. Reference arms already exist --
+  # `baseline_ada_ps_test` and `dual_u40_v2_ps_test` -- so nothing else has to be run.
+  shift
+  [ $# -gt 0 ] || { echo "usage: $0 replicate <arm ids...>" >&2; exit 1; }
+  Q=$LOGDIR/clipinf_replicate_queue.txt
+  : >"$Q"
+  for a in "$@"; do
+    [ -f "outputs/${PREFIX}_$a/slim_meta.json" ] || { echo "no recipe for arm $a"; exit 1; }
+    for sh in 0 1; do
+      echo "${PREFIX}_$a subinf_${a}_test test 250 *_s${sh}of2.json" \
+        "--shard $sh --n-shards 2" >>"$Q"
+    done
+  done
+  job_pool "$Q" "${CARDS-"4 5 6 7"}"
+  ;;
+
 validate)
   # Stage B arms are built by make_subset_recipes.py --drop, named slim_dropinf_<tag>
   Q=$LOGDIR/clipinf_validate_queue.txt

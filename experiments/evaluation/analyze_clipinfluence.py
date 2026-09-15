@@ -317,10 +317,24 @@ def main():
         "A2_sd_from_noise": float(np.sqrt(pvar.mean())),
         "A2_chi2": chi2, "A2_df": len(psum) - 1, "A2_p": p_add,
         "A2_additive": bool(p_add >= 0.05)})
+    # The same statement in the form that reads without a chi2: additivity forces
+    # y_B = C - y_A, so the two halves of a pair would be PERFECTLY anticorrelated.
+    # Measuring rho instead of the sum turns "is the sum constant" into "does one half
+    # being good make the other bad", which is the question in words.
+    r_pair = spearmanr(yv[0::2], yv[1::2])
+    zz = np.arctanh(r_pair.statistic)
+    se_z = 1 / np.sqrt(len(psum) - 3)
+    lo, hi = np.tanh([zz - 1.96 * se_z, zz + 1.96 * se_z])
+    res["gates"].update({"A2_rho_pair": float(r_pair.statistic),
+                         "A2_rho_lo": float(lo), "A2_rho_hi": float(hi),
+                         "A2_rho_required": -1.0})
     print(f"A2 pair sums span [{psum.min():.4f}, {psum.max():.4f}] "
           f"(sd {psum.std(ddof=1):.4f} vs {np.sqrt(pvar.mean()):.4f} from eval noise); "
           f"chi2 {chi2:.1f}/{len(psum) - 1} df p={p_add:.2g} -> "
           f"{'additive' if p_add >= 0.05 else 'NOT additive'}")
+    print(f"   rho(y_A, y_B) within a pair = {r_pair.statistic:+.3f} "
+          f"[{lo:+.3f}, {hi:+.3f}] -- additivity requires exactly -1.000, so the two "
+          f"halves are INDEPENDENT draws, not a split of one quantity")
     res["eval_noise_se"] = {"mean": float(se.mean()), "max": float(se.max())}
 
     # --- tau and the exact sign-flip null ----------------------------------------
@@ -485,6 +499,32 @@ def main():
                              "n_q05": int((q < 0.05).sum())}
     print(f"  max|rho| {np.abs(rhos).max():.3f} vs permutation FWER-5% {fwer:.3f}; "
           f"{(q < 0.05).sum()} survive BH")
+
+    # --- POST HOC: does resembling the full-100 selection predict y? ---------------
+    # Not in the plan and not in the Stage C multiplicity correction above, because it
+    # was asked after seeing those results. Kept separate and labelled for that reason:
+    # it is a hypothesis for an independent sample, not a finding. Bonferroni is taken
+    # over all 17 predictors actually tested (15 pre-registered + these 2).
+    full_meta = json.loads(
+        (REPO / "outputs" / "slim_dual_u40_v2" / "slim_meta.json").read_text())
+    res["post_hoc_overlap"] = {}
+    for key in ("q", "mlp"):
+        ref = {(li, u) for li, mm in enumerate(full_meta["vlm"]) for u in mm[key]}
+        ov = []
+        for t in done:
+            am = json.loads((REPO / "outputs" / f"slim_subinf_{t}"
+                             / "slim_meta.json").read_text())
+            s = {(li, u) for li, mm in enumerate(am["vlm"]) for u in mm[key]}
+            ov.append(len(ref & s) / len(ref))
+        ov = np.array(ov)
+        r = spearmanr(ov, yv)
+        res["post_hoc_overlap"][key] = {
+            "rho": float(r.statistic), "p": float(r.pvalue),
+            "min": float(ov.min()), "max": float(ov.max()), "mean": float(ov.mean()),
+            "bonferroni_17": float(min(1.0, r.pvalue * 17))}
+        print(f"POST HOC overlap_{key} with the full-100 kept set: "
+              f"{ov.min():.3f}..{ov.max():.3f}, rho with y {r.statistic:+.3f} "
+              f"(p={r.pvalue:.4f}, Bonferroni/17 {min(1.0, r.pvalue * 17):.4f})")
 
     # --- Stage B drop sets --------------------------------------------------------
     k = args.top_k

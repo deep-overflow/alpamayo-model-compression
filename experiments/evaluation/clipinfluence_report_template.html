@@ -161,8 +161,15 @@ MLP 7390/12288 유지). 달라지는 것은 어느 캘리브레이션 클립을 
 </table>
 
 <p>
-64개 중 전체 100개를 이긴 것은 <strong>4개</strong>다. <code>calib_100</code>의 &ldquo;운&rdquo;은
+분포는 오른쪽으로 크게 치우쳐 있다 &mdash; 5/25/50/75/95 분위가
+0.034 / 0.070 / 0.129 / 0.262 / 0.856이다. 64개 중 전체 100개를 이긴 것은 <strong>4개</strong>로,
+전체 집합은 절반들의 <strong>94분위</strong>에 해당한다. <code>calib_100</code>의 &ldquo;운&rdquo;은
 어느 절반에도 실려 있지 않고 <strong>100개가 함께</strong> 만든다.
+</p>
+<p class="small">
+다만 절반이 나쁜 것에는 <strong>크기 효과가 섞여 있다</strong>(n=50 대 n=100). 이 리포트의 설계로는
+둘을 분리할 수 없다. 분리가 필요 없는 것은 &sect;4다 &mdash; 쌍의 두 반쪽은 <em>둘 다</em> n=50이라
+크기가 고정돼 있고, 그래서 가법성 기각에는 크기 교락이 없다.
 </p>
 
 <p>
@@ -199,6 +206,25 @@ MLP 7390/12288 유지). 달라지는 것은 어느 캘리브레이션 클립을 
 쌍 23과 쌍 30을 나란히 보는 것이 이 리포트의 요점이다. <strong>완전히 같은 100개 클립</strong>인데,
 한 번 가르면 양쪽 다 전체 100개 수준(+0.0345)의 모델이 나오고, 다르게 가르면
 <strong>양쪽 다 20배 나쁜 모델</strong>이 나온다.
+</p>
+
+<h3>4.1 같은 말을 &chi;&sup2; 없이</h3>
+<p>
+가법성은 <var>y<sub>B</sub></var> = <var>C</var> &minus; <var>y<sub>A</sub></var>를 강제하므로,
+쌍의 두 반쪽은 <strong>완전히 음의 상관</strong>이어야 한다. 실측은 그 반대편 끝이다.
+</p>
+<table>
+  <thead><tr><th></th><th class="num">&rho;(y<sub>A</sub>, y<sub>B</sub>)</th></tr></thead>
+  <tbody>
+    <tr><td>가법 모형이 요구하는 값</td><td class="num"><strong>&minus;1.000</strong></td></tr>
+    <tr><td>실측 (32쌍)</td><td class="num"><strong>&minus;0.040</strong> &nbsp;95% CI [&minus;0.383, +0.313]</td></tr>
+  </tbody>
+</table>
+<p>
+두 반쪽은 <strong>독립</strong>이다 &mdash; 한 쪽이 좋다고 다른 쪽이 나쁠 이유가 없다.
+100개를 반으로 가르는 것은 한 덩어리를 나누는 것이 아니라 <strong>독립적인 추첨을 두 번</strong>
+하는 것에 가깝다. 위 표의 쌍 30이 &ldquo;양쪽 다 나쁜&rdquo; 것은 기전이 아니라 그 두 번의 추첨이
+같이 나쁘게 나온 경우다.
 </p>
 
 <div class="callout">
@@ -299,6 +325,31 @@ max|&rho;| 0.340이 순열 FWER 임계 <strong>0.365</strong>에 못 미친다. 
 (<code>n_cruise</code> &rho;=&minus;0.126, p=0.321).
 </p>
 
+<h3>6.4 사후 탐색 &mdash; 유일하게 살아남은 예측변수 (결과 아님)</h3>
+<p>
+위 널들을 전부 본 뒤에 물었다: <strong>좋은 부분집합이란 전체 100개의 선택을 잘 재현하는
+부분집합인가?</strong> 사전 등록에 없었고 Stage C의 다중비교에도 넣지 않았다. 그래서 아래는
+<strong>가설이지 결과가 아니다.</strong>
+</p>
+<table>
+  <thead><tr><th>전체 100개 kept set과의 중첩</th><th class="num">범위</th><th class="num">&rho;(중첩, y)</th><th class="num">p</th><th class="num">Bonferroni/17</th></tr></thead>
+  <tbody>
+    <tr><td>Q head</td><td class="num">0.898&ndash;0.944</td><td class="num"><strong>&minus;0.418</strong></td><td class="num">0.0006</td><td class="num"><strong>0.0100</strong></td></tr>
+    <tr><td>MLP 채널</td><td class="num">0.869&ndash;0.925</td><td class="num">&minus;0.339</td><td class="num">0.0061</td><td class="num">0.1034</td></tr>
+  </tbody>
+</table>
+<p>
+중첩이 0.898~0.944로 좁은 구간인데 그 안에서 성능을 가른다. 실제로 시험한 17개 예측변수
+(사전 등록 15 + 이 2개) 중 Q축만 Bonferroni를 넘는다.
+</p>
+<div class="callout opinion">
+  <strong><code>dualsafe</code>의 &ldquo;중첩은 안전 게이트가 아니다&rdquo;와 모순이 아니다</strong>
+  그 규칙은 <strong>서로 다른 arm</strong>을 비교할 때의 것이다 &mdash; <code>dualsafe</code>는 dual의
+  Q head 94.0%를 유지하고도 0.19를 잃었다. 여기는 <strong>같은 풀 안의 표집</strong> 문제이고,
+  중첩은 &ldquo;이 부분집합의 평균이 전체 평균에서 얼마나 벗어났나&rdquo;를 재는 대리변수다.
+  질문이 다르고, 둘 다 성립할 수 있다.
+</div>
+
 <h2><span class="num">7</span> 해석</h2>
 
 <div class="callout opinion">
@@ -316,6 +367,18 @@ max|&rho;| 0.340이 순열 FWER 임계 <strong>0.365</strong>에 못 미친다. 
   100개를 이겼지만(최선 +0.0200 대 +0.0345) <strong>사전에 식별할 방법이 없다</strong>는 것이 정확히 이 결과다.
   이것이 <code>draw-order</code>에서 세트 속성 21종이 전부 기각된 이유로 보인다 &mdash;
   검정력 문제가 아니라 <strong>분해 가능한 구조가 없어서</strong>다.
+</div>
+
+<div class="callout opinion">
+  <strong>&ldquo;<code>calib_100</code>은 운이 좋았다&rdquo;의 의미가 바뀐다</strong>
+  <code>calib_100</code>이 서로소 n=100 추출 6개 중 1위이고 나머지 다섯의 평균이 +0.435 나쁘다는 것은
+  이미 알려진 사실이다(<code>2026-09-03_calib-draw-variance</code>). 이 리포트가 바꾸는 것은
+  <em>어떤 종류의</em> 운이냐다. <strong>&ldquo;좋은 클립을 품어서&rdquo;는 배제된다</strong> &mdash; 그런 클립이 없다.
+  남는 것은 &ldquo;100개의 평균이 어디에 찍혔나&rdquo;이고, &sect;6.4가 그 방향을 가리킨다: 전체 100개의
+  선택에서 멀어지면 어느 방향이든 나빠진다. 여기에 <code>2026-09-06_calibration-size</code>의
+  n=2,000이 <em>수렴</em>하고도 더 나쁘다는 사실을 겹치면, <strong>데이터를 늘려 도달하는 &lsquo;옳은&rsquo;
+  캘리브레이션 지점 같은 것은 없고</strong> <code>calib_100</code>의 중심이 우연히 좋은 자리라는 그림이 된다.
+  운의 소재가 <strong>구성원이 아니라 좌표</strong>이므로, 클립을 골라 재현할 수 없다.
 </div>
 
 <div class="callout opinion">
@@ -363,8 +426,13 @@ M=32에서 <strong>+0.0052 (p=0.648)로 부호가 뒤집혔고</strong> M=64에�
 
 <h2><span class="num">9</span> 한계</h2>
 <ul>
-  <li><strong>개루프 &middot; val500 150클립 &middot; <code>calib_100</code> 풀 하나.</strong> 집합 효과가
-  test500에서 같은 크기로 재현되는지는 아직 확인하지 않았다(최선/최악 부분집합 2 arm, ~1.7 h).</li>
+  <li><strong>개루프 &middot; val500 150클립 &middot; <code>calib_100</code> 풀 하나.</strong> val 범위를
+  가로지르는 6 arm(54 / 53 / 09 / 44 / 29 / 07, val y +0.0200~+0.9977)의 <strong>test500 재현이
+  진행 중</strong>이다. 50배 산포가 재현되는지는 확실히 갈리지만, &ldquo;최선 절반(+0.0200)이
+  전체 100개(+0.0345)보다 정말 낫다&rdquo;는 칸은 <strong>사전 계산상 1.4 SE라 결론이 안 날 가능성이
+  크다</strong>(페어드 sd ~0.23, n=500 &rarr; SE 0.010).</li>
+  <li><strong>n=50 대 n=100의 크기 효과가 분리되지 않았다.</strong> <code>calib_100</code> 안에서
+  n=25/50/75 사다리를 돌리면 갈린다.</li>
   <li><strong>&ldquo;가법적이지 않다&rdquo;가 &ldquo;구조가 없다&rdquo;는 아니다.</strong> 쌍 &middot; 삼중 상호작용
   같은 저차 구조는 이 설계로 검출되지 않는다. 다만 클립별 점수로 선별하는 접근은 어느 쪽이든 닫힌다.</li>
   <li><strong>후속 가설 하나.</strong> 부분집합 평균 LOO churn이 &rho;=&minus;0.340 (p=0.006, q=0.091)로
