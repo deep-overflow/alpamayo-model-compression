@@ -36,7 +36,7 @@ from alpamayo1_5 import helper  # noqa: E402
 from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
-REPO = Path("/workspace/alpamayo-model-compression")
+REPO = Path(__file__).resolve().parents[2]
 REF_STEPS = 16  # baseline median CoC length (profile convention)
 
 
@@ -188,12 +188,16 @@ def main():
         f"end-to-end (norm {REF_STEPS} tok)  stock {stock_norm:7.1f}   fast {fast_norm:7.1f} ms "
         f"->  {stock_norm / fast_norm:.2f}x",
     ]
+    # peak over the whole run (both paths, graph pools included): the memory a
+    # deployment of the fast path has to budget for, alongside profile_stages' per-stage peaks
+    peak_gb = torch.cuda.max_memory_allocated(device) / 2**30
+    lines.append(f"peak allocated {peak_gb:6.2f} GB (whole run, both paths)")
     txt = "\n".join(lines)
     print(txt, flush=True)
     (out_dir / "summary.txt").write_text(txt + "\n")
     (out_dir / "metrics.json").write_text(json.dumps({
         "slim_ckpt": args.slim_ckpt, "cap": args.cap, "ref_steps": REF_STEPS,
-        "decode_capture_ms": cap_ms, "per_clip": rows,
+        "decode_capture_ms": cap_ms, "per_clip": rows, "peak_gb": peak_gb,
         "gpu": torch.cuda.get_device_name(device),
     }, indent=2))
     (out_dir / "config.json").write_text(json.dumps({
