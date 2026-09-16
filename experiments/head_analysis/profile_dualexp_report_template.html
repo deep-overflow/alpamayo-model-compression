@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dual + expert MLP 절단 사다리 &mdash; 메모리는 산술대로, latency는 경로가 정한다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; latency &amp; memory &middot; 2026-09-16</div>
+  <h1>dual + expert MLP 절단 사다리 &mdash; 메모리는 산술대로, latency는 경로가 정한다</h1>
+  <div class="meta">
+    5 arm(무압축 / <code>dual_u40_v2</code> / <code>dualexp_u40_em75</code> / <code>_em87p5</code> / <code>_em93p75</code>), cvlab21 <b>RTX 5880 Ada</b> 4&ndash;7,
+    릴리스 경로 <code>profile_stages.py</code>(arm당 24클립) + graphed fast path <code>bench_fastpipeline.py</code>(arm당 12클립), 배치 1, bf16, sdpa.
+    플랜 <code>plans/2026-09-15_dualexp-latency-memory.md</code> &middot; 분석 <code>experiments/head_analysis/analyze_profile_arms.py</code> &middot; 산출물 <code>outputs/profile_dualexp/</code>
+  </div>
+</header>
+
+<h2><span class="num">0</span>요약</h2>
+
+<div class="callout">
+  <strong><code>dualexp_u40_em93p75</code>(11.08B &rarr; 6.71B, &minus;39.4%)는 무압축 대비 <b>메모리 &minus;8.8 GB</b>(peak 21.5 &rarr; 13.3 GiB), latency는 <b>릴리스 경로 1.06&times;</b>, <b>graphed fast path 1.36&times;</b>(fast-vs-fast; stock 무압축 대비 1.56&times;).</strong>
+  메모리 감소는 네 arm 전부 bf16 가중치 산술과 0.09 GB 안에서 일치한다(KV 캐시 불변). 릴리스 경로의 이득은 <b>prefill 하나</b>(&minus;27%, VLM 절단)에서 오고, decode/tok은 gather 경로 대가로 +2&ndash;6%, expert denoise는 가중치의 75%를 잘라내도 <b>&minus;2%</b>(step-bound, G2 채택). 그런데 graphed 경로에서는 같은 expert 절단이 <b>denoise 203.7 &rarr; 148.9 ms(&minus;27%)</b>로 단조롭게 보인다 &mdash; "expert MLP 폭은 latency에 무관"은 <b>릴리스 경로 한정</b> 진술이다. em87p5와 em93p75는 두 경로 모두 구별되지 않는다.
+</div>
+
+<table>
+  <tr><th>게이트 (사전 등록)</th><th>판정</th><th>근거</th></tr>
+  <tr><td>G0 무결성</td><td class="good">PASS</td><td>15 run 전부 exit 0, arm당 24/24 (fast 12/12), 전부 Ada, 파라미터 수 = <code>slim_meta</code></td></tr>
+  <tr><td>G1 메모리 = 가중치 산술 &plusmn;1 GB</td><td class="good">PASS &times;4</td><td>측정 5.41 / 8.14 / 8.60 / 8.83 GB vs 예측 5.31 / 8.05 / 8.51 / 8.74; KV 436.2 MB 동일</td></tr>
+  <tr><td>G2 expert 단계 step-bound?</td><td class="good">채택 (릴리스 경로)</td><td>em93p75/dual 0.985 [0.948,1.003], 사다리 범위 6.3% &lt; 10%</td></tr>
+  <tr><td>G3 VLM 단계</td><td class="good">PASS</td><td>dual/base prefill 0.726 [0.722,0.728] &isin; [0.70,0.85]; dec/tok 1.057 [1.005,1.092] &isin; [1.00,1.15]; 릴리스 e2e 1.047&ndash;1.079&times;</td></tr>
+  <tr><td>G4 fast path</td><td>보고</td><td>fast-vs-fast 1.313 / 1.374 / 1.391 / 1.362&times;; stock&rarr;fast 이득이 arm마다 다르다(1.15 &rarr; 1.48&times;) &mdash; H4의 "graph 이득은 arm 무관" 가정이 틀렸다(&sect;4)</td></tr>
+</table>
+
+<h2><span class="num">1</span>질문과 사전 등록 예측</h2>
+<p>`slim_dualexp_u40_em93p75`가 무압축 Alpamayo-1.5-10B 대비 한 번의 추론(ViT &rarr; VLM prefill &rarr; CoC decode &rarr; expert denoise)에서 얼마나 빠르고 얼마나 적은 메모리를 쓰는가, 그리고 expert MLP 비율 사다리(75 &rarr; 87.5 &rarr; 93.75%)로 그 이득이 expert 가중치 바이트에 비례하는지. 선행(Blackwell, <code>slim_int</code>): expert 절단은 expert 단계를 거의 안 줄였고(378 &rarr; 377 ms) gather 경로 자체가 +87 ms였다. 예측 H1 메모리 = 산술 &plusmn;1 GB; H2 expert 단계 &minus;15% 미만·사다리 무차이(step-bound); H3 prefill 0.70&ndash;0.85, 릴리스 e2e 1.0&ndash;1.15&times;; H4 fast path는 같은 경로 안에서 비교.</p>
+
+<h2><span class="num">2</span>설계</h2>
+<ul>
+  <li><b>arm 5</b>: 무압축(stock 경로) / <code>dual_u40_v2</code>(VLM 19/32 Q head + 60% MLP 절단, 8.42B) / <code>dualexp_u40_em75</code>(+ expert MLP 8256&rarr;2064, 7.05B) / <code>em87p5</code>(&rarr;1032, 6.82B) / <code>em93p75</code>(&rarr;516, 6.71B). expert Q head·KV·k/v_proj 불변. identity(무압축·gather 경로)는 제외 &mdash; 경로 대가는 선행 +87 ms를 참고치로.</li>
+  <li><b>하드웨어</b>: cvlab21 Ada 4&ndash;7(폐루프 드라이버와 같은 카드). 15 job을 빈 카드(&lt;100 MiB)만 claim하는 4워커 풀로 동시 실행(<code>launch_profile_arms.sh</code>), 02:24&ndash;03:06 KST.</li>
+  <li><b>릴리스 경로</b>: <code>profile_stages.py</code>, CUDA 이벤트 모듈 훅으로 단계 타이밍, <code>max_memory_allocated</code> rollout/denoise peak, KV 캐시 MB. shard 2개(offset 0·13) &times; 12클립 + warmup. decode와 생성 루프 오버헤드는 <b>baseline 중앙 CoC 길이 16토큰</b>으로 정규화(프루닝 arm의 퇴화 rollout이 decode를 부풀리지 않도록).</li>
+  <li><b>fast path</b>: <code>bench_fastpipeline.py</code>, 같은 클립에서 stock(release semantics)과 graphed(eager ViT+prefill &rarr; graphed decode 루프 &rarr; graphed expert denoise)를 나란히, 12클립. 이번에 전체 run peak 메모리 기록 추가.</li>
+  <li><b>코드</b>: 두 벤치의 <code>REPO=/workspace/...</code>를 <code>__file__</code> 기준으로(호스트에서 처음 돌아감); 분석기는 옛 Blackwell 런으로 자체검증(<code>analyze_slim</code>의 1.03&times;·peak 15.4 G 재현).</li>
+</ul>
+
+<h2><span class="num">3</span>결과 (사실)</h2>
+
+<h3>3.1 릴리스 경로 &mdash; 단계별 중앙값 (ms), Ada</h3>
+<table>
+  <tr><th>arm</th><th class="num">ViT</th><th class="num">prefill</th><th class="num">dec/tok</th><th class="num">expert</th><th class="num">e2e (16 tok)</th><th class="num">speedup</th><th class="num">rollout peak</th><th class="num">KV</th></tr>
+  <tr><td>base</td><td class="num">165.8</td><td class="num">436.4</td><td class="num">33.15</td><td class="num">388.5</td><td class="num">1584.6</td><td class="num">1.000&times;</td><td class="num">21.53 GiB</td><td class="num">436.2 MB</td></tr>
+  <tr><td>dual</td><td class="num">170.1</td><td class="num">316.2</td><td class="num">35.13</td><td class="num">398.9</td><td class="num">1513.0</td><td class="num">1.047&times;</td><td class="num">16.49</td><td class="num">436.2</td></tr>
+  <tr><td>em75</td><td class="num">168.5</td><td class="num">305.2</td><td class="num">34.63</td><td class="num">395.6</td><td class="num">1488.2</td><td class="num">1.065&times;</td><td class="num">13.94</td><td class="num">436.2</td></tr>
+  <tr><td>em87p5</td><td class="num">169.4</td><td class="num">317.0</td><td class="num">33.58</td><td class="num">380.1</td><td class="num">1468.0</td><td class="num">1.079&times;</td><td class="num">13.52</td><td class="num">436.2</td></tr>
+  <tr><td><b>em93p75</b></td><td class="num">167.6</td><td class="num">305.0</td><td class="num">34.90</td><td class="num">397.6</td><td class="num">1494.0</td><td class="num"><b>1.061&times;</b></td><td class="num"><b>13.31</b></td><td class="num">436.2</td></tr>
+</table>
+
+<figure>
+  <img src="PLOT::prof::stages_release.png" alt="release-path stage stack per arm">
+  <figcaption>릴리스 경로 단계 스택(정규화). 줄어드는 것은 prefill 한 칸뿐이고, expert denoise(분홍)는 다섯 arm이 같은 높이다.</figcaption>
+</figure>
+
+<h3>3.2 메모리 &mdash; bf16 가중치 산술 대비 (GB = 10<sup>9</sup> B, peak는 GiB에서 환산)</h3>
+<table>
+  <tr><th>arm</th><th class="num">파라미터</th><th class="num">expert 파라미터</th><th class="num">가중치 GB</th><th class="num">예측 감소</th><th class="num">측정 감소</th><th class="num">차이</th></tr>
+  <tr><td>base</td><td class="num">11,078,526,194</td><td class="num">2,279,238,656</td><td class="num">22.16</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num"></td></tr>
+  <tr><td>dual</td><td class="num">8,421,074,162</td><td class="num">2,279,238,656</td><td class="num">16.84</td><td class="num">5.31</td><td class="num">5.41</td><td class="num">+0.09</td></tr>
+  <tr><td>em75</td><td class="num">7,051,502,834</td><td class="num">909,667,328</td><td class="num">14.10</td><td class="num">8.05</td><td class="num">8.14</td><td class="num">+0.09</td></tr>
+  <tr><td>em87p5</td><td class="num">6,823,240,946</td><td class="num">681,405,440</td><td class="num">13.65</td><td class="num">8.51</td><td class="num">8.60</td><td class="num">+0.09</td></tr>
+  <tr><td><b>em93p75</b></td><td class="num">6,709,110,002</td><td class="num">567,274,496</td><td class="num">13.42</td><td class="num">8.74</td><td class="num"><b>8.83</b></td><td class="num">+0.09</td></tr>
+</table>
+<p class="small">rollout peak와 denoise peak는 arm마다 0.03 GiB 안에서 같다(denoise가 rollout보다 크지 않다). fast path run 전체 peak(두 경로 + graph 풀): base 22.49 / dual 17.45 / em75 14.90 / em87p5 14.47 / em93p75 14.26 GiB.</p>
+
+<figure>
+  <img src="PLOT::prof::memory.png" alt="weights vs measured peak per arm">
+  <figcaption>가중치(회색)와 측정 rollout peak(파랑). 활성화·KV 몫(~1 GB)만 남기고 가중치 산술을 그대로 따른다.</figcaption>
+</figure>
+
+<h3>3.3 페어드 단계 비 (같은 24클립, 중앙값, 95% 부트스트랩 CI)</h3>
+<table>
+  <tr><th>비</th><th>prefill</th><th>decode/tok</th><th>expert</th><th>ViT</th></tr>
+  <tr><td>dual / base</td><td>0.726 [0.722,0.728]</td><td>1.057 [1.005,1.092]</td><td>1.026 [0.991,1.057]</td><td>1.022 [1.019,1.032]</td></tr>
+  <tr><td>em93p75 / base</td><td>0.706 [0.696,0.721]</td><td>1.023 [1.005,1.061]</td><td>0.979 [0.955,1.035]</td><td>1.003 [0.998,1.022]</td></tr>
+  <tr><td>em75 / dual</td><td>0.983 [0.952,1.002]</td><td>1.000 [0.952,1.036]</td><td>1.008 [0.910,1.051]</td><td>0.986 [0.976,0.995]</td></tr>
+  <tr><td>em87p5 / dual</td><td>1.009 [0.991,1.023]</td><td>0.973 [0.940,0.994]</td><td>0.944 [0.937,0.984]</td><td>1.001 [0.988,1.013]</td></tr>
+  <tr><td>em93p75 / dual</td><td>0.982 [0.956,0.993]</td><td>0.989 [0.956,1.012]</td><td><b>0.985 [0.948,1.003]</b></td><td>0.985 [0.976,0.999]</td></tr>
+</table>
+
+<h3>3.4 fast path &mdash; stock vs graphed (ms, e2e는 16토큰 정규화), Ada</h3>
+<table>
+  <tr><th>arm</th><th class="num">prefill s / f</th><th class="num">dec/tok s / f</th><th class="num">denoise s / f</th><th class="num">e2e stock</th><th class="num">e2e fast</th><th class="num">stock&rarr;fast</th><th class="num">fast-vs-fast</th></tr>
+  <tr><td>base</td><td class="num">628.0 / 693.9</td><td class="num">31.93 / 27.27</td><td class="num">399.0 / 211.0</td><td class="num">1537.9</td><td class="num">1341.2</td><td class="num">1.15&times;</td><td class="num">1.000&times;</td></tr>
+  <tr><td>dual</td><td class="num">465.9 / 505.6</td><td class="num">32.77 / 19.49</td><td class="num">382.5 / 203.7</td><td class="num">1372.7</td><td class="num">1021.2</td><td class="num">1.34&times;</td><td class="num">1.313&times;</td></tr>
+  <tr><td>em75</td><td class="num">470.1 / 505.5</td><td class="num">33.01 / 19.41</td><td class="num">384.3 / 160.0</td><td class="num">1382.4</td><td class="num">976.0</td><td class="num">1.42&times;</td><td class="num">1.374&times;</td></tr>
+  <tr><td>em87p5</td><td class="num">463.4 / 499.7</td><td class="num">35.15 / 19.41</td><td class="num">411.5 / 153.8</td><td class="num">1437.3</td><td class="num">964.1</td><td class="num">1.49&times;</td><td class="num">1.391&times;</td></tr>
+  <tr><td><b>em93p75</b></td><td class="num">489.3 / 525.0</td><td class="num">34.64 / 19.41</td><td class="num">415.1 / <b>148.9</b></td><td class="num">1458.6</td><td class="num"><b>984.5</b></td><td class="num">1.48&times;</td><td class="num"><b>1.362&times;</b></td></tr>
+</table>
+<p class="small">fast prefill이 stock prefill보다 큰 것은 이 벤치의 알려진 성질(fast 경로의 prefill에 정적 캐시 스테이징이 포함됨; 선행 Blackwell도 407 &rarr; 498). e2e는 그것을 포함한 값이다.</p>
+
+<figure>
+  <img src="PLOT::prof::fastpath.png" alt="stock vs graphed e2e per arm">
+  <figcaption>stock(회색) vs graphed(초록) e2e. graph 이득이 프루닝된 arm에서 더 크다 &mdash; 런치 오버헤드가 걷히면 가중치 바이트가 시간으로 바뀌기 때문.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>해석 (의견)</h2>
+<ol>
+  <li><b>메모리는 완전히 예측 가능하다.</b> 네 arm이 산술과 +0.09 GB로 일치하고 KV는 불변이다(k/v_proj·8&times;128 인터페이스를 안 건드리는 설계의 직접 결과). gather 경로의 활성화가 이득을 잠식한다는 H1 반증 조건은 성립하지 않았다.</li>
+  <li><b>릴리스 경로의 latency는 배치 1 런치 지배다.</b> 파라미터 &minus;39%가 시간 &minus;6%로 바뀌는 이유는 단계별 표에 그대로 있다: prefill(큰 행렬곱, 3,000토큰)만 가중치에 비례해 줄고(&minus;27%), decode(토큰당 1스텝)와 expert(64토큰 &times; 10스텝)는 커널 런치와 순차성이 지배해 가중치 바이트와 무관하다. em93p75/dual의 expert 비 0.985 [0.948,1.003]는 선행 slim_int의 378 &rarr; 377 ms를 Ada에서, 그리고 훨씬 큰 절단에서 재현한 것이다.</li>
+  <li><b>그러나 step-bound는 경로의 성질이지 모델의 성질이 아니다.</b> CUDA graph로 런치를 걷어내면 같은 expert 절단이 denoise 203.7 &rarr; 160.0 &rarr; 153.8 &rarr; 148.9 ms로 단조롭게 나타나고(&minus;27%), graphed decode도 27.3 &rarr; 19.4 ms/tok(&minus;29%)로 VLM 절단을 드러낸다. 그래서 H4의 "graph 이득은 arm 무관" 가정은 틀렸다 &mdash; stock&rarr;fast 이득이 base 1.15&times;에서 em93p75 1.48&times;로 커진다. <b>latency 수치는 반드시 경로 이름과 함께 인용해야 한다</b>: 1.06&times;(릴리스)와 1.36&times;(graphed)는 같은 모델의 두 얼굴이다.</li>
+  <li><b>사다리의 끝은 의미가 없다.</b> em87p5와 em93p75는 두 경로 모두 잡음 안이고(릴리스 1.079 vs 1.061&times;, fast 1.391 vs 1.362&times;), 메모리 차이 0.23 GB다. expert MLP 1032 &rarr; 516의 추가 절단은 latency·memory 어느 쪽도 사주지 않으므로, 그 선택은 성능(개루프·폐루프) 쪽 근거로만 정당화되어야 한다.</li>
+</ol>
+
+<div class="callout opinion">
+  <strong>이 레포의 다른 결과와의 연결.</strong>
+  "expert MLP 폭은 공짜"(2026-08-28, 개루프 minADE 기준)는 성능 진술이었고, 이번 결과는 그 폭이 <em>비용 쪽</em>에서도 릴리스 경로에서는 거의 아무것도 돌려주지 않는다는 뜻이다 &mdash; 배포 경로가 graphed일 때만 27%가 돌아온다. 반대로 VLM 절단(dual)은 prefill로 릴리스 경로에서도 확실히 돌아온다. 배포 목표가 latency라면 절단 예산은 VLM prefill과 graphed denoise에, 메모리라면 어느 축이든 산술대로다.
+</div>
+
+<h2><span class="num">5</span>한계</h2>
+<ul>
+  <li>배치 1, 단일 추론. 처리량(배치 &gt; 1)에서는 expert의 가중치 재사용이 달라져 결론이 바뀔 수 있다.</li>
+  <li>identity arm이 없어 gather 경로 대가(선행 Blackwell +87 ms)를 이번 측정 안에서 분리하지 못했다. dual/base의 dec/tok +5.7%가 그 대가의 흔적이다.</li>
+  <li>4 run 동시 실행(CPU·PCIe 공유). 선행과 같은 조건이라 arm 간 비교는 공정하지만 절대값은 단독 실행보다 보수적일 수 있다.</li>
+  <li>fast path의 peak는 두 경로와 graph 풀을 합친 run 전체 값이라 배포 시 fast path 단독 peak보다 크다.</li>
+</ul>
+
+<h2><span class="num">6</span>재현</h2>
+<pre><code>bash experiments/head_analysis/launch_profile_arms.sh "4 5 6 7"        # 15 job, 빈 Ada 카드 풀
+python experiments/head_analysis/analyze_profile_arms.py \
+  --arms base=profile_base_ada2_s0,profile_base_ada2_s13 dual=profile_dual_ada2_s0,profile_dual_ada2_s13 \
+         em75=... em87p5=... em93p75=... \
+  --fast base=fastpipe_base_ada2 dual=fastpipe_dual_ada2 em75=... em87p5=... em93p75=... \
+  --out outputs/profile_dualexp</code></pre>
+<p class="small">런 디렉토리 <code>outputs/profile_{base,dual,em75,em87p5,em93p75}_ada2_s{0,13}</code>, <code>outputs/fastpipe_{&hellip;}_ada2</code>; 게이트 <code>outputs/profile_dualexp/metrics.json</code>.</p>
+
+</div>
+</body>
+</html>
