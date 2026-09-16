@@ -235,6 +235,80 @@ def cut_pairs_table(m):
             f"<tbody>{body}</tbody></table></div>")
 
 
+HEAD_AXIS = [("dual", "dual", "13", "24.0%", "우리 dual (gate Taylor)"),
+             ("baseline", "baseline", "&mdash;", "&mdash;", "무압축"),
+             ("dual_h4", "dual+h4", "4", "24.0%", "우리 dual (gate Taylor)"),
+             ("act_h0", "act_h0", "0", "24.0%", "traj_param_first"),
+             ("spg", "spg", "0", "24.0%", "dual_param_first"),
+             ("act70", "act_mlp70", "0", "33.4%", "traj_param_first"),
+             ("pr70", "pr_mlp70", "0", "33.4%", "dual_param_first")]
+
+
+def head_axis_tables(m2):
+    """The head axis and the objective one-factor, both closed-loop only.
+
+    Read from spg_pairs, which carries all five arms in one paired matrix -- every delta
+    below is against the same 150 scenes, so the rows are directly comparable."""
+    if m2 is None:
+        return "", ""
+    a, pr = m2["arms"], m2["pairs"]
+
+    def gate(name, key):
+        hit, n = a[name]["gates"][key]
+        return 100 * hit / n
+
+    body = ""
+    for key, label, heads, budget, crit in HEAD_AXIS:
+        if key not in a:
+            continue
+        # analyze_calibsize names each pair once, in the order the arms were passed, so
+        # baseline's row has to be read off "dual - baseline" and flipped
+        if key == "dual":
+            vd, cls = "<span class='dim'>기준</span>", ""
+        else:
+            v = (pr[f"{key} - dual"] if f"{key} - dual" in pr
+                 else {"delta": -pr["dual - baseline"]["delta"],
+                       "wilcoxon_p": pr["dual - baseline"]["wilcoxon_p"],
+                       "ci_hi": -pr["dual - baseline"]["ci_lo"]})
+            vd = (f"{v['delta']:+.4f}<br>"
+                  f"<span class='ci'>p={v['wilcoxon_p']:.1e}</span>")
+            cls = " class='bad'" if v["ci_hi"] < 0 else ""
+        strong = "strong" if key == "dual" else "span"
+        body += (f"<tr><td><code>{label}</code></td><td>{heads}</td>"
+                 f"<td>{budget}</td><td class='dim'>{crit}</td>"
+                 f"<td><{strong}>{a[key]['score']:.3f}</{strong}></td><td{cls}>{vd}</td>"
+                 f"<td>{gate(key, 'offroad'):.1f}%</td>"
+                 f"<td>{gate(key, 'collision_at_fault'):.1f}%</td>"
+                 f"<td>{100 * a[key]['coc_degenerate']:.2f}%</td></tr>")
+    t1 = ("<div class='scroll'><table><thead><tr><th>arm</th><th>자른 head</th>"
+          "<th>총 제거</th><th>기준</th><th>score</th><th>vs dual</th><th>offroad</th>"
+          "<th>과실충돌</th><th>CoC 퇴화</th></tr></thead>"
+          f"<tbody>{body}</tbody></table></div>")
+
+    body = ""
+    # the four edges of the 2x2 first, then everything against the uncompressed baseline
+    for key in ("spg - act_h0", "pr70 - act70", "act70 - act_h0", "pr70 - spg",
+                "act70 - spg", "pr70 - act_h0",
+                "act_h0 - baseline", "spg - baseline", "act70 - baseline",
+                "pr70 - baseline", "dual_h4 - baseline"):
+        if key not in pr:
+            continue
+        v = pr[key]
+        sep = v["ci_lo"] > 0 or v["ci_hi"] < 0
+        aa, bb = key.split(" - ")
+        body += (f"<tr><td><code>{aa}</code> &minus; <code>{bb}</code></td>"
+                 f"<td>{v['delta']:+.4f}</td>"
+                 f"<td class='ci'>[{v['ci_lo']:+.4f}, {v['ci_hi']:+.4f}]</td>"
+                 f"<td>{v['wilcoxon_p']:.2f}</td>"
+                 f"<td class='dim'>{v['better']}/{v['worse']}/{v['tie']}</td>"
+                 f"<td class='{'bad' if sep else 'dim'}'>"
+                 f"{'구분됨' if sep else '구분 안 됨'}</td></tr>")
+    t2 = ("<div class='scroll'><table><thead><tr><th>쌍</th><th>델타</th><th>95% CI</th>"
+          "<th>Wilcoxon p</th><th>W/L/T</th><th>판정</th></tr></thead>"
+          f"<tbody>{body}</tbody></table></div>")
+    return t1, t2
+
+
 CSS = """
 :root{--bg:#FAF9F5;--card:#FFF;--code:#F0EEE6;--ink:#29261B;--muted:#6B6555;
 --acc:#D97757;--bd:#E8E6DC;--stripe:#F5F4EF;--good:#008300;--bad:#b0402a;--warn:#eda100}
@@ -285,7 +359,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:.5rem;line-height:1.6}
 """
 
 
-def build(ol, cl, m, plot_dir, date):
+def build(ol, cl, m, m2, plot_dir, date):
     pend = [n for n, _, _, _ in LADDER if n != "dual" and n not in cl["_abs"]]
     pend_note = ""
     if pend:
@@ -295,6 +369,7 @@ def build(ol, cl, m, plot_dir, date):
             "있으므로 아래의 단조성 주장은 <strong>남은 칸으로 그린 선</strong>이고, 비어 있는 "
             "칸이 그 선 위에 앉지 않으면 이 보고서의 핵심 주장은 약해진다. 판정이 아니라 "
             "중간 보고로 읽어야 한다.</p></div>")
+    head_t1, head_t2 = head_axis_tables(m2)
     worst = max((abs(ol[n][s]["mean"]) for n in ol for s, _ in SETS), default=0.0)
     deltas = [cl[n]["delta"] for n, _, _, _ in LADDER if n in cl and n != "dual"]
     return f"""<!DOCTYPE html>
@@ -398,6 +473,101 @@ test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝
 <code>dual</code>보다 높고, <code>dual</code>만 baseline보다 낮다. 칸끼리의 순서는 없다.</figcaption>
 </figure>
 
+<h3>4.2 같은 계단이 헤드 축에서도 나온다</h3>
+<p>여기까지는 expert MLP 축이었다. 같은 질문을 <strong>VLM의 헤드 축</strong>에 물으면
+&mdash; 24% 예산을 헤드에서 몇 개나 가져오는가 &mdash; 모양이 반복된다. 아래 네 arm은
+모두 <strong>같은 2,657,452,032 파라미터</strong>를 지우고, 헤드를 13개 / 4개 / 0개 자른다.</p>
+{head_t1}
+<p><code>dual</code>만 무압축을 이긴다. 헤드를 13개에서 4개로 줄이는 순간 &minus;0.091이
+발생하고, 0개로 더 줄여도 그 자리에 머문다.</p>
+{head_t2}
+<p class="note">여섯 쌍 중 <code>*&nbsp;&minus;&nbsp;dual</code>만 구분되고 나머지는 전부
+구분되지 않는다. expert MLP 사다리에서 본 것과 같다 &mdash; <strong>손해는 양이 아니라
+여부</strong>다.</p>
+
+<h3>4.3 목적 함수를 바꿔도 회복되지 않는다 (1요인)</h3>
+<p>위 표의 <code>spg</code>와 <code>act_h0</code>은 이 연구에서 가장 깨끗한 1요인 쌍이다.
+두 마스크는 <strong>층별 예산·head 마스크·캘리브레이션·제거 파라미터가 전부 동일</strong>하고,
+고르는 채널만 다르다(유지집합 겹침 83.5%). 다른 것은 점수 함수 하나뿐이다 &mdash;
+<code>traj_param_first</code>(궤적만) 대 <code>dual_param_first</code>(CoC+궤적). 빌드 시
+G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
+<pre>spg &minus; act_h0   +0.0054 [&minus;0.0310, +0.0421]   p=0.96</pre>
+<p><strong>목적에 CoC를 더한 효과가 없다.</strong> 그러므로 이 축의 손해는 "궤적만 보는
+기준"의 결함이 아니라 <strong>MLP-only 배분 자체</strong>다. 헤드를 4개 자르든 0개 자르든,
+목적에 CoC를 넣든 말든 같은 자리(&minus;0.09&nbsp;~&nbsp;&minus;0.10)에 앉는다.</p>
+<div class="callout">
+  <p><strong>그런데 CoC 생성 품질은 실제로 지켰다.</strong> <code>spg</code>의 CoC 퇴화율은
+  0.84%로 <code>act_h0</code>(2.14%)와 <code>dual</code>(2.72%)보다 훨씬 낮고 무압축(0.55%)에
+  가깝다. 목적에 CoC를 넣은 것이 <em>CoC에는 효과가 있었는데 주행 점수는 하나도 못 살렸다.</em>
+  이 저장소가 따로 기록해 둔 "CoC 건강은 안전 대리지표가 아니다"의 또 한 사례다.</p>
+</div>
+<p class="note">한 가지 덧붙일 것: <code>act_h0</code>과 <code>spg</code>는 예산·배분만
+우리 <code>dual</code>과 같고 기준과 캘리브레이션이 다르다(유지집합 겹침 MLP 71.9% / 75.9%).
+그래서 <strong>이 둘과 <code>dual</code>의 차이는 1요인이 아니다</strong> &mdash; 1요인인 것은
+둘 사이의 비교, 그리고 <code>dual+h4</code>와 <code>dual</code>의 비교다.</p>
+
+<div class="warn">
+  <p><strong><code>spg</code>는 "우리 <code>dual</code>의 h0 버전"이 아니다.</strong>
+  두 기준 모두 CoC와 궤적을 함께 보지만 재는 양이 다르다 &mdash; 우리 것은 곱셈 <em>게이트</em>를
+  미분해 <code>max(rank I_traj, rank I_CoC)</code>로 합집합을 취하고, <code>dual_param_first</code>는
+  <em>가중치</em>를 미분해 부호를 유지한 채 더한다. 확인해 봤다: 우리 dual 점수로
+  <code>spg</code>와 <strong>똑같은 층별 예산</strong>을 뽑으면 36개 층 중
+  <strong>1개만</strong> 일치한다(그 1개는 아무것도 자르지 않는 층 35다). 겹침 83.9%로
+  무작위(51.1%)보다는 훨씬 높으니 비슷한 것을 보긴 하지만, 같은 기준은 아니다.
+  <strong>우리 기준의 진짜 h0 arm은 아직 없다</strong> &mdash; <code>dual+h4</code>가 가장 극단이다.</p>
+</div>
+
+<h3>4.4 기준 &times; 깊이: 두 요인은 독립이 아니다</h3>
+<p>MLP-only arm 네 개가 <strong>완전 교차된 2&times;2</strong>를 이룬다. 배분·캘리브레이션
+(<code>lp_c100s1</code>)·head 0개·층 35 보존이 전부 고정되고, 점수 함수와 깊이만 움직인다.
+각 칸의 중첩과 예산 일치는 빌드 게이트로 확인한 뒤 돌렸다.</p>
+<div class="scroll"><table><thead><tr><th></th>
+<th><code>traj_param_first</code></th><th><code>dual_param_first</code></th></tr></thead><tbody>
+<tr><td><strong>MLP 50.3%</strong> (총 24.0%)</td><td>act_h0 <strong>0.727</strong></td>
+    <td>spg <strong>0.733</strong></td></tr>
+<tr><td><strong>MLP 70.0%</strong> (총 33.4%)</td>
+    <td>act_mlp70 <strong class="good">0.765</strong></td>
+    <td>pr_mlp70 <strong class="bad">0.715</strong></td></tr>
+</tbody></table></div>
+<pre>기준 효과  얕게  spg &minus; act_h0    +0.0054 [&minus;0.0310, +0.0421]  p=0.96     무관
+          깊게  pr70 &minus; act70    &minus;0.0499 [&minus;0.0874, &minus;0.0131]* p=0.0091   유의
+깊이 효과  traj  act70 &minus; act_h0  +0.0375 [&minus;0.0001, +0.0755]  p=0.025    좋아짐
+          dual  pr70 &minus; spg      &minus;0.0178 [&minus;0.0636, +0.0275]  p=0.81     무변화</pre>
+<p><strong>얕게 자를 때는 기준이 무관한데(p=0.96) 깊게 자르면 갈린다(p=0.0091).</strong>
+앞 절들이 세 축에서 얻은 "계단" 요약은 <em>깊이가 얕을 때의 성질</em>이었다. 70%까지 가면
+어느 점수로 골랐는지가 0.05를 가른다.</p>
+
+<div class="warn">
+  <p><strong><code>act_mlp70</code>의 0.765를 "더 자르면 좋아진다"로 읽으면 안 된다.</strong>
+  이 arm은 MLP-only 중 유일하게 무압축을 넘지만(+0.0153, p=0.11), <strong>CoC 퇴화율이
+  20.73%</strong>다 &mdash; empty 15.0% + soup 5.7%, 출하 <code>dual</code>(2.72%)의 7.6배,
+  무압축(0.55%)의 38배. 다섯 rollout 중 하나꼴로 추론이 붕괴한다.</p>
+  <p>서명이 분명하다: <strong>progress는 0.784로 전 arm 최고</strong>이고 중앙값이 1.000인데,
+  <strong>게이트는 최악</strong>이다(offroad 9.3%, 과실충돌 4.7% &mdash; 무압축 4.0%보다 높다).
+  추론을 포기하고 전진을 번 형태이고, 종합 점수는 그 거래를 보상한다. 이 저장소가 Tyr
+  폐루프에서 이미 본 모양이다 &mdash; 거기서도 CoC 붕괴는 전부 빈 출력이었고 궤적은
+  baseline 근처였다.</p>
+  <p class="note"><strong>부수 관찰.</strong> <code>act_mlp70</code>의 폐루프는 10시간 18분으로
+  다른 런(7시간 38분&ndash;8시간 21분)보다 2시간 넘게 길었다. CoC 길이가 106으로 다른
+  arm(74&ndash;80)보다 40% 길다 &mdash; <strong>CoC가 붕괴하면 디코딩이 짧아지는 게 아니라
+  길어질 수 있다</strong>(soup은 반복 생성이다). 다른 arm의 실측으로 런타임을 외삽하면
+  이만큼 빗나간다.</p>
+</div>
+
+<p><code>dual_param_first</code> 쪽에서는 이야기가 다르다. 깊이를 늘려도 종합 점수는 움직이지
+않는데(<code>pr70 &minus; spg</code> p=0.81) <strong>과실 충돌이 4.3% &rarr; 9.0%로 2.1배</strong>가
+되고 CoC 퇴화도 0.84% &rarr; 6.48%로 뛴다. 점수가 포화하는 이유는 점수의 구조에 있다 &mdash;
+<code>score_criteria</code>는 <code>collision_at_fault</code>와 <code>offroad</code>를
+<em>하드 게이트</em>로 쓰고 나머지를 progress로 채우므로, 이미 걸린 씬에서는 충돌이 더 늘어도
+깎을 자리가 없다. <code>pr70</code>의 중앙값이 0.937로 <code>spg</code>의 0.856보다
+<em>높다</em>는 것이 그 분포다.</p>
+<div class="callout">
+  <p><strong>두 칸이 같은 것을 말한다.</strong> 깊게 자르면 종합 점수는 더 이상 믿을 수 없다
+  &mdash; 한쪽(<code>act70</code>)은 추론을 버려 점수를 <em>올리고</em>, 다른 쪽
+  (<code>pr70</code>)은 충돌이 두 배가 되어도 점수가 <em>안 내려간다</em>. 어느 쪽이든
+  <strong>CoC 퇴화율과 게이트를 종합 점수와 함께 읽지 않으면 오독한다.</strong></p>
+</div>
+
 <h2><span class="num">5.</span>해석 (의견)</h2>
 <div class="callout">
   <p><strong>결론 1 &mdash; 개루프는 이 축에 구조적으로 눈이 멀었다.</strong>
@@ -407,13 +577,26 @@ test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝
   벗어난 궤적과 차선을 넘은 궤적은 거리로 구분되지 않는다. 개루프에서 이탈을 대신 잴 방법도
   없다: <code>features.csv</code> 전체에 차선&middot;도로경계&middot;주행가능영역 라벨이 없어
   "도로를 벗어났다"를 판정할 기준 자체가 존재하지 않는다.</p>
-  <p><strong>결론 2 &mdash; 용량-반응이 아니라 계단이다.</strong>
+  <p><strong>결론 2 &mdash; 용량-반응이 아니라 계단이고, 축을 바꿔도 같다.</strong>
   자른 세 칸은 <em>서로 구분되지 않는다</em> &mdash; 세 쌍 모두 CI가 0을 포함하고
   (<code>em87p5&minus;em75</code> +0.0221, <code>em93p75&minus;em75</code> +0.0033,
   <code>em93p75&minus;em87p5</code> &minus;0.0188), 92&ndash;96씬이 동점이다. 그런데 셋 다
   <code>dual</code>보다 아래이고 셋 다 offroad가 <code>dual</code>보다 높다. 읽히는 신호는
   <strong>"얼마나 자르느냐"가 아니라 "자르느냐 마느냐"</strong>다 &mdash; 2064채널만 남겨도
   손해가 이미 다 발생하고, 거기서 4배 더 잘라도 더 나빠지지 않는다.</p>
+  <p>4.2와 4.3이 같은 모양을 두 축에서 더 보여준다. <strong>헤드 축</strong>(13&rarr;4&rarr;0)은
+  4개에서 &minus;0.091이 완결되고 0개도 그 자리이며(p=0.89), <strong>목적 함수</strong>
+  (궤적만&rarr;궤적+CoC)는 아예 움직이지 않는다(+0.0054, p=0.96). 세 축 어느 쪽도 첫 칸
+  이후로는 반응이 없다. <code>dual</code>이 헤드를 13개 자른다는 사실 하나가 &minus;0.09를
+  지키고 있고, 그 선을 넘으면 더 적게 자르는 것도 목적을 보강하는 것도 되돌리지 못한다.</p>
+  <p><strong>단, 계단은 얕은 쪽의 성질이다.</strong> 4.4가 그 경계를 보인다 &mdash;
+  MLP를 70%까지 파면 기준 선택이 다시 유의해지고(p=0.0091), 한 칸은 CoC를 버려 점수를 올리고
+  다른 칸은 충돌이 두 배가 되어도 점수가 안 내려간다. 아래 문장은 그 안쪽에서만 성립한다.</p>
+  <p><strong>그리고 이 "계단"은 종합 점수의 성질이다.</strong> 4.4가 그 한계를 보여준다 &mdash;
+  MLP를 70%까지 파도 점수는 안 움직이는데(p=0.81) 과실 충돌은 2.1배가 되고 CoC 퇴화는
+  7.7배가 된다. 점수가 게이트를 하드 컷으로 쓰기 때문에 이미 걸린 씬에서는 추가 실패가
+  점수에 반영되지 않는다. <strong>계단이라는 결론은 "더 잘라도 안전하다"가 아니라
+  "종합 점수로는 더 이상 구분되지 않는다"이다.</strong></p>
   <p class="note"><strong>이 결론은 한 번 틀렸다가 고쳐진 것이다.</strong> 초판은
   <code>em87p5</code>(&minus;0.0166)와 <code>em93p75</code>(&minus;0.0355) 두 점만 가지고
   "계단이 거의 등간격으로 정렬한다"고 썼다. 두 점은 언제나 직선 위에 있다. 세 번째 점
@@ -469,6 +652,11 @@ THW&lt;1s 비율 &minus;0.032 (셋 다 유의). 나빠지는 것은 측면이다
   <p><strong>절대 이탈률&middot;충돌률을 suite 전체로 일반화하지 않는다.</strong> 150씬 표본은
   <code>public_2601</code> 913씬보다 쉽다 &mdash; 무압축 0.742 대 0.660, 과실 충돌 2.0% 대
   5.5%. 여기서 읽는 것은 대응 델타이지 절대값이 아니다.</p>
+  <p><strong>4.2의 다섯 arm이 모두 1요인이라고 말하지 않는다.</strong>
+  <code>act_h0</code>과 <code>spg</code>는 기준과 캘리브레이션이 우리 <code>dual</code>과
+  다르다(유지집합 겹침 MLP 71.9% / 75.9%). 그 둘과 <code>dual</code>의 차이에는 축과 기준이
+  함께 들어 있다. 1요인인 것은 <strong>둘 사이</strong>(4.3)와
+  <strong><code>dual+h4</code> 대 <code>dual</code></strong> 둘뿐이며, 나머지 행은 맥락이다.</p>
   <p><strong>expert MLP를 자르지 말라고 말하지 않는다.</strong> 모든 칸이 무압축을
   <em>이긴다</em>. 말하는 것은 두 가지다 &mdash; (a) 이 결정을 개루프로 내리면 안 되고,
   (b) 압축률이 절대적으로 필요한 상황이 아니라면 <code>dual</code>을 유지하는 편이 낫다.</p>
@@ -507,6 +695,8 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--pairs", default="em87p5_pairs",
                     help="analyze_calibsize output holding the closed-loop pair matrix")
+    ap.add_argument("--head-pairs", default="spg_pairs",
+                    help="analyze_calibsize output holding the head-axis matrix")
     ap.add_argument("--date", default="2026-09-12")
     args = ap.parse_args()
 
@@ -523,6 +713,9 @@ def main():
             ol[name] = got
 
     m = json.loads((O / args.pairs / "metrics.json").read_text())
+    # the head axis lives in its own paired matrix; absent, those sections are skipped
+    p2 = O / args.head_pairs / "metrics.json"
+    m2 = json.loads(p2.read_text()) if p2.exists() else None
     cl = {"_abs": {}, "_lo": {}, "_hi": {}, "_off": {}, "_col": {}, "_coc": {},
           "_vs_base": {}}
     for name, a in m["arms"].items():
@@ -544,7 +737,7 @@ def main():
     plots(ol, cl, plot_dir)
     out = args.out if args.out.is_absolute() else Path.cwd() / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(ol, cl, m, plot_dir, args.date))
+    out.write_text(build(ol, cl, m, m2, plot_dir, args.date))
     print(f"wrote {out}  ({out.stat().st_size // 1024} KB)")
 
 

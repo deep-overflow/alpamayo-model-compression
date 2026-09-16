@@ -32,7 +32,7 @@ from alpamayo1_5 import helper  # noqa: E402
 from alpamayo1_5.load_physical_aiavdataset import load_physical_aiavdataset  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
-REPO = Path("/workspace/alpamayo-model-compression")
+REPO = Path(__file__).resolve().parents[2]
 
 
 class ModuleTimer:
