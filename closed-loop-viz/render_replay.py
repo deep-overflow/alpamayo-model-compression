@@ -39,6 +39,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import math
 import pickle
 from pathlib import Path
 
@@ -102,9 +103,22 @@ async def read_rollout(asl):
     return {"boxes": boxes, "gt": gt, "frames": frames, "plans": plans, "cocs": cocs}
 
 
+def run_dir(config):
+    """Resolve an arm spec to its merged-run directory.
+
+    A bare name is one of our own runs and follows the `m2601_merged_<config>` convention.
+    An absolute path is taken as the run directory itself, which is how an arm that lives
+    in someone else's runs_root gets in -- soowon's LLM-Pruner baseline is at
+    /mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root/lp_r50 and covers the
+    same 150 scenes, but does not sit under our prefix.
+    """
+    p = Path(config)
+    return p if p.is_absolute() else RUNS / f"m2601_merged_{config}"
+
+
 def pick_rollout(config, scene, want_worst):
     """Choose which of the scene's two rollouts to show, and return its score and gates."""
-    d = json.loads((RUNS / f"m2601_merged_{config}/aggregate/results-summary.json").read_text())
+    d = json.loads((run_dir(config) / "aggregate/results-summary.json").read_text())
     rs = [r for r in d["rollouts"] if r["clipgt_id"] == scene]
     if not rs:
         raise SystemExit(f"{config}: {scene} 없음")
@@ -153,7 +167,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scene", required=True)
     ap.add_argument("--arm", action="append", required=True,
-                    help="label=config, repeatable")
+                    help="label=config, repeatable. `config` is either one of our run "
+                         "names (resolved as m2601_merged_<config>) or an absolute path "
+                         "to a merged run directory elsewhere.")
     ap.add_argument("--worst", action="store_true", default=True,
                     help="show each arm's worse rollout (default; the failure is the point)")
     ap.add_argument("--fps", type=int, default=10)
@@ -164,7 +180,7 @@ def main():
     for spec in args.arm:
         label, cfg = spec.split("=", 1)
         rid, score, gates, dist, gtdist = pick_rollout(cfg, args.scene, args.worst)
-        asl = RUNS / f"m2601_merged_{cfg}/rollouts/{args.scene}/{rid}/rollout.asl"
+        asl = run_dir(cfg) / "rollouts" / args.scene / rid / "rollout.asl"
         data = asyncio.run(read_rollout(asl))
         data.update(label=label, config=cfg, score=score, gates=gates,
                     dist=dist, gtdist=gtdist, rid=rid)
@@ -202,12 +218,17 @@ def main():
     ylim = (cy - span / 2, cy + span / 2)
 
     n_frames = min(len(a["ts"]) for a in arms)
-    # panels are square (one shared extent keeps the two arms at the same scale),
-    # so the figure is sized to that square plus room for title and caption --
-    # a taller figure just letterboxes the data box in white
-    fig, axes = plt.subplots(1, len(arms), figsize=(6.6 * len(arms), 7.7), facecolor=BG)
-    if len(arms) == 1:
-        axes = [axes]
+    # Panels are square: one shared extent keeps every arm at the same scale, and the
+    # figure is sized to that square plus room for title and caption (a taller figure just
+    # letterboxes the data box in white). Past three arms a single row is too wide to
+    # read, so the panels wrap into a grid.
+    ncol = len(arms) if len(arms) <= 3 else math.ceil(len(arms) / 2)
+    nrow = math.ceil(len(arms) / ncol)
+    fig, axgrid = plt.subplots(nrow, ncol, figsize=(5.4 * ncol, 6.1 * nrow + 0.6),
+                               facecolor=BG, squeeze=False)
+    axes = list(axgrid.ravel()[:len(arms)])
+    for extra in axgrid.ravel()[len(arms):]:
+        extra.axis("off")
     fig.suptitle(f"{args.scene}      same scene, worse rollout of each arm",
                  color=INK, fontsize=11, y=0.985)
 
@@ -233,12 +254,13 @@ def main():
         ax.set_title(f"{a['label']}   score {a['score']:.3f}   {verdict}\n"
                      f"{a['config']}   ·   drove {a['dist']:.0f} m of {a['gtdist']:.0f} m",
                      color=col if verdict != "pass" else INK, fontsize=10, pad=10)
-        cap = ax.text(0.5, -0.045, "", transform=ax.transAxes, ha="center", va="top",
-                      color=INK, fontsize=8.5, wrap=True)
+        cap = ax.text(0.5, -0.035, "", transform=ax.transAxes, ha="center", va="top",
+                      color=INK, fontsize=7.4, wrap=True)
         clock = ax.text(0.02, 0.975, "", transform=ax.transAxes, ha="left", va="top",
                         color=MUTED, fontsize=9, family="monospace")
-        ax.legend(loc="lower right", fontsize=7.5, framealpha=0.85,
-                  facecolor=BG, edgecolor=MUTED)
+        if not state:          # legend on the first panel only
+            ax.legend(loc="lower right", fontsize=7.5, framealpha=0.85,
+                      facecolor=BG, edgecolor=MUTED)
         state.append({"ax": ax, "trail": trail, "plan": plan, "cap": cap,
                       "clock": clock, "patches": []})
 
@@ -276,17 +298,24 @@ def main():
                 xy = a["plans"][j][1]
                 s["plan"].set_data(xy[:, 0], xy[:, 1])
                 txt = clean_coc(a["cocs"][j][1]) if j < len(a["cocs"]) else ""
-                s["cap"].set_text(wrap(txt) if txt else "(no reasoning logged)")
+                s["cap"].set_text(wrap(txt) if txt else "(empty reasoning output)")
             s["clock"].set_text(f"t = {(ts - a['t0']) / 1e6:5.1f} s")
             arts += [s["trail"], s["plan"], s["cap"], s["clock"], *s["patches"]]
         return arts
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     anim = animation.FuncAnimation(fig, update, frames=n_frames, blit=False)
-    fig.subplots_adjust(left=0.02, right=0.98, top=0.885, bottom=0.125, wspace=0.05)
+    fig.subplots_adjust(left=0.02, right=0.98,
+                        top=0.885 if nrow == 1 else 0.925,
+                        bottom=0.125 if nrow == 1 else 0.055,
+                        wspace=0.05, hspace=0.26)
+    # libx264 with yuv420p needs EVEN pixel dimensions, and the figure size that follows
+    # from the panel grid does not always give them (a 2-arm figure came out 1080x669 and
+    # ffmpeg exited 1). Rounding down to even in ffmpeg is robust to any grid.
     anim.save(str(args.out), writer=animation.FFMpegWriter(
         fps=args.fps, bitrate=2400, codec="libx264",
-        extra_args=["-pix_fmt", "yuv420p"]))
+        extra_args=["-pix_fmt", "yuv420p",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"]))
     print(f"\n-> {args.out}  ({args.out.stat().st_size / 1e6:.1f} MB, "
           f"{n_frames} frames @ {args.fps} fps = {n_frames / args.fps:.0f} s)")
 
