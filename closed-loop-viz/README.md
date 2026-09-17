@@ -3,14 +3,19 @@
 Top-down replay of stored alpasim rollouts. No GPU, no re-run: everything is read back out
 of `rollout.asl`, which each run already keeps per rollout (~3 MB).
 
-## Why top-down and not camera
+## The images were dropped, but they are recoverable without a re-run
 
 The launchers pass `ALPASIM_ASL_SKIP_IMAGES=1`
 (`alpasim_runtime/event_loop.py:68` — *"LogWriter that drops driver camera frames"*), so the
 logs carry `batch_render_request` entries with **no matching return**: the render requests
-were recorded and the images were thrown away. There is no camera footage to recover.
-Getting it would mean re-running the sim with images enabled — GPU, ~12 min/scene, and a
-*different* rollout from the one that produced the published score.
+were recorded and the images were thrown away.
+
+An earlier version of this file concluded from that that camera footage needs a full re-run.
+**That is wrong.** Each recorded item is already a complete `RGBRenderRequest` — scene_id,
+ftheta intrinsics, the rolling-shutter sensor pose (start *and* end), the frame window, and
+every dynamic object's pose for that frame — so the renderer can be replayed on its own and
+the pixels come back. `replay_camera.py` does that; `render_replay.py` stays useful because a
+top-down view shows the plan, the GT path and the whole scene at once, which no camera does.
 
 ## What is drawn, and from where
 
@@ -62,6 +67,34 @@ runs_root gets in — see LLM-Pruner below.
 `inspect_scene.py` prints per-arm score and gates for one scene, which is how a scene worth
 rendering gets picked. `render_all.sh` renders the whole 150-scene matrix (resumable; it
 skips scenes whose mp4 already exists).
+
+## Camera replay — `start_renderer.sh` + `replay_camera.py`
+
+```bash
+GPU=1 PORT=16007 bash closed-loop-viz/start_renderer.sh      # renderer alone, ~35 s to serve
+
+cd /home/cvlab21/project/chan/alpasim && CUDA_VISIBLE_DEVICES="" uv run python \
+  <repo>/closed-loop-viz/replay_camera.py \
+  --scene clipgt-04749bb9-9b37-495b-bed0-77f0e33ac7da \
+  --config slim_dual_u40_qcut4_v2 --camera camera_front_wide_120fov \
+  --out <repo>/closed-loop-viz/video/camera.mp4
+
+docker rm -f chan_nre_replay                                  # give the card back
+```
+
+**No driver, no physics, no trafficsim runs.** The renderer (NuRec) is the only model, and it
+makes no decisions — it rasterises a view from a pose the log already fixed. So the footage is
+of the rollout that produced the published score, and the GPU it runs on cannot change the
+driving: a Blackwell card is fine while Ada stays with the closed-loop evaluations.
+
+Measured: 199 frames in **17 s** (0.09 s/frame) at 1920×1080, 15 MB of mp4. The renderer
+container takes ~35 s to come up.
+
+**The renderer only serves the scenes its `--artifact-glob` matched.** The sceneset in
+`data/nre-artifacts/scenesets/<id>/` is whatever the last run materialised — it held 38 usdz
+(one shard's worth), not all 913 — so check the `Available scenes:` line in
+`docker logs chan_nre_replay` before choosing a scene, or point the glob at a sceneset that
+has the one you want.
 
 ## LLM-Pruner (`lp_r50`) lives outside our runs root
 
