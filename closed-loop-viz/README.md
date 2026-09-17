@@ -87,8 +87,21 @@ makes no decisions — it rasterises a view from a pose the log already fixed. S
 of the rollout that produced the published score, and the GPU it runs on cannot change the
 driving: a Blackwell card is fine while Ada stays with the closed-loop evaluations.
 
-Measured: 199 frames in **17 s** (0.09 s/frame) at 1920×1080, 15 MB of mp4. The renderer
-container takes ~35 s to come up.
+**All four cameras come back on every call**, so `--camera all` (the default) costs no extra
+rendering — the driver requests `front_wide_120`, `front_tele_30`, `cross_left_120` and
+`cross_right_120` in one batch, and keeping one tile instead of four only throws three away.
+The scene also carries `rear_left_70` and `rear_right_70`; the driver never asks for them, so
+they are not what the model saw and are not shown. Tiles are composited and written to disk
+one frame at a time: holding 199 frames × 4 × 1900×1080 in a list is ~4.9 GB, and the encoder
+does not need them at once.
+
+Measured on GPU 1: 199 frames, four cameras, **33 s** (0.17 s/frame), 1918×1202, 5.5 MB of
+mp4. One camera is 0.09 s/frame. The container takes ~35 s to serve, and the **first frame of
+a cold scene costs ~65 s** while the usdz loads — that is the scene cache filling, not a
+stall.
+
+The caption at t = 0.0 s reads *"(empty reasoning output)"* and that is correct: the first
+render request precedes the first `driver_return`, so the model has not spoken yet.
 
 **The renderer only serves the scenes its `--artifact-glob` matched.** The sceneset in
 `data/nre-artifacts/scenesets/<id>/` is whatever the last run materialised — it held 38 usdz
