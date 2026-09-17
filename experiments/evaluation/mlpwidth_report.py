@@ -9,6 +9,14 @@ Every number is read from an artifact, never retyped: open-loop rows from the pe
 JSON at K=6, closed-loop rows from analyze_calibsize's metrics.json, and the dual+h4 rows
 from the headmlp_split analysis that measured them.
 
+4.5 is the one section that does not hold the budget fixed. Its own reading changed twice
+and both retractions are in the body: the two-point "step" claim died when u30 landed on
+the u20-u40 line, and the "linear budget ladder" reading died when q13m1861 -- u20's budget
+spent on u40's head cut -- reached u30's score on half the budget. What survives is that
+the head count is the main effect and the MLP depth a half-sized one, and that the
+reallocation edge is the only claim there that survives dropping alpasim's 4 m
+GT-trajectory truncation.
+
 The ladder's own result is that it is NOT a dose-response: the three cut rungs do not
 separate from each other (every pair's CI spans zero) while all three sit below dual with
 higher offroad. An earlier edition of this report claimed a monotone descent from the two
@@ -235,6 +243,81 @@ def cut_pairs_table(m):
             f"<tbody>{body}</tbody></table></div>")
 
 
+BUDGET_AXIS = [("baseline", "baseline", "&mdash;", "&mdash;", "&mdash;"),
+               ("u20", "dual u20", "6", "2458", "11.9%"),
+               ("q13m1861", "q13m1861", "13", "1861", "11.9%"),
+               ("u30", "dual u30", "10", "3686", "18.1%"),
+               ("u40", "dual u40 (출하본)", "13", "4898", "24.0%")]
+
+
+def budget_axis_table(m3):
+    """The budget ladder. Separate from head_axis_tables because this is the one axis in
+    the report where the removed-parameter total is NOT held fixed -- mixing it into 4.2
+    would silently turn those one-factor rows into two-factor ones."""
+    if m3 is None:
+        return "", ""
+    a, pr = m3["arms"], m3["pairs"]
+
+    def gate(name, key):
+        hit, n = a[name]["gates"][key]
+        return 100 * hit / n
+
+    def cell(key, ref):
+        """analyze_calibsize names a pair once, in the order the arms were passed."""
+        if key == ref:
+            return "<span class='dim'>기준</span>", ""
+        if f"{key} - {ref}" in pr:
+            v, sign = pr[f"{key} - {ref}"], 1
+        elif f"{ref} - {key}" in pr:
+            v, sign = pr[f"{ref} - {key}"], -1
+        else:
+            return "<span class='dim'>&mdash;</span>", ""
+        d = sign * v["delta"]
+        lo, hi = sorted((sign * v["ci_lo"], sign * v["ci_hi"]))
+        sep = lo > 0 or hi < 0
+        cls = " class='good'" if sep and d > 0 else (" class='bad'" if sep else "")
+        return (f"{d:+.4f}<br><span class='ci'>[{lo:+.4f}, {hi:+.4f}]"
+                f" p={v['wilcoxon_p']:.2g}</span>"), cls
+
+    body = ""
+    for key, label, heads, chans, budget in BUDGET_AXIS:
+        if key not in a:
+            continue
+        vb, cb = cell(key, "baseline")
+        v2, c2 = cell(key, "u20")
+        vd, cd = cell(key, "u40")
+        hi = " class='hl'" if key == "q13m1861" else ""
+        body += (f"<tr{hi}><td><code>{label}</code></td><td>{heads}</td><td>{chans}</td>"
+                 f"<td>{budget}</td>"
+                 f"<td><strong>{a[key]['score']:.3f}</strong></td>"
+                 f"<td{cb}>{vb}</td><td{c2}>{v2}</td><td{cd}>{vd}</td>"
+                 f"<td>{gate(key, 'offroad'):.1f}%</td>"
+                 f"<td>{gate(key, 'collision_at_fault'):.1f}%</td>"
+                 f"<td>{100 * a[key]['coc_degenerate']:.2f}%</td></tr>")
+    t = ("<div class='scroll'><table><thead><tr><th>arm</th><th>자른 head/층</th>"
+         "<th>자른 MLP ch/층</th><th>총 제거</th><th>score</th><th>vs 무압축</th>"
+         "<th>vs u20</th><th>vs u40</th><th>offroad</th><th>과실충돌</th>"
+         "<th>CoC 퇴화</th></tr></thead>"
+         f"<tbody>{body}</tbody></table></div>")
+
+    # selection_overlap is stored as a FRACTION and is DIRECTED: ov["a|b"] is the share
+    # of a's kept units that also survive in b.
+    ov = m3.get("selection_overlap", {})
+
+    def pair(x, y):
+        v = ov.get(f"{x}|{y}")
+        return "&mdash;" if v is None else f"Q {100 * v['q']:.1f}% / MLP {100 * v['mlp']:.1f}%"
+
+    o = (f"<p class='note'><strong>선택 집합이 설계를 확인해 준다.</strong> "
+         f"<code>u40</code>의 유지 유닛 중 <code>u20</code>에도 남는 비율은 "
+         f"{pair('u40', 'u20')} &mdash; 예산 사다리는 완전 중첩이다. "
+         f"그리고 <code>q13m1861</code>은 <code>u40</code>과 head 선택이 "
+         f"<strong>36층 전부 인덱스까지 동일</strong>하다(빌드 게이트에서 확인). "
+         f"그래서 <code>u40 &minus; q13m1861</code>에서 움직이는 것은 MLP 하나뿐이고, "
+         f"<code>q13m1861 &minus; u20</code>에서 움직이는 것은 축 배분 하나뿐이다.</p>")
+    return t, o
+
+
 HEAD_AXIS = [("dual", "dual", "13", "24.0%", "우리 dual (gate Taylor)"),
              ("baseline", "baseline", "&mdash;", "&mdash;", "무압축"),
              ("dual_h4", "dual+h4", "4", "24.0%", "우리 dual (gate Taylor)"),
@@ -311,7 +394,7 @@ def head_axis_tables(m2):
 
 CSS = """
 :root{--bg:#FAF9F5;--card:#FFF;--code:#F0EEE6;--ink:#29261B;--muted:#6B6555;
---acc:#D97757;--bd:#E8E6DC;--stripe:#F5F4EF;--good:#008300;--bad:#b0402a;--warn:#eda100}
+--acc:#D97757;--bd:#E8E6DC;--stripe:#F5F4EF;--good:#008300;--bad:#b0402a;--warn:#eda100;--hl:#FBEEE8}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);margin:0;font-size:16px;line-height:1.7;
 padding:3rem 1.5rem 5rem;font-family:"Pretendard","Inter",-apple-system,BlinkMacSystemFont,
@@ -325,6 +408,7 @@ h1{font-size:2rem;line-height:1.25;margin:.4rem 0 .8rem;text-wrap:balance}
 h2{font-size:1.32rem;margin:2.6rem 0 .9rem;display:flex;align-items:baseline;gap:.6rem}
 h2 .num{color:var(--acc);font-size:.95rem;font-weight:700}
 h3{font-size:1.05rem;margin:1.9rem 0 .6rem}
+h4{font-size:.92rem;margin:1.5rem 0 .5rem;color:var(--muted);letter-spacing:.02em;text-transform:none}
 code{background:var(--code);padding:.1em .35em;border-radius:3px;font-size:.88em}
 pre{background:var(--code);padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;
 line-height:1.55}
@@ -336,6 +420,8 @@ border-bottom:2px solid var(--bd)}
 tbody tr:nth-child(even){background:var(--stripe)}
 .scroll{overflow-x:auto;margin:1rem 0}
 .dim{color:var(--muted)}.good{color:var(--good)}.bad{color:var(--bad)}
+/* the one row the section is about; stronger than the zebra stripe under it */
+tbody tr.hl,tbody tr.hl:nth-child(even){background:var(--hl);box-shadow:inset 3px 0 0 var(--acc)}
 .ci{color:var(--muted);font-size:.78em}
 tr.pend td{opacity:.5;font-style:italic}
 .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:1rem;
@@ -359,7 +445,7 @@ figcaption{color:var(--muted);font-size:.82rem;margin-top:.5rem;line-height:1.6}
 """
 
 
-def build(ol, cl, m, m2, plot_dir, date):
+def build(ol, cl, m, m2, m3, plot_dir, date):
     pend = [n for n, _, _, _ in LADDER if n != "dual" and n not in cl["_abs"]]
     pend_note = ""
     if pend:
@@ -370,6 +456,7 @@ def build(ol, cl, m, m2, plot_dir, date):
             "칸이 그 선 위에 앉지 않으면 이 보고서의 핵심 주장은 약해진다. 판정이 아니라 "
             "중간 보고로 읽어야 한다.</p></div>")
     head_t1, head_t2 = head_axis_tables(m2)
+    budget_t, budget_ov = budget_axis_table(m3)
     worst = max((abs(ol[n][s]["mean"]) for n in ol for s, _ in SETS), default=0.0)
     deltas = [cl[n]["delta"] for n, _, _, _ in LADDER if n in cl and n != "dual"]
     return f"""<!DOCTYPE html>
@@ -386,7 +473,7 @@ def build(ol, cl, m, m2, plot_dir, date):
       (<strong>@6은 샘플 개수</strong>, 지평 초가 아니다)
     &middot; 폐루프 <code>public_2601</code> 150씬 &times; 2 rollout, Ada 4&ndash;7,
       <code>DRIVER_OMP_THREADS=8</code>
-    &middot; 산출물 <code>outputs/em87p5_pairs</code>, <code>outputs/headmlp_split</code>
+    &middot; 산출물 <code>outputs/em87p5_pairs</code>, <code>outputs/headmlp_split</code>, <code>outputs/budget_axis</code>
   </div>
 </header>
 
@@ -568,6 +655,102 @@ G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
   <strong>CoC 퇴화율과 게이트를 종합 점수와 함께 읽지 않으면 오독한다.</strong></p>
 </div>
 
+<h3>4.5 예산인가 배분인가 &mdash; 자른 head 수가 주 효과다</h3>
+<div class="callout">
+  <p><strong>이 절만 예산을 고정하지 않는다.</strong> 4.1&ndash;4.4의 모든 행은 제거
+  파라미터를 묶어 두고 <em>어디서 가져오는지</em>만 바꿨다. 여기서는 기준
+  (<code>importance_v2</code>, <code>calib_100</code> 100클립)&middot;배분(uniform)&middot;
+  expert&middot;KV를 고정한 채 <strong>예산과 축 배분을 따로</strong> 움직인다.</p>
+</div>
+<p>네 arm이 두 축을 가른다. <code>u20/u30/u40</code>은 예산 사다리이고(층당 head와 채널이
+함께 늘어난다), <code>q13m1861</code>은 <strong><code>u20</code>의 예산을
+<code>u40</code>의 head 절단으로 쓴</strong> 칸이다 &mdash; 층당 head 13개(= u40)에
+채널 1861개, 제거 1,313,980,416으로 <code>u20</code>과 <strong>0.0112% 안</strong>에서
+같다. 13개가 <code>u20</code>의 층당 예산을 정수로 나누지 못해 정확히 0이 되지는
+않는다(<code>_qcut</code>의 나눗셈 assert가 거부하는 지점이며, 150씬 해상도 0.080보다
+네 자리 아래다).</p>
+
+{budget_t}
+{budget_ov}
+
+<h4>두 개의 1요인 비교</h4>
+<pre>재배분   q13m1861 &minus; u20   <b>+0.0660</b> [+0.0245, +0.1085]*  p=0.00057   56/21/73
+         같은 예산(&plusmn;0.011%), head 6&rarr;13 &middot; 채널 2458&rarr;1861
+
+순수 MLP q13m1861 &minus; u40   &minus;0.0335 [&minus;0.0658, &minus;0.0033]*  p=0.038     22/37/91
+         head 선택 36층 비트 동일, 채널 1861 대 4898
+
+예산     q13m1861 &minus; u30   +0.0136 [&minus;0.0237, +0.0502]   p=0.26      44/27/79
+         예산 11.9% 대 18.1%</pre>
+<div class="callout">
+  <p><strong>같은 예산을 head로 옮기는 것만으로 +0.066을 번다.</strong>
+  <code>u20</code>은 무압축을 이기지 못하는데(&minus;0.021, n.s.) 같은 파라미터 수를 쓴
+  <code>q13m1861</code>은 <strong>이긴다</strong>(+0.0452 [+0.0042, +0.0863], p=0.011).
+  그리고 <code>q13m1861</code>은 예산을 6.2%p 덜 쓰고도 <code>u30</code>과 구분되지
+  않는다(p=0.26). <strong>점수를 끄는 것은 예산이 아니라 자른 head 수다.</strong></p>
+  <pre>head  6 &rarr; 0.729   (u20,      11.9%)
+head 10 &rarr; 0.781   (u30,      18.1%)
+head 13 &rarr; <b>0.795</b>   (q13m1861, <b>11.9%</b>)
+head 13 &rarr; 0.828   (u40,      24.0%)</pre>
+  <p>MLP도 방향은 같지만(1861&rarr;4898에서 +0.034) 크기가 head 효과의 절반이고 CI 상단이
+  &minus;0.0033으로 겨우 0을 배제한다.</p>
+</div>
+
+<div class="warn">
+  <p><strong>이 절은 판정을 두 번 바꿨고, 둘 다 여기 남긴다.</strong></p>
+  <p><strong>초판(2점)</strong>은 <code>u20</code>과 <code>u40</code>만 놓고
+  <em>"예산은 용량-반응이 아니라 계단"</em>이라고 썼다. <code>u30</code>이 반증했다 &mdash;
+  인접 계단이 +0.0524와 +0.0472로 거의 같고, <code>u20</code>&ndash;<code>u40</code>
+  직선이 18.1%에서 예측하는 0.7801에 실측 0.781이 앉는다. 이 보고서가 5절 주석에 적어둔
+  <em>"점 두 개로 추세를 주장하면 안 된다"</em>를 스스로 어긴 것이다.</p>
+  <p><strong>2판(선형 사다리)</strong>도 <code>q13m1861</code>이 넘어섰다. 사다리가
+  선형으로 보인 이유는 <strong>사다리의 두 축이 함께 올라갔기 때문</strong>이고, 축을
+  풀어놓으면 예산 11.9%짜리가 18.1%짜리와 동급이 된다. <strong>"예산 축"이라는 절
+  제목 자체가 틀린 프레임이었다.</strong></p>
+</div>
+
+<div class="callout">
+  <p><strong>CoC 퇴화는 예산이 아니라 head 수를 따라간다 &mdash; 그리고 주행과 부호가
+  반대다.</strong> 2판까지는 퇴화율이 예산에 단조로 보였다(0.55 &rarr; 0.75 &rarr; 1.47
+  &rarr; 2.72%). <code>q13m1861</code>이 그 해석을 깬다 &mdash; 예산은
+  <code>u20</code>과 같은 11.9%인데 퇴화율은 <strong>3.28%로 전 arm 최고</strong>이고,
+  예산이 두 배인 <code>u40</code>(2.72%)보다도 높다. head 6개면 0.75%, head 13개면
+  3.3%다.</p>
+  <p>즉 <strong>head를 자르면 주행이 좋아지고 추론이 무너진다</strong> &mdash; 하나의
+  처치, 반대 방향의 두 효과. <code>dual+h4</code>가 head를 13&rarr;4로 줄였을 때 퇴화가
+  <strong>0.0%</strong>로 사라지고 주행이 0.091 나빠진 것과 같은 축, 같은 부호다.
+  이 저장소가 여러 번 기록한 <em>"CoC 건강도는 안전 프록시가 아니다"</em>의 가장 깨끗한
+  사례다 &mdash; 앞선 사례들은 예산이나 방법이 함께 달랐는데, 여기서는 제거
+  파라미터가 0.011% 안에서 묶여 있고 축 배분만 다르다.</p>
+</div>
+
+<h4>4 m 절단 규칙에 대한 강건성</h4>
+<p>alpasim은 자차가 GT <em>경로</em>에서 4 m 벗어나면 그 이후 타임스텝을 채점에서
+버린다(<code>RemoveTimestepsAfterEvent(dist_to_gt_trajectory &ge; 4.0)</code>, 집계
+단계이므로 시뮬은 끝까지 돈다). baseline rollout의 <strong>57.7%</strong>가 이 규칙에
+걸리고 평균 16.2%의 시간이 버려지므로, 위 수치가 그 창에 얼마나 기대는지 확인했다.
+per-timestep parquet에서 파이프라인을 재구현해 <strong>다섯 arm 1,500 rollout의 출하
+점수를 불일치 0으로 재현</strong>한 뒤, 5번 단계만 끄고 다시 쟀다.</p>
+<pre>                          출하                          4m 절단 없이
+q13m1861 &minus; u20   +0.0660 (p=0.00057)*   <b>+0.0495 [+0.0030,+0.0966]* p=0.023</b>   유지
+u20 &minus; u40       &minus;0.0995 (p=1.9e&minus;06)*  &minus;0.0672 [&minus;0.1181,&minus;0.0174]* p=0.0059  유지
+u30 &minus; u40       &minus;0.0472 (p=0.0019)*   &minus;0.0596 [&minus;0.1044,&minus;0.0143]* p=0.0085  유지
+q13m1861 &minus; u40  &minus;0.0335 (p=0.038)*    &minus;0.0177 [&minus;0.0556,+0.0182]  p=0.49    <b>소멸</b>
+u20 &minus; u30       &minus;0.0524 (p=0.0027)*   &minus;0.0077 [&minus;0.0528,+0.0361]  p=0.68    <b>소멸</b>
+q13m1861 &minus; base +0.0452 (p=0.011)*    +0.0266 [&minus;0.0233,+0.0744]  p=0.107   <b>소멸</b>
+u40 &minus; baseline  +0.0787 (p=1.1e&minus;04)*  +0.0443 [&minus;0.0084,+0.0976]  p=0.059   <b>소멸</b></pre>
+<p><strong>이 절의 헤드라인인 재배분 효과는 살아남고, 부수 주장인 MLP 깊이 효과와
+무압축 대비 비교는 살아남지 못한다.</strong> 기전은 절단이 게이트 위반을 채점 창 밖으로
+밀어내는 것이다 &mdash; 4 m를 벗어난 <em>뒤에</em> 이탈하거나 충돌하는 rollout이
+baseline 21개, <code>u40</code> 29개, <code>u30</code> 38개로 <strong>arm마다 다르다</strong>.
+창의 길이가 처치의 함수이므로, 페어드 비교가 잡음을 지워준다는 통상의 방어가 여기서는
+부분적으로만 통한다.</p>
+<p class="note"><strong>"진짜 점수는 절단 없는 쪽"이라는 뜻이 아니다.</strong> 4 m 규칙은
+alpasim이 정한 프로토콜이고 근거가 있다 &mdash; 자차가 GT 경로에서 그만큼 벗어나면 이후의
+반응형 에이전트와 렌더는 검증 범위 밖이라, 거기서 관측되는 이탈&middot;충돌은 시뮬레이터가
+보증하지 않는 반사실이다. 여기서 말하는 것은 <strong>어느 주장이 그 규칙에 기대고 어느
+주장이 기대지 않는지</strong>뿐이다.</p>
+
 <h2><span class="num">5.</span>해석 (의견)</h2>
 <div class="callout">
   <p><strong>결론 1 &mdash; 개루프는 이 축에 구조적으로 눈이 멀었다.</strong>
@@ -589,6 +772,12 @@ G0으로 그 동일성을 기계 확인한 뒤 돌렸다.</p>
   (궤적만&rarr;궤적+CoC)는 아예 움직이지 않는다(+0.0054, p=0.96). 세 축 어느 쪽도 첫 칸
   이후로는 반응이 없다. <code>dual</code>이 헤드를 13개 자른다는 사실 하나가 &minus;0.09를
   지키고 있고, 그 선을 넘으면 더 적게 자르는 것도 목적을 보강하는 것도 되돌리지 못한다.</p>
+  <p><strong>그리고 그 계단의 눈금은 예산이 아니라 head 수다.</strong> 4.5가 둘을
+  분리한다 &mdash; <code>u20</code>의 예산을 <code>u40</code>의 head 절단으로 쓴
+  <code>q13m1861</code>은 같은 파라미터 수로 <strong>+0.066</strong>을 벌고
+  (p=0.00057, 4 m 절단을 꺼도 유지) 예산이 1.5배인 <code>u30</code>과 구분되지 않는다.
+  같은 축을 반대로 민 <code>dual+h4</code>(head 13&rarr;4)가 0.091을 잃은 것과 부호가
+  맞는다. <strong>head 13개 선이 이 저장소에서 세 번째로 같은 자리에 나타났다.</strong></p>
   <p><strong>단, 계단은 얕은 쪽의 성질이다.</strong> 4.4가 그 경계를 보인다 &mdash;
   MLP를 70%까지 파면 기준 선택이 다시 유의해지고(p=0.0091), 한 칸은 CoC를 버려 점수를 올리고
   다른 칸은 충돌이 두 배가 되어도 점수가 안 내려간다. 아래 문장은 그 안쪽에서만 성립한다.</p>
@@ -649,6 +838,16 @@ THW&lt;1s 비율 &minus;0.032 (셋 다 유의). 나빠지는 것은 측면이다
   커진다(24.0 &rarr; 36.3 &rarr; 38.4 &rarr; 39.4%). <em>"MLP라서"와 "더 잘라서"가 섞여
   있다.</em> 예산을 고정한 1요인 증거는 <code>dual+h4</code> 하나뿐이고, 그것이 5.1절이
   존재하는 이유다.</p>
+  <p><strong>절대 점수는 4 m 절단 규칙의 함수다.</strong> 4.5 끝의 강건성 블록이
+  재다 &mdash; 규칙을 끄면 arm별로 0.008&ndash;0.055 움직이고, <strong>움직이는 양이
+  arm마다 다르다</strong>. 이 보고서의 무압축 대비 비교는 그 규칙 안에서만 유의하다.
+  이는 4.5뿐 아니라 이 보고서의 모든 절대 점수&middot;게이트 비율에 걸리는 단서이며,
+  아직 다른 절에는 적용해 보지 않았다.</p>
+  <p><strong>4.5가 이 사다리의 교락을 푼다고 말하지 않는다.</strong> 바로 위 문단이
+  이 사다리에 "MLP라서"와 "더 잘라서"가 섞여 있다고 했는데, 4.5는 <strong>VLM</strong>
+  예산 축이고 이 사다리는 <strong>expert</strong> MLP를 덧붙인다. 탑이 다르므로 4.5는
+  이 사다리의 교락을 제거하지 못한다. 4.5가 제약하는 것은 더 일반적인 문장 쪽이다 &mdash;
+  "더 자를수록 더 다친다"는 적어도 VLM 축에서는 성립하지 않는다.</p>
   <p><strong>절대 이탈률&middot;충돌률을 suite 전체로 일반화하지 않는다.</strong> 150씬 표본은
   <code>public_2601</code> 913씬보다 쉽다 &mdash; 무압축 0.742 대 0.660, 과실 충돌 2.0% 대
   5.5%. 여기서 읽는 것은 대응 델타이지 절대값이 아니다.</p>
@@ -697,6 +896,8 @@ def main():
                     help="analyze_calibsize output holding the closed-loop pair matrix")
     ap.add_argument("--head-pairs", default="spg_pairs",
                     help="analyze_calibsize output holding the head-axis matrix")
+    ap.add_argument("--budget-pairs", default="budget_axis",
+                    help="analyze_calibsize output holding the budget ladder")
     ap.add_argument("--date", default="2026-09-12")
     args = ap.parse_args()
 
@@ -716,6 +917,8 @@ def main():
     # the head axis lives in its own paired matrix; absent, those sections are skipped
     p2 = O / args.head_pairs / "metrics.json"
     m2 = json.loads(p2.read_text()) if p2.exists() else None
+    p3 = O / args.budget_pairs / "metrics.json"
+    m3 = json.loads(p3.read_text()) if p3.exists() else None
     cl = {"_abs": {}, "_lo": {}, "_hi": {}, "_off": {}, "_col": {}, "_coc": {},
           "_vs_base": {}}
     for name, a in m["arms"].items():
@@ -737,7 +940,7 @@ def main():
     plots(ol, cl, plot_dir)
     out = args.out if args.out.is_absolute() else Path.cwd() / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(ol, cl, m, m2, plot_dir, args.date))
+    out.write_text(build(ol, cl, m, m2, m3, plot_dir, args.date))
     print(f"wrote {out}  ({out.stat().st_size // 1024} KB)")
 
 

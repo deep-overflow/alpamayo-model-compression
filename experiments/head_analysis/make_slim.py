@@ -14,6 +14,14 @@ Configs:
                       Operator ablation: dualsum / dualprod
                       keep dual's halves but combine by rank-sum / rank-product.
                       Expected -2.66B each.
+  <crit>_q<N>m<M>_v2 -- the same family with BOTH axis counts set explicitly: N Q heads
+                      and M MLP channels dropped per layer, same score and allocation as
+                      the matching `_u<N>_v2`. `dual_q6m2458_v2` reproduces
+                      `dual_u20_v2` and `dual_q13m4898_v2` reproduces `dual_u40_v2` unit
+                      for unit (verified), so the form is checkable against the arms it
+                      generalises. Unlike `_qcut<N>` the budget is NOT held -- it is the
+                      output, which is the point: this is how a budget difference gets
+                      decomposed by axis. plans/2026-09-17_budget-axis-split.md.
   tyr_u40 / tyr_uniform_u40 -- Tyr-the-Pruner baseline: OSSCAR-reconstructed
                       supernet weights at the searched / uniform level assignment,
                       same -2.66B budget by construction.
@@ -169,6 +177,13 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
     # the difference into channels (plans/2026-09-05_axis-allocation.md)
     uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?_v2$", cfg_name)
+    # `_q<N>m<M>` sets BOTH axis counts explicitly: cut N Q heads and M MLP channels per
+    # layer. `_qcut<N>` cannot express this -- it pins N and solves for M so the budget is
+    # unchanged -- and holding the budget is exactly what has to be given up to ask which
+    # AXIS a budget difference acts through. The budget is therefore a consequence here,
+    # and the build prints it so a config that is "almost" some other arm cannot pass
+    # unnoticed. Cannot collide with `uni`: that pattern requires a literal `_u<digits>_`.
+    qm = re.match(r"^(.+)_q(\d+)m(\d+)_v2$", cfg_name)
     exp_only = re.match(r"^expert_u(\d+)$", cfg_name)
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
@@ -538,14 +553,30 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
               f"{vm.sum(1).max():.0f} (mean {vm.sum(1).mean():.0f})")
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
-    elif uni:
+    elif uni or qm:
         # The one-factor family. Everything is held at the grid's dual_uniform cell --
         # uniform allocation, expert untouched, no KV drop -- so the only things that
         # vary are the within-layer score and, across the ratio sweep, the budget.
         # `dual`/`j_traj` are the combined criteria max(rank I_traj, rank X);
         # `traj`/`coc`/`j` are the single-criterion controls that say what each half of
         # that max() does on its own.
-        stem, pct = uni.group(1), int(uni.group(2))
+        if qm:
+            # explicit per-axis counts; ratios are exact because select_mask_ratios
+            # rounds n_units * ratio and n/n_units round-trips
+            stem = qm.group(1)
+            n_q, n_m = int(qm.group(2)), int(qm.group(3))
+            assert 0 <= n_q < tc.num_attention_heads, n_q
+            assert 0 < n_m < tc.intermediate_size, n_m
+            rq = np.full(tc.num_hidden_layers, n_q / tc.num_attention_heads)
+            rm = np.full(tc.num_hidden_layers, n_m / tc.intermediate_size)
+            removed = (n_q * 2 * tc.head_dim * tc.hidden_size
+                       + n_m * 3 * tc.hidden_size) * tc.num_hidden_layers
+            print(f"q{n_q}m{n_m}: cut {n_q}/{tc.num_attention_heads} heads and "
+                  f"{n_m}/{tc.intermediate_size} channels per layer "
+                  f"({removed:,} params)", flush=True)
+            pct = None
+        else:
+            stem, pct = uni.group(1), int(uni.group(2))
         if pct == 40:
             # u40 is NOT 0.40: it is the matched target 0.3985632694 that
             # run_grid.allocations() derives from slim_integrated_mag's realized budget.
@@ -556,12 +587,12 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             allocs, _ = allocations(imp, ref_meta, tc.num_hidden_layers,
                                     tc.num_attention_heads, tc.intermediate_size, 0.5)
             rq, rm = allocs["uniform"]
-        else:
+        elif pct is not None:
             # the sweep points mean exactly what their name says
             rq = np.full(tc.num_hidden_layers, pct / 100)
             rm = np.full(tc.num_hidden_layers, pct / 100)
 
-        if uni.group(3) is not None:
+        if uni is not None and uni.group(3) is not None:
             # Same removed-parameter total, different split between the axes. One Q head
             # costs 2*head_dim*hidden (q_proj rows + o_proj cols); one MLP channel costs
             # 3*hidden (gate/up rows + down col), so a head is worth 85.33 channels here.
