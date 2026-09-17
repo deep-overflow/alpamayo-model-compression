@@ -139,6 +139,36 @@ is what later renders should use.
 
 The `video/` directory is gitignored — it rebuilds from `render_all.sh`.
 
+## Top-down options
+
+`--zoom R` adds an ego-following panel per arm, R metres either side. A 694 m route squeezes
+the whole-scene view until the cars are specks; the pair keeps both readings on screen.
+
+The **GT vehicle** is drawn as well as the GT path. It is placed by timestamp, not by frame
+index: the recorded drive is a `PoseAtTime` series on the same clock as `actor_poses` (first
+stamps agree exactly) but with a different length and rate — 202 poses against 200 frames.
+
+With a single arm the CoC caption belongs to the figure, not to a panel: repeating the same
+sentence under every panel says nothing and forces it small. Multi-arm renders keep their
+per-panel captions, because there each arm says something different.
+
+### Colour, decided by the validator rather than by eye
+
+The GT path and GT car were `MUTED #6B6555`, which sits at normal-vision ΔE **14.7** from the
+traffic grey `#8A8F98` — under the 15 floor, i.e. hard to tell apart *even with full colour
+vision*, and the two are side by side constantly. They are now `#2166ac`, at ΔE 18.5, and
+clear of the green driven path and the coral plan under every CVD simulation.
+
+One known weakness is left in deliberately: plan `#D97757` against driven `#087f5b` is protan
+ΔE **6.0** — the classic red/green pair. The alternatives trade it for something worse
+(`#f08c00` fixes CVD at ΔE 14.8 but drops to 2.42 contrast on this cream ground, and these
+are 1.6 px lines). The pair carries secondary encoding — different line weights and direct
+legend labels — so it stays, recorded here rather than silently accepted.
+
+Re-check with `scripts/validate_palette.js "<hex,...>" --mode light` from the dataviz skill.
+The traffic grey fails that script's chroma floor on purpose: it is background context, not
+a series, and the floor is a rule for series colours.
+
 ## Layout: video/<arm>/<suite>/{camera,topdown}
 
 ```

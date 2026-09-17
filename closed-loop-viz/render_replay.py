@@ -58,6 +58,11 @@ RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 ACC, BAD, GOOD = "#D97757", "#b0402a", "#087f5b"
 TRAFFIC = "#8A8F98"
+# The GT path and GT car were MUTED, which sits at normal-vision dE 14.7 from TRAFFIC --
+# under the 15 floor, i.e. hard to tell apart even with full colour vision, and they appear
+# side by side constantly. Blue puts that at 18.5 and stays clear of the green driven path
+# and the coral plan under every CVD simulation (scripts/validate_palette.js, light mode).
+GT = "#2166ac"
 
 
 def yaw_from_quat(q):
@@ -78,8 +83,13 @@ async def read_rollout(asl):
             md = e.rollout_metadata
             boxes = {a.actor_id: (a.aabb.size_x, a.aabb.size_y)
                      for a in md.actor_definitions.actor_aabb}
-            gt = np.array([[p.pose.vec.x, p.pose.vec.y]
-                           for p in md.ego_rig_recorded_ground_truth_trajectory.poses])
+            gtp = md.ego_rig_recorded_ground_truth_trajectory.poses
+            gt = np.array([[q.pose.vec.x, q.pose.vec.y] for q in gtp])
+            # the recorded drive is a PoseAtTime series on the SAME clock as actor_poses
+            # (first stamps agree exactly), so the GT car can be placed at the frame's own
+            # time instead of by index -- the two series have different lengths and rates
+            gt_t = np.array([int(q.timestamp_us) for q in gtp], dtype=np.int64)
+            gt_yaw = np.array([yaw_from_quat(q.pose.quat) for q in gtp])
         elif e.HasField("actor_poses"):
             ap = e.actor_poses
             frames[int(ap.timestamp_us)] = [
@@ -100,7 +110,8 @@ async def read_rollout(asl):
                     except Exception:
                         txt = ""
                 cocs.append((int(ps[0].timestamp_us), txt))
-    return {"boxes": boxes, "gt": gt, "frames": frames, "plans": plans, "cocs": cocs}
+    return {"boxes": boxes, "gt": gt, "gt_t": gt_t, "gt_yaw": gt_yaw,
+            "frames": frames, "plans": plans, "cocs": cocs}
 
 
 def run_dir(config):
@@ -137,7 +148,7 @@ def clean_coc(t):
     return s.strip()
 
 
-def wrap(s, width=62, lines=2):
+def wrap(s, width=62, lines=3):
     out, cur = [], ""
     for w in s.split():
         if len(cur) + len(w) + 1 > width:
@@ -172,6 +183,10 @@ def main():
                          "to a merged run directory elsewhere.")
     ap.add_argument("--worst", action="store_true", default=True,
                     help="show each arm's worse rollout (default; the failure is the point)")
+    ap.add_argument("--zoom", type=float, default=0.0, metavar="R",
+                    help="add an ego-following panel per arm, R metres either side. A long "
+                         "route squeezes the whole-scene view until the cars are specks, "
+                         "and this keeps both readings on screen at once.")
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
@@ -222,30 +237,48 @@ def main():
     # figure is sized to that square plus room for title and caption (a taller figure just
     # letterboxes the data box in white). Past three arms a single row is too wide to
     # read, so the panels wrap into a grid.
-    ncol = len(arms) if len(arms) <= 3 else math.ceil(len(arms) / 2)
-    nrow = math.ceil(len(arms) / ncol)
+    # a panel is (arm, zoomed): with --zoom each arm contributes a whole-scene view and an
+    # ego-following one, and the grid is laid out over panels rather than arms
+    panels = []
+    for a in arms:
+        panels.append((a, False))
+        if args.zoom > 0:
+            panels.append((a, True))
+    ncol = len(panels) if len(panels) <= 3 else math.ceil(len(panels) / 2)
+    nrow = math.ceil(len(panels) / ncol)
     # Size the figure from EVEN pixel counts, not from inches. `6.1 * 1 + 0.6` is
     # 6.699999999999999 in float, so a one-row figure came out 669 px tall -- odd. The
     # writer then told ffmpeg one height while handing it buffers of another, and every
     # frame slid by a row: by frame 100 the picture was visibly torn. Two even constants
     # and an integer dpi make that unrepresentable, and the assert below refuses to encode
     # if it ever happens again.
+    # With one arm the CoC belongs to the figure, not to a panel: repeating the same
+    # sentence under every panel says nothing and forces it small. That layout needs its
+    # own band at the bottom, so the height gains an (even) 50 px.
+    one_caption = len(arms) == 1
     dpi = 100
-    w_px, h_px = 540 * ncol, 610 * nrow + 60
+    w_px, h_px = 540 * ncol, 610 * nrow + 60 + (50 if one_caption else 0)
     fig, axgrid = plt.subplots(nrow, ncol, figsize=(w_px / dpi, h_px / dpi), dpi=dpi,
                                facecolor=BG, squeeze=False)
-    axes = list(axgrid.ravel()[:len(arms)])
-    for extra in axgrid.ravel()[len(arms):]:
+    axes = list(axgrid.ravel()[:len(panels)])
+    for extra in axgrid.ravel()[len(panels):]:
         extra.axis("off")
     # The suptitle has to fit the narrowest layout: at one 540 px panel the scene id alone
     # already fills the width, so the explanatory half is dropped there rather than clipped,
     # and "each arm" would be wrong for a single panel anyway.
+    # the one shared caption, centred under the whole figure
+    fig_cap = fig.text(0.5, 0.030, "", ha="center", va="center", color=INK,
+                       fontsize=12) if one_caption else None
     note = "      same scene, worse rollout of each arm" if len(arms) > 1 else ""
     fig.suptitle(f"{args.scene}{note}", color=INK,
                  fontsize=11 if ncol >= 3 else (9.5 if ncol == 2 else 7.5), y=0.985)
 
+    # ~9 px per character at 12 pt is close enough; one shared line spans the whole figure
+    # while a per-panel one only has its own column
+    cap_width = int((w_px if one_caption else 540) / 9)
+    cap_lines = 2 if one_caption else 3
     state = []
-    for ax, a in zip(axes, arms):
+    for ax, (a, zoomed) in zip(axes, panels):
         ax.set_facecolor(BG)
         ax.set_xlim(*xlim)
         ax.set_ylim(*ylim)
@@ -254,8 +287,11 @@ def main():
         ax.set_yticks([])
         for s in ax.spines.values():
             s.set_color(MUTED)
-        ax.plot(a["gt"][:, 0], a["gt"][:, 1], "--", color=MUTED, lw=1.2,
+        ax.plot(a["gt"][:, 0], a["gt"][:, 1], "--", color=GT, lw=1.3,
                 label="GT reference path", zorder=1)
+        gtcar = Rectangle((0, 0), 0, 0, facecolor="none", edgecolor=GT, lw=1.6,
+                          ls="--", zorder=5, label="GT vehicle")
+        ax.add_patch(gtcar)
         col = BAD if a["gates"]["offroad"] or a["gates"]["collision_at_fault"] else GOOD
         a["col"] = col
         trail, = ax.plot([], [], "-", color=col, lw=2.2, zorder=4, label="driven path")
@@ -264,22 +300,26 @@ def main():
         verdict = ("OFFROAD" if a["gates"]["offroad"] else
                    ("COLLISION" if a["gates"]["collision_at_fault"] else "pass"))
         shown = Path(a["config"]).name if "/" in a["config"] else a["config"]
-        ax.set_title(f"{a['label']}   score {a['score']:.3f}   {verdict}\n"
+        view = f"   ·   zoom ±{args.zoom:.0f} m" if zoomed else ""
+        ax.set_title(f"{a['label']}   score {a['score']:.3f}   {verdict}{view}\n"
                      f"{shown}   ·   drove {a['dist']:.0f} m of {a['gtdist']:.0f} m",
                      color=col if verdict != "pass" else INK, fontsize=10, pad=10)
-        cap = ax.text(0.5, -0.035, "", transform=ax.transAxes, ha="center", va="top",
-                      color=INK, fontsize=7.4, wrap=True)
+        cap = None if one_caption else ax.text(
+            0.5, -0.035, "", transform=ax.transAxes, ha="center", va="top",
+            color=INK, fontsize=7.4, wrap=True)
         clock = ax.text(0.02, 0.975, "", transform=ax.transAxes, ha="left", va="top",
                         color=MUTED, fontsize=9, family="monospace")
         if not state:          # legend on the first panel only
             ax.legend(loc="lower right", fontsize=7.5, framealpha=0.85,
                       facecolor=BG, edgecolor=MUTED)
         state.append({"ax": ax, "trail": trail, "plan": plan, "cap": cap,
-                      "clock": clock, "patches": []})
+                      "clock": clock, "patches": [], "gtcar": gtcar, "zoomed": zoomed,
+                      "arm": a})
 
     def update(k):
         arts = []
-        for a, s in zip(arms, state):
+        for s in state:
+            a = s["arm"]
             ts = a["ts"][k]
             for p in s["patches"]:
                 p.remove()
@@ -305,23 +345,50 @@ def main():
                                                  facecolor=TRAFFIC, edgecolor=MUTED,
                                                  lw=0.5, alpha=0.75, zorder=3))
 
+            # the GT car at THIS frame's time, matched on the timestamp the recording
+            # carries rather than on frame index
+            gj = int(np.argmin(np.abs(a["gt_t"] - ts)))
+            gw, gh = a["boxes"].get("EGO", (4.5, 2.0))
+            gx, gy = a["gt"][gj]
+            s["gtcar"].set_width(gw)
+            s["gtcar"].set_height(gh)
+            s["gtcar"].set_xy((-gw / 2, -gh / 2))
+            s["gtcar"].set_transform(
+                matplotlib.transforms.Affine2D().rotate(a["gt_yaw"][gj]).translate(gx, gy)
+                + s["ax"].transData)
+
+            if s["zoomed"]:
+                e = next((f for f in a["frames"][ts] if f[0] == "EGO"), None)
+                if e:
+                    s["ax"].set_xlim(e[1] - args.zoom, e[1] + args.zoom)
+                    s["ax"].set_ylim(e[2] - args.zoom, e[2] + args.zoom)
+
             # the plan whose first pose is nearest this frame's time
             if a["plans"]:
                 j = int(np.argmin([abs(p[0] - ts) for p in a["plans"]]))
                 xy = a["plans"][j][1]
                 s["plan"].set_data(xy[:, 0], xy[:, 1])
                 txt = clean_coc(a["cocs"][j][1]) if j < len(a["cocs"]) else ""
-                s["cap"].set_text(wrap(txt) if txt else "(empty reasoning output)")
+                shown_txt = wrap(txt, cap_width, cap_lines) if txt \
+                    else "(empty reasoning output)"
+                if s["cap"] is not None:
+                    s["cap"].set_text(shown_txt)
+                elif fig_cap is not None:
+                    fig_cap.set_text(shown_txt)
             s["clock"].set_text(f"t = {(ts - a['t0']) / 1e6:5.1f} s")
-            arts += [s["trail"], s["plan"], s["cap"], s["clock"], *s["patches"]]
+            arts += [s["trail"], s["plan"], s["clock"], s["gtcar"], *s["patches"]]
+            if s["cap"] is not None:
+                arts.append(s["cap"])
+        if fig_cap is not None:
+            arts.append(fig_cap)
         return arts
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     anim = animation.FuncAnimation(fig, update, frames=n_frames, blit=False)
+    bottom = (110 / h_px) if one_caption else (0.125 if nrow == 1 else 0.055)
     fig.subplots_adjust(left=0.02, right=0.98,
                         top=0.885 if nrow == 1 else 0.925,
-                        bottom=0.125 if nrow == 1 else 0.055,
-                        wspace=0.05, hspace=0.26)
+                        bottom=bottom, wspace=0.05, hspace=0.26)
     # Check the real canvas rather than trusting the arithmetic above: an odd dimension is
     # what tore the earlier single-arm videos, and rescaling it in ffmpeg hid the error
     # without fixing the frame-size mismatch that caused the tearing. Fail instead.
