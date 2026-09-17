@@ -171,6 +171,8 @@ def main():
     verdict = ("OFFROAD" if float(m.get("offroad") or 0) else
                ("COLLISION" if float(m.get("collision_at_fault") or 0) else "pass"))
     asl = run_dir(args.config) / "rollouts" / args.scene / r["rollout_id"] / "rollout.asl"
+    if not asl.exists():
+        raise SystemExit(f"{args.scene}: rollout.asl 이 없습니다 -- {asl}")
     print(f"{args.config}  rollout {r['rollout_id'][:8]}  "
           f"score {float(r['score']):.3f}  {verdict}")
 

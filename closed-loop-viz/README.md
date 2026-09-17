@@ -174,13 +174,28 @@ a series, and the floor is a rule for series colours.
 ```
 video/
   dual/
-    origin150/camera   10 × 4-camera replay        1918×1202
-    origin150/topdown  10 × single-arm top-down     540×670
-    hard100/camera     10 × 4-camera replay
-    hard100/topdown    10 × single-arm top-down
+    origin150/camera   150 × 4-camera replay       1918×1202   2.1 GB
+    origin150/topdown  150 × whole + zoom          1080×720    321 MB
+    hard100/camera      98 × 4-camera replay                   1.2 GB
+    hard100/topdown     98 × whole + zoom                      207 MB
   matrix150/             150 × 6-arm top-down      1620×1280
   matrix_hard100_gt10/    10 × 5-arm top-down
 ```
+
+Files are `<score>_<scene>.mp4` with the score to three decimals, so listing a directory
+sorts by score. It is the **scene** score — the mean over the scene's rollouts, the number
+the tables use — not the score of the worse rollout the video shows; the two differ on a
+split scene.
+
+hard100 stops at 98, not 100. `clipgt-4bad2f63` and `clipgt-adb899bd` appear in
+`aggregate/results-summary.json` but **both of their rollouts have no `rollout.asl` on
+disk**, so there is nothing to replay and no other rollout to fall back to. Both scored
+0.000. The renderers now say so plainly instead of raising a FileNotFoundError from inside
+the protobuf reader.
+
+`render_arm_all.sh` does a suite end to end (`ARM=`, `SUITE=`, `RUN=`, `SCENESET=`, `GPU=`);
+existing files are skipped so an interrupted run resumes. `scene_scores.py` produces the
+`<score>\t<scene>` list it works from.
 
 Everything under an arm folder is that arm alone — a multi-panel comparison filed under
 `dual/` would claim to be something it is not, so the multi-arm renders keep their own
@@ -216,6 +231,26 @@ suite's difficulty shows up in that filter. Its GT paths also run 158–694 m ag
 `make_sceneset.py` exists because of hard100: its shards left four 25-scene scenesets and
 no single one covers a selection drawn from the whole suite, so the ten needed usdz are
 hardlinked into one `chan_`-prefixed sceneset (same filesystem, no extra space).
+
+### Three bugs this batch turned up
+
+**Frame tearing** — see below; the one that produced visibly broken video.
+
+**The run name was prefixed twice.** `render_replay.py` expands a bare config under
+`m2601_merged_`, so passing `RUN=m2601_merged_slim_dual_u40_v2` looked for
+`m2601_merged_m2601_merged_...` and all 250 top-downs failed at once. A hard100 name would
+have been given the wrong suite's prefix entirely. `render_arm_all.sh` now resolves RUN to
+an absolute path itself and checks it exists, rather than leaving that as a rule the caller
+has to remember.
+
+**The child ate the scene list.** The camera loop was `while read ... done < list`, and the
+python it spawns inherits stdin — so it consumed part of the list and `read` came back with
+half a line: an empty scene, and a score field holding the whole record. It surfaced as
+files named `000_clipgt-…` and `.000_clipgt-…` (the render itself was fine, only the prefix
+was truncated) plus outright failures on the empty ones. The list is now read on fd 3 with
+`</dev/null` for the child. `check_drift.py` had its own version of the same class of bug:
+`select` matching nothing exits 0 and writes no file, so a stale PNG from the previous video
+was compared — two 165-frame clips were reported torn when they were fine.
 
 ### The tearing bug, and why the first fix was not one
 

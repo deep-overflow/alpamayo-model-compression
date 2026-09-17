@@ -196,6 +196,10 @@ def main():
         label, cfg = spec.split("=", 1)
         rid, score, gates, dist, gtdist = pick_rollout(cfg, args.scene, args.worst)
         asl = run_dir(cfg) / "rollouts" / args.scene / rid / "rollout.asl"
+        if not asl.exists():
+            # the summary lists a rollout whose log was never written; two hard100 scenes
+            # are in that state on BOTH rollouts, so there is nothing to fall back to
+            raise SystemExit(f"{label}: {args.scene} 의 rollout.asl 이 없습니다 -- {asl}")
         data = asyncio.run(read_rollout(asl))
         data.update(label=label, config=cfg, score=score, gates=gates,
                     dist=dist, gtdist=gtdist, rid=rid)
