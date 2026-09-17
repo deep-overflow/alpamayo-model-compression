@@ -27,7 +27,12 @@ CONFIG=${CONFIG:-slim_dual_u40_v2}
 SCENESET=${SCENESET:-6f937b0c67258133d8e372901b8f2aa8}
 OUT=${OUT:-$REPO/closed-loop-viz/video/gt_closest10}
 SCENES_FILE=${SCENES_FILE:-$T/gt10.txt}
-LOG=$T/gt10_render.log
+LOG=${LOG:-$T/gt10_render.log}
+# Top-down comes from one of two places. GATHER_FROM copies an existing six-arm render
+# (matrix150 already holds all 150, so re-rendering them would be pure waste); TOPDOWN_ARMS
+# renders instead, which is what a suite with no prior batch needs. Set exactly one.
+GATHER_FROM=${GATHER_FROM:-$REPO/closed-loop-viz/video/matrix150}
+TOPDOWN_ARMS=${TOPDOWN_ARMS:-}
 
 mkdir -p "$OUT/camera" "$OUT/topdown"
 : > "$LOG"
@@ -36,18 +41,36 @@ log() { echo "[$(date -u -d '+9 hours' '+%m-%d %H:%M KST')] $*" | tee -a "$LOG";
 mapfile -t SCENES < "$SCENES_FILE"
 log "씬 ${#SCENES[@]}개, arm $CONFIG, GPU $GPU, 씬셋 $SCENESET"
 
-# ---- 1. top-down: gather the existing six-arm renders ---------------------------------
+# ---- 1. top-down ----------------------------------------------------------------------
 missing=0
-for s in "${SCENES[@]}"; do
-  src=$REPO/closed-loop-viz/video/matrix150/$s.mp4
-  if [ -s "$src" ]; then
-    cp -n "$src" "$OUT/topdown/$s.mp4"
-  else
-    log "top-down 없음: $s"
-    missing=$((missing + 1))
-  fi
-done
-log "top-down $(( ${#SCENES[@]} - missing ))/${#SCENES[@]} 수집 (matrix150 의 6패널 렌더)"
+if [ -n "$TOPDOWN_ARMS" ]; then
+  tdargs=()
+  for a in $TOPDOWN_ARMS; do tdargs+=(--arm "$a"); done
+  for s in "${SCENES[@]}"; do
+    out=$OUT/topdown/$s.mp4
+    [ -s "$out" ] && continue
+    cd "$ALPASIM" || exit 1
+    if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/render_replay.py" \
+         --scene "$s" "${tdargs[@]}" --out "$out" >>"$LOG.td.$s" 2>&1; then
+      rm -f "$LOG.td.$s"
+    else
+      log "top-down FAIL $s -- $LOG.td.$s 참조"
+      missing=$((missing + 1))
+    fi
+  done
+  log "top-down $(( ${#SCENES[@]} - missing ))/${#SCENES[@]} 렌더"
+else
+  for s in "${SCENES[@]}"; do
+    src=$GATHER_FROM/$s.mp4
+    if [ -s "$src" ]; then
+      cp -n "$src" "$OUT/topdown/$s.mp4"
+    else
+      log "top-down 없음: $s"
+      missing=$((missing + 1))
+    fi
+  done
+  log "top-down $(( ${#SCENES[@]} - missing ))/${#SCENES[@]} 수집 ($GATHER_FROM)"
+fi
 
 # ---- 2. renderer ----------------------------------------------------------------------
 GPU=$GPU PORT=$PORT SCENESET=$SCENESET bash "$WT/closed-loop-viz/start_renderer.sh" >>"$LOG" 2>&1

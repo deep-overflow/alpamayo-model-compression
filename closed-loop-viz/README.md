@@ -139,52 +139,69 @@ is what later renders should use.
 
 The `video/` directory is gitignored — it rebuilds from `render_all.sh`.
 
-## video/gt_closest10 — the ten scenes `dual` drove most like the GT
+## Layout: video/<arm>/<suite>/{camera,topdown}
 
-`pick_gt_close.py` ranks by `dist_to_gt_trajectory`, the sim's own per-rollout measure (the
-`d2gt` column in `analyze_alpasim`); `render_gt10.sh` then renders them.
+```
+video/
+  dual/
+    origin150/camera   10 × 4-camera replay        1918×1202
+    origin150/topdown  10 × single-arm top-down     540×670
+    hard100/camera     10 × 4-camera replay
+    hard100/topdown    10 × single-arm top-down
+  matrix150/             150 × 6-arm top-down      1620×1280
+  matrix_hard100_gt10/    10 × 5-arm top-down
+```
 
-**Ranking on d2gt alone selects failures, and the guard against that is the point.** A
-rollout that stops early never gets the chance to leave the GT curve, so it sits at d2gt ≈ 0
-while having driven almost nothing. Unguarded, the top pick was:
+Everything under an arm folder is that arm alone — a multi-panel comparison filed under
+`dual/` would claim to be something it is not, so the multi-arm renders keep their own
+directories. `restructure_by_arm.sh` builds this and takes `ARM=` plus a run path, so
+another arm stacks up the same way.
+
+### Which ten scenes, and the selection trap
+
+`pick_gt_close.py` ranks by `dist_to_gt_trajectory` — the sim's own per-rollout measure,
+the `d2gt` column in `analyze_alpasim`. **Ranking on it alone selects failures.** A rollout
+that stops early never gets the chance to leave the GT curve:
 
 ```
 1d205d02   d2gt 0.000   drove  16.2 m of 105.9 m  (15%)   score 0.000   offroad 2/2
 05ecbbf5   d2gt 0.276   drove  15.1 m of 117.5 m  (13%)   score 0.000   offroad 2/2
-278088cf   d2gt 0.429   drove  87.5 m of 304.4 m  (29%)   score 0.000   offroad 2/2
 ```
 
-Half of an unguarded top-10 was that failure mode. A scene therefore qualifies only when the
-ego actually drove the route (`dist_traveled_m / gt_dist_traveled_m ≥ 0.9`, `--min-progress-frac`)
-and is ranked by d2gt only after that. 150 scenes → 146 with a GT path over 20 m → 91 that
-drove it → top 10:
+Half of an unguarded top-10 was that shape. A scene qualifies only when the ego drove the
+route (`dist_traveled_m / gt_dist_traveled_m ≥ 0.9`, `--min-progress-frac`) and is ranked by
+d2gt after that.
 
 ```
- #  scene       d2gt   score  driven/GT   GT m
- 1  0dbb91dd   0.100   1.000    0.99      146.9
- 2  25f6ad44   0.336   1.000    0.95      126.4
- 3  13fb89b9   0.413   1.000    0.95      190.0
- 4  0e02fb8c   0.450   1.000    0.99      115.7
- 5  1920170b   0.629   1.000    0.99      243.0
- 6  054b5901   0.908   1.000    1.00      132.3
- 7  22a92557   1.033   1.000    1.01       52.3
- 8  1a7b81b8   1.113   1.000    1.00      136.2
- 9  04394343   1.286   1.000    0.92      299.2
-10  1a5da90a   1.303   1.000    1.00      410.7
+origin150   150 scenes -> 146 with GT over 20 m -> 91 that drove it -> top 10
+            d2gt 0.100-1.303 against a median of 4.078, all score 1.000, no gate hits
+hard100      96 scenes ->  96                   -> 26 that drove it -> top 10
+            d2gt 0.250-2.677 against a median of 3.841; #9 (d07c2655) is 1/2 at-fault
 ```
 
-All ten pass with no gate hits, against a d2gt median of 4.078 over the qualifying scenes.
+Only 27% of hard100 scenes were driven to completion against 62% of the matrix — the
+suite's difficulty shows up in that filter. Its GT paths also run 158–694 m against
+52–411 m, which is part of why its d2gt values sit higher.
 
-```
-video/gt_closest10/
-  camera/   <scene>.mp4   dual, all four cameras   132 MB
-  topdown/  <scene>.mp4   the same ten from matrix150, six arms    30 MB
-```
+`make_sceneset.py` exists because of hard100: its shards left four 25-scene scenesets and
+no single one covers a selection drawn from the whole suite, so the ten needed usdz are
+hardlinked into one `chan_`-prefixed sceneset (same filesystem, no extra space).
 
-The top-down side is **gathered, not re-rendered**: `matrix150` already holds the six-arm
-render for all 150 scenes, so these are the same files. Ten camera videos took 10 min on
-GPU 1 with sceneset `6f937b0c67258133d8e372901b8f2aa8`, which is the one holding all 150
-usdz — a per-shard sceneset holds 38 and would have missed most of the picks.
+### The tearing bug, and why the first fix was not one
+
+The first single-arm batch produced torn video — by frame 100 the bottom of the previous
+frame appeared at the top. The cause is that `6.1 * nrow + 0.6` is `6.699999999999999` at
+nrow=1, so the canvas came out **540×669**: an odd height. The writer declared one size to
+ffmpeg and handed it buffers of another, and every frame slid by one row.
+
+`matrix150` was never affected — at nrow=2 the same arithmetic lands on 1620×1280, both
+even — which is why a six-panel frame looked right while the one-panel one did not.
+
+An earlier `-vf scale=trunc(ih/2)*2` had been added when ffmpeg refused an odd height. That
+**hid the error without fixing it**: rescaling 669 to 668 satisfies libx264 and leaves the
+frame-size mismatch in place. The renderer now sizes from even integer pixels and asserts
+the real canvas before encoding, so an odd dimension fails loudly instead of producing
+plausible-looking garbage. Verified across all 210 videos: 0 odd dimensions.
 
 ## video/dual_vs_h4_2431387d.mp4
 

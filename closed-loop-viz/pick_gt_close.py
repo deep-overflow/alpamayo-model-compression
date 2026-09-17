@@ -29,14 +29,18 @@ ARTIFACTS = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts")
 SUITES_CSV = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
 
 
-def run_dir(config):
+def run_dir(config, prefix="m2601_merged_"):
     p = Path(config)
-    return p if p.is_absolute() else RUNS / f"m2601_merged_{config}"
+    return p if p.is_absolute() else RUNS / f"{prefix}{config}"
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="slim_dual_u40_v2")
+    ap.add_argument("--prefix", default="m2601_merged_",
+                    help="run-name prefix; h100_merged_ for the hard100 suite")
+    ap.add_argument("--parent-suite", default="public_2601",
+                    help="suite whose scene_id -> uuid mapping resolves the usdz check")
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--min-gt-m", type=float, default=20.0,
                     help="drop scenes whose GT path is shorter than this")
@@ -46,7 +50,8 @@ def main():
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
 
-    d = json.loads((run_dir(args.config) / "aggregate/results-summary.json").read_text())
+    d = json.loads(
+        (run_dir(args.config, args.prefix) / "aggregate/results-summary.json").read_text())
     per = collections.defaultdict(list)
     for r in d["rollouts"]:
         m = r.get("metrics") or {}
@@ -95,7 +100,7 @@ def main():
         uuid_of = {}
         with open(SUITES_CSV) as fh:
             for row in csv.DictReader(fh):
-                if row.get("test_suite_id") == "public_2601":
+                if row.get("test_suite_id") == args.parent_suite:
                     uuid_of[row["scene_id"]] = row["uuid"]
         for ss in sorted(ARTIFACTS.glob("scenesets/*")):
             have = sum(1 for s in picks

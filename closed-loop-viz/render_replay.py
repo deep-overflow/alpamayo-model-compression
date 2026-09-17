@@ -224,13 +224,25 @@ def main():
     # read, so the panels wrap into a grid.
     ncol = len(arms) if len(arms) <= 3 else math.ceil(len(arms) / 2)
     nrow = math.ceil(len(arms) / ncol)
-    fig, axgrid = plt.subplots(nrow, ncol, figsize=(5.4 * ncol, 6.1 * nrow + 0.6),
+    # Size the figure from EVEN pixel counts, not from inches. `6.1 * 1 + 0.6` is
+    # 6.699999999999999 in float, so a one-row figure came out 669 px tall -- odd. The
+    # writer then told ffmpeg one height while handing it buffers of another, and every
+    # frame slid by a row: by frame 100 the picture was visibly torn. Two even constants
+    # and an integer dpi make that unrepresentable, and the assert below refuses to encode
+    # if it ever happens again.
+    dpi = 100
+    w_px, h_px = 540 * ncol, 610 * nrow + 60
+    fig, axgrid = plt.subplots(nrow, ncol, figsize=(w_px / dpi, h_px / dpi), dpi=dpi,
                                facecolor=BG, squeeze=False)
     axes = list(axgrid.ravel()[:len(arms)])
     for extra in axgrid.ravel()[len(arms):]:
         extra.axis("off")
-    fig.suptitle(f"{args.scene}      same scene, worse rollout of each arm",
-                 color=INK, fontsize=11, y=0.985)
+    # The suptitle has to fit the narrowest layout: at one 540 px panel the scene id alone
+    # already fills the width, so the explanatory half is dropped there rather than clipped,
+    # and "each arm" would be wrong for a single panel anyway.
+    note = "      same scene, worse rollout of each arm" if len(arms) > 1 else ""
+    fig.suptitle(f"{args.scene}{note}", color=INK,
+                 fontsize=11 if ncol >= 3 else (9.5 if ncol == 2 else 7.5), y=0.985)
 
     state = []
     for ax, a in zip(axes, arms):
@@ -251,8 +263,9 @@ def main():
                         label="plan held now (6.4 s)")
         verdict = ("OFFROAD" if a["gates"]["offroad"] else
                    ("COLLISION" if a["gates"]["collision_at_fault"] else "pass"))
+        shown = Path(a["config"]).name if "/" in a["config"] else a["config"]
         ax.set_title(f"{a['label']}   score {a['score']:.3f}   {verdict}\n"
-                     f"{a['config']}   ·   drove {a['dist']:.0f} m of {a['gtdist']:.0f} m",
+                     f"{shown}   ·   drove {a['dist']:.0f} m of {a['gtdist']:.0f} m",
                      color=col if verdict != "pass" else INK, fontsize=10, pad=10)
         cap = ax.text(0.5, -0.035, "", transform=ax.transAxes, ha="center", va="top",
                       color=INK, fontsize=7.4, wrap=True)
@@ -309,13 +322,16 @@ def main():
                         top=0.885 if nrow == 1 else 0.925,
                         bottom=0.125 if nrow == 1 else 0.055,
                         wspace=0.05, hspace=0.26)
-    # libx264 with yuv420p needs EVEN pixel dimensions, and the figure size that follows
-    # from the panel grid does not always give them (a 2-arm figure came out 1080x669 and
-    # ffmpeg exited 1). Rounding down to even in ffmpeg is robust to any grid.
+    # Check the real canvas rather than trusting the arithmetic above: an odd dimension is
+    # what tore the earlier single-arm videos, and rescaling it in ffmpeg hid the error
+    # without fixing the frame-size mismatch that caused the tearing. Fail instead.
+    fig.canvas.draw()
+    cw, ch = fig.canvas.get_width_height()
+    assert (cw, ch) == (w_px, h_px), f"canvas {cw}x{ch} != planned {w_px}x{h_px}"
+    assert cw % 2 == 0 and ch % 2 == 0, f"odd canvas {cw}x{ch}; libx264 yuv420p needs even"
     anim.save(str(args.out), writer=animation.FFMpegWriter(
         fps=args.fps, bitrate=2400, codec="libx264",
-        extra_args=["-pix_fmt", "yuv420p",
-                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"]))
+        extra_args=["-pix_fmt", "yuv420p"]))
     print(f"\n-> {args.out}  ({args.out.stat().st_size / 1e6:.1f} MB, "
           f"{n_frames} frames @ {args.fps} fps = {n_frames / args.fps:.0f} s)")
 
