@@ -308,9 +308,11 @@ def main():
         ax.set_title(f"{a['label']}   score {a['score']:.3f}   {verdict}{view}\n"
                      f"{shown}   ·   drove {a['dist']:.0f} m of {a['gtdist']:.0f} m",
                      color=col if verdict != "pass" else INK, fontsize=10, pad=10)
-        cap = None if one_caption else ax.text(
+        # One caption per ARM. With --zoom an arm owns two panels and the same sentence
+        # under both says nothing twice, so only the whole-scene half carries it.
+        cap = None if (one_caption or zoomed) else ax.text(
             0.5, -0.035, "", transform=ax.transAxes, ha="center", va="top",
-            color=INK, fontsize=7.4, wrap=True)
+            color=INK, fontsize=8.2, wrap=True)
         clock = ax.text(0.02, 0.975, "", transform=ax.transAxes, ha="left", va="top",
                         color=MUTED, fontsize=9, family="monospace")
         if not state:          # legend on the first panel only

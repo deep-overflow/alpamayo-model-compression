@@ -21,6 +21,11 @@ OUT=${OUT:-$REPO/closed-loop-viz/video/matrix150}
 WORKERS=${WORKERS:-6}
 LOG=${LOG:-/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp/render_all.log}
 
+# ARMS_SPEC (space-separated label=config) overrides the default set, which is what makes
+# this usable for a suite other than the 150-scene matrix. Configs may be absolute paths.
+if [ -n "${ARMS_SPEC:-}" ]; then
+  read -r -a ARMS <<< "$ARMS_SPEC"
+else
 ARMS=(
   "dual=slim_dual_u40_v2"
   "coc=slim_coc_u40_v2"
@@ -33,6 +38,7 @@ ARMS=(
   "tyr=slim_tyr_u40_r"
   "wanda=slim_wanda_u40_v2"
 )
+fi
 
 mkdir -p "$OUT"
 : > "$LOG"
@@ -73,6 +79,9 @@ render_one() {
   local args=()
   local a
   for a in $ARMS_STR; do args+=(--arm "$a"); done
+  # ZOOM adds the ego-following twin per arm. hard100's routes run 158-694 m, where the
+  # whole-scene view alone leaves every car a speck -- the same reason dual/*/topdown uses it.
+  [ -n "${ZOOM:-}" ] && args+=(--zoom "$ZOOM")
   cd "$ALPASIM" || return 1
   if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/render_replay.py" \
        --scene "$scene" "${args[@]}" --out "$out" >> "$LOG.$scene" 2>&1; then
@@ -83,7 +92,7 @@ render_one() {
   fi
 }
 export -f render_one
-export OUT ALPASIM WT LOG
+export OUT ALPASIM WT LOG ZOOM
 export ARMS_STR="${ARMS[*]}"
 
 printf '%s\n' "${SCENES[@]}" | xargs -P "$WORKERS" -I{} bash -c 'render_one "$@"' _ {}

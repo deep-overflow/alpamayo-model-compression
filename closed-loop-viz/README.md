@@ -127,6 +127,31 @@ schema, and the GT-path check against our `dual` passes at 0.0000 m. It scores 0
 
 Pass it as `--arm "llm-pruner=/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root/lp_r50"`.
 
+## video/matrix_hard100 — 98 scenes × 4 arms
+
+`dual` / `tyr` / `llm-pruner` (`lp_r50`) / `baseline`, each arm shown twice: whole scene and
+an ego-following ±45 m view. 8 panels, 2160×1280, 392 MB.
+
+The arm set differs from matrix150 because **hard100 has no `coc` and no `traj` run**. What
+it does have, all on the same 100 scenes:
+
+```
+slim_tyrK          0.610      slim_tyr_u40_r     0.586      baseline           0.510
+slim_dual_u40_v2   0.595      lp_r50             0.575      slim_wanda_u40_v2  0.406
+```
+
+`lp_r50` is under our own prefix here (`h100_merged_lp_r50`) — only its 150-scene run sits
+in soowon's runs_root. `slim_wanda_u40_v2` landed 2026-09-18; the repo's hard100 report
+predates it and describes five arms.
+
+The zoom matters more here than on the matrix: hard100 routes run 158–694 m, so the
+whole-scene view alone leaves every car a speck. With `--zoom` an arm owns two panels, and
+only the whole-scene half carries the CoC caption — the same sentence under both says
+nothing twice.
+
+98 and not 100: `clipgt-4bad2f63` and `clipgt-adb899bd` have no `rollout.asl` on either
+rollout, so those two FAILs are the ceiling, not a defect.
+
 ## video/matrix150 — 150 scenes × 6 arms
 
 All 150 scenes of the matrix, six panels each: `dual`, `coc`, `traj`, `llm-pruner`, `tyr`,
