@@ -25,7 +25,11 @@ ARMS=(
   "dual=slim_dual_u40_v2"
   "coc=slim_coc_u40_v2"
   "traj=slim_traj_u40_v2"
-  "llm-pruner=slim_spg_s1_uni_nr"
+  # The real LLM-Pruner baseline, not a stand-in. Its 150-scene run lives in soowon's
+  # runs_root rather than under our m2601_merged_ prefix, which is why an earlier batch
+  # used spg_s1_uni_nr (0.733) instead: a search of our prefix simply does not find it.
+  # Verified same 150 scenes, same record schema, GT path agreeing with ours at 0.0000 m.
+  "llm-pruner=/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root/lp_r50"
   "tyr=slim_tyr_u40_r"
   "wanda=slim_wanda_u40_v2"
 )
@@ -41,7 +45,11 @@ runs = Path(sys.argv[1])
 sets = []
 for spec in sys.argv[2:]:
     cfg = spec.split("=", 1)[1]
-    d = json.loads((runs / f"m2601_merged_{cfg}/aggregate/results-summary.json").read_text())
+    # An absolute path is the run directory itself. Blindly prefixing it produced
+    # `m2601_merged_/mnt/nvme1n1/...` and the batch died before rendering anything --
+    # the same mistake render_arm_all.sh had, in a second place.
+    run = Path(cfg) if Path(cfg).is_absolute() else runs / f"m2601_merged_{cfg}"
+    d = json.loads((run / "aggregate/results-summary.json").read_text())
     sets.append({r["clipgt_id"] for r in d["rollouts"]})
 common = sorted(set.intersection(*sets))
 union = sorted(set.union(*sets))

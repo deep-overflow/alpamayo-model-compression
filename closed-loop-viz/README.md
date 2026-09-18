@@ -132,10 +132,13 @@ Pass it as `--arm "llm-pruner=/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysi
 All 150 scenes of the matrix, six panels each: `dual`, `coc`, `traj`, `llm-pruner`, `tyr`,
 `wanda`. 475 MB total, ~3 MB and 20 s per scene, rendered in 36 min on 6 workers.
 
-**The `llm-pruner` panel in this batch is `slim_spg_s1_uni_nr`** (`dual_param_first`, MLP
-50.3%, 24.0% total, score 0.733) — one of soowon's masks run through our closed loop. It was
-chosen before `lp_r50`'s 150-scene run was located; `lp_r50` is the better representative and
-is what later renders should use.
+The `llm-pruner` panel is **`lp_r50`**, the real external baseline (0.810), read from
+soowon's runs_root by absolute path. An earlier batch used `slim_spg_s1_uni_nr` (0.733) as a
+stand-in because a search of our own `m2601_merged_` prefix does not find `lp_r50` at all.
+
+That absolute path found the same prefix bug a second time: `render_all.sh`'s scene-list step
+also prefixed blindly, producing `m2601_merged_/mnt/nvme1n1/...` and killing the batch before
+it rendered anything. Both places now pass an absolute path through unchanged.
 
 The `video/` directory is gitignored — it rebuilds from `render_all.sh`.
 
