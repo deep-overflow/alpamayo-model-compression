@@ -207,7 +207,7 @@ video/
     hard100/camera      98 × 4-camera replay                   1.2 GB
     hard100/topdown     98 × whole + zoom                      207 MB
   matrix150/             150 × 6-arm top-down      1620×1280
-  matrix_hard100_gt10/    10 × 5-arm top-down
+  matrix_hard100/         98 × 4-arm top-down (whole + zoom)   2160×1280
 ```
 
 Files are `<score>_<scene>.mp4` with the score to three decimals, so listing a directory

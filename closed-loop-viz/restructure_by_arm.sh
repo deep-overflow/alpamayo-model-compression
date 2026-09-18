@@ -9,7 +9,13 @@
 #   video/dual/origin150/{camera,topdown}   dual alone, the 10 scenes closest to GT
 #   video/dual/hard100/{camera,topdown}     same, on the hard100 suite
 #   video/matrix150/                        6 arms, all 150 scenes  (unchanged)
-#   video/matrix_hard100_gt10/              5 arms, the 10 hard100 picks
+#   video/matrix_hard100/                   4 arms, all 98 renderable hard100 scenes
+#
+# This script ran once, when the per-arm layout was introduced, and its two source
+# directories (gt_closest10, gt_closest10_hard) no longer exist -- so the camera moves below
+# are now no-ops and only the top-down render would do anything on a re-run. It also used to
+# park the multi-arm hard100 top-downs in a holding pen; those 10 scenes are a subset of the
+# 98 in matrix_hard100, which renders them at full arm coverage, so that step is gone.
 #
 # Camera videos are moved, not re-rendered: they are already dual-only.
 
@@ -40,8 +46,7 @@ fi
 log "hard100 배치 완료 확인"
 
 mkdir -p "$V/$ARM/origin150/camera" "$V/$ARM/origin150/topdown" \
-         "$V/$ARM/hard100/camera" "$V/$ARM/hard100/topdown" \
-         "$V/matrix_hard100_gt10"
+         "$V/$ARM/hard100/camera" "$V/$ARM/hard100/topdown"
 
 # ---- 1. camera: move what already exists ----------------------------------------------
 moved=0
@@ -54,13 +59,6 @@ for f in "$V/gt_closest10_hard/camera/"*.mp4; do
   mv -n "$f" "$V/$ARM/hard100/camera/" && moved=$((moved + 1))
 done
 log "카메라 $moved개 이동"
-
-# the multi-arm hard100 top-down keeps its own home rather than being thrown away
-for f in "$V/gt_closest10_hard/topdown/"*.mp4; do
-  [ -e "$f" ] || continue
-  mv -n "$f" "$V/matrix_hard100_gt10/"
-done
-log "다중 arm hard100 top-down -> matrix_hard100_gt10/"
 
 # ---- 2. top-down: single arm, both suites ---------------------------------------------
 render_one() {
