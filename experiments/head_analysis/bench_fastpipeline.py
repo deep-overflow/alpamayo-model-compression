@@ -12,6 +12,11 @@ Usage (PYTORCH_CUDA_ALLOC_CONF= required for graph capture):
   PYTORCH_CUDA_ALLOC_CONF= bash experiments/head_analysis/run_retry.sh 20 \
       experiments/head_analysis/bench_fastpipeline.py --gpu 0 --reserve-gb 8 \
       --exp-id fastpipe_base [--slim-ckpt outputs/slim_integrated_mag]
+
+--clip-cache DIR keeps each clip's loaded tensors in DIR/<clip_id>.pt (a live load is
+25-42 s per clip; loading sits outside every timed region). --prefetch-only fills that
+cache on CPU and exits before any GPU is reserved, so repeated runs on one card
+(plans/2026-09-19_fastpath-single-card-rounds.md) spend their GPU time measuring.
 """
 
 import argparse
@@ -66,6 +71,20 @@ def prefix_from_static(cache, true_len, n_layers, pad_multiple=128):
     return fd.StaticPrefixCache(keys, values, s_pad)
 
 
+def load_clip(clip_id, cache_dir):
+    """Clip tensors from cache_dir/<clip_id>.pt when present, else a live load (then cached)."""
+    if cache_dir is None:
+        return load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+    f = cache_dir / f"{clip_id}.pt"
+    if f.exists():
+        return torch.load(f, weights_only=False)
+    data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+    tmp = f.with_suffix(".tmp")
+    torch.save(data, tmp)
+    tmp.rename(f)
+    return data
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--slim-ckpt", type=str, default=None)
@@ -74,10 +93,33 @@ def main():
     ap.add_argument("--cap", type=int, default=3456)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--max-gen", type=int, default=256)
-    ap.add_argument("--exp-id", type=str, required=True)
+    ap.add_argument("--exp-id", type=str, default=None)
     ap.add_argument("--reserve-gb", type=float, default=8.0)
     ap.add_argument("--gpu", type=int, default=None)
+    ap.add_argument("--clip-cache", type=str, default=None,
+                    help="dir of <clip_id>.pt, relative to the repo; filled on a miss")
+    ap.add_argument("--prefetch-only", action="store_true",
+                    help="fill --clip-cache on CPU and exit (no GPU, no model)")
     args = ap.parse_args()
+
+    # same clip selection as profile_stages (seed permutation + offset, no warmup here)
+    import pandas as pd
+    clip_df = pd.read_parquet(REPO / "notebooks" / "clip_ids.parquet")
+    order = np.random.RandomState(args.seed).permutation(len(clip_df))
+    sel = order[args.clip_offset : args.clip_offset + args.num_clips + 1]
+    clips = clip_df.iloc[sel]["clip_id"].tolist()  # first clip doubles as warmup
+    cache_dir = REPO / args.clip_cache if args.clip_cache else None
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    if args.prefetch_only:
+        assert cache_dir is not None, "--prefetch-only needs --clip-cache"
+        for ci, clip_id in enumerate(clips):
+            t0 = time.time()
+            if not (cache_dir / f"{clip_id}.pt").exists():
+                load_clip(clip_id, cache_dir)
+            print(f"[{ci + 1}/{len(clips)}] {clip_id} cached ({time.time() - t0:.0f}s)", flush=True)
+        return
+    assert args.exp_id, "--exp-id is required for a benchmark run"
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -101,17 +143,10 @@ def main():
     print(f"decode capture {cap_ms:.0f} ms", flush=True)
     denoisers = {}  # s_pad -> GraphedDenoiser
 
-    # same clip selection as profile_stages (seed permutation + offset, no warmup here)
-    import pandas as pd
-    clip_df = pd.read_parquet(REPO / "notebooks" / "clip_ids.parquet")
-    order = np.random.RandomState(args.seed).permutation(len(clip_df))
-    sel = order[args.clip_offset : args.clip_offset + args.num_clips + 1]
-    clips = clip_df.iloc[sel]["clip_id"].tolist()  # first clip doubles as warmup
-
     rows = []
     for ci, clip_id in enumerate(clips):
         t0 = time.time()
-        data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
+        data = load_clip(clip_id, cache_dir)
         inputs = lib.build_inputs(model, processor, data, "cuda")
         prompt_len = inputs["input_ids"].shape[1]
         r = {"clip_id": clip_id, "warmup": ci == 0, "prompt_len": prompt_len}
@@ -204,6 +239,8 @@ def main():
         "purpose": "stock vs graph-optimized full pipeline, paired per clip",
         "slim_ckpt": args.slim_ckpt, "num_clips": len(clips), "clip_offset": args.clip_offset,
         "cap": args.cap, "seed": args.seed, "gpu": torch.cuda.get_device_name(device),
+        "gpu_index": torch.device(device).index, "clip_ids": clips,
+        "clip_cache": args.clip_cache,
     }, indent=2))
 
 
