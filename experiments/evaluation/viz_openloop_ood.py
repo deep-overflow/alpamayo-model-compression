@@ -97,7 +97,22 @@ def best_of_k(row, k=K_EVAL):
     return i, float(ade[i]), float(fde.min())
 
 
-def draw_bev(ax, clip, row, arm, k=K_EVAL):
+def bev_limits(clip, rows, pad=2.0):
+    """One axis box covering every arm, so the panels of a clip stay comparable.
+
+    Letting each panel autoscale would draw an arm that overshoots by 20 m at the
+    same visual size as one that tracks the reference.
+    """
+    xy = np.concatenate([clip["hist"], clip["gt"]]
+                        + [np.asarray(r["pred_xy_k"]).reshape(-1, 2) for r in rows])
+    # Straight clips span metres laterally against tens forward; hold a minimum
+    # half-width so the equal-aspect box does not collapse to an unreadable sliver.
+    lo, hi = xy[:, 1].min() - pad, xy[:, 1].max() + pad
+    mid, half = (lo + hi) / 2, max((hi - lo) / 2, 4.0)
+    return (mid + half, mid - half), (xy[:, 0].min() - pad, xy[:, 0].max() + pad)
+
+
+def draw_bev(ax, clip, row, arm, xlim, ylim, k=K_EVAL):
     """Ego history, ground truth and the K rollout samples for one arm."""
     pred = np.asarray(row["pred_xy_k"])              # (8, 64, 2)
     i_best, ade, fde = best_of_k(row, k)
@@ -120,24 +135,25 @@ def draw_bev(ax, clip, row, arm, k=K_EVAL):
     # Equal aspect with adjustable="box" shrinks the axes to the data instead of
     # padding the lateral range out to the cell width, which on a straight clip
     # would stretch a +-2 m rollout across +-40 m of axis.
-    xy = np.concatenate([clip["hist"], clip["gt"], pred.reshape(-1, 2)])
-    pad = 2.0
-    # Straight clips span metres laterally against tens forward; hold a minimum
-    # half-width so the equal-aspect box does not collapse to an unreadable sliver.
-    lo, hi = xy[:, 1].min() - pad, xy[:, 1].max() + pad
-    mid, half = (lo + hi) / 2, max((hi - lo) / 2, 4.0)
-    ax.set_xlim(mid + half, mid - half)                       # reversed: +y is left
-    ax.set_ylim(xy[:, 0].min() - pad, xy[:, 0].max() + pad)
+    ax.set_xlim(*xlim)                                        # reversed: +y is left
+    ax.set_ylim(*ylim)
     ax.set_aspect("equal", adjustable="box")
+    ax.set_anchor("W")              # left-align the box, leaving room for the legend
     ax.xaxis.set_major_locator(MaxNLocator(nbins=3, prune="both"))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
 
-    ax.set_title(f"{arm}   minADE@{k} {ade:.3f}   minFDE@{k} {fde:.3f}", fontsize=9)
-    ax.set_xlabel("lateral y (m)   ← left", fontsize=8)
+    # Left-aligned: the equal-aspect box is narrow, so a centred title would run
+    # back across the camera panel.
+    ax.set_title(f"{arm}   minADE@{k} {ade:.3f}   minFDE@{k} {fde:.3f}",
+                 fontsize=9, loc="left")
+    ax.set_xlabel("lateral y (m)   ← left", fontsize=8, loc="left")
     ax.set_ylabel("forward x (m)", fontsize=8)
     ax.grid(alpha=0.25, lw=0.5)
     ax.tick_params(labelsize=7)
-    ax.legend(fontsize=6.5, loc="best", framealpha=0.85)
+    # The equal-aspect box is often a narrow sliver, so the legend goes beside it
+    # rather than on top of the trajectories.
+    ax.legend(fontsize=6.5, loc="center left", bbox_to_anchor=(1.03, 0.5),
+              framealpha=0.85, borderaxespad=0)
 
 
 def render(clip_id, arms, rows_by_arm, manifest, out_png, cache=CACHE, k=K_EVAL):
@@ -154,7 +170,7 @@ def render(clip_id, arms, rows_by_arm, manifest, out_png, cache=CACHE, k=K_EVAL)
     fig_h = max(4.2, panel_in * n) + text_in
     fig = plt.figure(figsize=(13.0, fig_h))
     gs = fig.add_gridspec(n, 2, width_ratios=[1.45, 1.0],
-                          left=0.035, right=0.985, top=1 - 0.80 / fig_h,
+                          left=0.035, right=0.90, top=1 - 0.80 / fig_h,
                           bottom=text_in / fig_h, hspace=0.36, wspace=0.16)
 
     ax_cam = fig.add_subplot(gs[:, 0])
@@ -164,8 +180,10 @@ def render(clip_id, arms, rows_by_arm, manifest, out_png, cache=CACHE, k=K_EVAL)
     ax_cam.set_title(f"front camera @ t0   ({clip['frame'].size[0]}x{clip['frame'].size[1]})",
                      fontsize=9)
 
+    xlim, ylim = bev_limits(clip, [rows_by_arm[a][clip_id] for a in arms])
     for i, arm in enumerate(arms):
-        draw_bev(fig.add_subplot(gs[i, 1]), clip, rows_by_arm[arm][clip_id], arm, k)
+        draw_bev(fig.add_subplot(gs[i, 1]), clip, rows_by_arm[arm][clip_id], arm,
+                 xlim, ylim, k)
 
     fig.suptitle(f"{clip_id}    bucket={head['bucket']}    cluster={head['cluster']}    "
                  f"split={head.get('split', '?')}    t0_us={t0}",
