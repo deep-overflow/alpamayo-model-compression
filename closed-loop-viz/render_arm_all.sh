@@ -17,7 +17,9 @@ set -uo pipefail
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
 WT=$REPO/.claude/worktrees/closed-loop-viz
 ALPASIM=/home/cvlab21/project/chan/alpasim
-T=/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp
+# Overridable: the default is the job dir this was first written under, and a job dir goes
+# away with its job. A caller running from a later session passes its own.
+T=${T:-/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp}
 
 ARM=${ARM:-dual}
 SUITE=${SUITE:-origin150}

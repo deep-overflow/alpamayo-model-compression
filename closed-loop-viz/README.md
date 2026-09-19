@@ -132,17 +132,25 @@ Pass it as `--arm "llm-pruner=/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysi
 `dual` / `tyr` / `llm-pruner` (`lp_r50`) / `baseline`, each arm shown twice: whole scene and
 an ego-following ±45 m view. 8 panels, 2160×1280, 392 MB.
 
-The arm set differs from matrix150 because **hard100 has no `coc` and no `traj` run**. What
-it does have, all on the same 100 scenes:
+Four panels and not more because six at this scale stop being readable, not because the
+suite is short of arms. **The hard100 arm set grows under you** — when these 98 videos were
+rendered on 2026-09-18 there was no `coc` and no `traj` run, and both merged within the next
+nine hours. Re-read the directory rather than an earlier sentence about it. All eight, on
+the same 100 scenes, as of 2026-09-19:
 
 ```
-slim_tyrK          0.610      slim_tyr_u40_r     0.586      baseline           0.510
-slim_dual_u40_v2   0.595      lp_r50             0.575      slim_wanda_u40_v2  0.406
+slim_tyrK          0.610      lp_r50             0.575      slim_coc_u40_v2    0.416
+slim_dual_u40_v2   0.595      slim_traj_u40_v2   0.546      slim_wanda_u40_v2  0.406
+slim_tyr_u40_r     0.586      baseline           0.510
 ```
+
+`slim_coc_u40_v2` and `slim_wanda_u40_v2` are the only arms below `baseline` here, and
+`coc` alone losing while `traj` alone draws is the union result the repo already has from
+the 150 — see the `criterion-union-beats-both-halves` memory.
 
 `lp_r50` is under our own prefix here (`h100_merged_lp_r50`) — only its 150-scene run sits
-in soowon's runs_root. `slim_wanda_u40_v2` landed 2026-09-18; the repo's hard100 report
-predates it and describes five arms.
+in soowon's runs_root. The repo's hard100 report describes five arms; it predates
+`slim_wanda_u40_v2` (2026-09-18), `slim_coc_u40_v2` and `slim_traj_u40_v2` (2026-09-19).
 
 The zoom matters more here than on the matrix: hard100 routes run 158–694 m, so the
 whole-scene view alone leaves every car a speck. With `--zoom` an arm owns two panels, and
@@ -227,8 +235,39 @@ existing files are skipped so an interrupted run resumes. `scene_scores.py` prod
 
 Everything under an arm folder is that arm alone — a multi-panel comparison filed under
 `dual/` would claim to be something it is not, so the multi-arm renders keep their own
-directories. `restructure_by_arm.sh` builds this and takes `ARM=` plus a run path, so
-another arm stacks up the same way.
+directories. `restructure_by_arm.sh` built the first one; it is a spent migration now (both
+of its source directories are gone). `render_arms_queue.sh` is what fills the rest.
+
+### `render_arms_queue.sh` — every arm, both suites
+
+```bash
+PHASE=both ARMS="tyr coc traj wanda tyrK llm-pruner baseline" \
+JOBS_PAR=5 TD_WORKERS=4 GPUS="0 1 2 3" \
+  bash closed-loop-viz/render_arms_queue.sh
+```
+
+It holds the arm→run table (both prefixes, plus llm-pruner's split home) and skips any arm
+whose run has no `aggregate/results-summary.json`, so a run still in flight is passed over
+rather than half-rendered.
+
+**Two phases, not one loop over whole jobs.** The halves want different hardware: top-down
+is pure CPU and camera needs a GPU renderer, so a job run end to end holds a card idle
+through its top-down half. `PHASE=td` is `JOBS_PAR` jobs × `TD_WORKERS` matplotlib
+processes; `PHASE=cam` is one renderer per card in `GPUS`.
+
+Cards default to the Blackwell half. Rendering is not evaluation — the rule that evaluation
+stays on Ada exists so a kernel difference cannot reach a reported number, and replay pixels
+cannot reach one at all, since the poses come out of `rollout.asl` already decided. Keeping
+off 4–7 leaves them for whoever needs them. Each camera worker re-checks its card is
+**empty** (≤16 MiB) immediately before starting a renderer and waits rather than piling onto
+someone else's job.
+
+The job cursor is `flock`-guarded. Without it two workers claim the same line, render the
+same files and one card's work is thrown away.
+
+Stopping it means killing the process **group** — `pkill -f render_arms_queue` leaves
+`render_arm_all` and its python children running, the same trap the other launchers carry —
+and then `docker rm -f chan_nre_q0 …`.
 
 ### Which ten scenes, and the selection trap
 
