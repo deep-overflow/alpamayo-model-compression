@@ -153,7 +153,7 @@ def gather():
                 continue
             df = scene_rows(dd)
             sc = df.groupby("scene").score.mean()
-            per[key] = {"abort": aborted(df),
+            per[key] = {"abort": aborted(df), "raw": df,
                         "score": float(sc.mean()), "median": float(sc.median()),
                         "coc": coc.get((cfg, n)), "n_roll": len(df),
                         "col": float(df.col.gt(0).mean()),
@@ -161,7 +161,7 @@ def gather():
                         "prog": float(df.prog.mean()),
                         "vs_base": paired(sc, base), "scenes": sc}
         bdf = scene_rows(run_dir(prefix, "baseline", n))
-        per["baseline"] = {"abort": aborted(bdf),
+        per["baseline"] = {"abort": aborted(bdf), "raw": bdf,
                            "score": float(base.mean()), "median": float(base.median()),
                            "coc": coc.get(("baseline", n)), "n_roll": len(bdf),
                            "col": float(bdf.col.gt(0).mean()),
@@ -292,6 +292,93 @@ def pair_rows(per, pairs):
             f"<tbody>{body}</tbody></table></div>")
 
 
+def four_metric_tables(data):
+    """Four metrics, three columns, absolute value with the vs-baseline value in ().
+
+    Each metric is reduced the way that metric should be. `score` is per-scene and the
+    parenthesised figure is the SCENE-PAIRED delta, which is the statistic this repo
+    decides on. The two gates are rollout-level binaries, so the figure is a
+    percentage-point difference of rates -- pairing a 0/1 gate over two rollouts would
+    throw away most of its information. `progress` is a difference of means.
+
+    The pooled column's ABSOLUTE score is a 60:40 mix of two difficulties and is printed
+    only so the delta has something to sit beside; the delta is the part that means
+    something, because each scene was differenced against its own set's baseline first.
+    """
+    keys = [k for k, *_ in ARMS] + ["baseline"]
+    cols = [(lab, lab) for lab, *_ in SETS] + [("pooled", "종합")]
+
+    def score_cell(k, lab):
+        if lab == "pooled":
+            dd, vv = [], []
+            for L, *_ in SETS:
+                a, b = data[L][k]["scenes"], data[L]["baseline"]["scenes"]
+                j = pd.concat([a, b], axis=1, join="inner", keys=["x", "y"]).dropna()
+                dd.append((j["x"] - j["y"]).to_numpy())
+                vv.append(a.to_numpy())
+            d, v = np.concatenate(dd), np.concatenate(vv)
+        else:
+            a, b = data[lab][k]["scenes"], data[lab]["baseline"]["scenes"]
+            j = pd.concat([a, b], axis=1, join="inner", keys=["x", "y"]).dropna()
+            d, v = (j["x"] - j["y"]).to_numpy(), a.to_numpy()
+        if k == "baseline":
+            return f"{v.mean():.3f}", None, False
+        rng = np.random.default_rng(0)
+        bs = d[rng.integers(0, len(d), (10000, len(d)))].mean(1)
+        lo, hi = np.quantile(bs, [0.025, 0.975])
+        sep = lo > 0 or hi < 0
+        return (f"{v.mean():.3f}",
+                f"{d.mean():+.4f}{'*' if sep else ''}", sep and d.mean() > 0)
+
+    def rate_cell(k, lab, col, as_pct):
+        def frame(key):
+            if lab == "pooled":
+                return pd.concat([data[L][key]["raw"] for L, *_ in SETS])
+            return data[lab][key]["raw"]
+        v = frame(k)[col]
+        val = v.gt(0).mean() if as_pct else v.mean()
+        txt = f"{100 * val:.1f}%" if as_pct else f"{val:.3f}"
+        if k == "baseline":
+            return txt, None, False
+        b = frame("baseline")[col]
+        base = b.gt(0).mean() if as_pct else b.mean()
+        d = val - base
+        # for the two gates lower is better, for progress higher is
+        good = (d < 0) if as_pct else (d > 0)
+        return txt, (f"{100 * d:+.1f}pp" if as_pct else f"{d:+.3f}"), good
+
+    out = ""
+    for title, note, getter in (
+        ("scene score", "괄호 안은 씬 페어드 델타, <code>*</code> 는 95% CI 가 0 배제",
+         lambda k, lab: score_cell(k, lab)),
+        ("과실 충돌", "rollout 비율. 괄호는 퍼센트포인트 차",
+         lambda k, lab: rate_cell(k, lab, "col", True)),
+        ("offroad", "rollout 비율. 괄호는 퍼센트포인트 차",
+         lambda k, lab: rate_cell(k, lab, "off", True)),
+        ("progress", "rollout 평균 <code>progress_clipped_rel</code>",
+         lambda k, lab: rate_cell(k, lab, "prog", False)),
+    ):
+        body = ""
+        for k in keys:
+            if any(k not in data[L] for L, *_ in SETS):
+                continue
+            hl = " class='hl'" if k == "baseline" else ""
+            tds = ""
+            for lab, _ in cols:
+                a, rel, good = getter(k, lab)
+                cls = "" if rel is None else (" class='good'" if good else " class='bad'")
+                tds += (f"<td><strong>{a}</strong>"
+                        + ("" if rel is None
+                           else f" <span{cls}>({rel})</span>") + "</td>")
+            body += f"<tr{hl}><td><code>{k}</code></td>{tds}</tr>"
+        heads = "".join(f"<th>{nice}</th>" for _, nice in cols)
+        out += (f"<h4>{title}</h4>"
+                f"<p class='note'>{note}</p>"
+                f"<div class='scroll'><table><thead><tr><th>arm</th>{heads}</tr></thead>"
+                f"<tbody>{body}</tbody></table></div>")
+    return out
+
+
 def pooled_table(data, drop_aborted):
     """Per-scene deltas from both sets, concatenated.
 
@@ -416,6 +503,7 @@ def build(data, r_agree, plot_dir, date):
                      "있어 표에서 빠졌다.</p></div>")
     flips = sum(1 for k in o if k != "baseline" and k in h
                 and np.sign(o[k]["vs_base"]["delta"]) != np.sign(h[k]["vs_base"]["delta"]))
+    four_t = four_metric_tables(data)
     pooled_all = pooled_table(data, False)
     pooled_clean = pooled_table(data, True)
     abort_t = abort_table(data)
@@ -498,6 +586,29 @@ scene_id 로 정렬한 앞 150씬, 그리고 그와 <strong>겹치지 않는</st
 {set_table(h, 100)}
 <p class="note">hard100 의 무압축 0.510 은 사전 등록 범위 0.42&ndash;0.58 안이다(예상 0.499,
 sangoh 의 913씬 런에서). 벗어났다면 씬이 아니라 설정을 의심해야 한다.</p>
+
+<h3>3.3 네 지표 한눈에</h3>
+<p>같은 데이터를 지표별로 세운 표다. 각 칸은 <strong>절대값 (무압축 대비)</strong> 이고,
+종합 열은 250씬 / 500 rollout 이다.</p>
+{four_t}
+<div class="warn">
+  <p><strong>종합 열의 절대값은 인용하지 말 것.</strong> 두 집합의 난이도가 다르므로
+  (무압축 0.750 대 0.510) 종합 절대값은 60:40 혼합일 뿐이다. 의미가 있는 것은
+  <strong>괄호 안</strong>이다 &mdash; score 는 씬마다 자기 집합의 무압축과 뺀 뒤
+  합쳤으므로 구성상 비교 가능하다.</p>
+  <p><strong><code>offroad</code> 를 단독으로 읽으면 부호가 뒤집힌다.</strong>
+  거의 모든 arm 이 무압축보다 적게 이탈하고, 가장 크게 줄인 것은 hard100 의
+  <code>wanda</code>(&minus;12.5pp)인데 점수는 꼴찌다. <code>progress</code> 를 같이
+  보면 답이 나온다 &mdash; 0.393 으로 최저다. <strong>못 나가면 도로를 벗어날 일도
+  없다.</strong> 반대로 <code>traj</code> 는 유일하게 이탈이 늘었는데(+0.8pp) 점수는
+  무압축 위다.</p>
+  <p><strong>과실 충돌은 두 집합에서 방향이 갈리는 유일한 지표다.</strong>
+  <code>dual</code> 은 origin150 에서 &minus;1.7pp 인데 hard100 에서 +1.0pp 다.
+  rollout 300 / 200 개로 이 크기는 분해되지 않는다 &mdash; 이 저장소가 &ldquo;과실
+  충돌은 세기에 너무 드물다&rdquo;고 적어둔 그대로이고, 그래서
+  <code>analyze_longitudinal.py</code> 가 연속 대리지표를 따로 읽는다.
+  <code>wanda</code> 의 +10.7pp / +3.0pp 만 두 집합 모두에서 크다.</p>
+</div>
 
 <figure>
   <img alt="여섯 arm 의 무압축 대비 델타, 두 씬 집합" src="data:image/png;base64,{b64(plot_dir / 'deltas.png')}">
