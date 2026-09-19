@@ -350,12 +350,13 @@ def main():
         ax.xaxis.set_major_locator(plt.MaxNLocator(5))
         ax.set_title(title)
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.4))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 3.4))
     forest(axes[0], [(f"{a}/{b}", pair(a, b, "fast", "denoise"), C3) for a, b in adjacent],
            "expert denoise, adjacent ladder pairs (ratio)")
-    forest(axes[1], [(f"{a}/{b}", pair(a, b, "fast", "e2e"), C1) for a, b in adjacent]
-           + [(f"{a}/{base}", pair(a, base, "fast", "e2e"), C2) for a in arms if a != base],
-           "e2e fast (ratio); small dots = per-round medians")
+    forest(axes[1], [(f"{a}/{b}", pair(a, b, "fast", "e2e"), C1) for a, b in adjacent],
+           "e2e fast, adjacent ladder pairs (ratio)")
+    forest(axes[2], [(f"{a}/{base}", pair(a, base, "fast", "e2e"), C2) for a in arms if a != base],
+           f"e2e fast vs {base} (ratio); small dots = per-round")
     fig.tight_layout()
     fig.savefig(out / "plots" / "ladder_ratios.png", dpi=150)
     plt.close(fig)
