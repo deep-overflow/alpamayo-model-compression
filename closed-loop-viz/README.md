@@ -207,16 +207,23 @@ a series, and the floor is a rule for series colours.
 
 ## Layout: video/<arm>/<suite>/{camera,topdown}
 
+Eight arms, both suites: 3,968 per-arm videos plus the 248 multi-arm ones and one pair
+comparison, 4,217 files and 32 GB. Every arm folder has the same four directories and the
+same counts:
+
 ```
 video/
-  dual/
-    origin150/camera   150 × 4-camera replay       1918×1202   2.1 GB
-    origin150/topdown  150 × whole + zoom          1080×720    321 MB
-    hard100/camera      98 × 4-camera replay                   1.2 GB
-    hard100/topdown     98 × whole + zoom                      207 MB
-  matrix150/             150 × 6-arm top-down      1620×1280
-  matrix_hard100/         98 × 4-arm top-down (whole + zoom)   2160×1280
+  <arm>/                 arm = dual coc traj tyr tyrK wanda llm-pruner baseline
+    origin150/camera   150 × 4-camera replay       1918×1202   ~2.1 GB
+    origin150/topdown  150 × whole + zoom          1080×720    ~320 MB
+    hard100/camera      98 × 4-camera replay                   ~1.2 GB
+    hard100/topdown     98 × whole + zoom                      ~210 MB
+  matrix150/             150 × 6-arm top-down      1620×1280     510 MB
+  matrix_hard100/         98 × 4-arm top-down (whole + zoom)   2160×1280   392 MB
 ```
+
+The per-arm halves are 496 videos and ~3.8 GB per arm; a ninth arm costs the same again
+and one `render_arms_queue.sh` invocation with `ARMS=` naming it.
 
 Files are `<score>_<scene>.mp4` with the score to three decimals, so listing a directory
 sorts by score. It is the **scene** score — the mean over the scene's rollouts, the number
@@ -333,11 +340,45 @@ An earlier `-vf scale=trunc(ih/2)*2` had been added when ffmpeg refused an odd h
 **hid the error without fixing it**: rescaling 669 to 668 satisfies libx264 and leaves the
 frame-size mismatch in place. The renderer now sizes from even integer pixels and asserts
 the real canvas before encoding, so an odd dimension fails loudly instead of producing
-plausible-looking garbage. Verified across all 210 videos: 0 odd dimensions.
+plausible-looking garbage.
+
+## Verifying a batch
+
+Three checks, each answering a question the others cannot.
+
+`check_dims.py` — every video's dimensions, and whether any side is odd. Cheap (no frame
+decoding), and it is the precondition for the tearing bug rather than proof of absence.
+
+`check_drift.py` — an early and a late frame compared over the static top band, judged on
+the **mean**. Top-down only; `--exclude /camera/` is the default and the docstring says why.
+
+`check_arms_differ.py [camera|topdown]` — the one specific to a multi-arm batch. It takes a
+scene every arm rendered and compares a late frame across arms. Each arm's footage has to
+come from **its own** `rollout.asl` poses, and if the replay had reused one arm's requests
+the videos would be identical — which would not look like a bug, it would look like evidence
+that pruning changes nothing. The control is a file against itself and must read exactly 0.
+
+Measured on the 2026-09-19 eight-arm batch, `origin150`, frame 120 of
+`clipgt-01d503d4`, mean absolute difference from `baseline` (control 0.000):
+
+```
+camera    coc 10.01   dual 9.76   traj 9.67   wanda 6.98   tyrK 4.33   lp 3.36   tyr 1.77
+topdown   coc  5.25   dual 4.89   traj 4.85   wanda 4.62   tyrK 2.27   lp 1.72   tyr 1.72
+```
+
+Run over the whole tree on 2026-09-20: **4,216 videos, 0 odd dimensions, 0 unreadable**
+(1918×1202 ×1984 camera, 1080×720 ×1984 top-down, 1620×1280 ×150 matrix150, 2160×1280 ×98
+matrix_hard100), **drift 0/2232** top-downs, and every arm distinct as above.
+
+4,216 and not 4,217 because `dual_vs_h4_2431387d.mp4` was re-rendered after that scan; it
+was checked on its own (1080×670, drift 0/1).
 
 ## video/dual_vs_h4_2431387d.mp4
 
-`dual` vs `dual+h4` on the scene where they diverge most in the 150-scene matrix.
+`dual` vs `dual+h4` on the scene where they diverge most in the 150-scene matrix. The only
+two-arm file here; rebuild it with two `--arm` flags on one `render_replay.py` call. (It was
+deleted with the first, torn batch and re-rendered on 2026-09-20 -- 1080×670, and the two
+arms' GT paths agree to 0.0000 m, which is the check that they are the same scene.)
 
 ```
 dual     score 1.000  pass      drove 64 m of 61 m
