@@ -48,9 +48,11 @@ from matplotlib.ticker import MaxNLocator
 from PIL import Image
 
 # outputs/ is an untracked symlink and is absent inside a git worktree, so the
-# defaults are absolute; --out-root / --cache override them off-box.
-OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
+# defaults are absolute; --out-root / --cache / --viz-root override them off-box.
+OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")          # read: eval sets and arm dumps
 CACHE = Path("/mnt/nvme1n1/ad_vla/data/physicalai_av/pre_processed/ood/samples")
+# write: figures live in the repo beside closed-loop-viz, not under the outputs mount
+VIZ = Path("/home/cvlab21/project/chan/alpamayo-model-compression/open-loop-viz")
 
 FRONT_CAMERA = 1   # camera_indices is [0, 1, 2, 6]; 1 is the front camera
 K_EVAL = 6         # best-of-6, the reduction the published tables use
@@ -225,8 +227,9 @@ def main():
     ap.add_argument("--bucket", default=None, help="restrict to one bucket")
     ap.add_argument("--k", type=int, default=K_EVAL)
     ap.add_argument("--exp-id", default="viz_oodval")
-    ap.add_argument("--out-root", default=str(OUT))
+    ap.add_argument("--out-root", default=str(OUT), help="where the arm dumps are read from")
     ap.add_argument("--cache", default=str(CACHE))
+    ap.add_argument("--viz-root", default=str(VIZ), help="where the figures are written")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -254,14 +257,14 @@ def main():
                       reverse=args.sort_by == "worst")
             clips = pool[:args.n]
 
-    out_dir = out_root / args.exp_id
+    out_dir = Path(args.viz_root) / args.exp_id
     (out_dir / "plots").mkdir(parents=True, exist_ok=True)
     (out_dir / "config.json").write_text(json.dumps({
         "arms": args.arms, "clips": list(clips), "n": len(clips),
         "sort_by": None if args.clip else args.sort_by,
         "bucket": args.bucket, "k_eval": args.k, "seed": args.seed,
         "manifest": str(out_root / "eval_sets" / "ood_val.parquet"),
-        "cache": args.cache, "n_oodval": len(manifest),
+        "cache": args.cache, "viz_root": args.viz_root, "n_oodval": len(manifest),
         "source": "experiments/evaluation/viz_openloop_ood.py",
     }, indent=2))
 
