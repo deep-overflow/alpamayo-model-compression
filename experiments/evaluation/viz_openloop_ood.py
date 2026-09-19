@@ -158,10 +158,12 @@ def draw_bev(ax, clip, row, arm, xlim, ylim, k=K_EVAL):
               framealpha=0.85, borderaxespad=0)
 
 
-def render(clip_id, arms, rows_by_arm, manifest, out_png, cache=CACHE, k=K_EVAL):
-    """One figure: shared camera panel on the left, one BEV per arm on the right."""
-    t0 = int(manifest.loc[clip_id, "t0_us"])
-    clip = load_clip(clip_id, t0, cache)
+def render(clip_id, clip, t0, arms, rows_by_arm, out_png, k=K_EVAL):
+    """One figure: shared camera panel on the left, one BEV per arm on the right.
+
+    Takes the already-loaded clip: the npz is several MB, so a full 262-clip run
+    would otherwise read and decode each one twice.
+    """
     head = rows_by_arm[arms[0]][clip_id]
 
     # The CoC block is one line per arm plus the reference; size it in inches so the
@@ -271,10 +273,11 @@ def main():
     t = time.time()
     lines = [f"OOD-val open-loop visualization -- arms {' '.join(args.arms)}, best-of-{args.k}",
              f"{len(clips)} clip(s) of {len(manifest)} in the OOD-val manifest", ""]
-    for c in clips:
-        png = render(c, args.arms, rows_by_arm, manifest, out_dir / "plots" / f"{c}.png",
-                     args.cache, args.k)
-        clip = load_clip(c, int(manifest.loc[c, "t0_us"]), args.cache)
+    for n_done, c in enumerate(clips, 1):
+        t0 = int(manifest.loc[c, "t0_us"])
+        clip = load_clip(c, t0, args.cache)
+        png = render(c, clip, t0, args.arms, rows_by_arm,
+                     out_dir / "plots" / f"{c}.png", args.k)
         per = []
         for a in args.arms:
             _, ade, fde = best_of_k(rows_by_arm[a][c], args.k)
@@ -282,8 +285,11 @@ def main():
                        f"(recheck {check_ade(clip, rows_by_arm[a][c]):.1e})")
         line = f"{c}  {rows_by_arm[args.arms[0]][c]['bucket']:<11} " + " | ".join(per)
         lines.append(line)
-        print(line, flush=True)
-        print(f"  -> {png}", flush=True)
+        # summary.txt keeps every row; a full 262-clip run only prints a heartbeat.
+        if len(clips) <= 20:
+            print(f"{line}\n  -> {png}", flush=True)
+        elif n_done % 20 == 0 or n_done == len(clips):
+            print(f"[{n_done}/{len(clips)}] {time.time() - t:.0f}s  last {c}", flush=True)
 
     lines += ["", f"plots in {out_dir / 'plots'}", f"{time.time() - t:.1f}s"]
     (out_dir / "summary.txt").write_text("\n".join(lines) + "\n")
