@@ -233,3 +233,7 @@ wandb/
 # worktrees are ignored, not all of .claude/, so a settings file can still be tracked.
 .claude/worktrees/
 experiments/head_analysis/*_report_template_filled.html
+
+# Rendered OOD-val open-loop figures from viz_openloop_ood.py: 262 PNGs is ~140 MB
+# per arm pair, and every one is rebuildable from the arm dumps and the clip cache.
+open-loop-viz/
