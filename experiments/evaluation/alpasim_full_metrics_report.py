@@ -222,23 +222,9 @@ def fmt_d(v, unit):
 
 
 def table(df, coc, label, n):
-    sub = df[df.set == label]
-    arms = [k for k, *_ in ARMS if k in set(sub.arm)]
-    vals, deltas = {}, {}
-    for key, cfg, _, _ in ARMS:
-        if key not in arms:
-            continue
-        a = sub[sub.arm == key]
-        per = {}
-        for m, *_ in SPEC:
-            if m.startswith("coc_"):
-                per[m] = (coc.get((cfg, n)) or {}).get(m)
-            elif m in a.columns:
-                v = a.groupby("scene")[m].mean()
-                per[m] = float(v.mean()) if len(v) else None
-            else:
-                per[m] = None
-        vals[key] = per
+    vals = arm_values(df, coc, label, n)
+    arms = list(vals)
+    deltas = {}
     for key in arms:
         deltas[key] = {m: (None if key == "baseline" or vals[key].get(m) is None
                            or vals["baseline"].get(m) is None
@@ -265,6 +251,68 @@ def table(df, coc, label, n):
                         + (f"<br><span{cls}>({ds})</span>" if ds else "") + "</td>")
             body += f"<tr><td><code>{nice}</code></td>{tds}</tr>"
     return (f"<div class='scroll'><table><thead><tr><th>metric</th>{head}</tr></thead>"
+            f"<tbody>{body}</tbody></table></div>")
+
+
+def arm_values(df, coc, label, n):
+    """{metric: value} for every arm on one scene set."""
+    sub = df[df.set == label]
+    out = {}
+    for key, cfg, _, _ in ARMS:
+        if key not in set(sub.arm):
+            continue
+        a = sub[sub.arm == key]
+        per = {}
+        for m, *_ in SPEC:
+            if m.startswith("coc_"):
+                per[m] = (coc.get((cfg, n)) or {}).get(m)
+            elif m in a.columns:
+                v = a.groupby("scene")[m].mean()
+                per[m] = float(v.mean()) if len(v) else None
+            else:
+                per[m] = None
+        out[key] = per
+    return out
+
+
+def combined_table(df, coc):
+    """Every metric x 8 arms x both sets in one grid.
+
+    Each arm gets two adjacent columns, origin150 then hard100, so moving along a row
+    compares arms and moving within a pair compares scene sets. Cells carry the absolute
+    value with the vs-baseline difference beside it; the per-set tables below repeat the
+    same numbers with more room if a cell needs reading closely.
+    """
+    per = {lab: arm_values(df, coc, lab, n) for lab, _, n in SETS}
+    arms = [k for k, *_ in ARMS if all(k in per[lab] for lab, _, _ in SETS)]
+
+    head1 = "".join(f"<th colspan='2' class='grp'>{k}</th>" for k in arms)
+    head2 = "".join("<th class='sub'>o150</th><th class='sub h'>h100</th>"
+                    for _ in arms)
+    body = ""
+    for fam in FAMILIES:
+        rows = [x for x in SPEC if x[2] == fam]
+        if not rows:
+            continue
+        body += f"<tr class='fam'><td colspan='{2 * len(arms) + 1}'>{fam}</td></tr>"
+        for m, nice, _, unit, direction in rows:
+            tds = ""
+            for k in arms:
+                for li, (lab, _, _) in enumerate(SETS):
+                    v = per[lab][k].get(m)
+                    b = per[lab]["baseline"].get(m)
+                    d = None if (k == "baseline" or v is None or b is None) else v - b
+                    cls = ""
+                    if d is not None and d != 0 and direction:
+                        good = (d > 0) if direction == "up" else (d < 0)
+                        cls = " good" if good else " bad"
+                    ds = fmt_d(d, unit)
+                    tds += (f"<td class='cell{' h' if li else ''}'>{fmt(v, unit)}"
+                            + (f"<span class='d{cls}'>{ds}</span>" if ds else "")
+                            + "</td>")
+            body += f"<tr><td class='mname'><code>{nice}</code></td>{tds}</tr>"
+    return ("<div class='scroll'><table class='combined'><thead>"
+            f"<tr><th rowspan='2'>metric</th>{head1}</tr><tr>{head2}</tr></thead>"
             f"<tbody>{body}</tbody></table></div>")
 
 
@@ -300,6 +348,19 @@ color:var(--ink);border-bottom:1px solid var(--bd)}
 tbody tr.fam:nth-child(even) td{background:var(--fam)}
 .scroll{overflow-x:auto;margin:1rem 0}
 .good{color:var(--good);font-size:.74rem}.bad{color:var(--bad);font-size:.74rem}
+table.combined{font-size:.74rem}
+table.combined th.grp{text-align:center;border-bottom:1px solid var(--bd);
+border-left:2px solid var(--bd);font-weight:700;color:var(--ink)}
+table.combined th.sub{font-size:.68rem;font-weight:400;padding:.15rem .4rem}
+table.combined th.sub.h,table.combined td.cell.h{background:#F3F1EA}
+table.combined th.sub:not(.h),table.combined td.cell:not(.h){
+border-left:2px solid var(--bd)}
+table.combined td.cell{padding:.3rem .4rem}
+table.combined td.mname{position:sticky;left:0;background:var(--bg);z-index:1}
+table.combined tbody tr:nth-child(even) td.mname{background:var(--stripe)}
+table.combined tr.fam td{position:sticky;left:0}
+span.d{display:block;font-size:.66rem;color:var(--muted);line-height:1.2}
+span.d.good{color:var(--good)}span.d.bad{color:var(--bad)}
 .dim{color:var(--muted)}
 .callout{background:var(--card);border-left:3px solid var(--acc);padding:1rem 1.2rem;
 margin:1.2rem 0;border-radius:0 6px 6px 0}
@@ -359,13 +420,23 @@ def build(df, coc, date):
   얻는다.</p>
 </div>
 
-<h2><span class="num">3.</span>origin150 (150씬 &times; 2 rollout)</h2>
+<h2><span class="num">3.</span>8 arm 통합 (두 세트 나란히)</h2>
+<p>arm 마다 두 칸이다 &mdash; 왼쪽이 <strong>origin150</strong>, 오른쪽(음영)이
+<strong>hard100</strong>. 가로로 읽으면 arm 끼리, 한 쌍 안에서 읽으면 씬 집합끼리
+비교된다. 각 칸은 절대값과 그 아래 무압축 대비 차다. 좁은 칸이라 아래 4·5절이 같은
+수치를 더 넓게 반복한다.</p>
+{combined_table(df, coc)}
+<p class="note">두 세트의 절대값을 <strong>가로질러</strong> 비교하지는 말 것 &mdash;
+난이도가 다르다(무압축 score 0.750 대 0.510). 한 쌍 안에서 읽을 값은 괄호 안의
+<em>무압축 대비 차</em>이고, 그것이 집합 간 비교가 성립하는 유일한 형태다.</p>
+
+<h2><span class="num">4.</span>origin150 (150씬 &times; 2 rollout)</h2>
 {table(df, coc, "origin150", 150)}
 
-<h2><span class="num">4.</span>hard100 (100씬 &times; 2 rollout)</h2>
+<h2><span class="num">5.</span>hard100 (100씬 &times; 2 rollout)</h2>
 {table(df, coc, "hard100", 100)}
 
-<h2><span class="num">5.</span>이 표를 읽을 때</h2>
+<h2><span class="num">6.</span>이 표를 읽을 때</h2>
 <div class="warn">
   <p><strong>게이트를 <code>progress</code> 없이 읽으면 부호가 뒤집힌다.</strong>
   <code>wanda</code> 는 hard100 에서 <code>offroad</code> 가 전 arm 최저인데 점수는
@@ -397,7 +468,7 @@ def build(df, coc, date):
   먼저 인정하고 계획해야 한다.</p>
 </div>
 
-<h2><span class="num">6.</span>재현</h2>
+<h2><span class="num">7.</span>재현</h2>
 <pre>python experiments/evaluation/alpasim_full_metrics_report.py \\
     --out reports/evaluation/{date}_alpasim-all-metrics.html
 
