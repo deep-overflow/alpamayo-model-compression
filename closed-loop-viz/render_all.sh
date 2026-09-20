@@ -14,7 +14,10 @@
 set -uo pipefail
 
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-WT=$REPO/.claude/worktrees/closed-loop-viz
+# Resolve the script directory from $0 rather than naming a worktree. These lived in
+# .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
+# with its session -- after which every `$HERE/...` here pointed at nothing.
+HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ALPASIM=/home/cvlab21/project/chan/alpasim
 RUNS=/home/cvlab21/project/chan/alpasim-runs
 OUT=${OUT:-$REPO/closed-loop-viz/video/matrix150}
@@ -83,7 +86,7 @@ render_one() {
   # whole-scene view alone leaves every car a speck -- the same reason dual/*/topdown uses it.
   [ -n "${ZOOM:-}" ] && args+=(--zoom "$ZOOM")
   cd "$ALPASIM" || return 1
-  if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/render_replay.py" \
+  if CUDA_VISIBLE_DEVICES="" uv run python "$HERE/render_replay.py" \
        --scene "$scene" "${args[@]}" --out "$out" >> "$LOG.$scene" 2>&1; then
     echo "ok    $scene  $(du -h "$out" | cut -f1)" >> "$LOG"
     rm -f "$LOG.$scene"

@@ -15,7 +15,10 @@
 set -uo pipefail
 
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-WT=$REPO/.claude/worktrees/closed-loop-viz
+# Resolve the script directory from $0 rather than naming a worktree. These lived in
+# .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
+# with its session -- after which every `$HERE/...` here pointed at nothing.
+HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ALPASIM=/home/cvlab21/project/chan/alpasim
 # Overridable: the default is the job dir this was first written under, and a job dir goes
 # away with its job. A caller running from a later session passes its own.
@@ -49,11 +52,11 @@ OUT=$REPO/closed-loop-viz/video/$ARM/$SUITE
 LOG=$T/all_${ARM}_${SUITE}.log
 LIST=$T/scenes_${ARM}_${SUITE}.tsv
 
-mkdir -p "$OUT/camera" "$OUT/topdown"
+mkdir -p "$OUT/camera" "$OUT/topdown" "$T"
 : > "$LOG"
 log() { echo "[$(date -u -d '+9 hours' '+%m-%d %H:%M KST')] $*" | tee -a "$LOG"; }
 
-"$REPO/.venv/bin/python" "$WT/closed-loop-viz/scene_scores.py" --run "$RUN" --out "$LIST" \
+"$REPO/.venv/bin/python" "$HERE/scene_scores.py" --run "$RUN" --out "$LIST" \
   >>"$LOG" 2>&1 || { log "씬 목록 생성 실패"; exit 1; }
 n=$(wc -l < "$LIST")
 log "$ARM / $SUITE: 씬 $n개, zoom ±${ZOOM}m, 씬셋 $SCENESET"
@@ -64,7 +67,7 @@ td_one() {
   local out="$OUT/topdown/${score}_${scene}.mp4"
   [ -s "$out" ] && return 0
   cd "$ALPASIM" || return 1
-  if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/render_replay.py" \
+  if CUDA_VISIBLE_DEVICES="" uv run python "$HERE/render_replay.py" \
        --scene "$scene" --arm "$ARM=$RUN" --zoom "$ZOOM" --out "$out" \
        >>"$LOG.td.$scene" 2>&1; then
     echo "td ok   $score $scene" >> "$LOG"; rm -f "$LOG.td.$scene"
@@ -84,7 +87,7 @@ fi
 # ---- camera: one renderer, scenes served serially ---------------------------------------
 if [ "$DO_CAMERA" = 1 ]; then
   GPU=$GPU PORT=$PORT NAME=$NAME SCENESET=$SCENESET \
-    bash "$WT/closed-loop-viz/start_renderer.sh" >>"$LOG" 2>&1
+    bash "$HERE/start_renderer.sh" >>"$LOG" 2>&1
   for _ in $(seq 1 60); do
     docker logs "$NAME" 2>&1 | grep -q "Serving on" && break
     sleep 5
@@ -102,7 +105,7 @@ if [ "$DO_CAMERA" = 1 ]; then
     out="$OUT/camera/${score}_${scene}.mp4"
     [ -s "$out" ] && continue
     cd "$ALPASIM" || exit 1
-    if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/replay_camera.py" \
+    if CUDA_VISIBLE_DEVICES="" uv run python "$HERE/replay_camera.py" \
          --scene "$scene" --config "$RUN" --camera all \
          --endpoint "localhost:$PORT" --out "$out" \
          </dev/null >>"$LOG.cam.$scene" 2>&1; then

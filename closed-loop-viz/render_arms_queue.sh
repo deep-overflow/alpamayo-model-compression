@@ -30,7 +30,10 @@
 set -uo pipefail
 
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-WT=$REPO/.claude/worktrees/closed-loop-viz
+# Resolve the script directory from $0 rather than naming a worktree. These lived in
+# .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
+# with its session -- after which every `$HERE/...` here pointed at nothing.
+HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 RUNS=/home/cvlab21/project/chan/alpasim-runs
 SOOWON=/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root
 T=${T:-/home/cvlab21/project/chan/.claude/jobs/34d28911/tmp}
@@ -130,7 +133,7 @@ one_job() {   # phase, line, gpu, port, name
   GPU="$gpu" PORT="$port" NAME="$name" ZOOM="$ZOOM" \
   TD_WORKERS="$TD_WORKERS" DO_TOPDOWN="$do_td" DO_CAMERA="$do_cam" \
   T="$Q/$phase" \
-    bash "$WT/closed-loop-viz/render_arm_all.sh" >>"$Q/$phase.$arm.$suite.out" 2>&1
+    bash "$HERE/render_arm_all.sh" >>"$Q/$phase.$arm.$suite.out" 2>&1
   local rc=$?
   log "끝   [$phase] $arm / $suite  rc=$rc  $(tail -1 "$Q/$phase/all_${arm}_${suite}.log" 2>/dev/null)"
 }
