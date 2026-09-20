@@ -21,11 +21,11 @@ for v in vids:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
          "-show_entries", "stream=width,height", "-of", "json", str(v)],
-        capture_output=True, text=True)
+        capture_output=True, text=True, check=False)
     try:
         st = json.loads(out.stdout)["streams"][0]
         w, h = int(st["width"]), int(st["height"])
-    except Exception:
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError):
         bad.append(v)
         continue
     sizes[(w, h)] += 1

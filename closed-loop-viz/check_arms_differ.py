@@ -39,7 +39,7 @@ scenes = None
 for a in ARMS:
     got = {p.name.split("_", 1)[1][:-4] for p in (V / a / SUITE / KIND).glob("*.mp4")}
     scenes = got if scenes is None else (scenes & got)
-scene = sorted(scenes)[0]
+scene = min(scenes)
 print(f"{KIND} / {SUITE} / {scene}  (모든 arm 공통 {len(scenes)}씬 중 첫 번째)")
 
 with tempfile.TemporaryDirectory() as td:

@@ -84,13 +84,14 @@ async def read_requests(asl):
             if blob:
                 try:
                     t = pickle.loads(blob).get("reasoning_text")
-                    if t:
-                        s = str(t).strip()
-                        if s.startswith("['") and s.endswith("']"):
-                            s = s[2:-2]
-                        last_coc = s.strip()
-                except Exception:
-                    pass
+                except (pickle.UnpicklingError, EOFError, AttributeError,
+                        ImportError, IndexError, TypeError, ValueError):
+                    t = None          # keep the previous caption rather than blanking it
+                if t:
+                    s = str(t).strip()
+                    if s.startswith("['") and s.endswith("']"):
+                        s = s[2:-2]
+                    last_coc = s.strip()
         elif e.HasField("batch_render_request"):
             reqs.append((e.batch_render_request, last_coc))
     return reqs

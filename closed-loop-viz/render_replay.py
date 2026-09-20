@@ -107,7 +107,8 @@ async def read_rollout(asl):
                     try:
                         t = pickle.loads(blob).get("reasoning_text")
                         txt = str(t) if t else ""
-                    except Exception:
+                    except (pickle.UnpicklingError, EOFError, AttributeError,
+                            ImportError, IndexError, TypeError, ValueError):
                         txt = ""
                 cocs.append((int(ps[0].timestamp_us), txt))
     return {"boxes": boxes, "gt": gt, "gt_t": gt_t, "gt_yaw": gt_yaw,
