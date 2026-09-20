@@ -1,7 +1,10 @@
 # Gradient anatomy: on which tokens, and through which cache layers, does each loss see a unit?
 
 Date: 2026-09-20. Branch: `worktree-why-importance-differs`.
-Status: **awaiting approval — no code written, no GPU used.**
+Status: **approved and run the same day** ("진행해줘", "calib100으로 진행해줘"). Results in the
+Outcome section at the end; write-up in `paper/2026-09-20_why-importance-differs.md` (R9-R13)
+and `reports/evaluation/2026-09-20_gradient-anatomy.html`. Everything between here and
+Outcome is the plan as approved, unedited except for the follow-up section, which is dated.
 
 ## Why
 
@@ -122,8 +125,51 @@ depend on any of these outcomes.
 One Ada card (4–7), to stay on the architecture of `importance_v2_ada` and the per-step
 file. `df` on `/mnt/nvme1n1` first; the output is about 250 MB.
 
+## Follow-up: port map (added 2026-09-20, after the 3-clip smoke run, before any 100-clip result)
+
+Status: **not separately approved.** The user approved the pass above ("진행해줘",
+"calib100으로 진행해줘"). This follow-up is the same measurement at finer resolution (same
+code path, same protocol, same `calib_100`, about 1 GPU-hour on idle Ada cards), run on
+my own judgement because it decides how the main pass's P3 result should be read. It is
+reported as an extension, and the note marks which claims rest on it.
+
+The smoke run's layer sums (stable at 3 clips because each is a sum over 12,288 channels)
+already contradict P3 as written: mid-layer units receive about half of their FM mass
+through cache layers 25-35, so "the expert's read ports end around layer 24" is wrong. But
+they also show the band 22-24 -- three layers -- carrying more of those units' FM gradient
+than any other band, and closing exactly where `I_traj` steps down (a unit in layer l can
+only write into cache layers above l). Six bands cannot tell one dense port from a smooth
+profile cut at an unlucky boundary. `run_port_map.py` repeats D2 at single-cache-layer
+resolution, crossed with the position group of the cache entries (vision / everything
+else): 72 partial-seed backwards per clip, FM only, same protocol, `calib_100`.
+
+It also replaces mass shares with an additive decomposition. `E|G_part|` shares do not
+add up (cancellation index 1.2-1.7 at six bands, worse at 72 parts). The signed share
+`sum_u G_part,u * sign(G_full,u)` does: summed over all ports it returns
+`sum_u |G_full,u|`, the layer's shipped `I_traj`. So `I_traj(l) = sum_m S(m, l)` exactly
+(up to the bf16 floor), with `S(m, l) = 0` for `m <= l`.
+
+Predictions, written before the port-map data exist:
+
+- **PM1 (a port, not a boundary)**: for units in layers 16-21 (MLP), the per-cache-layer
+  signed share peaks at a cache layer in 22-24, and those three layers carry >= 30% of
+  the units' `I_traj`. *If the profile over cache layers is flat or peaks elsewhere, the
+  band result was an artefact of where the bands were cut.*
+- **PM2 (the step is ports closing)**: write the fall `I_traj(21) - I_traj(23)` as
+  [share through cache layers 22-23, which a layer-23 unit cannot reach] + [change in the
+  share through cache layers >= 24]. The first term is >= 50% of the fall. *If it is
+  below 25%, the step is not a port effect: late units simply write less of what the
+  expert reads, through the same ports.*
+- **PM3 (what is read there)**: for ports m >= 22 more than half of the signed share
+  enters through non-vision cache entries; for ports m <= 15, through vision entries.
+
+Cost: about 35 s per clip (a backward seeded at cache layer m only traverses layers below
+m), three cards in round-robin shards, roughly 20 minutes.
+
 ## Files
 
+- `experiments/head_analysis/run_port_map.py` / `analyze_port_map.py` (follow-up) →
+  `outputs/portmap_v1_s{0,1,2}/`, merged into `outputs/portmap_v1/`.
 - `experiments/head_analysis/prune_lib.py`: add `TypedUnitGates` as a new class. No
   existing code path changes; `UnitGates` stays as it is.
 - `experiments/head_analysis/run_gradient_anatomy.py` → `outputs/gradanat_v1/`
@@ -143,3 +189,52 @@ file. `df` on `/mnt/nvme1n1` first; the output is about 250 MB.
 - Own-rollout teacher forcing, one model, one calibration set of 100 clips. R2 of the note
   suggests the calibration set does not matter for depth structure, but that was shown
   for the pooled score only.
+
+## Outcome (2026-09-20)
+
+Runs: `outputs/gradanat_v1` (100 clips, one Ada card, 12 s/clip, peak 42.8 GB, no NaN),
+`outputs/gradanat_verify` (3 clips, `--verify`), `outputs/portmap_v1` (100 clips in three
+shards, 30 s/clip, peak 40.9 GB). Analysis: `analyze_gradient_anatomy.py`,
+`analyze_port_map.py`; each run directory has `summary.txt`, `metrics_analysis.json`, `plots/`.
+
+One design change after the smoke test, before the 100-clip run: D1 for the FM loss is read
+off a **single full-seed backward** (the shipped operation), not off the sum of the six band
+backwards, so P1 and P2 are exact splits of the shipped score. That is 13 VLM backwards per
+clip instead of 12. The residual-gradient fallback was measured in the same pass.
+
+Two smaller deviations from the text above. The per-clip MLP arrays *were* kept, for the
+two type-resolved scores only (signed fp32, 1.8 GB), so the MLP ceilings come from random
+disjoint halves like the Q-head ones rather than from parity accumulators. And three
+analyses were added that no gate rests on: the additive (signed-share) split by token type,
+the same-token comparison at CoC positions only and at prompt-text positions only, and the
+ratio `I_traj / I_CoC` by token type.
+
+| gate | pre-registered | measured | verdict |
+|---|---|---|---|
+| G0 (a) typed grads sum to the single gate | rel err < 1e-3 | max 6.0e-06 (3 clips x 13 backwards) | **PASS** |
+| G0 (b) seed splits sum to the full-seed backward | rel err < 1e-3 | median layer 3.2e-03, worst layer of a clip: median 1.3e-02, max 4.0e-02; rank rho >= 0.961 | **NOT MET** -- bf16 rounding floor, the same one `analyze_stepvlm` V0 measured (~5e-3 median) and set 2e-2 for. Affects P3/P4 only |
+| G0 (c) reproduces `importance_v2_ada` | Q-head rho >= 0.99 in every layer | Q min 0.9996 / 0.9993, MLP min 1.0000 / 1.0000 (traj / CoC) | **PASS** |
+| P1 CE on text-side late, on vision early | < 0.35 (L6-17), > 0.65 (L27-34) | Q 0.404 / 0.940, MLP 0.337 / 0.930 | late clause passes on both axes; early clause misses on Q by 0.05 |
+| P1 FM stays on vision | > 0.65 in both bands | Q 0.605 / **0.333**, MLP 0.754 / **0.276** | **FAIL** -- the FM gradient also leaves the vision tokens |
+| P2 same-token agreement (Q, vision, L22-34, corrected) | >= 0.70 supports, <= 0.45 refutes | **0.786** (ceilings 0.84 / 0.90; pooled 0.38) | **SUPPORTED** |
+| P3 late cache layers are minor ports | < 0.20 (> 0.40 refutes) | Q 0.417, MLP 0.433 | **REFUTED** |
+| P4 FM enters through vision cache entries | >= 0.65 at every unit depth | mean 0.35 / 0.38, min 0.15 / 0.20 | **FAIL** |
+| PM1 cache 22-24 is a port, not a band artefact | peak in 22-24, >= 0.30 | peak at 22, 0.431 on both axes | **PASS** |
+| PM2 the `I_traj` step is ports closing | closed-port term >= 50% of the fall | MLP 89.5%, Q 72.6% | **PASS** |
+| PM3 late ports are read at non-vision entries | vision share < 0.5 for m >= 22, > 0.5 for m <= 15 | 0.39 / 0.36 vs 0.78 / 0.89 | **PASS** |
+
+What I got wrong, stated plainly:
+
+- I expected the FM gradient to stay on vision tokens in late layers. It does not: both
+  scores move from vision tokens to text-side tokens over the same layers (additive vision
+  share, MLP: `I_traj` 0.90 -> 0.26, `I_CoC` 0.75 -> 0.02). P2 passed anyway, because what it
+  tests -- agreement at matched tokens -- does not depend on that picture.
+- I expected the expert's useful ports to end near cache layer 24. They do not: cache layers
+  25-35 carry 42-43% of a mid-layer unit's FM mass. The step is still a port effect, but a
+  different one: cache layers 21-23 are the densest port in the network (35-41% of all VLM
+  `I_traj`; layer 22 alone 19-22%), and a unit above them cannot write into them.
+- I expected the expert to reach units through vision cache entries. Only 35-38% does; the
+  ~16 generated CoC tokens alone carry 29-32%.
+
+The 3-clip smoke numbers for position shares moved a lot at 100 clips (trunk share through
+late non-vision entries: 0.80 -> 0.44), so nothing from a smoke run is quoted anywhere.

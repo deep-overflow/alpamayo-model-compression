@@ -41,6 +41,25 @@ ranks after layer ~22. These panels ask why, using only stored runs (CPU, no mod
       CoC on another dataset reproduces CoC's ranking, while VQA-NLL and CoC-NLL -- both
       read through the LM head -- disagree as much as trajectory and CoC do.
 
+  fig4_token_handoff_mlp / fig4_token_handoff_q_head      (needs outputs/gradanat_v1)
+      Additive share of each shipped layer score that comes from what the unit does at
+      VISION positions (signed shares; over token types they sum to the layer's score).
+      Both scores hand over from vision to text-side positions across the same layers.
+  fig4_ratio_by_token_mlp / fig4_ratio_by_token_q_head    (needs outputs/gradanat_v1)
+      fig3_ratio_step again, with both scores restricted to the unit's action at vision
+      tokens, and at text-side tokens. The step is absent at vision tokens.
+  fig4_same_token_q_head                                  (needs outputs/gradanat_v1)
+      Ceiling-corrected agreement between the two objectives with both restricted to the
+      same token type, next to the pooled (shipped) agreement. The pre-registered test of
+      whether the late-layer split is a difference in token support.
+  fig4_itraj_ports_mlp / fig4_itraj_ports_q_head          (needs outputs/portmap_v1)
+      I_traj per layer rebuilt from the cache layer the FM gradient arrives through
+      (additive; a unit in layer l cannot reach cache layers <= l). The bars sum to the
+      blue curve of fig1_depth_*.
+  fig4_port_profile                                       (needs outputs/portmap_v1)
+      Share of all VLM I_traj carried by each cache layer, split by whether it enters
+      through vision or non-vision cache entries.
+
 Sources: outputs/importance_v2 (+ importance_perclip.npz), outputs/importance_vqa,
 outputs/importance_dim0 / _dim1, outputs/jlens_v2, and the independent draws listed in
 DRAWS. Numbers quoted in paper/2026-09-20_why-importance-differs.md are written to
@@ -342,10 +361,174 @@ def pair_panels(z, outputs, out):
             print(f"    {name}: L6-21 -> L22-34  {out[f'pairs_{name}']}")
 
 
+def anatomy_panels(outputs, out, exp="gradanat_v1"):
+    path = outputs / exp / "metrics_analysis.json"
+    if not path.exists():
+        print(f"anatomy panels skipped: {path} missing")
+        return
+    print("gradient anatomy")
+    m = json.loads(path.read_text())
+    L = np.arange(N_L)
+    t_vis, t_pt, t_coc = 0, 2, 3  # rows of the (5, 36) share arrays
+    for name, fname in (("mlp", "fig4_token_handoff_mlp"), ("q", "fig4_token_handoff_q_head")):
+        fm = np.array(m["additive_by_type"][f"{name}_fm"]["share_by_type_and_layer"])  # (5, 36)
+        ce = np.array(m["additive_by_type"][f"{name}_ce"]["share_by_type_and_layer"])  # (5, 36)
+        fig, ax = depth_axes("Share of importance from vision tokens", (-0.05, 1.05))
+        ax.plot(L[:LAST], fm[t_vis][:LAST], color=TRAJ, lw=1.5, label=r"$I_{\mathrm{traj}}$")
+        ax.plot(L, ce[t_vis], color=COC, lw=1.5, label=r"$I_{\mathrm{CoC}}$")
+        ax.axhline(0, color="black", lw=0.7)
+        ax.legend(loc="upper right")
+        save(fig, fname)
+        # hand-off layer: the first layer from which the vision share stays below one half
+        # through layer 32 (a single early dip does not count; Q-head shares are jagged)
+        half = {k: next(l for l in range(6, 33) if (v[t_vis][l:33] < 0.5).all())
+                for k, v in (("traj", fm), ("coc", ce))}
+        out[f"handoff_{name}"] = {
+            "traj_vision": [float(fm[t_vis][6:18].mean()), float(fm[t_vis][27:LAST].mean())],
+            "coc_vision": [float(ce[t_vis][6:18].mean()), float(ce[t_vis][27:LAST].mean())],
+            "traj_text": [float((fm[t_pt] + fm[t_coc])[6:18].mean()), float((fm[t_pt] + fm[t_coc])[27:LAST].mean())],
+            "coc_text": [float((ce[t_pt] + ce[t_coc])[6:18].mean()), float((ce[t_pt] + ce[t_coc])[27:LAST].mean())],
+            "first_layer_below_half": half}
+        print(f"    {name}: vision share L6-17 -> L27-34  {out[f'handoff_{name}']}")
+
+    with np.load(outputs / exp / "anatomy.npz") as z:
+        for name, fname in (("mlp", "fig4_ratio_by_token_mlp"), ("q", "fig4_ratio_by_token_q_head")):
+            parts = {"pooled": (z[f"fm_full_{name}"], z[f"ce_full_{name}"]),
+                     "vision tokens": (z[f"fm_type_{name}"][t_vis], z[f"ce_{name}"][t_vis]),
+                     "text tokens": (z[f"fm_text_{name}"], z[f"ce_text_{name}"])}
+            fig, ax = depth_axes(r"$I_{\mathrm{traj}}\,/\,I_{\mathrm{CoC}}$")
+            out[f"ratio_by_token_{name}"] = {}
+            for (label, (t, c)), col, ls, lw in zip(parts.items(), ("black", TRAJ, PURPLE),
+                                                    ("-", "-", (0, (4, 2))), (1.6, 1.2, 1.2)):
+                tl, cl = t.sum(-1)[:LAST], c.sum(-1)[:LAST]  # (35,) layer sums
+                y = np.log(tl / cl)
+                tau, _, _, r2 = step_fit(y)
+                ax.plot(L[:LAST], np.exp(y), color=col, lw=lw, ls=ls, label=label)
+                out[f"ratio_by_token_{name}"][label] = {
+                    "L0_21": float(np.exp(y[:22].mean())), "L23_34": float(np.exp(y[23:].mean())),
+                    "step_at_23": float(np.exp(y[:22].mean() - y[23:].mean())),
+                    "best_step_tau": int(tau), "best_step_r2": float(r2),
+                    "traj_L18_21_to_L24_29": float(tl[24:30].mean() / tl[18:22].mean()),
+                    "coc_L18_21_to_L24_29": float(cl[24:30].mean() / cl[18:22].mean())}
+            ax.set_yscale("log")
+            ax.set_yticks([1, 2, 5, 10, 20])
+            ax.set_yticklabels(["1", "2", "5", "10", "20"])
+            ax.set_ylim(0.6, 45)
+            legend_above(ax, 3)
+            save(fig, fname)
+            print(f"    {name} ratio by token: {out[f'ratio_by_token_{name}']}")
+
+    fig, ax = depth_axes(r"Corrected rank agreement ($\rho$)", (-0.3, 1.1))
+    series = (("pooled (the shipped score)", "pooled", "black", "-", 1.6),
+              ("both at VISION positions", "vision tokens only", TRAJ, "-", 1.1),
+              ("both at TEXT-side positions", "text tokens only", PURPLE, (0, (4, 2)), 1.1))
+    out["same_token_q"] = {}
+    for key, label, col, ls, lw in series:
+        b = m["P2"]["q"][key]
+        st, sc, cr = (np.array(b["per_layer"][k]) for k in ("self_traj", "self_coc", "cross"))
+        ok = (st > 0.2) & (sc > 0.2)
+        y = np.where(ok, cr / np.sqrt(np.where(ok, st * sc, 1.0)), np.nan)
+        ax.plot(L[:LAST], y, color=col, lw=lw, ls=ls, label=label)
+        out["same_token_q"][label] = {"early": b["early"]["corrected"], "late": b["late"]["corrected"],
+                                      "late_self": [b["late"]["self_traj"], b["late"]["self_coc"]],
+                                      "late_layers_used": b["late"]["layers_used"]}
+    for key in ("both at CoC positions only", "both at prompt-text positions only",
+                "traj at vision vs CoC at text", "traj: vision vs text-side", "CoC: vision vs text-side"):
+        b = m["P2"]["q"][key]
+        out["same_token_q"][key] = {"early": b["early"]["corrected"], "late": b["late"]["corrected"]}
+    out["same_token_mlp"] = {k: {"early": v["early"]["corrected"], "late": v["late"]["corrected"]}
+                             for k, v in m["P2"]["mlp"].items()}
+    out["anatomy_gates"] = {
+        "G0_typed_sum_relerr_max": m["G0"].get("typed_vs_single_relerr_max"),
+        "G0_seed_split_relerr_median_layer": m["G0"]["split_vs_full_relerr_median_layer"],
+        "G0_seed_split_relerr_worst": m["G0"]["split_vs_full_relerr_worst_layer_max"],
+        "G0_reproduces_ref": m["G0"]["reproduces_ref"],
+        "P1_pass": m["P1"]["pass"], "P1_q": {k: v for k, v in m["P1"]["q"].items() if not isinstance(v, list)},
+        "P1_mlp": {k: v for k, v in m["P1"]["mlp"].items() if not isinstance(v, list)},
+        "P2_decisive_value": m["P2"]["decisive_value"], "P2_verdict": m["P2"]["verdict"],
+        "P3_verdict": m["P3"]["verdict"],
+        "P3_late_cache_share": [m["P3"]["q"]["late_cache_share_units_L8_21"],
+                                m["P3"]["mlp"]["late_cache_share_units_L8_21"]],
+        "P4_pass": m["P4"]["pass"],
+        "P4_vision_share_mean": [m["P4"]["q"]["vision_share_mean"], m["P4"]["mlp"]["vision_share_mean"]],
+        "P4_share_by_type_mlp": m["P4"]["mlp"]["share_mean_by_type"],
+        "residual_cosine": {k: v for k, v in m["residual_cosine"].items() if not isinstance(v, list)}}
+    ax.axhline(0, color="black", lw=0.7)
+    legend_above(ax, 3)
+    save(fig, "fig4_same_token_q_head")
+    print(f"    same-token agreement (Q): {out['same_token_q']}")
+
+
+def port_panels(outputs, out, exp="portmap_v1"):
+    path = outputs / exp / "port_map.npz"
+    if not path.exists():
+        print(f"port panels skipped: {path} missing")
+        return
+    print("port map")
+    L = np.arange(N_L)
+    groups = (("cache 1-21", 0, 22, "#BBBBBB"), ("cache 22-24", 22, 25, "#E69F00"),
+              ("cache 25-29", 25, 30, "#56B4E9"), ("cache 30-35", 30, 36, TRAJ))
+    with np.load(path) as z:
+        for name, fname in (("mlp", "fig4_itraj_ports_mlp"), ("q", "fig4_itraj_ports_q_head")):
+            S = z[f"{name}_signed"].sum((1, 2))  # (36 cache layers, 36 unit layers)
+            full = z[f"{name}_full"]  # (36,)
+            fig, ax = depth_axes("Normalized importance", (0, 1.05), shade=False)
+            bottom = np.zeros(LAST)
+            for label, lo, hi, col in groups:
+                y = S[lo:hi, :LAST].sum(0) / full.max()
+                ax.bar(L[:LAST], y, bottom=bottom, color=col, width=0.9, lw=0, label=label)
+                bottom += y
+            ax.plot(L[:LAST], full[:LAST] / full.max(), color="black", lw=0.9, label=r"$I_{\mathrm{traj}}$")
+            legend_above(ax, 3)
+            save(fig, fname)
+            out[f"ports_{name}"] = {
+                "rebuilt_over_shipped_min_max": [float((S.sum(0)[:LAST] / full[:LAST]).min()),
+                                                 float((S.sum(0)[:LAST] / full[:LAST]).max())],
+                "units_16_21_share_by_group": {g[0]: float(S[g[1]:g[2], 16:22].sum() / full[16:22].sum())
+                                               for g in groups},
+                "fall_21_to_23": float(full[21] - full[23]),
+                "closed_ports_share_of_fall": float(S[22:24, 21].sum() / (S[:, 21].sum() - S[:, 23].sum()))}
+            print(f"    {name}: {out[f'ports_{name}']}")
+        Sp = z["mlp_signed"].sum(2)  # (36, 2, 36) cache layer x position group x unit layer
+        tot = Sp.sum(2) / z["mlp_full"][:LAST].sum()  # (36, 2)
+        fig, ax = depth_axes(r"Share of all $I_{\mathrm{traj}}$", shade=False)
+        ax.bar(L, tot[:, 0], color=TRAJ, width=0.85, lw=0, label="through vision cache entries")
+        ax.bar(L, tot[:, 1], bottom=tot[:, 0], color="#E69F00", width=0.85, lw=0,
+               label="through text-side entries")
+        ax.set_xlabel("VLM cache layer")
+        ax.set_xticks([0, 7, 14, 21, 28, 35])
+        legend_above(ax, 1)
+        save(fig, "fig4_port_profile")
+        for name in ("mlp", "q"):
+            prof = z[f"{name}_signed"].sum((1, 2, 3))[:N_L] / z[f"{name}_full"][:LAST].sum()  # (36,)
+            out[f"port_profile_{name}"] = {
+                "top_cache_layers": [int(i) for i in np.argsort(prof)[::-1][:5]],
+                "cache_22": float(prof[22]), "cache_21_23": float(prof[21:24].sum()),
+                "cache_le_20": float(prof[:21].sum()), "cache_ge_22": float(prof[22:].sum())}
+        trunk = Sp[:, :, 6:22].sum(2)  # (36, 2)
+        out["ports_trunk_doors"] = {"cache_ge_22": float(trunk[22:].sum() / trunk.sum()),
+                                    "late_nonvision": float(trunk[22:, 1].sum() / trunk.sum()),
+                                    "late_vision": float(trunk[22:, 0].sum() / trunk.sum()),
+                                    "early_vision": float(trunk[:22, 0].sum() / trunk.sum()),
+                                    "early_nonvision": float(trunk[:22, 1].sum() / trunk.sum())}
+        print(f"    trunk doors: {out['ports_trunk_doors']}")
+        print(f"    port profile: {out['port_profile_mlp']} {out['port_profile_q']}")
+    pm = outputs / exp / "metrics_analysis.json"
+    if pm.exists():
+        m = json.loads(pm.read_text())
+        out["port_gates"] = {a: {k: m[a][k] for k in (
+            "pm1_share_by_group", "pm1_argmax_cache_layer", "pm1_pass", "pm2_closed_share_of_fall",
+            "pm2_verdict", "pm2_I21", "pm2_I23", "pm3_vision_share_ports_le15",
+            "pm3_vision_share_ports_ge22", "pm3_pass", "structural_zero_max")} for a in ("mlp", "q")}
+        out["port_gates"]["integrity"] = m["integrity"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs", type=Path, default=REPO / "outputs")
     parser.add_argument("--out-dir", type=Path, default=fc.OUT)
+    parser.add_argument("--anatomy", default="gradanat_v1")
+    parser.add_argument("--portmap", default="portmap_v1")
     args = parser.parse_args()
     fc.OUT = args.out_dir
     o = args.outputs
@@ -360,6 +543,8 @@ def main():
         boundary_panel(z, jl, out)
         text_write_panels(z, jl, out)
         pair_panels(z, o, out)
+    anatomy_panels(o, out, args.anatomy)
+    port_panels(o, out, args.portmap)
     (args.out_dir / "fig3_why_differs_stats.json").write_text(json.dumps(out, indent=2))
     print(f"  {args.out_dir / 'fig3_why_differs_stats.json'}")
 

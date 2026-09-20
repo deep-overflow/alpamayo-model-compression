@@ -138,3 +138,58 @@ identically zero there.
   Caption guard: on the MLP axis every pair falls late, including two halves of the same
   FM loss, so do not read the MLP panel as evidence of objective-specific units without
   the noise-ceiling panel beside it.
+
+## Figure 4 panels: where each loss sees a unit (new GPU measurement)
+
+Same script (`experiments/paper/fig_why_differs.py`); these panels are drawn only when the
+two runs exist, and are skipped with a message otherwise:
+
+- `outputs/gradanat_v1` from `experiments/head_analysis/run_gradient_anatomy.py` +
+  `analyze_gradient_anatomy.py` (100 `calib_100` clips, ~20 min on one 48 GB card)
+- `outputs/portmap_v1` from `run_port_map.py` (three shards) + `analyze_port_map.py`
+
+Plan, pre-registered gates and their outcome: `plans/2026-09-20_gradient-anatomy.md`.
+Both runs use the protocol of `importance_v2` unchanged and reproduce
+`importance_v2_ada`'s within-layer ranking at rho >= 0.9993 in every layer.
+
+- `fig4_token_handoff_mlp`, `fig4_token_handoff_q_head`: share of each shipped layer score
+  that is earned where the unit acts on vision tokens. The gate gradient is a sum over
+  token positions; it is split exactly by token type (the parts reproduce the unsplit
+  gradient to 6e-06), and the share is additive: `sum_u G_type,u * sign(G_full,u)` over
+  the layer's `sum_u |G_full,u|`. For a Q head the position is the query position.
+  Layers 6-17 -> 27-34, MLP: `I_traj` 0.90 -> 0.26, `I_CoC` 0.75 -> 0.02; Q heads:
+  0.72 -> 0.35 and 0.63 -> 0.02. The share stays below one half from layer 21 / 18 (MLP,
+  traj / CoC) and 19 / 17 (Q heads).
+  Caption guard: this is where the SCORE is earned. Per-position gradient energy is a
+  different quantity and sits at text-side positions at every depth (97-99.5% for CE).
+- `fig4_ratio_by_token_mlp`, `fig4_ratio_by_token_q_head`: `fig3_ratio_step` with both
+  scores restricted to vision tokens, and to text-side tokens (prompt + generated CoC).
+  Geometric means over layers 0-21 -> 23-34, MLP: pooled 12.9x -> 2.8x, vision 15.0x ->
+  12.4x (best single step R2 0.21), text 6.3x -> 2.1x. Q heads: 14.3x -> 3.1x, 16.7x ->
+  18.2x (R2 0.25), 9.0x -> 1.9x. The levels carry no meaning, as in `fig3_ratio_step`.
+- `fig4_same_token_q_head`: within-layer Spearman agreement between the two objectives for
+  Q heads, corrected for the split-half ceiling of the scores being compared (50 disjoint
+  halves; ceilings 0.78-0.94). Layers 0-21 -> 22-34: pooled 0.85 -> 0.38, both at vision
+  tokens 0.96 -> 0.79 (the pre-registered decisive value, bar 0.70), both at text-side
+  tokens 0.72 -> 0.53. Not drawn: prompt tokens only 0.86 -> 0.81, generated CoC tokens
+  only 0.47 -> 0.41, and within one loss vision vs text-side 0.35-0.48.
+  Caption guard: layers where a ceiling falls below 0.2 are left blank rather than
+  corrected; with 100 clips there are none.
+- `fig4_itraj_ports_mlp`, `fig4_itraj_ports_q_head`: `I_traj` per layer rebuilt from the
+  cache layer its gradient arrives through, normalised like `fig1_depth_*` so the bars sum
+  to that figure's blue curve (black line here). Additive by construction:
+  `I_traj(l) = sum_m S(m, l)` with `S(m, l) = E_c sum_u G_m,u sign(G_full,u)`, and
+  `S(m, l) = 0` for `m <= l` because cache layer m is computed before layer m writes.
+  Measured: rebuilt / shipped within 0.05% (MLP) and 0.1% (Q) at every layer, structural
+  zeros exactly 0. Units in layers 16-21 get 43.1% of their `I_traj` through cache layers
+  22-24 on both axes; ports 22-23 closing is 89.5% (MLP) / 72.6% (Q) of the fall between
+  layers 21 and 23.
+  Caption guard: this is the route of the first-order score, not the expert's causal
+  reliance. The knockout map puts 81% of that on cache layers 0-15. Do not caption it
+  "the expert reads the late cache".
+- `fig4_port_profile`: share of all VLM `I_traj` (MLP) carried by each cache layer, split
+  by whether it enters through vision cache entries or all other entries. Cache layer 22
+  carries 19.1% (Q: 22.0%), layers 21-23 34.7% (40.9%), all layers <= 20 together 3.7%
+  (7.2%), layers >= 22 88.8% (84.4%).
+  Caption guard: the partial-seed backwards behind both port panels are linear only up to
+  bf16 rounding (median layer 0.4%, worst layer of a clip 1.5%); quote two digits.
