@@ -257,6 +257,10 @@ It holds the arm→run table (both prefixes, plus llm-pruner's split home) and s
 whose run has no `aggregate/results-summary.json`, so a run still in flight is passed over
 rather than half-rendered.
 
+Every launcher here finds its siblings through its own `$0`, so it runs from wherever the
+directory sits. They used to name `.claude/worktrees/closed-loop-viz`, which is where this
+work was done and which goes away with its session.
+
 **Two phases, not one loop over whole jobs.** The halves want different hardware: top-down
 is pure CPU and camera needs a GPU renderer, so a job run end to end holds a card idle
 through its top-down half. `PHASE=td` is `JOBS_PAR` jobs × `TD_WORKERS` matplotlib

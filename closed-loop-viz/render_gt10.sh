@@ -17,7 +17,10 @@
 set -uo pipefail
 
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-WT=$REPO/.claude/worktrees/closed-loop-viz
+# Resolve the script directory from $0 rather than naming a worktree. These lived in
+# .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
+# with its session -- after which every `$HERE/...` here pointed at nothing.
+HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ALPASIM=/home/cvlab21/project/chan/alpasim
 T=/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp
 
@@ -50,7 +53,7 @@ if [ -n "$TOPDOWN_ARMS" ]; then
     out=$OUT/topdown/$s.mp4
     [ -s "$out" ] && continue
     cd "$ALPASIM" || exit 1
-    if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/render_replay.py" \
+    if CUDA_VISIBLE_DEVICES="" uv run python "$HERE/render_replay.py" \
          --scene "$s" "${tdargs[@]}" --out "$out" >>"$LOG.td.$s" 2>&1; then
       rm -f "$LOG.td.$s"
     else
@@ -73,7 +76,7 @@ else
 fi
 
 # ---- 2. renderer ----------------------------------------------------------------------
-GPU=$GPU PORT=$PORT SCENESET=$SCENESET bash "$WT/closed-loop-viz/start_renderer.sh" >>"$LOG" 2>&1
+GPU=$GPU PORT=$PORT SCENESET=$SCENESET bash "$HERE/start_renderer.sh" >>"$LOG" 2>&1
 for _ in $(seq 1 60); do
   docker logs chan_nre_replay 2>&1 | grep -q "Serving on" && break
   sleep 5
@@ -98,7 +101,7 @@ for s in "${SCENES[@]}"; do
     continue
   fi
   cd "$ALPASIM" || exit 1
-  if CUDA_VISIBLE_DEVICES="" uv run python "$WT/closed-loop-viz/replay_camera.py" \
+  if CUDA_VISIBLE_DEVICES="" uv run python "$HERE/replay_camera.py" \
        --scene "$s" --config "$CONFIG" --camera all \
        --endpoint "localhost:$PORT" --out "$out" >>"$LOG.$s" 2>&1; then
     log "ok   $s  $(du -h "$out" | cut -f1)"
