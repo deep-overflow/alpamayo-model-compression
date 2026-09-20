@@ -560,6 +560,33 @@ test500과 OOD-val은 부호가 반대이므로 세 세트 중 하나이고, 끝
 <code>dual</code>보다 높고, <code>dual</code>만 baseline보다 낮다. 칸끼리의 순서는 없다.</figcaption>
 </figure>
 
+<h4>4.1.1 독립 표본은 이 손해를 재현하지 않는다 (2026-09-19 추가)</h4>
+<div class="warn">
+  <p><strong>사다리의 "자른 칸은 <code>dual</code>보다 아래"라는 판정은 150씬에 한정된
+  것이다.</strong> <code>em93p75</code> 를 150씬과 <strong>서로소</strong>인 어려운
+  100씬에서 돌렸더니 <code>dual</code> 과의 차이가 사라진다.</p>
+  <pre>origin150   dual &minus; em93p75   <b>+0.0355</b> [+0.0005, +0.0726]*  p=0.155   31/23/96
+hard100     em93p75 &minus; dual   <b>+0.0042</b> [&minus;0.0288, +0.0393]   p=0.18    31/18/51</pre>
+  <p>부호까지 뒤집히고 CI 가 0 을 넉넉히 포함한다. 무압축 대비로 보면
+  <code>em93p75</code> 는 hard100 에서 <strong>+0.0892 [+0.0337, +0.1476],
+  p=1.3e&minus;04</strong> 로 <code>dual</code>(+0.0850)보다 오히려 약간 위다 &mdash;
+  제거량이 24.0% 가 아니라 <strong>39.4%</strong> 인데도.</p>
+  <p class="note">150씬 쪽 수치 자체가 경계였다는 점도 같이 봐야 한다 &mdash; CI 하단이
+  +0.0005 로 0 을 겨우 배제하고 Wilcoxon 은 p=0.155 로 반대를 가리킨다. 이 저장소는
+  평균 CI 를 1차로 읽지만, 두 통계가 엇갈리는 칸은 독립 표본이 오면 흔들릴 후보였다.</p>
+  <p><strong>방어되는 문장은 하나로 좁아진다</strong> &mdash; <em>expert MLP 를 93.75%
+  잘라 제거량을 24.0% &rarr; 39.4% 로 키워도, 두 씬 집합 어디에서도 <code>dual</code>
+  대비 손해가 확정되지 않는다.</em> 4절 본문의 "모든 칸이 <code>dual</code>보다 못하다"는
+  <strong>150씬에서만</strong> 성립한다.</p>
+  <p class="note"><strong>범위.</strong> hard100 에서 돌린 것은 <code>em93p75</code>
+  하나다. <code>em75</code> 와 <code>em87p5</code> 는 150씬만 있으므로, 사다리의 나머지
+  두 칸에 대해서는 위 문장을 주장하지 않는다.</p>
+  <p class="note"><strong>CoC 는 이쪽에서도 안 움직인다.</strong> hard100 에서
+  <code>em93p75</code> 퇴화 3.7% 대 <code>dual</code> 3.6%, 길이 78 대 78,
+  unique 0.93 대 0.93. expert MLP 를 93.75% 잘라도 생성은 건드리지 않는다 &mdash; CoC 를
+  쓰는 것은 VLM 이라는 구조와 일치한다.</p>
+</div>
+
 <h3>4.2 같은 계단이 헤드 축에서도 나온다</h3>
 <p>여기까지는 expert MLP 축이었다. 같은 질문을 <strong>VLM의 헤드 축</strong>에 물으면
 &mdash; 24% 예산을 헤드에서 몇 개나 가져오는가 &mdash; 모양이 반복된다. 아래 네 arm은
@@ -778,6 +805,10 @@ alpasim이 정한 프로토콜이고 근거가 있다 &mdash; 자차가 GT 경�
   (p=0.00057, 4 m 절단을 꺼도 유지) 예산이 1.5배인 <code>u30</code>과 구분되지 않는다.
   같은 축을 반대로 민 <code>dual+h4</code>(head 13&rarr;4)가 0.091을 잃은 것과 부호가
   맞는다. <strong>head 13개 선이 이 저장소에서 세 번째로 같은 자리에 나타났다.</strong></p>
+  <p><strong>그리고 사다리의 계단은 150씬의 성질이다.</strong> 4.1.1 이 그 경계를
+  보인다 &mdash; 서로소인 어려운 100씬에서 <code>em93p75</code> 는 <code>dual</code> 과
+  구분되지 않고(+0.0042, p=0.18) 무압축 대비로는 오히려 약간 위다. 아래의 계단 서술은
+  150씬 안에서만 성립한다.</p>
   <p><strong>단, 계단은 얕은 쪽의 성질이다.</strong> 4.4가 그 경계를 보인다 &mdash;
   MLP를 70%까지 파면 기준 선택이 다시 유의해지고(p=0.0091), 한 칸은 CoC를 버려 점수를 올리고
   다른 칸은 충돌이 두 배가 되어도 점수가 안 내려간다. 아래 문장은 그 안쪽에서만 성립한다.</p>
