@@ -35,6 +35,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--slim", required=True, help="slim checkpoint dir, repo-relative")
     ap.add_argument("--out", required=True, help="npz to write, repo-relative")
+    ap.add_argument("--layers", type=int, nargs=2, default=None, metavar=("LO", "HI"),
+                    help="apply the build's mask in layers LO..HI only and keep every other layer "
+                         "whole: not a shipped model, a probe of WHERE the build loses what it loses")
     args = ap.parse_args()
 
     meta = json.loads((REPO / args.slim / "slim_meta.json").read_text())
@@ -49,6 +52,13 @@ def main():
     if removed != meta["params"]["removed"]:
         raise SystemExit(f"the VLM mask removes {removed:,} parameters but the build removed "
                          f"{meta['params']['removed']:,}: something outside the VLM units was cut")
+    if args.layers:
+        lo, hi = args.layers
+        band = np.zeros(len(q), bool)
+        band[lo : hi + 1] = True
+        q[~band], mlp[~band] = 1.0, 1.0
+        removed = int(((1 - q).sum() * HEAD_DIM * HIDDEN * 2) + ((1 - mlp).sum() * HIDDEN * 3))
+        cfg = f"{cfg} in layers {lo}-{hi} only"
     out = REPO / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(out, q_mask=q, mlp_mask=mlp)

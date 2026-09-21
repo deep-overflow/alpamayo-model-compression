@@ -120,6 +120,18 @@ statistic and split-half ceiling is taken among kept units only.
   lowest on both (paired Wilcoxon, p < 0.01) — with a smaller NLL gap between `traj` and
   `coc` than in sample. *If the NLL ordering flips, A2's language half was an in-sample
   artefact and must be reported as one.*
+- **A2-bands (added while B was running; not blind).** A 20-clip partial check of B, made
+  to test the analyzer, showed the scale of B's effects: removing 19% of the late-layer
+  heads moves the FM loss by under 1% whatever the set, while the NLL moves. If that holds,
+  the question that matters for the dual criterion is *at which depth* each single
+  criterion loses each channel. The same run therefore also reads each arm's mask applied
+  in layers 22–35 only and in layers 0–21 only (six more configs, dense elsewhere; the two bands partition the network).
+  Predictions, written with that partial look in hand: (i) late-only masks leave the FM
+  loss within 1% of dense for all three arms, and the late-only `traj` mask raises the NLL
+  more than the late-only `coc` mask (p < 0.01); (ii) trunk-only masks carry the action
+  side — the FM loss rises more under trunk-only `coc` than under trunk-only `traj`
+  (p < 0.01); (iii) for every arm, trunk-only + late-only damage adds up to within 25% of
+  the full mask's damage on both losses.
 
 ## B — token-targeted ablation: does the score anatomy predict function? (GPU ~1 h on four cards)
 
