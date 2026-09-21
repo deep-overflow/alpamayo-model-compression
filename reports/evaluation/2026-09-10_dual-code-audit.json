@@ -1,0 +1,922 @@
+{
+  "scope": {
+    "arms": [
+      "baseline",
+      "dual",
+      "traj",
+      "coc",
+      "dualr",
+      "dualr_rep",
+      "dualr_wl",
+      "dualrwl_em50",
+      "dualrwl_em75",
+      "dualrwl_em87p5",
+      "dualrwl_em93p75",
+      "dualexp_em93p75"
+    ],
+    "method": "CPU artifact/code audit; no GPU rerun; no experiment mutation"
+  },
+  "dual_zero_rank": {
+    "q": {
+      "constant_traj_layers": [
+        35
+      ],
+      "saved_recipe_matches_current_code": true,
+      "neutral_zero_branch_changes": [
+        {
+          "layer": 35,
+          "replacement_count": 4,
+          "retained_overlap": 0.7894736842105263
+        }
+      ],
+      "zero_row_rank_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "mlp": {
+      "constant_traj_layers": [
+        35
+      ],
+      "saved_recipe_matches_current_code": true,
+      "neutral_zero_branch_changes": [
+        {
+          "layer": 35,
+          "replacement_count": 1764,
+          "retained_overlap": 0.761299052774019
+        }
+      ],
+      "zero_row_rank_range": [
+        0.0,
+        1.0
+      ]
+    }
+  },
+  "gate_gradient_check": {
+    "head_matches_contraction": true,
+    "mlp_matches_contraction": true
+  },
+  "expert_znorm": {
+    "score_exact_match": true,
+    "ladder": {
+      "50": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 4128
+      },
+      "75": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 2064
+      },
+      "87p5": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 1032
+      },
+      "93p75": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": true,
+        "kept_per_layer": 516
+      },
+      "96p875": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 258
+      },
+      "98p4375": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 129
+      },
+      "100": {
+        "all_masks_match": true,
+        "vlm_indices_match_wl": true,
+        "state_exists": false,
+        "kept_per_layer": 0
+      }
+    }
+  },
+  "wl_mixture": {
+    "stream_order": [
+      "driving_prefill",
+      "own_coc",
+      "lingo_prefill",
+      "lingo_answer"
+    ],
+    "driving_clips": 100,
+    "qa_samples": 600,
+    "per_sample_weights": [
+      0.6799998879432678,
+      0.03999999910593033,
+      0.1599999964237213,
+      0.11999999731779099
+    ],
+    "actual_mass": [
+      67.99998879432678,
+      3.999999910593033,
+      95.99999785423279,
+      71.99999839067459
+    ],
+    "actual_normalized_coefficients": [
+      0.28333330441059157,
+      0.01666666733928857,
+      0.40000001614292563,
+      0.30000001210719424
+    ],
+    "lingo_segment_overlap_eval": 0
+  },
+  "open_loop_coverage": {
+    "baseline/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "baseline",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.823552766
+    },
+    "baseline/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 3,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "baseline",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.841710668
+    },
+    "baseline/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "baseline",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.9995417938931298
+    },
+    "dual/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dual_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8904264760000001
+    },
+    "dual/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dual_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.9497647100000002
+    },
+    "dual/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 3,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dual_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.1192110114503817
+    },
+    "traj/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_traj_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.950332264
+    },
+    "traj/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_traj_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.00757054
+    },
+    "traj/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_traj_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.1782480839694658
+    },
+    "coc/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_coc_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.5577106800000002
+    },
+    "coc/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_coc_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.583721342
+    },
+    "coc/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 4,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_coc_u40_v2",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.5459866908396946
+    },
+    "dualr/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8143288740000001
+    },
+    "dualr/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.860152334
+    },
+    "dualr/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 1,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.1063834847328244
+    },
+    "dualr_rep/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_rep_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8437155440000002
+    },
+    "dualr_rep/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_rep_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.865733394
+    },
+    "dualr_rep/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_rep_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0344061564885496
+    },
+    "dualr_wl/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_wl_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.827106716
+    },
+    "dualr_wl/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_wl_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.869569314
+    },
+    "dualr_wl/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualr_wl_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0686938816793894
+    },
+    "dualrwl_em50/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em50_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8276292080000001
+    },
+    "dualrwl_em50/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em50_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.868768942
+    },
+    "dualrwl_em50/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em50_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0678730877862597
+    },
+    "dualrwl_em75/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8283351560000001
+    },
+    "dualrwl_em75/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8681144399999999
+    },
+    "dualrwl_em75/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0670666984732824
+    },
+    "dualrwl_em87p5/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em87p5_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.829158904
+    },
+    "dualrwl_em87p5/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em87p5_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8676383579999999
+    },
+    "dualrwl_em87p5/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em87p5_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0660953167938931
+    },
+    "dualrwl_em93p75/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em93p75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8306000060000001
+    },
+    "dualrwl_em93p75/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em93p75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8674520359999999
+    },
+    "dualrwl_em93p75/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualrwl_em93p75_u40",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.0645930992366412
+    },
+    "dualexp_em93p75/indist": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualexp_u40_em93p75",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.8937475440000001
+    },
+    "dualexp_em93p75/test": {
+      "n_unique": 500,
+      "raw_rows": 500,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualexp_u40_em93p75",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 0.9505801940000002
+    },
+    "dualexp_em93p75/oodval": {
+      "n_unique": 262,
+      "raw_rows": 262,
+      "files": 2,
+      "duplicate_ids": 0,
+      "conflicting_duplicates": 0,
+      "missing_manifest": 0,
+      "extra_manifest": 0,
+      "calib_overlap": 0,
+      "bad_seed_or_metrics": 0,
+      "gpu_config": "NVIDIA RTX 5880 Ada Generation",
+      "k_config": 8,
+      "model_config": "outputs/slim_dualexp_u40_em93p75",
+      "revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
+      "mean_minADE6": 1.1176362709923664
+    }
+  },
+  "coc_consistency": {
+    "dualrwl_em50/indist": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em50/test": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em50/oodval": {
+      "paired_n": 262,
+      "coc_identical": 262
+    },
+    "dualrwl_em75/indist": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em75/test": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em75/oodval": {
+      "paired_n": 262,
+      "coc_identical": 262
+    },
+    "dualrwl_em87p5/indist": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em87p5/test": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em87p5/oodval": {
+      "paired_n": 262,
+      "coc_identical": 262
+    },
+    "dualrwl_em93p75/indist": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em93p75/test": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualrwl_em93p75/oodval": {
+      "paired_n": 262,
+      "coc_identical": 262
+    },
+    "dualexp_em93p75/indist": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualexp_em93p75/test": {
+      "paired_n": 500,
+      "coc_identical": 500
+    },
+    "dualexp_em93p75/oodval": {
+      "paired_n": 262,
+      "coc_identical": 262
+    }
+  },
+  "closed_loop_coverage": {
+    "common_scenes": 150,
+    "arms": {
+      "baseline": {
+        "scenes": 150,
+        "rollouts": 300,
+        "per_scene_counts": {
+          "2": 150
+        },
+        "null_scores": 0,
+        "mean_score": 0.7495921411422414
+      },
+      "dual": {
+        "scenes": 150,
+        "rollouts": 300,
+        "per_scene_counts": {
+          "2": 150
+        },
+        "null_scores": 0,
+        "mean_score": 0.8282891005465504
+      },
+      "dualr_wl": {
+        "scenes": 150,
+        "rollouts": 300,
+        "per_scene_counts": {
+          "2": 150
+        },
+        "null_scores": 0,
+        "mean_score": 0.782840018163257
+      },
+      "em93p75": {
+        "scenes": 150,
+        "rollouts": 300,
+        "per_scene_counts": {
+          "2": 150
+        },
+        "null_scores": 0,
+        "mean_score": 0.7690625081744754
+      },
+      "dualexp": {
+        "scenes": 150,
+        "rollouts": 300,
+        "per_scene_counts": {
+          "2": 150
+        },
+        "null_scores": 0,
+        "mean_score": 0.7928293232390234
+      }
+    }
+  },
+  "state_checks": {
+    "wl_em93_refit_blocks_equal": 72,
+    "dualexp_dual_blocks_equal": 72,
+    "expert_em93_twin_tensors_equal": 397,
+    "old_dualr_layer35_o_maxabs": 46.25,
+    "wl_layer35_o_maxabs": 2.453125,
+    "dual_layer35_o_maxabs": 0.59765625
+  },
+  "existing_dualfix_control": {
+    "indist": {
+      "n": 500,
+      "median_delta": 0.0,
+      "mean_delta": -0.0007318879999999997,
+      "changed_minADE6": 72,
+      "coc_same": 428
+    },
+    "test": {
+      "n": 500,
+      "median_delta": 0.0,
+      "mean_delta": -0.004002949999999999,
+      "changed_minADE6": 65,
+      "coc_same": 435
+    },
+    "oodval": {
+      "n": 262,
+      "median_delta": 0.0,
+      "mean_delta": -0.012567217557251905,
+      "changed_minADE6": 39,
+      "coc_same": 223
+    }
+  },
+  "lingo_scoring": {
+    "lingo_vqa_baseline": {
+      "n": 500,
+      "unique_keys": 500,
+      "missing_eval_keys": 0,
+      "extra_eval_keys": 0,
+      "accuracy": 0.732,
+      "correct_matches_threshold": true,
+      "generation_config": {
+        "max_gen": 128,
+        "gpu": "NVIDIA RTX 5880 Ada Generation"
+      }
+    },
+    "lingo_vqa_slim_dual_u40_v2": {
+      "n": 500,
+      "unique_keys": 500,
+      "missing_eval_keys": 0,
+      "extra_eval_keys": 0,
+      "accuracy": 0.688,
+      "correct_matches_threshold": true,
+      "generation_config": {
+        "max_gen": 128,
+        "style": "unprompted",
+        "gpu": "NVIDIA RTX 5880 Ada Generation"
+      }
+    },
+    "lingo_vqa_slim_dualr_u40": {
+      "n": 500,
+      "unique_keys": 500,
+      "missing_eval_keys": 0,
+      "extra_eval_keys": 0,
+      "accuracy": 0.418,
+      "correct_matches_threshold": true,
+      "generation_config": {
+        "max_gen": 128,
+        "style": "unprompted",
+        "gpu": "NVIDIA RTX 5880 Ada Generation"
+      }
+    },
+    "lingo_vqa_slim_dualr_rep_u40": {
+      "n": 500,
+      "unique_keys": 500,
+      "missing_eval_keys": 0,
+      "extra_eval_keys": 0,
+      "accuracy": 0.522,
+      "correct_matches_threshold": true,
+      "generation_config": {
+        "max_gen": 128,
+        "style": "unprompted",
+        "gpu": "NVIDIA RTX 5880 Ada Generation"
+      }
+    },
+    "lingo_vqa_slim_dualr_wl_u40": {
+      "n": 500,
+      "unique_keys": 500,
+      "missing_eval_keys": 0,
+      "extra_eval_keys": 0,
+      "accuracy": 0.726,
+      "correct_matches_threshold": true,
+      "generation_config": {
+        "max_gen": 128,
+        "style": "unprompted",
+        "gpu": "NVIDIA RTX 5880 Ada Generation"
+      }
+    }
+  }
+}

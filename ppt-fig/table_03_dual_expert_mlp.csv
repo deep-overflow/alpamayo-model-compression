@@ -1,0 +1,5 @@
+Model,Kept MLP ch. / layer,Removed (%),Test500 / minADE@6 ↓ (m),Test500 / minFDE@6 ↓ (m),OOD-val262 / minADE@6 ↓ (m),OOD-val262 / minFDE@6 ↓ (m),Closed-loop · 150 scenes × 2 rollouts / Scene score ↑,Closed-loop · 150 scenes × 2 rollouts / Collision@fault ↓ (%),Closed-loop · 150 scenes × 2 rollouts / Offroad ↓ (%),Closed-loop · 150 scenes × 2 rollouts / Progress ↑ (ratio)
+Dual,"8,256",24.0,0.9498 (ref.),2.5459 (ref.),1.1192 (ref.),2.8514 (ref.),0.8283 (ref.),2.3 (ref.),6.7 (ref.),0.8276 (ref.)
+Dual + MLP75,"2,064",36.3,0.9495 (−0.0002),2.5429 (−0.0030),1.1182 (−0.0010),2.8480 (−0.0034),0.7895 (−0.0388),3.3 (+1.0 pp),9.0 (+2.3 pp),0.8130 (−0.0146)
+Dual + MLP87.5,"1,032",38.4,0.9499 (+0.0002),2.5418 (−0.0041),1.1181 (−0.0011),2.8464 (−0.0050),0.8117 (−0.0166),3.3 (+1.0 pp),7.7 (+1.0 pp),0.8251 (−0.0025)
+Dual + MLP93.75,516,39.4,0.9506 (+0.0008),2.5386 (−0.0073),1.1176 (−0.0016),2.8440 (−0.0074),0.7928 (−0.0355),3.0 (+0.7 pp),8.3 (+1.7 pp),0.8163 (−0.0112)

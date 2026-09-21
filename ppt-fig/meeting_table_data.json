@@ -1,0 +1,1162 @@
+{
+  "main": [
+    {
+      "method": "Dense",
+      "checkpoint": "baseline",
+      "removed": 0,
+      "removed_pct": 0.0,
+      "val_ade6": 0.823552766,
+      "test_ade6": 0.841710668,
+      "ood_ade6": 0.9995417938931298,
+      "val_fde6": 2.204982282,
+      "test_fde6": 2.267295438,
+      "ood_fde6": 2.495888790076336,
+      "closed_score": 0.7495921411422414,
+      "collision_at_fault": 0.04,
+      "offroad": 0.07,
+      "progress_clipped_rel": 0.7467098432937903,
+      "lingo_pct": 73.2
+    },
+    {
+      "method": "Wanda",
+      "checkpoint": "slim_wanda_u40_v2",
+      "removed": 2657452032,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 2.700496584,
+      "test_ade6": 2.97535795,
+      "ood_ade6": 2.7897793053435116,
+      "val_fde6": 7.513858804,
+      "test_fde6": 8.268687914000001,
+      "ood_fde6": 6.883986370229008,
+      "closed_score": 0.6211557161746274,
+      "collision_at_fault": 0.14666666666666667,
+      "offroad": 0.09333333333333334,
+      "progress_clipped_rel": 0.6922005406318481,
+      "lingo_pct": 9.2
+    },
+    {
+      "method": "LLM-Pruner",
+      "checkpoint": "lp_r50",
+      "removed": 2768240640,
+      "removed_pct": 24.987445004185183,
+      "val_ade6": 1.2794492679999998,
+      "test_ade6": 1.4513278719999998,
+      "ood_ade6": 1.6621828396946563,
+      "val_fde6": 3.362724668,
+      "test_fde6": 3.8885237080000006,
+      "ood_fde6": 4.153374454198473,
+      "closed_score": 0.8104672001388408,
+      "collision_at_fault": 0.056666666666666664,
+      "offroad": 0.03666666666666667,
+      "progress_clipped_rel": 0.8108354558282584,
+      "lingo_pct": 44.800000000000004
+    },
+    {
+      "method": "Týr-the-Pruner",
+      "checkpoint": "slim_tyr_u40_r",
+      "removed": 2657452032,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 0.845672696,
+      "test_ade6": 0.95033979,
+      "ood_ade6": 1.1764630152671756,
+      "val_fde6": 2.1991409699999998,
+      "test_fde6": 2.5701944360000004,
+      "ood_fde6": 2.9895593015267177,
+      "closed_score": 0.7863582970321112,
+      "collision_at_fault": 0.03,
+      "offroad": 0.08666666666666667,
+      "progress_clipped_rel": 0.7942536277877945,
+      "lingo_pct": 34.2
+    },
+    {
+      "method": "Traj",
+      "checkpoint": "slim_traj_u40_v2",
+      "removed": 2657452032,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 0.950332264,
+      "test_ade6": 1.00757054,
+      "ood_ade6": 1.1782480839694658,
+      "val_fde6": 2.492374726,
+      "test_fde6": 2.7203332380000003,
+      "ood_fde6": 2.959733290076336,
+      "closed_score": 0.7829697519232699,
+      "collision_at_fault": 0.03333333333333333,
+      "offroad": 0.08666666666666667,
+      "progress_clipped_rel": 0.8049335458014123,
+      "lingo_pct": 37.0
+    },
+    {
+      "method": "CoC",
+      "checkpoint": "slim_coc_u40_v2",
+      "removed": 2657452032,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 1.5577106800000002,
+      "test_ade6": 1.583721342,
+      "ood_ade6": 1.5459866908396946,
+      "val_fde6": 4.324084906,
+      "test_fde6": 4.499582594,
+      "ood_fde6": 4.009596671755726,
+      "closed_score": 0.6604243218250295,
+      "collision_at_fault": 0.07333333333333333,
+      "offroad": 0.09,
+      "progress_clipped_rel": 0.6849025349478819,
+      "lingo_pct": 30.2
+    },
+    {
+      "method": "Dual",
+      "checkpoint": "slim_dual_u40_v2",
+      "removed": 2657452032,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 0.8904264760000001,
+      "test_ade6": 0.9497647100000002,
+      "ood_ade6": 1.1192110114503817,
+      "val_fde6": 2.330427318,
+      "test_fde6": 2.5458937799999997,
+      "ood_fde6": 2.8514021603053434,
+      "closed_score": 0.8282891005465504,
+      "collision_at_fault": 0.023333333333333334,
+      "offroad": 0.06666666666666667,
+      "progress_clipped_rel": 0.8275927564524262,
+      "lingo_pct": 68.8
+    }
+  ],
+  "llm_pruner_dual_backup": {
+    "val_ade6": 1.159543212,
+    "test_ade6": 1.2648990600000003,
+    "ood_ade6": 1.4006725610687025,
+    "lingo_pct": 61.8,
+    "closed_score": 0.8162384573869914
+  },
+  "metric_definitions": {
+    "open_loop": "Mean over clips of independent per-metric minima over samples 0:6; ADE/FDE in meters, trajectory horizon 6.4 s.",
+    "collision_at_fault": "Fraction of rollouts with collision_at_fault=1; stored as fraction, tables show percent.",
+    "offroad": "Fraction of rollouts with offroad=1; stored as fraction, tables show percent.",
+    "progress": "Mean progress_clipped_rel over all rollouts; ratio relative to the full GT trajectory, not a percent.",
+    "closed_score": "Average the two rollout scores in each scene, then average over scenes. Main/expert MLP: 150 scenes (300 rollouts); Hard100: 100 scenes (200 rollouts).",
+    "hard100_missing_metrics": "Hard100 contains missing observations. See hard100.aggregation for the historical denominator and progress convention; common_observed uses 96 scenes (192 rollouts) for every metric.",
+    "lingo_pct": "Native VQA, unprompted, Lingo-Judge accuracy over 500 questions.",
+    "composition_parentheses": "Performance cells show absolute mean (signed change from Dual). Rate changes are percentage points; other changes use the metric's original unit."
+  },
+  "dual_vs_llm_closed": {
+    "mean": 0.017821900407709642,
+    "lo": -0.028866244807950955,
+    "hi": 0.06574715216218273
+  },
+  "hard100": {
+    "suite": "public_2601_hard100",
+    "n_scenes": 100,
+    "rollouts_per_scene": 2,
+    "scene_ids": [
+      "clipgt-288829f8-8808-46dc-a7e0-29ed1f7fddbc",
+      "clipgt-28e3a9ca-66bc-4d25-a684-fefd43da3e88",
+      "clipgt-29fb826a-9b22-4a1d-8e51-b8d5bee542e5",
+      "clipgt-2f380e80-0b15-4d00-a03b-a107106ab0c9",
+      "clipgt-3232fdb7-2b72-4e25-8726-4d9b28281e1e",
+      "clipgt-3717cd19-ac06-4d95-8225-0b92c04ada41",
+      "clipgt-39f3ab94-d506-421a-9f85-3b7dd00094c1",
+      "clipgt-3b934c9a-3172-4a85-91a0-6e3fd0c9f05c",
+      "clipgt-411ee080-8d8a-4ba5-a6f0-4a19b939ee1f",
+      "clipgt-45eb781a-8712-4fd9-8563-02ef9800eacd",
+      "clipgt-45fed0d9-1f8d-4d36-a15e-efb4c33eca6c",
+      "clipgt-460a9160-90dd-448b-beef-afbf75a33d7c",
+      "clipgt-474e4031-322b-4427-a5fb-0eec4ae23264",
+      "clipgt-48c8d69a-7e42-4615-a260-ac27faa07e7f",
+      "clipgt-4a091b74-4ba0-46e3-90bb-be1370076319",
+      "clipgt-4b673ab0-c718-4e65-b6a7-89d85608fdec",
+      "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+      "clipgt-5240502c-001a-4f02-aed9-da86a4d307d1",
+      "clipgt-59a2e98b-938b-42cb-9901-4429ab7c4534",
+      "clipgt-5c1b7555-64fa-4ae4-98bf-4cf24e6de0a4",
+      "clipgt-5c871a72-ca26-4e8a-9bca-0736260285ea",
+      "clipgt-5d2827ec-3b1c-47e3-bf78-1e2003b7209f",
+      "clipgt-5dde348a-e6d1-4b78-bbea-f60a963a277f",
+      "clipgt-610b3fc7-8d43-4342-ac2e-6f6d6b8b16e9",
+      "clipgt-61106668-1a33-4ca1-9e64-4041381a37f4",
+      "clipgt-63844633-ef7c-4c48-8a61-a50af34b9e09",
+      "clipgt-655dfa49-1d51-45a3-b6f4-0856db73c414",
+      "clipgt-68e53160-f9d1-4070-9434-bf50c55652d3",
+      "clipgt-6b5ca926-4526-412b-bd26-500a3b4b8695",
+      "clipgt-6bec4e02-ae49-4092-9d66-136ee490e138",
+      "clipgt-6db8921b-e103-4cd4-901c-b2726849be7a",
+      "clipgt-700e4d24-205c-4419-a359-1731a4264b0f",
+      "clipgt-73ee2cdb-1b63-4b6a-93f6-3b73af8ede2b",
+      "clipgt-7cccce33-647f-4dfe-b643-eae78e6733de",
+      "clipgt-7cd29a50-39b9-40d3-8ab5-d75a7efe7bc1",
+      "clipgt-7ce9e86e-c63f-4f0e-97cd-072c9ab24a88",
+      "clipgt-7dc59d0d-7582-48b2-a6f9-2d7288b2c556",
+      "clipgt-832cd2b0-57b0-4f4e-9be1-a70b38371bbc",
+      "clipgt-85e8df35-1c8b-4236-a64d-45e79324f69a",
+      "clipgt-89d4188e-982c-4f29-a966-2ed03f6be864",
+      "clipgt-8f8d5705-944e-4051-ab25-66a230a11dce",
+      "clipgt-90d1908c-9fdc-40ea-a5a1-351240aa323e",
+      "clipgt-93982b71-92af-4cf6-8447-00d619f50ad3",
+      "clipgt-96eb4700-3f26-4629-86df-7e736935f51d",
+      "clipgt-994cb976-c692-4103-92e9-81f04e61959a",
+      "clipgt-9f2f1c8b-8d42-4021-b3b1-1dbd6b68d47b",
+      "clipgt-a0eef9d8-6a3b-4a33-9a14-92f699a1aee3",
+      "clipgt-a32549eb-9106-4357-b6a7-b4fa4b025c78",
+      "clipgt-a5c06f4f-de00-44d1-add2-0a89818a3b0b",
+      "clipgt-a6941bb6-6c7f-4842-8134-ac84bd95fe44",
+      "clipgt-a6db4919-62db-4da9-bde9-ea065d018562",
+      "clipgt-a9c81fec-e33f-4363-8634-ca789045b0c9",
+      "clipgt-aaf093de-2f7a-444d-97bc-296b681fd996",
+      "clipgt-ab09743b-ac37-403b-b84e-29089fc58474",
+      "clipgt-ab7e9102-dfb7-44a2-affa-dd85ee411886",
+      "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+      "clipgt-af093ead-13fa-4634-ba5f-108434543aae",
+      "clipgt-af4bd2e0-7205-413c-ac28-2c5272c3b248",
+      "clipgt-af874fc8-6231-4284-bb68-12f88c7bf12f",
+      "clipgt-afa37955-fae8-4741-bb91-649ca9e3eb5d",
+      "clipgt-b0947992-20f3-4355-903b-92fcddb84528",
+      "clipgt-b1588642-dad4-4ee3-a56f-5337b85ba3ef",
+      "clipgt-b799daf9-2f85-4bb0-8a47-17f96cef1bd5",
+      "clipgt-bae463d3-655b-4b54-ac8e-1c982219d829",
+      "clipgt-bbc53aa8-7009-4139-b7c9-38d71ecfac7f",
+      "clipgt-bcf67ede-1879-4125-ab20-cae5a483d8cb",
+      "clipgt-bd97de34-6f59-455a-93c5-9f469f243b4a",
+      "clipgt-be183bd3-96a4-44fd-988b-bd7d22e4fbdb",
+      "clipgt-c2df5259-0079-4ca8-904a-e3ae7667da27",
+      "clipgt-c390b208-2672-4db5-b8aa-b98019fe03ee",
+      "clipgt-c42044c0-40c8-42f6-8f5b-5b9dc2480b02",
+      "clipgt-c5b21e90-35ec-4578-84d0-e7cecc5ab80c",
+      "clipgt-cc289222-8a2c-486d-9b4f-0db31d1165b7",
+      "clipgt-cdd9448c-8808-46b1-85c1-883bcc5862ff",
+      "clipgt-ce161092-a921-432d-b2d0-2d50fd7779a6",
+      "clipgt-ceb3d0d5-0cb7-4415-890d-6feae8ea29e2",
+      "clipgt-d07c2655-fcb3-4469-bdfc-518bccc5f3cf",
+      "clipgt-d101f9f0-1539-421f-8b27-971fa745b5ad",
+      "clipgt-d141e3fb-dd01-454e-bc3c-af025415b7cb",
+      "clipgt-d1a25a99-0f02-4730-a076-96f067e92874",
+      "clipgt-d1fca92f-9c5d-437a-aab2-e0bf237ef573",
+      "clipgt-d34673c7-2573-42a4-b771-1a5bf38f7d60",
+      "clipgt-d68c7161-bef6-4342-800f-607127417825",
+      "clipgt-d90fe123-3462-450e-b65f-f37e4eb422d9",
+      "clipgt-db450d95-7096-429a-8a01-dacf94cd4036",
+      "clipgt-df829727-390c-4b7b-b218-597e4e7a530b",
+      "clipgt-e121e37d-b03f-4f25-aa09-5ba5b74b8afb",
+      "clipgt-e1a2da5e-ef4f-4153-bbf2-3c892708977b",
+      "clipgt-e37aa159-7300-4529-a519-0308ddd61134",
+      "clipgt-e742759b-9403-4d6c-9c52-704b81bc5ba9",
+      "clipgt-e86e5751-209e-443f-ac1b-8bdc3827e730",
+      "clipgt-eaba3f6a-3629-42a6-aa86-4bf8dd1f569b",
+      "clipgt-eaf4352c-a194-4b09-a5a1-144c6a0d7dbc",
+      "clipgt-eb7e7674-8022-454e-b957-e7757217b078",
+      "clipgt-f244c735-cb12-4190-8b68-64c90251d3f8",
+      "clipgt-f55825ac-4cd3-4222-8fec-2da2aed646a0",
+      "clipgt-f8f93104-aad2-4fae-b8d0-73378e8e11f5",
+      "clipgt-fa1f799f-b2f3-48d7-a61b-e06c619a5514",
+      "clipgt-fb6d1a18-16cd-45f2-b80d-fa963ff59de3",
+      "clipgt-ff28f961-dd5a-4dba-8fb4-711b510b535c"
+    ],
+    "rows": [
+      {
+        "method": "Dense",
+        "checkpoint": "baseline",
+        "removed": 0,
+        "removed_pct": 0.0,
+        "closed_score": 0.5104620274621995,
+        "collision_at_fault": 0.03,
+        "offroad": 0.265,
+        "progress_clipped_rel": 0.5643879137478052,
+        "recorded_event_counts": {
+          "collision_at_fault": 6,
+          "offroad": 53
+        },
+        "scheduled_rollouts": 200,
+        "observed_rollouts": 196,
+        "missing_metrics": [
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "6b2e5214-a85a-11f1-a143-ef1875a7c30b",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "6b32fc42-a85a-11f1-a143-ef1875a7c30b",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "5d73ddf6-a85a-11f1-af49-65c4fcc3ff53",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "5d77d32a-a85a-11f1-af49-65c4fcc3ff53",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          }
+        ],
+        "closed_delta_vs_dense": null
+      },
+      {
+        "method": "LLM-Pruner",
+        "checkpoint": "lp_r50",
+        "removed": 2768240640,
+        "removed_pct": 24.987445004185183,
+        "closed_score": 0.5752695803407266,
+        "collision_at_fault": 0.035,
+        "offroad": 0.16,
+        "progress_clipped_rel": 0.5816709201338321,
+        "recorded_event_counts": {
+          "collision_at_fault": 7,
+          "offroad": 32
+        },
+        "scheduled_rollouts": 200,
+        "observed_rollouts": 196,
+        "missing_metrics": [
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "4f1a391e-a92a-11f1-838f-617e56841307",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "4f1f1312-a92a-11f1-838f-617e56841307",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "0f851934-a92c-11f1-9150-d5ffe4d19e49",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "0f891f66-a92c-11f1-9150-d5ffe4d19e49",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          }
+        ],
+        "closed_delta_vs_dense": {
+          "mean": 0.06480755287852716,
+          "lo": -0.010501544091606235,
+          "hi": 0.14137965342191322
+        }
+      },
+      {
+        "method": "Týr-the-Pruner",
+        "checkpoint": "slim_tyr_u40_r",
+        "removed": 2657452032,
+        "removed_pct": 23.987414801070244,
+        "closed_score": 0.5855790857577665,
+        "collision_at_fault": 0.02,
+        "offroad": 0.215,
+        "progress_clipped_rel": 0.6272403272579605,
+        "recorded_event_counts": {
+          "collision_at_fault": 4,
+          "offroad": 43
+        },
+        "scheduled_rollouts": 200,
+        "observed_rollouts": 196,
+        "missing_metrics": [
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "e7f74b30-a8e5-11f1-a79c-e590cbc42e5b",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "e7fbef32-a8e5-11f1-a79c-e590cbc42e5b",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "36552c76-a8e5-11f1-89d0-79bbeae25778",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "36d98ef8-a8e5-11f1-aaff-1bca01dab359",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          }
+        ],
+        "closed_delta_vs_dense": {
+          "mean": 0.07511705829556715,
+          "lo": 0.029928767548121613,
+          "hi": 0.12505689684468047
+        }
+      },
+      {
+        "method": "Týr-K",
+        "checkpoint": "slim_tyrK",
+        "removed": 2657452032,
+        "removed_pct": 23.987414801070244,
+        "closed_score": 0.6095439276058966,
+        "collision_at_fault": 0.015,
+        "offroad": 0.21,
+        "progress_clipped_rel": 0.6477248984776228,
+        "recorded_event_counts": {
+          "collision_at_fault": 3,
+          "offroad": 42
+        },
+        "scheduled_rollouts": 200,
+        "observed_rollouts": 196,
+        "missing_metrics": [
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "9aa709f2-ac81-11f1-9b9c-f3f3fa129d57",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "9aabb0ba-ac81-11f1-9b9c-f3f3fa129d57",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "10a47a88-ac85-11f1-8109-e131cff55c1f",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "10a88470-ac85-11f1-8109-e131cff55c1f",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          }
+        ],
+        "closed_delta_vs_dense": {
+          "mean": 0.09908190014369725,
+          "lo": 0.04501683556337327,
+          "hi": 0.15688250300955803
+        }
+      },
+      {
+        "method": "Dual",
+        "checkpoint": "slim_dual_u40_v2",
+        "removed": 2657452032,
+        "removed_pct": 23.987414801070244,
+        "closed_score": 0.5954916261908197,
+        "collision_at_fault": 0.04,
+        "offroad": 0.19,
+        "progress_clipped_rel": 0.6492435297187216,
+        "recorded_event_counts": {
+          "collision_at_fault": 8,
+          "offroad": 38
+        },
+        "scheduled_rollouts": 200,
+        "observed_rollouts": 192,
+        "missing_metrics": [
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "c3a62f36-a885-11f1-844f-259d9d4f1673",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+            "rollout_id": "c3aaf23c-a885-11f1-844f-259d9d4f1673",
+            "reason": "Waypoint 83 fails sanity check: route folds back on itself with angle 180.00 deg"
+          },
+          {
+            "scene_id": "clipgt-3b934c9a-3172-4a85-91a0-6e3fd0c9f05c",
+            "rollout_id": "16b5aafc-a887-11f1-bce1-017a2a13f97a",
+            "reason": "Waypoint 239 fails sanity check: route folds back on itself with angle 179.81 deg"
+          },
+          {
+            "scene_id": "clipgt-3b934c9a-3172-4a85-91a0-6e3fd0c9f05c",
+            "rollout_id": "0cb86558-a887-11f1-9fca-d521d0dedb62",
+            "reason": "Waypoint 239 fails sanity check: route folds back on itself with angle 179.81 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "16aa9cca-a887-11f1-bce1-017a2a13f97a",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+            "rollout_id": "16b10f10-a887-11f1-bce1-017a2a13f97a",
+            "reason": "Waypoint 1 fails sanity check: route folds back on itself with angle 179.97 deg"
+          },
+          {
+            "scene_id": "clipgt-ceb3d0d5-0cb7-4415-890d-6feae8ea29e2",
+            "rollout_id": "5d243c0a-a888-11f1-9fca-d521d0dedb62",
+            "reason": "Waypoint 237 fails sanity check: route folds back on itself with angle 179.81 deg"
+          },
+          {
+            "scene_id": "clipgt-ceb3d0d5-0cb7-4415-890d-6feae8ea29e2",
+            "rollout_id": "5ac0459e-a888-11f1-bce1-017a2a13f97a",
+            "reason": "Waypoint 237 fails sanity check: route folds back on itself with angle 179.81 deg"
+          }
+        ],
+        "closed_delta_vs_dense": {
+          "mean": 0.0850295987286204,
+          "lo": 0.02970258523727894,
+          "hi": 0.1425216455145466
+        }
+      }
+    ],
+    "aggregation": "Scene score: all 100 scenes, including stored zero scores on failed rollouts. Event rates: recorded events / 200 scheduled rollouts, matching the historical report. Progress: mean over observed rollouts only (Dual 192; other methods 196).",
+    "common_observed": {
+      "n_scenes": 96,
+      "scene_ids": [
+        "clipgt-288829f8-8808-46dc-a7e0-29ed1f7fddbc",
+        "clipgt-28e3a9ca-66bc-4d25-a684-fefd43da3e88",
+        "clipgt-29fb826a-9b22-4a1d-8e51-b8d5bee542e5",
+        "clipgt-2f380e80-0b15-4d00-a03b-a107106ab0c9",
+        "clipgt-3232fdb7-2b72-4e25-8726-4d9b28281e1e",
+        "clipgt-3717cd19-ac06-4d95-8225-0b92c04ada41",
+        "clipgt-39f3ab94-d506-421a-9f85-3b7dd00094c1",
+        "clipgt-411ee080-8d8a-4ba5-a6f0-4a19b939ee1f",
+        "clipgt-45eb781a-8712-4fd9-8563-02ef9800eacd",
+        "clipgt-45fed0d9-1f8d-4d36-a15e-efb4c33eca6c",
+        "clipgt-460a9160-90dd-448b-beef-afbf75a33d7c",
+        "clipgt-474e4031-322b-4427-a5fb-0eec4ae23264",
+        "clipgt-48c8d69a-7e42-4615-a260-ac27faa07e7f",
+        "clipgt-4a091b74-4ba0-46e3-90bb-be1370076319",
+        "clipgt-4b673ab0-c718-4e65-b6a7-89d85608fdec",
+        "clipgt-5240502c-001a-4f02-aed9-da86a4d307d1",
+        "clipgt-59a2e98b-938b-42cb-9901-4429ab7c4534",
+        "clipgt-5c1b7555-64fa-4ae4-98bf-4cf24e6de0a4",
+        "clipgt-5c871a72-ca26-4e8a-9bca-0736260285ea",
+        "clipgt-5d2827ec-3b1c-47e3-bf78-1e2003b7209f",
+        "clipgt-5dde348a-e6d1-4b78-bbea-f60a963a277f",
+        "clipgt-610b3fc7-8d43-4342-ac2e-6f6d6b8b16e9",
+        "clipgt-61106668-1a33-4ca1-9e64-4041381a37f4",
+        "clipgt-63844633-ef7c-4c48-8a61-a50af34b9e09",
+        "clipgt-655dfa49-1d51-45a3-b6f4-0856db73c414",
+        "clipgt-68e53160-f9d1-4070-9434-bf50c55652d3",
+        "clipgt-6b5ca926-4526-412b-bd26-500a3b4b8695",
+        "clipgt-6bec4e02-ae49-4092-9d66-136ee490e138",
+        "clipgt-6db8921b-e103-4cd4-901c-b2726849be7a",
+        "clipgt-700e4d24-205c-4419-a359-1731a4264b0f",
+        "clipgt-73ee2cdb-1b63-4b6a-93f6-3b73af8ede2b",
+        "clipgt-7cccce33-647f-4dfe-b643-eae78e6733de",
+        "clipgt-7cd29a50-39b9-40d3-8ab5-d75a7efe7bc1",
+        "clipgt-7ce9e86e-c63f-4f0e-97cd-072c9ab24a88",
+        "clipgt-7dc59d0d-7582-48b2-a6f9-2d7288b2c556",
+        "clipgt-832cd2b0-57b0-4f4e-9be1-a70b38371bbc",
+        "clipgt-85e8df35-1c8b-4236-a64d-45e79324f69a",
+        "clipgt-89d4188e-982c-4f29-a966-2ed03f6be864",
+        "clipgt-8f8d5705-944e-4051-ab25-66a230a11dce",
+        "clipgt-90d1908c-9fdc-40ea-a5a1-351240aa323e",
+        "clipgt-93982b71-92af-4cf6-8447-00d619f50ad3",
+        "clipgt-96eb4700-3f26-4629-86df-7e736935f51d",
+        "clipgt-994cb976-c692-4103-92e9-81f04e61959a",
+        "clipgt-9f2f1c8b-8d42-4021-b3b1-1dbd6b68d47b",
+        "clipgt-a0eef9d8-6a3b-4a33-9a14-92f699a1aee3",
+        "clipgt-a32549eb-9106-4357-b6a7-b4fa4b025c78",
+        "clipgt-a5c06f4f-de00-44d1-add2-0a89818a3b0b",
+        "clipgt-a6941bb6-6c7f-4842-8134-ac84bd95fe44",
+        "clipgt-a6db4919-62db-4da9-bde9-ea065d018562",
+        "clipgt-a9c81fec-e33f-4363-8634-ca789045b0c9",
+        "clipgt-aaf093de-2f7a-444d-97bc-296b681fd996",
+        "clipgt-ab09743b-ac37-403b-b84e-29089fc58474",
+        "clipgt-ab7e9102-dfb7-44a2-affa-dd85ee411886",
+        "clipgt-af093ead-13fa-4634-ba5f-108434543aae",
+        "clipgt-af4bd2e0-7205-413c-ac28-2c5272c3b248",
+        "clipgt-af874fc8-6231-4284-bb68-12f88c7bf12f",
+        "clipgt-afa37955-fae8-4741-bb91-649ca9e3eb5d",
+        "clipgt-b0947992-20f3-4355-903b-92fcddb84528",
+        "clipgt-b1588642-dad4-4ee3-a56f-5337b85ba3ef",
+        "clipgt-b799daf9-2f85-4bb0-8a47-17f96cef1bd5",
+        "clipgt-bae463d3-655b-4b54-ac8e-1c982219d829",
+        "clipgt-bbc53aa8-7009-4139-b7c9-38d71ecfac7f",
+        "clipgt-bcf67ede-1879-4125-ab20-cae5a483d8cb",
+        "clipgt-bd97de34-6f59-455a-93c5-9f469f243b4a",
+        "clipgt-be183bd3-96a4-44fd-988b-bd7d22e4fbdb",
+        "clipgt-c2df5259-0079-4ca8-904a-e3ae7667da27",
+        "clipgt-c390b208-2672-4db5-b8aa-b98019fe03ee",
+        "clipgt-c42044c0-40c8-42f6-8f5b-5b9dc2480b02",
+        "clipgt-c5b21e90-35ec-4578-84d0-e7cecc5ab80c",
+        "clipgt-cc289222-8a2c-486d-9b4f-0db31d1165b7",
+        "clipgt-cdd9448c-8808-46b1-85c1-883bcc5862ff",
+        "clipgt-ce161092-a921-432d-b2d0-2d50fd7779a6",
+        "clipgt-d07c2655-fcb3-4469-bdfc-518bccc5f3cf",
+        "clipgt-d101f9f0-1539-421f-8b27-971fa745b5ad",
+        "clipgt-d141e3fb-dd01-454e-bc3c-af025415b7cb",
+        "clipgt-d1a25a99-0f02-4730-a076-96f067e92874",
+        "clipgt-d1fca92f-9c5d-437a-aab2-e0bf237ef573",
+        "clipgt-d34673c7-2573-42a4-b771-1a5bf38f7d60",
+        "clipgt-d68c7161-bef6-4342-800f-607127417825",
+        "clipgt-d90fe123-3462-450e-b65f-f37e4eb422d9",
+        "clipgt-db450d95-7096-429a-8a01-dacf94cd4036",
+        "clipgt-df829727-390c-4b7b-b218-597e4e7a530b",
+        "clipgt-e121e37d-b03f-4f25-aa09-5ba5b74b8afb",
+        "clipgt-e1a2da5e-ef4f-4153-bbf2-3c892708977b",
+        "clipgt-e37aa159-7300-4529-a519-0308ddd61134",
+        "clipgt-e742759b-9403-4d6c-9c52-704b81bc5ba9",
+        "clipgt-e86e5751-209e-443f-ac1b-8bdc3827e730",
+        "clipgt-eaba3f6a-3629-42a6-aa86-4bf8dd1f569b",
+        "clipgt-eaf4352c-a194-4b09-a5a1-144c6a0d7dbc",
+        "clipgt-eb7e7674-8022-454e-b957-e7757217b078",
+        "clipgt-f244c735-cb12-4190-8b68-64c90251d3f8",
+        "clipgt-f55825ac-4cd3-4222-8fec-2da2aed646a0",
+        "clipgt-f8f93104-aad2-4fae-b8d0-73378e8e11f5",
+        "clipgt-fa1f799f-b2f3-48d7-a61b-e06c619a5514",
+        "clipgt-fb6d1a18-16cd-45f2-b80d-fa963ff59de3",
+        "clipgt-ff28f961-dd5a-4dba-8fb4-711b510b535c"
+      ],
+      "excluded_scene_ids": [
+        "clipgt-3b934c9a-3172-4a85-91a0-6e3fd0c9f05c",
+        "clipgt-4bad2f63-1bab-4dbf-b55d-4a6606969103",
+        "clipgt-adb899bd-45f6-420f-b04a-79eb32a02e92",
+        "clipgt-ceb3d0d5-0cb7-4415-890d-6feae8ea29e2"
+      ],
+      "rows": [
+        {
+          "method": "Dense",
+          "checkpoint": "baseline",
+          "removed_pct": 0.0,
+          "observed_rollouts": 192,
+          "closed_score": 0.5317312786064576,
+          "collision_at_fault": 0.03125,
+          "offroad": 0.2552083333333333,
+          "progress_clipped_rel": 0.5750492559031711
+        },
+        {
+          "method": "LLM-Pruner",
+          "checkpoint": "lp_r50",
+          "removed_pct": 24.987445004185183,
+          "observed_rollouts": 192,
+          "closed_score": 0.5987236491663689,
+          "collision_at_fault": 0.036458333333333336,
+          "offroad": 0.15104166666666666,
+          "progress_clipped_rel": 0.5924552009698442
+        },
+        {
+          "method": "Týr-the-Pruner",
+          "checkpoint": "slim_tyr_u40_r",
+          "removed_pct": 23.987414801070244,
+          "observed_rollouts": 192,
+          "closed_score": 0.6099782143310067,
+          "collision_at_fault": 0.020833333333333332,
+          "offroad": 0.203125,
+          "progress_clipped_rel": 0.6392129327639248
+        },
+        {
+          "method": "Týr-K",
+          "checkpoint": "slim_tyrK",
+          "removed_pct": 23.987414801070244,
+          "observed_rollouts": 192,
+          "closed_score": 0.6349415912561424,
+          "collision_at_fault": 0.015625,
+          "offroad": 0.19791666666666666,
+          "progress_clipped_rel": 0.6601253969113476
+        },
+        {
+          "method": "Dual",
+          "checkpoint": "slim_dual_u40_v2",
+          "removed_pct": 23.987414801070244,
+          "observed_rollouts": 192,
+          "closed_score": 0.620303777282104,
+          "collision_at_fault": 0.041666666666666664,
+          "offroad": 0.19791666666666666,
+          "progress_clipped_rel": 0.6492435297187216
+        }
+      ],
+      "aggregation": "Every metric uses the same scenes with complete observations for all five methods."
+    },
+    "dual_comparisons": {
+      "Dense": {
+        "mean": 0.0850295987286204,
+        "lo": 0.02970258523727894,
+        "hi": 0.1425216455145466
+      },
+      "LLM-Pruner": {
+        "mean": 0.020222045850093268,
+        "lo": -0.059218460505540256,
+        "hi": 0.09853955753245375
+      },
+      "Týr-the-Pruner": {
+        "mean": 0.009912540433053244,
+        "lo": -0.04825120406582755,
+        "hi": 0.06858829527720854
+      },
+      "Týr-K": {
+        "mean": -0.014052301415076834,
+        "lo": -0.07689068561651723,
+        "hi": 0.04877951656884778
+      }
+    },
+    "unavailable": [
+      "Wanda",
+      "Traj",
+      "CoC",
+      "Dual + expert MLP"
+    ]
+  },
+  "expert_axis": [
+    {
+      "comparison": "Q25 − MLP25\nAda · equal unit fraction",
+      "q_removed": 75497472,
+      "mlp_removed": 456523776,
+      "n": 500,
+      "med": 0.0205495,
+      "lo": 0.010313874999999993,
+      "hi": 0.037950499999999956,
+      "mean": 0.03160190399999999,
+      "mlo": -0.03564460105,
+      "mhi": 0.07606113259999997,
+      "p": 4.719428002846127e-06,
+      "sig": true
+    },
+    {
+      "comparison": "Q25 − MLP4.13\nAda · matched parameters",
+      "q_removed": 75497472,
+      "mlp_removed": 75423744,
+      "n": 500,
+      "med": 0.021692499999999948,
+      "lo": 0.010329000000000033,
+      "hi": 0.03751249999999981,
+      "mean": 0.031657387999999995,
+      "mlo": -0.035500067850000004,
+      "mhi": 0.07607771075,
+      "p": 4.2989624570114565e-06,
+      "sig": true
+    },
+    {
+      "comparison": "Q50 − MLP50\nBlackwell · equal unit fraction",
+      "q_removed": 150994944,
+      "mlp_removed": 913047552,
+      "n": 500,
+      "med": 0.11711999999999997,
+      "lo": 0.0848495,
+      "hi": 0.181458,
+      "mean": 0.24592597199999996,
+      "mlo": 0.16939498355,
+      "mhi": 0.3167717817,
+      "p": 1.1847897035465172e-21,
+      "sig": true
+    }
+  ],
+  "composition": [
+    {
+      "method": "Dual",
+      "kept": 8256,
+      "removed_pct": 23.987414801070244,
+      "val_ade6": 0.8904264760000001,
+      "val_fde6": 2.330427318,
+      "test_ade6": 0.9497647100000002,
+      "test_fde6": 2.5458937799999997,
+      "ood_ade6": 1.1192110114503817,
+      "ood_fde6": 2.8514021603053434,
+      "closed_score": 0.8282891005465504,
+      "collision_at_fault": 0.023333333333333334,
+      "offroad": 0.06666666666666667,
+      "progress_clipped_rel": 0.8275927564524262,
+      "closed_delta": null,
+      "open_delta": null,
+      "open_fde_delta": null
+    },
+    {
+      "method": "Dual + MLP75",
+      "kept": 2064,
+      "removed_pct": 36.34981124277152,
+      "val_ade6": 0.891750308,
+      "test_ade6": 0.949540386,
+      "ood_ade6": 1.1181687251908397,
+      "val_fde6": 2.337689372,
+      "test_fde6": 2.542860856,
+      "ood_fde6": 2.848021591603054,
+      "closed_score": 0.7895306215096424,
+      "collision_at_fault": 0.03333333333333333,
+      "offroad": 0.09,
+      "progress_clipped_rel": 0.8130237359200198,
+      "closed_delta": {
+        "mean": -0.0387584790369079,
+        "lo": -0.07483578113292985,
+        "hi": -0.004067219375813863
+      },
+      "open_delta": {
+        "val": {
+          "mean": 0.0013238320000000061,
+          "lo": -8.942434999999431e-05,
+          "hi": 0.0028134477500000054
+        },
+        "test": {
+          "mean": -0.000224324000000004,
+          "lo": -0.0013689495000000062,
+          "hi": 0.0008307448499999891
+        },
+        "ood": {
+          "mean": -0.0010422862595419946,
+          "lo": -0.0031559455152671964,
+          "hi": 0.0010233465648855054
+        }
+      },
+      "open_fde_delta": {
+        "val": {
+          "mean": 0.007262053999999995,
+          "lo": 0.002142440299999992,
+          "hi": 0.012657804799999993
+        },
+        "test": {
+          "mean": -0.0030329239999999985,
+          "lo": -0.007765020899999986,
+          "hi": 0.0014001392500000035
+        },
+        "ood": {
+          "mean": -0.0033805687022901033,
+          "lo": -0.011612042366412232,
+          "hi": 0.004747071469465609
+        }
+      }
+    },
+    {
+      "method": "Dual + MLP87.5",
+      "kept": 1032,
+      "removed_pct": 38.41021064972173,
+      "val_ade6": 0.8923300319999999,
+      "test_ade6": 0.949946382,
+      "ood_ade6": 1.1180647977099236,
+      "val_fde6": 2.3418793800000004,
+      "test_fde6": 2.541837006,
+      "ood_fde6": 2.8464096984732827,
+      "closed_score": 0.8116617524851238,
+      "collision_at_fault": 0.03333333333333333,
+      "offroad": 0.07666666666666666,
+      "progress_clipped_rel": 0.8250890926331137,
+      "closed_delta": {
+        "mean": -0.0166273480614264,
+        "lo": -0.05131727850122075,
+        "hi": 0.015483941401399129
+      },
+      "open_delta": {
+        "val": {
+          "mean": 0.0019035560000000078,
+          "lo": -0.00021453509999999582,
+          "hi": 0.004034950700000006
+        },
+        "test": {
+          "mean": 0.0001816720000000018,
+          "lo": -0.0016215311000000025,
+          "hi": 0.0018830921500000042
+        },
+        "ood": {
+          "mean": -0.001146213740458023,
+          "lo": -0.004429357156488553,
+          "hi": 0.002082726526717549
+        }
+      },
+      "open_fde_delta": {
+        "val": {
+          "mean": 0.011452061999999999,
+          "lo": 0.0033638255500000043,
+          "hi": 0.01979735105
+        },
+        "test": {
+          "mean": -0.004056774000000015,
+          "lo": -0.01132525450000002,
+          "hi": 0.0029469844499999624
+        },
+        "ood": {
+          "mean": -0.00499246183206107,
+          "lo": -0.017934531774809175,
+          "hi": 0.007547462022900746
+        }
+      }
+    },
+    {
+      "method": "Dual + MLP93.75",
+      "kept": 516,
+      "removed_pct": 39.44041035319684,
+      "val_ade6": 0.8937475440000001,
+      "test_ade6": 0.9505801940000002,
+      "ood_ade6": 1.1176362709923664,
+      "val_fde6": 2.348429236,
+      "test_fde6": 2.5386246519999998,
+      "ood_fde6": 2.84401172519084,
+      "closed_score": 0.7928293232390236,
+      "collision_at_fault": 0.03,
+      "offroad": 0.08333333333333333,
+      "progress_clipped_rel": 0.8163491194630956,
+      "closed_delta": {
+        "mean": -0.03545977730752686,
+        "lo": -0.07259113828494194,
+        "hi": -0.0004651441380887694
+      },
+      "open_delta": {
+        "val": {
+          "mean": 0.0033210680000000073,
+          "lo": -3.0206749999990788e-05,
+          "hi": 0.00665986410000001
+        },
+        "test": {
+          "mean": 0.000815484000000002,
+          "lo": -0.0020100742999999994,
+          "hi": 0.0035368472499999934
+        },
+        "ood": {
+          "mean": -0.001574740458015266,
+          "lo": -0.006590167557251909,
+          "hi": 0.003469645610687033
+        }
+      },
+      "open_fde_delta": {
+        "val": {
+          "mean": 0.018001918000000002,
+          "lo": 0.005374176400000007,
+          "hi": 0.03082503345000001
+        },
+        "test": {
+          "mean": -0.0072691280000000144,
+          "lo": -0.01850647670000001,
+          "hi": 0.0036997718999999952
+        },
+        "ood": {
+          "mean": -0.007390435114503825,
+          "lo": -0.026366624141221377,
+          "hi": 0.011234300572519004
+        }
+      }
+    }
+  ],
+  "calibration": {
+    "baseline": {
+      "score": 0.7495921411422414,
+      "ci_lo": 0.6968293949477821,
+      "ci_hi": 0.8011322343850543
+    },
+    "calib100": {
+      "score": 0.8282891005465504,
+      "ci_lo": 0.7787101789479045,
+      "ci_hi": 0.8741631165607695
+    },
+    "st2000_a": {
+      "score": 0.7162453195094899,
+      "ci_lo": 0.6586087961581155,
+      "ci_hi": 0.7708733504934205
+    },
+    "st2000_b": {
+      "score": 0.7132655717531597,
+      "ci_lo": 0.6571974232769535,
+      "ci_hi": 0.7684507292374015
+    }
+  },
+  "analysis_figures": [
+    {
+      "file": "fig1_depth_q_head.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.png"
+    },
+    {
+      "file": "fig1_depth_q_head.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.pdf"
+    },
+    {
+      "file": "fig1_depth_q_head.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.svg"
+    },
+    {
+      "file": "fig1_depth_mlp.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.png"
+    },
+    {
+      "file": "fig1_depth_mlp.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.pdf"
+    },
+    {
+      "file": "fig1_depth_mlp.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.svg"
+    },
+    {
+      "file": "fig1_rank_agreement.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.png"
+    },
+    {
+      "file": "fig1_rank_agreement.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.pdf"
+    },
+    {
+      "file": "fig1_rank_agreement.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.svg"
+    },
+    {
+      "file": "fig1_kept_overlap.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.png"
+    },
+    {
+      "file": "fig1_kept_overlap.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.pdf"
+    },
+    {
+      "file": "fig1_kept_overlap.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.svg"
+    },
+    {
+      "file": "fig2_steps_q_head.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.png"
+    },
+    {
+      "file": "fig2_steps_q_head.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.pdf"
+    },
+    {
+      "file": "fig2_steps_q_head.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.svg"
+    },
+    {
+      "file": "fig2_steps_mlp.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.png"
+    },
+    {
+      "file": "fig2_steps_mlp.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.pdf"
+    },
+    {
+      "file": "fig2_steps_mlp.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.svg"
+    },
+    {
+      "file": "fig2_mass_curve.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.png"
+    },
+    {
+      "file": "fig2_mass_curve.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.pdf"
+    },
+    {
+      "file": "fig2_mass_curve.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.svg"
+    },
+    {
+      "file": "fig2_stability_vs_mass.png",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.png"
+    },
+    {
+      "file": "fig2_stability_vs_mass.pdf",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.pdf"
+    },
+    {
+      "file": "fig2_stability_vs_mass.svg",
+      "source": "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.svg"
+    }
+  ],
+  "sources_sha256": {
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lingo_vqa_analysis/metrics.json": "d6ea05c312bf3768bc072ab45dedc47d7b96c68a1d171e671e0ed2e4ff50217e",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/lingo_vqa_scores/metrics.json": "020443ad246b8146e0068357299eb2ca0d9d0b96ab60afd049b3e7516097cac4",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/baseline_ada_ps_indist/baseline_s0of1.json": "fb8e6f1355d8fd26833590a340cecf945efbdabdedddec4298db45aa4dec7f55",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/baseline_ada_ps_test/baseline_s0of3.json": "a12b47b9bb64ecde18b75dfa67240062fbcf9e7804f5b0c1620eb1059808acf7",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/baseline_ada_ps_test/baseline_s1of3.json": "b52f266dc478ab6aeb18a5095f3b3b3dfdb5426157c2ef9495f31afc5c52a1cc",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/baseline_ada_ps_test/baseline_s2of3.json": "07d01f9754b40c7db3778c1d3ea2e6cf71f256da7903214534a7fc8d0cca6724",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/baseline_ada_ps_oodval/baseline_s0of1.json": "f3c97d366ebda92f7b852ebfa9acda74daadf00c50a1d2e80b11e6401a676980",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_baseline/aggregate/results-summary.json": "e056fc821b648cbfef92695060e6206e0cb155a30e58d9f14dbc8db4e0cab104",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/lingo_vqa_scores_wanda_u40_v2/metrics.json": "5902c1166df8d38d212e580ea3b03430fd045dd08821704d92a31e8fe16c6265",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_wanda_u40_v2/slim_meta.json": "7abdbc47cf73e4a81ee28b6816db3fe2c71fa2fdacc7feffd36f3cdeab44e2f4",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/wanda_u40_v2_indist/slim_wanda_u40_v2_s0of1.json": "061e98a071492b705b88ecee98efd599448bc7bb8fcec85bf176176175cb81a4",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/wanda_u40_v2_test/slim_wanda_u40_v2_s0of1.json": "83514b57acdeeac32afb6719549dff6f6c16a8ebdcc15c7c2fc8e04e0f286920",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/wanda_u40_v2_oodval/slim_wanda_u40_v2_s0of1.json": "b9c0d930c071950f7defbd20e5dbea6ff31b7eab1c41c73b43d77534ae5316fa",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_wanda_u40_v2/aggregate/results-summary.json": "e15b068c0c8b22513ea92a993d9d2b38efe89f723b6c399b0b2e46e040e30f6f",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_r50/slim_meta.json": "aec7061ed6237873f223fe2077482826dbd98dd7095a3ade138dc375d1f0598d",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_indist/lp_r50_s0of2.json": "3999a736acb31e73987856c52d0e492965cdfd3fe01ede577dbd9dad50344e47",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_indist/lp_r50_s1of2.json": "1b7fa6eaf8a50c44aa900e66cbd60ce94f745c8a239efc49759c9beb7e32e70b",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_test/lp_r50_s0of2.json": "5f113704b11e6109f424a34f8087205a0484746c738ab015a560c7076e0fd0eb",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_test/lp_r50_s1of2.json": "f795bdb8ee0c802befe5b116cef9b7be0e4c127bae4ecaa55e8c432ad83b8d34",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_ood/lp_r50_s0of2.json": "95dde92c47407b0c7a50f6035c632ba03217db3cbede9db4305a83c9a13acd77",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_ood/lp_r50_s1of2.json": "ae3fd1f0803837ec1ea812662086d154453ee1ba464fa3d1c45b3a83eecef7e0",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs/cl150_merged_lp_r50/aggregate/results-summary.json": "a10edd61c6cd9668e26f91d1d3c320d200658c5beacc239771f145b76f934c6d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/lingo_vqa_scores_tyr/metrics.json": "b8dce969b4c62926845725f1f7b43e6dc9b8793f1047a1e77e1e3338c0053eb5",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_tyr_u40_r/slim_meta.json": "97958cf929114cf98b78b13296c97c9f2b3cb971d136aaa137a4e23766872c1e",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/tyr_u40_r_indist/slim_tyr_u40_r_s0of1.json": "753442ba811fe78b35c06b49beabb8f1250e9f48623df30733f29f6c98bb4681",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/tyr_u40_r_test/slim_tyr_u40_r_s0of1.json": "51d88d571ebfff2fc1448999162a4e7183783a81f91c63945b9b8f03f6e8008f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/tyr_u40_r_oodval/slim_tyr_u40_r_s0of1.json": "df5312e7b3703ac95e39bd17a10c7f65addf5696d646c84b315e7cdcfb348096",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_tyr_u40_r/aggregate/results-summary.json": "5b0f769fefb9732f97260c32061dbc69a384924eeb639c87d90d9ada5b9fdc8f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/lingo_vqa_scores_extra/metrics.json": "3cf0ebac719733efd3eb01e11e2dec28d8c248365c6336b019866aedefad6813",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_traj_u40_v2/slim_meta.json": "e85d4102ffefde038beb176da1fb2229c0d58e7876cf83dc4fb76bb623eb1e36",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_indist/slim_traj_u40_v2_s0of4.json": "643af2795a84d22ded55477683e7c27e19c2bb618c5fabe292cfd79975298fc4",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_indist/slim_traj_u40_v2_s1of4.json": "ba62cf228c2e2ffbd3d635a95296b6b0432ad7d75139d81a6302904ae5f0119e",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_indist/slim_traj_u40_v2_s2of4.json": "bb59f7c91ace964c861040e6d6f30de9beb189f6393ee6a7bbcd8252f5f5e43d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_indist/slim_traj_u40_v2_s3of4.json": "78021e4b37ecf3fa4d057d9ffd0017a646390eda03dd8b41e99f263b7ad354bc",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_test/slim_traj_u40_v2_s0of4.json": "9cdb87a7ef68d7ce554069d04ecea344fe8bdb321c5ff3c485045ff737e7873a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_test/slim_traj_u40_v2_s1of4.json": "f05c609b07ec78fffb282c8f1fe964ecf4def61b5b37eb7b6a4025d4fc47caf2",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_test/slim_traj_u40_v2_s2of4.json": "640c1fcda21bad980213e3e759b1b11c023c59081e8ebccf12087f38b6cc3cba",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_test/slim_traj_u40_v2_s3of4.json": "a3e190f034e82120eaf23b95ea3e2c85aa1becfdcde2d669461040e769c20266",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_ood/slim_traj_u40_v2_s0of4.json": "b7e36bee976afdd77d6317a54fb89fd064a2b3adf02701d426d1830750318846",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_ood/slim_traj_u40_v2_s1of4.json": "f001db268ea534af7b9b95b8603444d3eb3885dcad765cdac36d833d4633b44a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_ood/slim_traj_u40_v2_s2of4.json": "a30e3e4314ca64cb402540bc36e68c677043c25e2709f5d39df7e1ed2fe5da9b",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/traj_u40_v2_ood/slim_traj_u40_v2_s3of4.json": "67fb25332a884b12931c0ba9b3cc371af60625ae020f7f99002f6ad74173e79b",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_traj_u40_v2/aggregate/results-summary.json": "a5d2c2bec72430b00b438cb85d11f268a9b8c957fd0c17d55e16a7e9abfe763d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_coc_u40_v2/slim_meta.json": "945a2b562c2f9a05971191f60d02c03ee4c26e49c03e9af1d23802f4a801bfb9",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_indist/slim_coc_u40_v2_s0of4.json": "e9ba4cfc9fadfad9cc2125af458aaad5053366e43c5d8ba37c9f7e4bd91a7b35",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_indist/slim_coc_u40_v2_s1of4.json": "6ceb5db2376614ca3998c406dc1e4324e9ad9d1034cbc8b1b77f6aff888f369c",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_indist/slim_coc_u40_v2_s2of4.json": "e29fc602a2265edc899e7d89f56844d1f6f61a62ed4a718aba77858ab541d8e3",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_indist/slim_coc_u40_v2_s3of4.json": "c583dba8ab34af6cafaf3ad9d3809d94335b9e8e015477b11829b433d5d667be",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_test/slim_coc_u40_v2_s0of4.json": "5f8fefb81e50f3038548285a6eb52267c253dbf7ae6c68c9792c7237f18cd529",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_test/slim_coc_u40_v2_s1of4.json": "8f4e291698ec5f6328703f5b93c79e366118a89a5838c576777f6670d98ae41d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_test/slim_coc_u40_v2_s2of4.json": "9a160a1665c21643bcc92a9538080c88e0f248943082f06c4ebe9b3bae533f9e",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_test/slim_coc_u40_v2_s3of4.json": "ff74ab2f6d4c34afdd064af62d9db506319b468271ca87c3878a4bebd703959a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_ood/slim_coc_u40_v2_s0of4.json": "1d91bd82d5c4fd4f193dcaf7ce1fb012db78d4569b9e60d7389e56887fd64d95",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_ood/slim_coc_u40_v2_s1of4.json": "ca8d317f21b1619eeb8fa6a15c5e44b3abbf31f87e787c00f201d01aa556f25f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_ood/slim_coc_u40_v2_s2of4.json": "a0b9805b4e73a84c44dc6b41745bff576a20934a3d995d0727f8b716185e6c65",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/coc_u40_v2_ood/slim_coc_u40_v2_s3of4.json": "b796b3b0406ef164ce41be00e6a5a8305371ffe6ad936b846c5aba76264cce6e",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_coc_u40_v2/aggregate/results-summary.json": "a4612d8e32167c43a315067f26fbca5302a26a13d080b854b442b676c0fddc28",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_dual_u40_v2/slim_meta.json": "878745ce55799b0456cc996ba7986d00ae8bb4bd9aa383bb24e079f8efd72a00",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dual_u40_v2_ps_indist/slim_dual_u40_v2_s0of1.json": "e825aa4a6d26828c78b6af46d69e1b61753d515ef0692a5a0a34a5168ca058df",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dual_u40_v2_ps_test/slim_dual_u40_v2_s0of1.json": "a16e0139d226726f0af908545284222c0d4495b811b3e1cda1b63f92a6068911",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dual_u40_v2_ps_ood/slim_dual_u40_v2_s0of3.json": "c1d639da484955c1f67a2f2d213fb356bf4f0127cae6528a33d4839e8854303f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dual_u40_v2_ps_ood/slim_dual_u40_v2_s1of3.json": "ea2e8911fb13cb447ba5081aab196202f54b1c4c5cb8a19003723f8aed969ce7",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dual_u40_v2_ps_ood/slim_dual_u40_v2_s2of3.json": "f845a00f638663f819fa4eebec0e5849c12d4cca7e5cd498d4eb0d00ed5c0f24",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_dual_u40_v2/aggregate/results-summary.json": "db16e3e34b8c5eace49605f891dff265fa7eea1325d7f01e64e7d5abd9b29b8f",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_indist/lp_r50_dual_s0of2.json": "d6188ee3a8f79d26a5e9389c740a059aa21562f904e8952f101aa6414726c6f0",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_indist/lp_r50_dual_s1of2.json": "072ac4648480e61b7c5bd6429e011d7fa198ed07c78f4299a32591218d4ced69",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_test/lp_r50_dual_s0of2.json": "4519c409f92f47474b1dc56f0a987774e5d79bcdcaceac250cf0af3f1272f3e5",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_test/lp_r50_dual_s1of2.json": "3df88f6332b2d6655fe259f0ef5b60679990427cb9d0b817a28cb9cfee4be2df",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_ood/lp_r50_dual_s0of2.json": "255c9cc7e6b92518a336244f17965b57934d7d549823b61b2d5f321c1c47a59f",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner/lp_k6_ood/lp_r50_dual_s1of2.json": "f920b84da29cd0d4aa4eea8d93a90ee304c31dad5f8a4303197d9514381c0a94",
+    "/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs/cl150_merged_lp_r50_dual/aggregate/results-summary.json": "102a590ccd9e9324e8ff95a6c46ecb4bed324a84e52b20754fb1fcafac487947",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_indist/slim_dualexp_u40_em75_s0of4.json": "e203e5f06ffe746da49d29e3dbdb6255307c98a430861650da4cd3e7e9430039",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_indist/slim_dualexp_u40_em75_s1of4.json": "29c6a04f5eb612724ce659b6c0386f145906d203fc18d46447c89c4d619b502c",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_indist/slim_dualexp_u40_em75_s2of4.json": "68d700aa031a750403aea286e21d27802c60cda8df4db32bdbcc5f8cdf82b7bc",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_indist/slim_dualexp_u40_em75_s3of4.json": "8a48d99d44404fa436ae38dc665442c900ebf0b587e5b4bb385d5d7a80799829",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_test/slim_dualexp_u40_em75_s0of4.json": "5bb567a6f6313b6ca7fba3c57f64280362b47ccf07174912d5e030c2db95b555",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_test/slim_dualexp_u40_em75_s1of4.json": "9e5b533302d084b15c10b69b0c210d94c52ff551aa688fe3cfaa0fe42b429c93",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_test/slim_dualexp_u40_em75_s2of4.json": "bd3df138ad3be90db6b62ec48495ce171f9a03ab513c97c5b2972b0970e72d4d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_test/slim_dualexp_u40_em75_s3of4.json": "acdec3026442d21d56b11293d1eeb5765ab84954535cf3b034c920cd647ff665",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_oodval/slim_dualexp_u40_em75_s0of4.json": "35c34ba1cb88abfaa0fa535a9cf3c14fd36a7b4756f3e54e7e493de88acd15ce",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_oodval/slim_dualexp_u40_em75_s1of4.json": "300cc19e5c9180f25b626ccc5c2c4c06b9035de8f053dc2db789c66ad66ff4ac",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_oodval/slim_dualexp_u40_em75_s2of4.json": "c4fdd80fad0d867415b55e70e7e5f309260aeec3509897c746eeff35b67ff2db",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em75_oodval/slim_dualexp_u40_em75_s3of4.json": "8c9b95ac0ba2e8a62cf4ba223084f22d11e5449963ac0affa068e182e0541bf9",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_dualexp_u40_em75/aggregate/results-summary.json": "e6f0ed73810f12a017059b78f2a32a57fa4fc9c9e2f36dcd46cb994d73ea3195",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_dualexp_u40_em75/slim_meta.json": "89e501576322b90fe4aa14b4d2ead7a40a7b8863be1431667fdc33b2e3f4f504",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_indist/slim_dualexp_u40_em87p5_s0of4.json": "8c6ee0435401d2f76caccfdd93cee6b51438ed079578520cb88397ff4eb4ab36",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_indist/slim_dualexp_u40_em87p5_s1of4.json": "ef0a93c5ccc318d7b175229782bf073ddec1166806e861a7573e699e88211d37",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_indist/slim_dualexp_u40_em87p5_s2of4.json": "c3cb0dc636d5faff748639619643de063ac886c6572cead194bb6e4aab86d104",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_indist/slim_dualexp_u40_em87p5_s3of4.json": "408809d701f7ec4644bfc789d47e2994ee328a69a332457a7b07a9e4b6a0800f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_test/slim_dualexp_u40_em87p5_s0of4.json": "798522e52112333602edea4f68333f18f69ae0cc98dff7e77a10c37a1f038025",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_test/slim_dualexp_u40_em87p5_s1of4.json": "fef18e11d2d5845df144b34a28a03b521eb5d99bf6450c51913a295b551bd61d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_test/slim_dualexp_u40_em87p5_s2of4.json": "74159c2c38201d465ff5ed5540d8f0fa1ac75a7f1c1d4a00559662d5b423e227",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_test/slim_dualexp_u40_em87p5_s3of4.json": "fb52377fec0941f27e62c1d83c85d8ebbf65d995c016b6ca90d85b899f265f12",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_oodval/slim_dualexp_u40_em87p5_s0of4.json": "9af7a4502a072c27cef14903881734b4aa8c181813cf702b3fd395eb1017a070",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_oodval/slim_dualexp_u40_em87p5_s1of4.json": "5131e52baf541089c9cef16be730acfc0715d61d1a679870a9fffec364d499a6",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_oodval/slim_dualexp_u40_em87p5_s2of4.json": "dda5f019d42e2729aea8a9d935242f065d48db3da96b499b6f3822d7b4d11f95",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em87p5_oodval/slim_dualexp_u40_em87p5_s3of4.json": "aa5421e10fe4ab153da444206838108bc0800ba16734073094dc561a2e24f9b5",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_dualexp_u40_em87p5/aggregate/results-summary.json": "7e817bd26d1ef5cad5a0998de4f765629c1c878bb6aa41ab43478f3382198d16",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_dualexp_u40_em87p5/slim_meta.json": "0f42cf871db6db72e167fadcb6ab973ec94a69486b59e0ad7bd96a5ba77e0db0",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_indist/slim_dualexp_u40_em93p75_s0of2.json": "f8364d63d507077e41e513a6c155b35277bd6fc62f142a2850a2a2cc12f875ca",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_indist/slim_dualexp_u40_em93p75_s1of2.json": "fa53806410dacd16d87478d18c85633353aec19cd574603889de77d5d9d4cb04",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_test/slim_dualexp_u40_em93p75_s0of2.json": "ac3b8f689ce4a1dddad98d5d67f2c31364c644dc64201833efaccc27e7ae59c4",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_test/slim_dualexp_u40_em93p75_s1of2.json": "7595bf97173c169822c27682d508719a0e3a6ee9b0a8ce874e4d7183aa6ec58a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_oodval/slim_dualexp_u40_em93p75_s0of2.json": "fca43b3db978e8a05170aa24271b0e4e46177affc7104b2face64e186e57d3ae",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/dualexp_em93p75_oodval/slim_dualexp_u40_em93p75_s1of2.json": "11722daf5fcbac6863a0063bd453c79e9cc9da957c885c1c19b5e24b1820b998",
+    "/home/cvlab21/project/chan/alpasim-runs/m2601_merged_slim_dualexp_u40_em93p75/aggregate/results-summary.json": "6e513c84037379e758e530b1220a2146a523ff5e8b8c0566424dafa2252a31cc",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_dualexp_u40_em93p75/slim_meta.json": "c60a28cadadcb4d9ae9dbdfdff0e8715afbf83968972529b2788b0ed1806ef3d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/expert_axis_analysis/metrics.json": "99662fa4582bbe66a3a011612ef1d34674586ada3ae4a9196c837fa124a2ef2f",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/calibsize_eval/metrics.json": "e76009ec3f44c84650a5ed8be0a9ab25068cb0f3e31cc9e81991dcac084df385",
+    "/home/cvlab21/project/chan/alpasim-runs/hard100/hard100_suite.csv": "3e0830131c6c5bf0a8443a4d76bd52b925dbb6b6a3c88b859b988ea00c917cf1",
+    "/home/cvlab21/project/chan/alpasim-runs/h100_merged_baseline/aggregate/results-summary.json": "d696b0cbe472b56c8a2edcb32e6b40dd19be929d84838a2f58c7966ec3f31ea6",
+    "/home/cvlab21/project/chan/alpasim-runs/h100_merged_lp_r50/aggregate/results-summary.json": "8513b278866b4d49f8bf6fce22a44bb76c300a69d603061e96a62198a9021eed",
+    "/home/cvlab21/project/chan/alpasim-runs/h100_merged_slim_tyr_u40_r/aggregate/results-summary.json": "acd60ea0dc2565bc717a989e3d5421e97f16b7788c67cb78293bbb808e9d7372",
+    "/home/cvlab21/project/chan/alpasim-runs/h100_merged_slim_tyrK/aggregate/results-summary.json": "95e1b7af6d83d3e3ad425723baa63783f9d2c68fd8cbc3b9aa7d24e6d874bba3",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/outputs/slim_tyrK/slim_meta.json": "4c32d727a0dfb20e3c9ddf88db75addaf512bce45f7e3799ab503f4e4484cdb0",
+    "/home/cvlab21/project/chan/alpasim-runs/h100_merged_slim_dual_u40_v2/aggregate/results-summary.json": "7d8731e50e044c509cdf689c59338995356ef3edd38abe2d5f2293224709bd4b",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.png": "b2094eee8cad5d696af9a0a7280fd64be6ffb91ddd8f167409edf2735e7bfc03",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.pdf": "c60c04586713749b1a7333e1abf18b55d9320636f7aa6014002e6ab96157de21",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_q_head.svg": "3e8bd248537989b1fbbefd2c3ff0fe4968321ae4c17e13b5888b4e4d8b1f7462",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.png": "e8db6f60d02b5dabeb89275326cfc7253dd57ffca1e826390c70fa0789bdfef9",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.pdf": "977128040a0c64c00731f7e5c7d09f24249367283dde2e5a39e397d57bed7e50",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_depth_mlp.svg": "e228e50620d5f1fdfc9b055da8400f35d614c353f7e382dbf02d4793257a43e7",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.png": "976700c4d6a186fbef8ad33c406941e4986699ae79c6b70ef02622effcb1d66e",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.pdf": "0fe1a55db39dd925c49ef6d68071fe246a53518340db3e3e1a0c41f7d8c5df29",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_rank_agreement.svg": "f0d868073c1eccdb1d9beacbc551b3af0a4d7d7746a64b87274389950006812b",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.png": "661488a59e9832d8ac2ff0ca188b4cc93f87c3bc266dfad5dff4e35ba8dfb4e7",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.pdf": "e78b9d9f2b2225e9a97a9685371f84b86de6222ad59d794d03bd67ce12bdb777",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig1_kept_overlap.svg": "4a3f2eda0bcebb76ee6b79f687f95668e113c1ddc1fb84c170f343cd85922664",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.png": "35b0ca87ea01545af80cc823b3e4ca6b2ea3daeaa12d896e3a582d2733aff793",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.pdf": "551277a3afa6e2fb6c9d761aecc3acb36bae7099c1f3b31f8ef7675abe005386",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_q_head.svg": "9ba9c1db69948e3a4db0415ca9708822004a03cb92a1bfb79fa2a748a975b82a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.png": "8cf49bf2b64a7e26756da9f66d362f79e7c56422887e5539fee6ab634e7ca7fa",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.pdf": "70a9eb4730b554e6e94c3c0c23f36e0d1c9d0b2fe0c9390b38f05ef63f676c9b",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_steps_mlp.svg": "8d50c897607280b1ebf1c97be70dc8f86ad9d9a77675951082aa232ea4752308",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.png": "4b08f626f73439d33e80e6bdfbcc1c4c8501f07a59484d26dd7b910c0d08602a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.pdf": "4ae4edee9567b41290dd66cdd717a600a6d0b50cb527952ad97b249f32887414",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_mass_curve.svg": "40c49d9df759583c177d4bf567524aaea49d516f57211b71ba0e0bb09c45cd21",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.png": "c5a668bb23a7d145207f391675ad58ea5dc52ad9e76f4dac7914ac5ee6bbd71d",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.pdf": "ec1e5ffcfa86decefde61e65ed45bc20c2b38e7b18124bbc5ff308ea0d3a201a",
+    "/home/cvlab21/project/chan/alpamayo-model-compression/figures/fig2_stability_vs_mass.svg": "b4b52eb1d430416053aca5eaddff5a24b23c1a59b7f19113f53b89f6449e03a1"
+  }
+}

@@ -1,0 +1,6 @@
+Method,Removed (%),Scene score ↑,Collision@fault ↓ (%),Offroad ↓ (%),Progress ↑ (ratio)
+Dense,0.0,0.5105,3.0,26.5,0.5644
+LLM-Pruner,24.0,0.5753,3.5,16.0,0.5817
+Týr-the-Pruner,24.0,0.5856,2.0,21.5,0.6272
+Týr-K,24.0,0.6095,1.5,21.0,0.6477
+Dual,24.0,0.5955,4.0,19.0,0.6492
