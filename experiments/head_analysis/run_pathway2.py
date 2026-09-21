@@ -18,9 +18,18 @@ Token order in the fused prompt (verified from helper.create_message) is
   instruction text | <|cot_start|> | CoC
 so causality already forbids e.g. hist->vision; only the edges below can exist.
 
+--cuts (plans/2026-09-21_importance-causal-validation.md, C) replaces the disjoint 9-layer
+bands by NESTED windows. The band grid found that the layers make up for each other --
+vision <- same-camera earlier frames costs at most +16.5% minADE in any one band and +63.9%
+when blocked everywhere -- so a single window understates an edge. Blocking it in [l, 36)
+for a rising l asks until what depth the interaction is still needed; [0, l) (--upto-edges)
+asks how much later layers can make up. Defaults are the shipped 42-config grid unchanged.
+
 Usage:
   bash experiments/head_analysis/run_pathway.sh 20 --stage2 --gpu 4 \
       --num-clips 13 --clip-offset 0 --k 8 --exp-id pathway_e_s0
+  ... --exp-id vvdepth_s0 --edges VV_allvision E1_crossframe E2_crosscam V3_ownimage \
+      --upto-edges VV_allvision --cuts 0 3 6 9 12 15 18 21 24 27 30 33
 """
 
 import argparse
@@ -99,8 +108,17 @@ def image_runs(vision_mask):
     return runs
 
 
-def edge_specs(spans, prompt_len, coc_start, coc_end, n_frames=4):
-    """(name, [(query_idx, key_idx), ...]) for each VLM-internal edge type."""
+OPEN_DIAG = ("V3_ownimage", "VV_allvision")  # edges whose blocks cover the diagonal
+
+
+def edge_specs(spans, prompt_len, coc_start, coc_end, n_frames=4, vision_edges=False):
+    """(name, [(query_idx, key_idx), ...]) for each VLM-internal edge type.
+
+    vision_edges adds the two edges of plans/2026-09-21_importance-causal-validation.md (C):
+    V3 = a vision token <- the other tokens of its own image, and VV = a vision token <- any
+    other vision token (V3 + E1 + E2). Their blocks include the diagonal, which build_mask
+    re-opens for the names in OPEN_DIAG, so a token always keeps itself.
+    """
     T = coc_end
     vis = spans["vision"]
     runs = image_runs(vis)
@@ -143,10 +161,13 @@ def edge_specs(spans, prompt_len, coc_start, coc_end, n_frames=4):
     specs["E6_coc_hist"] = [(coc_i, hist_i)]
     specs["E7_coc_instr"] = [(coc_i, instr_i)]
     specs["E8_all_sink"] = [(all_i, sink_i)]
+    if vision_edges:
+        specs["V3_ownimage"] = [(rng(a, b), rng(a, b)) for a, b in runs]
+        specs["VV_allvision"] = [(vis_i, vis_i)]
     return specs
 
 
-def build_mask(T, blocks, device, dtype):
+def build_mask(T, blocks, device, dtype, open_diag=False):
     """Additive causal mask with the (query x key) blocks additionally forbidden."""
     neg = torch.finfo(dtype).min
     m = torch.full((T, T), neg, device=device, dtype=dtype).triu_(1)
@@ -154,6 +175,8 @@ def build_mask(T, blocks, device, dtype):
         if len(q) == 0 or len(k) == 0:
             continue
         m[q.to(device).unsqueeze(1), k.to(device).unsqueeze(0)] = neg
+    if open_diag:
+        m.diagonal().zero_()
     return m.view(1, 1, T, T)
 
 
@@ -210,6 +233,15 @@ def main():
     ap.add_argument("--gpu", type=int, default=None)
     ap.add_argument("--clip-offset", type=int, default=0)
     ap.add_argument("--outputs-root", type=str, default=None)
+    ap.add_argument("--edges", nargs="+", default=None,
+                    help="edges to run (default: the eight shipped ones); V3_ownimage and "
+                         "VV_allvision exist only when named here")
+    ap.add_argument("--cuts", type=int, nargs="+", default=None,
+                    help="nested knockouts instead of the 9-layer band grid: for every cut l the "
+                         "edge is blocked in layers [l, 36) (config <edge>@from<l>). Single bands "
+                         "understate an edge the layers can make up for each other")
+    ap.add_argument("--upto-edges", nargs="+", default=[],
+                    help="with --cuts: edges that also get the [0, l) family (<edge>@upto<l>)")
     args = ap.parse_args()
 
     root = Path(args.outputs_root) if args.outputs_root else REPO / "outputs"
@@ -254,7 +286,16 @@ def main():
         seq_tf = roll["sequences"][:, :coc_end].clone()
         del roll
 
-        specs = edge_specs(spans, prompt_len, coc_start, coc_end)
+        specs = edge_specs(spans, prompt_len, coc_start, coc_end,
+                           vision_edges=any(e in OPEN_DIAG for e in args.edges or []))
+        if args.edges:
+            specs = {e: specs[e] for e in args.edges}
+        if args.cuts is None:
+            windows = {e: [(b, list(range(lo, hi))) for b, (lo, hi) in BANDS.items()] for e in specs}
+        else:
+            windows = {e: [(f"from{c}", list(range(c, 36))) for c in args.cuts]
+                       + [(f"upto{c}", list(range(c))) for c in args.cuts
+                          if c > 0 and e in args.upto_edges] for e in specs}
         cfgs = [("E0_none", {"edge": "none", "band": "-", "n_blocks": 0}, None, None),
                 # integrity check: an injected mask with no blocks is just the causal mask,
                 # so this must reproduce E0_none. If it does not, the mask construction is
@@ -262,11 +303,11 @@ def main():
                 ("E0_causalonly", {"edge": "causal_mask_only", "band": "all", "n_blocks": 0},
                  [], list(range(36)))]
         for ename, blocks in specs.items():
-            for bname, (blo, bhi) in BANDS.items():
+            for bname, blayers in windows[ename]:
                 cfgs.append((f"{ename}@{bname}",
                              {"edge": ename, "band": bname, "n_blocks": len(blocks),
                               "n_pairs": int(sum(len(q) * len(k) for q, k in blocks))},
-                             blocks, list(range(blo, bhi))))
+                             blocks, blayers))
         if cfg_names is None:
             cfg_names = [c[0] for c in cfgs]
             cfg_meta = {c[0]: c[1] for c in cfgs}
@@ -277,7 +318,8 @@ def main():
                 "eval_split": args.split, "num_clips": len(clips), "clip_ids": clips,
                 "clip_offset": args.clip_offset, "k_samples": args.k, "seed": args.seed,
                 "seed_from": "sha256(f'{seed}:{clip_id}')[:4] -- shard-invariant",
-                "bands": {k: list(v) for k, v in BANDS.items()},
+                "bands": {k: list(v) for k, v in BANDS.items()} if args.cuts is None else None,
+                "cuts": args.cuts, "upto_edges": args.upto_edges,
                 "protocol": ("per config: one masked teacher-forced VLM forward (readout 1 = "
                              "CoC NLL) then K denoisings on that cache (readout 2 = minADE); "
                              "injected mask carries causality since sdpa drops is_causal when "
@@ -289,7 +331,8 @@ def main():
 
         T = coc_end
         for name, _, blocks, blayers in cfgs:
-            mask = None if blocks is None else build_mask(T, blocks, "cuda", torch.bfloat16)
+            mask = None if blocks is None else build_mask(
+                T, blocks, "cuda", torch.bfloat16, open_diag=name.split("@")[0] in OPEN_DIAG)
             ade, fde, nll = eval_edge(model, inputs, seq_tf, coc_start, coc_end, gt_xy,
                                       seeds, blocker, mask, blayers or [])
             results[name]["ade"].append(ade)
@@ -300,10 +343,11 @@ def main():
         buckets.append(el.bucket(gt_xy))
         clip_ids_done.append(clip_id)
         b = results["E0_none"]
+        shown = "E5_coc_vision@all" if "E5_coc_vision@all" in results else cfg_names[2]
         print(f"[{ci + 1}/{len(clips)}] {clip_id} {buckets[-1]:10s} T={T} "
               f"base={b['ade'][-1]:.3f}/nll={b['nll'][-1]:.3f} "
-              f"cocvis={results['E5_coc_vision@all']['ade'][-1]:.3f}/"
-              f"{results['E5_coc_vision@all']['nll'][-1]:.3f} "
+              f"{'cocvis' if shown.startswith('E5') else shown}={results[shown]['ade'][-1]:.3f}/"
+              f"{results[shown]['nll'][-1]:.3f} "
               f"({time.time() - t0:.0f}s)", flush=True)
         if (ci + 1) % 2 == 0 or ci + 1 == len(clips):
             save(out_dir, cfg_names, cfg_meta, results, buckets, clip_ids_done, ci + 1)

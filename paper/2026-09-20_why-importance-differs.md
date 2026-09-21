@@ -11,6 +11,13 @@ explanation R1–R8 pointed to. **It confirmed the decisive prediction and refut
 the others, so the Analysis section below replaces the one written before the run**; what
 changed is listed at its top.
 
+A third pass on 2026-09-21 (branch `worktree-importance-causal-validation`,
+`plans/2026-09-21_importance-causal-validation.md`, approved by the user; panels
+`figures/fig5_*`, numbers in `figures/fig5_causal_validation_stats.json`) asked whether the
+account describes the network's *function*, and whether it makes the paper's case for the
+dual criterion: R14–R19. About half of its pre-registered gates failed; the plan's Outcome
+table lists them, and the Analysis section has a second part written after them.
+
 ## Purpose
 
 Figure 1 (`fig1_depth_mlp`, `fig1_depth_q_head`, `fig1_rank_agreement`) establishes
@@ -39,6 +46,7 @@ a fourth question needed a new measurement:
 | other runs | `importance_rd100_a/b/c`, `se100_a`, `su100_a`, `val100`, `ood`, `nt500`, `st4000`, `selftraj_v1`, `dim0`, `dim1` (robustness); `importance_vqa` (VQA-NLL and CoC-NLL on LingoQA images); `jlens_v2` (Jacobian lens) |
 | causal evidence cited | `outputs/pathway_x_v1`, `outputs/pathway_e_v1` (attention knockouts, n=50), `outputs/cacheuse_v1` (expert cache-read knockouts, n=100) — all already in the draft's Sec. 7 |
 | new runs (R9–R13) | `outputs/gradanat_v1` (token-type and cache-port split of the shipped gate gradients, `calib_100`, 100 clips, one RTX 5880 Ada, 12 s/clip, peak 42.8 GB), `outputs/gradanat_verify` (3 clips, integrity), `outputs/portmap_v1` (single-cache-layer ports, 100 clips in 3 shards, 30 s/clip). Same protocol as `importance_v2`: own-rollout CoC teacher-forced, 10-step FM loss against the GT action, clip seeds `sha256("42:clip_id")`. They reproduce `importance_v2_ada`'s within-layer ranking at ρ ≥ 0.9993 in every layer |
+| third pass (R14–R19) | `outputs/gradanat_{dual,traj,coc}_u40` (the anatomy of the three shipped arms, teacher-forced on the dense text; masks from `slim_to_mask.py`), `gradanat_probes_v1` (random-readout probes), `tokabl_sets_v1` → `tokabl_v1_s{0..3}` (53 unit-set configs × 100 held-out `indist_500` clips), `armheld_v1_s*` and `armmix_v1_s*` (whole, band-restricted and crossed arm masks on the same 100 clips), `vvdepth_s*` and `vision_census_v1_s*` (nested vision–vision knockouts and the attention census on the 50 `val` clips and seeds of `pathway_e_v1`), `failure_by_situation_v1` (stored open-loop records of the three arms, 2,533 clips). Four RTX 5880 Ada. Every loss readout of R15–R18 is teacher-forced on the **dense** model's rollout, so arms and sets see the same tokens, positions and noise |
 | layer 35 | excluded everywhere: `I_traj` is identically zero there |
 | bands | "early" = layers 0–21, "late" = 22–34, the same shading as `fig1_rank_agreement` |
 
@@ -392,6 +400,389 @@ Panels: `fig4_itraj_ports_mlp`, `fig4_itraj_ports_q_head`, `fig4_port_profile`.
   at 0.96, so that agreement is not the two losses "pointing the same way"; it comes from
   the units' side of the inner product.
 
+### R14. What each shipped criterion kept, in token currency (no GPU)
+
+Plan: `plans/2026-09-21_importance-causal-validation.md`, Stage 0; the prediction was pushed
+(commit `1b4f981`) before the table was computed. The dense token-resolved scores of R9 are
+crossed with the kept sets of the three shipped arms (`dual_u40_v2`, `traj_u40_v2`,
+`coc_u40_v2`: 19 of 32 heads and 7,390 of 12,288 channels in every layer, expert untouched).
+Entries are the share of the dense score's mass, layers 22–34, that sits on kept units; a
+random kept set would hold 0.59 (heads) / 0.60 (channels).
+
+| | | `dual` | `traj` | `coc` |
+|---|---|---|---|---|
+| Q heads | `I_traj` at vision + history tokens | 0.787 | 0.828 | **0.678** |
+| | `I_traj` at text-side tokens | 0.835 | 0.842 | 0.777 |
+| | `I_CoC` at CoC tokens | 0.763 | **0.650** | 0.827 |
+| | `I_CoC` at prompt tokens | 0.852 | 0.781 | 0.865 |
+| MLP channels | `I_traj` at vision + history tokens | 0.697 | 0.712 | **0.651** |
+| | `I_CoC` at CoC tokens | 0.715 | **0.669** | 0.729 |
+
+- Ordering as predicted on both axes: the CoC-only criterion keeps the least trajectory
+  importance earned at vision and history tokens, the trajectory-only criterion the least
+  CoC importance earned at the CoC tokens.
+- "`dual` within 5 pp of the better single criterion": 1.6 pp and 1.4 pp on MLP channels,
+  4.1 pp on the trajectory side of Q heads, **6.4 pp on the CoC side of Q heads — missed.**
+- What the CoC-only criterion loses is late and token-specific: against `traj` it gives up
+  15 pp of `I_traj` at vision/history tokens in layers 22–34 but 3 pp in layers 6–21, and
+  10 pp more at vision/history tokens than at text-side tokens. The late kept sets of the
+  two single criteria overlap 0.68 (Q) / 0.69 (MLP): about 6 of 19 kept heads per layer.
+
+### R15. The pruned models: what survives, and the three arms on the same text
+
+`run_gradient_anatomy.py --mask`, 100 `calib_100` clips per arm. Every arm is teacher-forced
+on the **dense** model's rollout (same tokens, positions and noise seeds; all 100 texts
+identical across runs, and the dense FM loss reproduces R9's run exactly). A mask on the
+full model *is* the shipped checkpoint here: the parameters the mask removes are the
+2,657,452,032 the build removed.
+
+Structure (gate A1, judged on `dual`; all statistics among kept units):
+
+| | dense | `dual` | `traj` | `coc` |
+|---|---|---|---|---|
+| ratio change point, Q / MLP | 23 / 23 | **23 / 23** | 7 / 22 | 21 / 22 |
+| step size, Q / MLP | 4.5× / 4.5× | 3.3× / 4.0× | — / 2.3× | — / 2.3× |
+| MLP hand-over layer, `I_CoC` / `I_traj` | 18 / 21 | **18 / 21** | 10 / 20 | 10 / 19 |
+| agreement at vision tokens, late Q heads (corrected) | 0.786 | **0.804** | 0.746 | 0.888 |
+| pooled agreement, late Q heads (corrected) | 0.382 | 0.257 | 0.425 | 0.553 |
+| layer-profile correlation with dense, MLP (`I_traj` / `I_CoC`) | — | 0.977 / 0.990 | 0.849 / 0.702 | 0.939 / 0.804 |
+| same, Q heads | — | **0.919 / 0.664** | 0.324 / −0.130 | 0.699 / 0.327 |
+
+- Three of A1's four clauses hold for `dual`; **the fourth (profile correlation ≥ 0.98)
+  fails on the Q axis.** The cause is at the bottom of the network, not at the step: the
+  surviving heads of layers 0–1 carry 3.9× (`I_traj`) and 8.3× (`I_CoC`) their dense
+  importance while layers 6–34 carry 1.1× and 1.9×. Without the first two layers the Q
+  correlations are 0.985 and 0.925 (not a gate; reported because it says where the change is).
+- The single-criterion arms lose more of the structure: on the Q axis their ratio no longer
+  has a step (R² 0.34 and 0.15 against 0.79 for `dual`), the early-layer load is 14× / 66×
+  (`traj`) and 11× / 25× (`coc`), and their `I_CoC` hands over to text tokens at layer 6–10
+  instead of 17–18.
+- Cache bands (descriptive): the share of the FM gradient entering through cache layers
+  22–24 is 0.316 (dense) → 0.272 (`dual`) → 0.234 (`traj`) → 0.167 (`coc`) on Q heads, and
+  the share through layers 30–35 rises 0.262 → 0.292 → 0.424 → 0.543.
+
+Function on matched text (gate A2, passed on all four tests; paired one-sided Wilcoxon over
+the 100 clips):
+
+| | FM loss | CoC NLL |
+|---|---|---|
+| dense | 0.2553 | 0.1593 |
+| `dual` | 0.2728 | 0.2182 |
+| `traj` | 0.2846 | **0.5022** |
+| `coc` | **0.2899** | 0.2714 |
+
+- FM loss: `coc` > `dual` (p = 4.6e-06), `coc` > `traj` (p = 1.0e-03). NLL: `traj` > `dual`
+  (p = 1.1e-17), `traj` > `coc` (p = 5.0e-12).
+- Not pre-registered: `dual` is also below each specialist on the specialist's own channel —
+  FM loss `traj` > `dual` (median paired difference +0.0038, p = 2.8e-03), NLL `coc` >
+  `dual` (+0.0163, p = 7.8e-05).
+- These clips are the calibration clips, so each single criterion is in-sample for its own
+  loss. R17 repeats the comparison on held-out clips and splits it by depth.
+
+Panels: `fig5_matched_fm`, `fig5_matched_nll`; run outputs `outputs/gradanat_{dual,traj,coc}_u40`,
+analysis `outputs/gradanat_pruned_v1`.
+
+### R16. Random readouts through the same two doors reproduce the step and the late split
+
+`run_gradient_anatomy.py --probes`, dense model, 100 `calib_100` clips. Each loss is
+replaced by a random linear readout with no language or driving content: **head door**
+`Σ_p ⟨r_p, h_final(p)⟩` over the positions the CE loss reads; **expert door**
+`Σ_s ⟨R_s, v_θ(x_s, t_s)⟩` over the ten FM steps on the same `x_s`; **bare cache door**
+`⟨R, [K_m; V_m]⟩` on every cache layer and position alike, no expert involved.
+
+| | Q heads | MLP channels |
+|---|---|---|
+| layer profile, expert-door probe vs `I_traj` (Pearson) | 0.980 | 0.964 |
+| layer profile, head-door probe vs `I_CoC` | 0.871 | 0.936 |
+| change point of expert-door / head-door | **23** (5.4×, R² 0.87) | **23** (5.5×, R² 0.91) |
+| for reference, `I_traj` / `I_CoC` | 23 (4.5×, R² 0.86) | 23 (4.5×, R² 0.93) |
+| `I_traj` / expert-door probe, layers 22–24 and 25–34 relative to 0–15 | 0.96, 0.82 | 0.95, 0.74 |
+| `I_CoC` / head-door probe, same | 0.81, 0.63 | 0.73, 0.57 |
+
+- **D1 passed**: what any demand on the expert's output does to the VLM has `I_traj`'s
+  depth profile, and the two doors' content-free probes have the step of R1 at the same
+  layer. **D2 failed on the Q axis** (0.871 against 0.90; MLP 0.936).
+- **D3 passed**, and by more than asked: within a layer the expert-door probe ranks Q heads
+  like `I_traj` at 0.990 (layers 6–21) and **0.992 (layers 22–34)** after ceiling
+  correction; the head-door probe and `I_CoC`, 0.965 and 0.880. The two probes against each
+  other: 0.786 in the trunk and **0.353 late** — R4's 0.85 → 0.37 for the real losses,
+  reproduced with no objective on either side.
+- The probes hand over between tokens like the scores they stand in for: share of `E|G|`
+  at vision tokens, layers 6–17 → 27–34, expert door 0.750 → 0.277 (`I_traj` 0.754 → 0.276,
+  MLP), head door 0.520 → 0.049 (`I_CoC` 0.616 → 0.062).
+- **D4 failed** on both clauses as written. (i) Cache side, first-order read by cache
+  layer, FM loss vs expert-door probe over cache layers 16–35: Pearson 0.857 against 0.9
+  (top layers 22, 21, 26, 23, 31 vs 21, 35, 22, 26, 31; the unit-side port share of R12
+  follows the same cache-side profile at 0.86–0.88). (ii) I predicted the bare cache door
+  would show no step. It does not show a *step*, but it is not flat either: relative to the
+  head door it declines as a ramp from about layer 10 (MLP: 0.70 of its trunk level over
+  layers 16–21, 0.33 over 22–24, 0.16 after; a straight line fits it almost as well as a
+  step, R² 0.72 vs 0.85, where for the real ratio it is 0.66 vs 0.93). What the expert adds
+  to the bare door is a boost of layers 16–21 only — 1.9× (Q) and 1.3× (MLP) — which is the
+  signature of its demand being concentrated on cache layers 21–23 (R12).
+- This does not contradict R8. R8 changed the data, the prompt and the read positions
+  together with the text; here the forward pass and the read positions are fixed and only
+  the content of the readout changes. What R8 called output-specific is specific to where
+  and in what context the network is read, not to what is asked for there.
+
+Panels: `fig5_probe_ratio_mlp`, `fig5_probe_ratio_q_head`, `fig5_probe_rank_q_head`; run
+`outputs/gradanat_probes_v1`.
+
+### R17. Held-out ablation: late layers carry the language channel and not the action channel
+
+**Token-targeted unit sets (part B).** `make_token_sets.py` → `run_token_ablation.py`, dense
+model, 100 held-out `indist_500` clips (disjoint from `calib_100`, where every set was
+chosen), paired with the dense model on the same clip, dense text and noise: FM loss 0.2425,
+CoC NLL 0.1708, minADE@8 0.837 unmasked. Per layer 6 of 32 heads or 2,304 of 12,288 channels
+(19%) are removed, in layers 22–34 ("late") or, as the control, 6–17 ("trunk"). T sets are the
+units one score ranks far above the other on the trajectory side, C sets the same on the CoC
+side, from token-resolved ("tok") or pooled ("pool") scores; five random sets per family.
+
+What a band is worth, whatever the rule (mean over its five random sets, share of dense):
+
+| | FM loss | CoC NLL |
+|---|---|---|
+| Q heads, layers 22–34 | **−0.0%** | +6.1% |
+| Q heads, layers 6–17 | +3.9% | +3.8% |
+| MLP channels, layers 22–34 | **−0.6%** | +8.3% |
+| MLP channels, layers 6–17 | +0.7% | +1.0% |
+
+Late layers, mean damage as a share of dense (median in brackets):
+
+| set | FM loss, Q | NLL, Q | FM loss, MLP | NLL, MLP |
+|---|---|---|---|---|
+| T-tok | +0.2% | +1.6% (+1.6%) | −0.4% | +1.5% (−0.0%) |
+| C-tok | −0.2% | **+14.4%** (+7.3%) | −0.1% | +10.3% (+3.7%) |
+| T-pool | +0.1% | +13.5% (+1.7%) | −0.9% | +8.3% (+0.4%) |
+| C-pool | −0.2% | **+15.0%** (+8.1%) | −0.3% | +8.4% (+3.1%) |
+| random, range of five | −0.6 to +0.4% | +4.2 to +8.4% | −0.9 to −0.2% | +5.0 to +11.0% |
+
+- **B1 failed everywhere.** No late-layer set moves the FM loss: every 95% interval contains
+  zero or sits within 1% of dense, the T sets are not above the C sets (p = 0.23, 0.13 on Q;
+  0.87, 0.92 on MLP) and above none of the random sets. The units `I_traj` singles out in
+  layers 22–34 do not carry the action at this dose. The first-order score says the same
+  thing in a different way: over the 17 late configs the summed `I_traj` of the removed
+  units does not order the measured FM damage (Spearman +0.09 on Q, −0.80 on MLP, all
+  damages within ±1%), while the summed `I_CoC` orders the NLL damage at +0.65 / +0.71.
+- **B2 passed on Q heads, half-passed on MLP channels.** Removing the heads `I_CoC` singles
+  out raises the NLL more than removing the ones `I_traj` singles out (tok p = 1.6e-06, pool
+  p = 6.7e-04) and more than every random set (5/5 both): 2.4× the random sets' mean damage,
+  against one quarter of it for T-tok. On MLP the cross-over holds for the
+  token-resolved sets (p = 3.1e-04; pooled p = 0.038) but the C sets are not above the random
+  sets (0/5): there `I_CoC` tells which channels are safe to drop, not which are critical.
+- **B3, the trunk control, failed for the token-resolved Q sets and was not evaluable on
+  MLP.** In layers 6–17 the T and C sets *do* part, on the action side: FM loss +2.8% (T-tok)
+  and +3.5% (T-pool) against +0.6% and +1.3% (C) — paired p = 3.9e-04 and 2.0e-03 — with no
+  difference on the NLL. Both stay below the random sets (+1.8 to +6.0%): a rank-difference
+  rule picks specialised heads, not the important ones. MLP trunk damages are too small for a
+  ratio (a mean ≤ 0).
+- **B4 passed** trivially on the T side (no FM effect to compare) and on the C side (C-tok and
+  C-pool are indistinguishable): token resolution explains the scores (R10) but selects no
+  better than the pooled scores.
+- **B5, what the dual criterion saves, passed on one of four.** The heads the trajectory-only
+  criterion dropped and `dual` kept (S-traj, 3.5 per late layer): NLL +8.6% against +1.3 to
+  +3.2% for three size-matched random sets (3/3), FM loss unchanged — passed. The heads the
+  CoC-only criterion dropped and `dual` kept (S-coc): FM loss +0.6% [−0.0000, +0.0027], above
+  one random set of three — failed; both MLP sets failed (damages within the random range).
+- **`I_CoC` is calibrated across depth; `I_traj` is not** (descriptive). Measured damage per
+  unit of removed score mass, on the random sets — an unbiased sample of a band's units. Q
+  heads: the NLL costs 0.113 per unit of `I_CoC` in the trunk and 0.136 late; the FM loss
+  costs 0.0111 per unit of `I_traj` in the trunk and −0.0000 late. (MLP: 0.0041 and 0.0099;
+  0.0003 and −0.0003 — the trunk dose moves neither loss by more than 1% there.) It is not a
+  matter of sign: the gate gradient's sign agrees across clips at only 0.31 / 0.28
+  (FM, trunk / late) and 0.16 / 0.20 (CE), and the signed first-order prediction `−Σ E_c[G_u]`
+  orders nothing (ρ = +0.19, −0.24 over the 26 Q configs). What a finite removal costs is a
+  second-order matter, which `E|G|` tracks for the CE loss at every depth and for the FM
+  loss only below the step.
+- minADE@8 gates nothing, as planned: every late-set interval contains zero; the trunk T sets
+  average +0.16 to +0.18 m with intervals that reach zero ([−0.004, +0.482]).
+
+**The shipped arms on the same held-out clips, whole and by depth band (A2-heldout,
+A2-bands).** `run_token_ablation.py --arm-masks`: the three arms' masks, and each mask applied
+in layers 0–21 only ("trunk") or 22–35 only ("late") with the other band dense; same 100
+clips, dense text, same seeds. Mean change against dense [95% interval]:
+
+| mask | FM loss | CoC NLL | minADE@8 (m) |
+|---|---|---|---|
+| `dual`, all layers | +5.5% | +32.6% | +0.01 [−0.10, +0.11] |
+| `traj`, all layers | +6.6% | **+240.6%** | +0.06 [−0.04, +0.16] |
+| `coc`, all layers | **+15.8%** | +67.2% | **+0.56** [+0.37, +0.76] |
+| `dual`, late only | +0.1% | +10.1% | −0.01 |
+| `traj`, late only | −0.1% | **+65.5%** | −0.01 |
+| `coc`, late only | +0.1% | +6.3% | +0.00 |
+| `dual`, trunk only | +4.8% | +25.2% | +0.06 [−0.05, +0.15] |
+| `traj`, trunk only | **+26.1%** | +51.2% | **+2.64** [+1.81, +3.54] |
+| `coc`, trunk only | +17.0% | +28.3% | +0.46 [+0.29, +0.64] |
+
+- **A2's ordering holds out of sample.** FM loss `coc` > `dual` (p = 8.7e-08) and > `traj`
+  (1.9e-06); NLL `traj` > `dual` (5.1e-18) and > `coc` (7.0e-14); NLL `coc` > `dual` (3.1e-05).
+  The pre-registered gate also asked for `dual` below `traj` on the FM loss, and that is
+  **not** significant out of sample (median difference +0.0016, p = 0.33), so the gate as
+  written failed; and the NLL gap between `traj` and `coc` is larger out of sample (+0.296)
+  than in sample (+0.231), not smaller as predicted. In-sample selection is not what made
+  R15's language ordering.
+- **(i) passed: the late layers carry language only.** Applied in layers 22–35 alone, no
+  arm's mask moves the FM loss (+0.13%, −0.07%, +0.08%) or minADE, while the trajectory-only
+  mask alone raises the NLL by 65.5% against 6.3% for the CoC-only mask (p = 2.9e-17) and
+  10.1% for `dual`. R17's unit sets and whole arms agree.
+- **(ii) failed, in the opposite direction.** Applied in layers 0–21 alone, it is the
+  *trajectory-only* mask that costs the action most: FM loss +26.1% against +17.0% (CoC-only)
+  and +4.8% (`dual`); minADE +2.64 m against +0.46 m and +0.06 m. `dual`'s trunk selection
+  beats both single criteria on the FM loss (p = 6.7e-13 and 3.1e-15) and is no worse on the
+  NLL (+25% against +28% and +51%).
+- **(iii) failed: depth bands interact, except under `dual`.** Trunk-only plus late-only
+  damage over the full mask's damage: `dual` 0.90 (FM) and 1.08 (NLL); `coc` 1.08 and 0.51;
+  `traj` **3.98** and 0.49. The trajectory-only arm's late-layer pruning, which by itself
+  changes nothing on the action side, removes three quarters of the FM damage its trunk
+  pruning causes (+26.1% → +6.6%; minADE +2.64 m → +0.06 m). The masks were checked (trunk
+  ∧ late = full for every arm and axis).
+- **A2-mix: the repair is about late capacity, not about which late units** (all three
+  predictions failed; both runs reproduce the dense model and the `traj` trunk mask per clip
+  exactly). The `traj` trunk mask with a *random* late mask of the same size: FM loss +8.8%,
+  minADE +0.42 m — most of the way from +26.1% / +2.64 m to the full arm's +6.6% / +0.06 m
+  (above the full mask at p = 0.016 only). With `dual`'s late mask +7.7% / +0.26 m; with
+  `coc`'s, which keeps the language-side late units, the least repair, +13.5% / +0.98 m
+  (I predicted none, ≥ +20%). The reverse cross does nothing for the `coc` trunk (+18.1%
+  with `traj`'s late mask against +17.0% alone; a random late mask: +15.1%, minADE +0.46 →
+  +0.26 m). Reading: a trunk chosen by `I_traj` alone damages what it feeds the late layers;
+  the intact late layers — a language network the action does not otherwise need — turn that
+  into a late cache the expert reads, and thinning them in any way damps it. The
+  trajectory-only arm is a usable driver because it also prunes its late layers, at the
+  price of the language (NLL +241%); `dual`'s trunk needs no such repair (+4.8%, additive).
+
+Panels: `fig5_dissociation_q_head`, `fig5_dissociation_mlp`, `fig5_dual_saves`, `fig5_damage_by_band_fm`,
+`fig5_damage_by_band_nll`; runs `outputs/tokabl_sets_v1`, `tokabl_v1_s{0..3}`, `armheld_v1_s{0..3}`,
+`armmix_v1_s{0..3}`; analyses `outputs/tokabl_v1`, `armheld_v1`, `armmix_v1`.
+
+### R18. Vision–vision interaction by depth: the user's hypothesis, tested causally
+
+The hypothesis: the action loss draws mostly on vision tokens, so action importance should be
+high where vision–vision interaction is high. `run_pathway2.py --cuts` on the 50 `val` clips
+and seeds of `pathway_e_v1` (K = 8): the edge "vision token ← X" is blocked in the nested
+windows [l, 36), l = 0, 3, …, 33, for X = any other vision token (**VV**), same-camera earlier
+frames (E1), other cameras (E2), the rest of its own image (V3); VV also in [0, l). Damage is
+the paired median change over the baseline median (minADE 0.468 m, NLL 0.125), the statistic
+of the stored map. Why nested: the stored 9-layer bands showed the layers make up for each
+other (E1: at most +16.5% in one band, +63.9% everywhere), so single windows have no power.
+
+Integrity: the causal-mask-only control is at +1.8e-04 NLL, and the unblocked run,
+`E1` from 0 and `E2` from 0 reproduce the stored `E0_none`, `E1@all` and `E2@all` per clip
+exactly (max |difference| 0.000).
+
+minADE change when the edge is blocked from layer l to the last [95% interval]:
+
+| l | VV | E1 (time) | E2 (cameras) | V3 (own image) | NLL, VV |
+|---|---|---|---|---|---|
+| 0 | +58.9% [+30, +134] | +63.9% [+6, +82] | +17.4% [−4, +28] | +46.4% [+25, +75] | +54.5% |
+| 9 | +35.1% [+14, +100] | +16.4% [+5, +35] | +7.6% | +37.9% | +31.9% |
+| 12 | +51.3% | +9.0% [+1, +31] | +12.0% | +30.0% [+7, +47] | +23.2% |
+| 15 | +35.3% [+9, +71] | +3.1% | +6.3% | +9.9% [+1, +27] | +15.6% |
+| 18 | **+27.8% [+6, +55]** | +0.1% [−6, +7] | +4.3% [−1, +8] | +2.1% [−1, +9] | +4.1% |
+| 21 | +6.3% [−2, +18] | +0.1% | +0.9% | +0.2% | +0.8% |
+| 24 | +6.5% [−1, +11] | −0.2% | +0.5% | +0.2% | −0.2% |
+| 27 | +1.3% [−1, +4] | −0.1% | −0.1% | +0.1% | −0.2% |
+
+VV blocked in [0, l): +0.1% (l = 6), +6.7% (9), +24.5% (12), +59.8% (18), +52.3% (24).
+
+- **C1 passed.** What each 3-layer window adds to the VV action damage (−0.4, +2.2, +17.8,
+  +14.3, +4.9, **+20.2** (layers 15–17), +11.6, +5.5, +1.7, +1.2, +0.5, −0.9%) follows
+  `I_traj` at vision tokens at Spearman **+0.85** (Q heads) and +0.83 (MLP).
+- **C2: the hypothesis holds up to the importance peak, and my prediction failed.** I expected
+  vision–vision interaction to be finished before layers 16–20, where `I_traj` at vision
+  tokens peaks, because the stored map had E1 and E2 at +1.0% and +3.0% in layers 18–26.
+  Blocked one kind at a time that is still what happens (from layer 18 on: +0.1%, +4.3%,
+  +2.1%). Blocked together, VV from layer 18 on costs **+27.8%**, 47% of blocking it
+  everywhere (the bar for the hypothesis was 25%, my prediction below 10%). The three kinds
+  of vision–vision attention substitute for each other late in the trunk, which a
+  one-edge-at-a-time map cannot see.
+- **C3 failed narrowly.** VV from layer 24 on still costs +6.5% [−0.9, +11.0] (the null band
+  is ±5%); from layer 27 on, +1.3%. The single edges are within 1% from layer 21 on.
+- **Different interactions finish at different depths.** Time (same camera, earlier frames)
+  is done by layers 9–12 (+16.4% from 9, +9.0% from 12, +0.1% from 18); the own image by
+  15–18; cameras never cost more than +20%; *some* vision–vision mixing is needed through
+  layers 18–23. Early interaction is fully replaceable: blocking VV in layers 0–5 costs
+  +0.1%, in 0–8 +6.7%; the damage arrives when the block reaches layers 9–17.
+- **C4, the causal half: it is a shared substrate.** VV's NLL profile follows its action
+  profile over the windows below layer 24 at +0.86, and the VV action profile follows
+  `I_CoC` *at vision tokens* (+0.87 Q, +0.83 MLP) as well as it follows `I_traj` there. What
+  it does not follow is the pooled `I_CoC` (+0.20 Q, −0.31 MLP; pooled `I_traj`: +0.84,
+  +0.64). So the user's hypothesis is right and it is half of the answer to "why are the
+  distributions different": both scores are earned, through layer ~21, where vision tokens
+  are being integrated — that is the shared profile of R1 — and the pooled profiles part
+  because `I_CoC` has a second, text-token component after the hand-over that no vision
+  interaction explains, while `I_traj`'s late component is the first-order shadow of R17.
+- **C4, the observational half, passed — and shows why attention mass is the wrong ruler.**
+  `run_vision_census.py`, same 50 clips: where the 2,880 vision queries put their attention.
+  Mass on tokens of *other* images (earlier frames + other cameras) is 0.25 in layers 0–5,
+  0.23 in 6–11, 0.35 in 12–17, **0.64 in 18–21, 0.60 in 22–27, 0.61 in 28–35**; the sink
+  takes 0.51 and 0.37 in layers 6–11 and 12–17. So cross-image attention stays at 0.60 after
+  layer 22, where the knockouts find it does nothing, and over depth it is unrelated to importance at vision
+  tokens (Spearman −0.10 / +0.19 for `I_traj`, −0.15 / +0.15 for `I_CoC`, Q / MLP). Within a
+  layer it does pick out the important heads, and for both scores alike: ρ = +0.64
+  (`I_traj`) and +0.59 (`I_CoC`) over layers 6–17 — a gap of 0.05 against the 0.1 bar —
+  falling to +0.20 / +0.29 in layers 18–21 and +0.17 / +0.03 after. The hypothesis holds for
+  the causal measure of interaction, not for the observed attention mass.
+
+Panels: `fig5_vv_nested`, `fig5_vv_window_profile`, `fig5_vision_census`; runs
+`outputs/vvdepth_s{0,13,26,38}`, `vision_census_v1_s{0,13,26,38}`, analysis `outputs/vvdepth_v1`.
+
+### R19. Where the single-criterion arms fail: driving situation, free-running CoC, end tokens
+
+Stored open-loop records only (`analyze_failure_by_situation.py`): `coc_u40_v2`,
+`traj_u40_v2`, `dual_u40_v2` against `baseline_ada`, paired per clip over `indist_500` +
+`test_500` + OOD (2,533 clips, K = 8, same seeds), split by the GT manoeuvre
+(`eval_lib.bucket`; recomputed labels match the stored ones on every clip). The question
+was the user's: do the two single criteria fail in *different* situations — CoC-only on
+turns, trajectory-only on straight driving?
+
+ΔminADE against dense, mean over clips (share of the dense model's minADE in that situation):
+
+| | cruise (1,385) | accelerate (413) | decelerate / stop (456) | turn (279) | all |
+|---|---|---|---|---|---|
+| CoC-only | +0.641 (+88%) | +0.387 (+46%) | +0.551 (+68%) | +0.888 (+83%) | +0.611 (+76%) |
+| trajectory-only | +0.162 (+22%) | +0.080 (+10%) | +0.325 (+40%) | +0.286 (+27%) | +0.192 (+24%) |
+| dual | +0.068 (+9%) | +0.078 (+9%) | +0.119 (+15%) | +0.147 (+14%) | +0.088 (+11%) |
+
+- **No cross-over.** The clip-wise difference `d_coc − d_traj` is positive in every
+  situation (cruise +0.479 [+0.416, +0.544], accelerate +0.307 [+0.184, +0.456],
+  decelerate/stop +0.226 [+0.104, +0.376], turn +0.602 [+0.383, +0.822]). Left and right
+  turns do not differ for either arm (−0.237 [−0.677, +0.184] on the difference).
+- **The trajectory-only arm is weakest at decelerate/stop and at turns**, not on straight
+  driving: against cruise, +0.163 [+0.058, +0.266] and +0.124 [+0.002, +0.267]. The same
+  two contrasts for `dual` are +0.051 [−0.047, +0.156] and +0.079 [−0.004, +0.159], and
+  `dual` recovers most exactly there (OOD: decelerate/stop +0.381 → +0.102, turn
+  +0.429 → +0.169). Both contrasts are significant on OOD and pooled, not on the
+  in-distribution sets alone; no multiple-comparison correction.
+- **The CoC-only arm fails everywhere, and part of it is its own CoC collapsing.** 12.1% of
+  its rollouts are degenerate (dense 0.6%, trajectory-only 2.7%, `dual` 2.4%); those clips
+  cost +2.06 m against +0.41 m for the healthy ones and carry 41% of the arm's action
+  damage. Restricted to clips with a healthy CoC the pattern stays (CoC-only +61 / +25 /
+  +60 / +49%, trajectory-only +17 / +7 / +38 / +21%, `dual` +10 / +8 / +10 / +14%).
+- **The CoC-only criterion is not the language-safe one.** Free-running: it is the only arm
+  that often fails to stop — 62 / 65 / 118 rollouts (12.4% / 13.0% / 7.7% of `indist` /
+  `test` / OOD) reach the 256-token limit without the stop token, against 2 / 5 / 23
+  (trajectory-only), 4 / 4 / 13 (`dual`) and 0 (dense); every one of them is classed
+  degenerate. Teacher-forced on GT text (OOD): NLL +0.192 (CoC-only), +0.143
+  (trajectory-only), +0.032 (`dual`). LingoQA: 30.2 (CoC-only), 37.0 (trajectory-only),
+  68.8 (`dual`), 73.2 (dense). The one language readout on which CoC-only beats
+  trajectory-only is the one it was selected on — the NLL of the dense model's own text
+  (R15) — and there `dual` beats it too.
+- **End tokens are in `I_CoC`, and nearly silent.** The scored span is
+  `seq[prompt_len : eos_pos + 1]`: the CoC text, `<|cot_end|>` and the stop token
+  `<|traj_future_start|>`; all 100 calibration rollouts ended with that pair. Measured on 30
+  calibration clips: text tokens carry 94.5% of the gradient energy the loss sends into the
+  final hidden states, `<|cot_end|>` 5.5% (6.9% of the tokens, mean NLL 0.061), the stop
+  token 0.0% (NLL 0.0000 — it is certain once `<|cot_end|>` is out). So the decision to stop
+  enters `I_CoC` through one position in about fourteen, under teacher forcing, on a prefix
+  that is always well-formed — which says nothing about reaching that state when the prefix
+  is the pruned model's own.
+- **Which clips make each score** (`calib_100`, Q heads, per-clip gate gradients): turns
+  are 17% of the clips and 46.7% of `I_traj`'s mass (mean FM loss 0.53 against 0.18 for
+  cruise); decelerate/stop clips are 18% and 7.6%. `I_CoC`'s mass follows the clip shares
+  (44 / 17 / 19 / 21%). Ten clips carry 49% of `I_traj` and 27% of `I_CoC`. The
+  trajectory-only arm's weakest situation is the one its score under-represents most; with
+  four buckets this is a coincidence worth testing, not a result.
+
 ## Analysis (opinion)
 
 **What the GPU pass changed.** Before it, this section argued that in late layers the CE
@@ -449,18 +840,112 @@ gradients are orthogonal everywhere, including where their rankings agree.
   nearly free before it (corrected agreement 0.85–0.96). That is a sharper statement of C2
   than "each loss illuminates its own substrate": the substrate is shared; what differs is
   which tokens each loss scores a late unit on.
-- It also says what a single criterion loses. `I_CoC` is blind to a late unit's work at
-  vision and history tokens (2% of its late score; 34–51% of `I_traj`'s). `I_traj` is not
+- It also says what a single criterion *cannot see*. `I_CoC` is blind to a late unit's work
+  at vision and history tokens (2% of its late score; 34–51% of `I_traj`'s). `I_traj` is not
   blind to text tokens (49–66%) but ranks heads differently at the CoC tokens themselves.
-  That matches the asymmetry the single-criterion arms showed: CoC-only is the
-  single-criterion arm that loses closed-loop driving (0.660, −0.089 against the unpruned
-  model), while trajectory-only loses language (LingoQA 73.2 → 37.0).
+  **Corrected by R17 (2026-09-21):** this paragraph went on to say that the blindness
+  "matches" CoC-only losing closed-loop driving (0.660, −0.089 against the unpruned model)
+  and trajectory-only losing language (LingoQA 73.2 → 37.0). Half of that does not survive
+  measurement. At the shipped dose the action does not depend on late-layer units at all —
+  the CoC-only arm's late mask costs +0.1% FM loss and 0.00 m — so what `I_CoC` cannot see
+  up there is not why it loses driving; it loses it in the trunk (R17). The language half
+  stands (the trajectory-only arm's late mask alone: NLL +65.5%), with the amendment that
+  on LingoQA *both* single criteria collapse (CoC-only 30.2).
 - R8 generalises beyond these two losses: late-layer units are specific to each output, so
   a criterion needs a term per output the compressed model must keep. VQA would not ride
   on `I_CoC`.
 - Practical: the step's location is fixed by the architecture (cache port 21–23), not by
   data. An allocation that treats layers ≤ 21 and ≥ 23 as two regimes does not need to be
   re-derived per calibration set.
+
+**What the causal round (R14–R19) changed.** R1–R13 described two *scores*. The second plan
+asked whether that description is about the network's function, with every prediction
+written down first. Roughly half of them failed, and the failures are what reorganise the
+account.
+
+*The split is between two doors, not between two tasks (R16).* A random readout through
+the expert has `I_traj`'s depth profile (0.98 / 0.96), hands over between tokens like it and
+ranks heads like it (0.99, early and late); two content-free probes reproduce the step at
+layer 23 and the late rank split (0.79 → 0.35). What a loss can see of the VLM is fixed by
+where it reads it — the final hidden states at a dozen text positions, or every cache layer
+at every position through the expert — and hardly by what it asks for there. The step itself
+decomposes: the VLM's wiring gives *any* cache-side demand a ramp (a deeper unit feeds fewer
+cache layers), the expert's concentration on cache layers 21–23 lifts layers 16–21 by
+1.3–1.9× and so turns the ramp into a step, and the FM objective adds a factor of about 0.8
+after layer 22. "Each loss illuminates its own substrate" should read "each interface does".
+
+*After the step the VLM is, functionally, a language network (R17).* Removing 19% of the
+late heads or channels — by either score, by their difference, at random, or as whole arms —
+does not move the FM loss (−0.0%, −0.6%; arms +0.1%) or minADE. It moves the NLL: +6 to +8%
+for random sets, +14 to +15% for the heads `I_CoC` singles out, +65% for the
+trajectory-only arm's late mask. So `I_traj`'s late-layer scores, 18–47% of its peak on the
+MLP axis, have no functional counterpart at this dose. They are the first-order shadow of the
+route the gradient takes through the late cache ports (R12), a route the knockouts had
+already shown the expert does not depend on. `I_CoC` is calibrated across depth (0.113 vs
+0.136 NLL per unit of score on Q heads); `I_traj` is not (0.0111 vs 0). I predicted a double
+dissociation in the late layers and found a single one.
+
+*That corrects an explanation given above.* The first round's "Consequences" said CoC-only
+loses driving because `I_CoC` is blind to a late unit's work at vision and history tokens.
+Stage 0 confirms the blindness in score currency (R14) — and R17 shows it does not matter:
+the CoC-only arm's late mask costs the action nothing (+0.1% FM loss, +0.00 m). CoC-only
+loses the action in the trunk (+17.0% FM loss, +0.46 m with the trunk mask alone, against
++15.8% and +0.56 m for the whole arm).
+
+*The measured case for the dual criterion is in the shared trunk (R17).* Below layer 22 the
+two scores agree at 0.85–0.96 and differ, arm against arm, in about two heads per layer. Yet
+a trunk pruned by `I_traj` alone costs the action +26.1% FM loss and +2.64 m, by `I_CoC`
+alone +17.0% and +0.46 m, by their union +4.8% and +0.06 m, on held-out clips with the late
+layers left dense. Neither first-order score identifies on its own the trunk units the
+action needs; keeping a unit when *either* door ranks it high does. The port route does not
+explain which units those are (the rescued heads reach the FM loss through the early cache
+no more than any other trunk head, 7% against 7%). The cross-over runs say where the
+trajectory-only trunk goes wrong: most of its action damage disappears when the late layers
+are thinned in *any* way — a random late mask takes it from +26.1% to +8.8% — so it is damage
+that the intact late layers amplify into the cache the expert reads, not damage to the
+action pathway itself. The likeliest reading is that `I_traj` alone lets go of trunk units
+the language pathway needs, and the language network above them then writes a corrupted
+late cache. The action is thus not independent of the language pathway even though it does
+not *use* the late layers: the expert reads what they write. That is an argument for the
+language-side score that holds for a user who only cares about driving.
+
+*The user's hypothesis is right, and it is the shared half of the answer (R18).* Action
+importance is high where vision–vision interaction is needed: the depth profile of the
+action's need for it follows `I_traj` at vision tokens at +0.85, up to and under the
+importance peak (blocking every vision–vision edge from layer 18 on still costs +27.8%), and
+it ends with the hand-over, at layers 21–24. But it follows `I_CoC` at vision tokens just as
+well (+0.87), and blocking the same edges raises the NLL with the same profile (+0.86). So
+vision integration is what *both* scores are earned on below the step — it is the shared
+profile of R1, now with a causal footing — and it cannot be what separates them. What
+separates the pooled profiles is what lies above it: a text-token component that is real
+function for `I_CoC` and a first-order shadow for `I_traj`. Observed attention mass is the
+wrong ruler for any of this: cross-image attention is 0.60 of a vision query's mass in the
+late layers, where removing it changes nothing.
+
+*Single criteria fail unevenly; the union fails evenly (R15, R17, R19).* On held-out clips
+and matched text the trajectory-only arm loses the language (NLL +241%) and the CoC-only arm
+the action (FM loss +15.8%, minADE +67%); free-running, the CoC-only arm also loses the
+language it was selected on (12% degenerate chains, 8–13% that never stop), because a
+teacher-forced first-order score protects next-token likelihood on a well-formed prefix, not
+the ability to reach one. Across driving situations the trajectory-only arm is weakest at
+decelerate/stop and turns, the CoC-only arm everywhere, `dual` evenly (+9 to +15%).
+
+**Consequences for the paper, second round.**
+
+- C2 can now be stated at the level of function, in three parts: (i) a criterion that reads
+  the VLM through one output interface is blind by construction, whatever its objective
+  (R16); (ii) above layer 22 only the language channel depends on which units are kept, so
+  letting `I_traj` decide there costs language for nothing (R17); (iii) below layer 22 the
+  union of the two scores selects a far better network than either score, for the action as
+  much as for the language (R17). Item 6 below is a draft paragraph.
+- "Each loss illuminates its own substrate" should become "each interface" (R16), and the
+  late-layer `I_traj` profile should not be read as the action's dependence on late layers
+  (R17).
+- The shared trunk profile can be given its cause: both scores are earned where vision
+  tokens are integrated, layers ~6–21 (R18).
+- A side finding for the allocation work: pruning every layer at the same ratio loads the
+  surviving heads of layers 0–1 with 4–8× their dense importance under `dual`, and 11–66×
+  under the single criteria (R15).
 
 ## Suggested manuscript changes
 
@@ -534,6 +1019,45 @@ layers 22–23 and the token hand-over to layers 17–24, both at single-layer r
 both compatible with the knockouts. Worth saying once so the numbers do not look
 inconsistent.
 
+**6. A paragraph on why the criterion needs both losses (after the paragraph of item 1, or in
+Sec. 5 where the dual criterion is introduced).** Draft, to be cut to length:
+
+> *Why score with both losses.* The divergence of Fig. 1 is a property of the two output
+> interfaces rather than of the two tasks. Replacing each loss by a random linear readout
+> through the same interface — the expert's predicted field, or the final hidden states at
+> the CoC positions — reproduces the two depth profiles (r = 0.96 and 0.94 on the MLP axis),
+> the step at layer 23 (5.5× against 4.5×) and the late-layer rank disagreement (ρ = 0.79 →
+> 0.35 between the two probes), and the expert-side probe ranks heads as `I_traj` does
+> (ρ = 0.99). A criterion that reads the network through one interface is therefore blind
+> by construction, and the blindness has functional consequences. We applied each shipped
+> mask to one depth band at a time on 100 held-out clips, every model teacher-forced on the
+> dense model's reasoning text. Above layer 22 the action does not depend on which units are
+> kept (flow-matching loss within 0.13% of the dense model under all three criteria) while
+> the reasoning does: the trajectory-only mask raises the CoC NLL by 65% there, the CoC-only
+> mask by 6%, and removing only the heads that the trajectory-only criterion drops and the
+> dual criterion keeps costs 8.6% against 1.3–3.2% for random heads. Below layer 22, where
+> the two scores agree (ρ = 0.85–0.96) and the criteria differ by about two heads per layer,
+> their union still selects a markedly better network than either score alone: +4.8%
+> flow-matching loss and +0.06 m minADE, against +17.0% / +0.46 m (CoC-only) and +26.1% /
+> +2.64 m (trajectory-only). With the full masks each single criterion loses one channel —
+> trajectory-only the reasoning (NLL +241%; LingoQA 37.0), CoC-only the action
+> (flow-matching loss +16%, minADE +67%) and, in free-running generation, the reasoning too
+> (8–13% of its chains never terminate) — while the dual criterion loses neither (+5.5%, +33%,
+> +0.01 m; LingoQA 68.8), and it is the only one whose open-loop cost is even across driving
+> situations (+9 to +15% of the dense minADE, against +10 to +40% and +46 to +88%).
+
+**7. Figure for that paragraph, three panels.** (a) `fig5_probe_ratio_mlp`;
+(b) `fig5_damage_by_band_fm` next to `fig5_damage_by_band_nll` (or one of them with the other
+in the supplement); (c) `fig5_failure_by_manoeuvre`. Supplementary: `fig5_probe_rank_q_head`,
+`fig5_dissociation_*`, `fig5_dual_saves`, `fig5_matched_*`, the three `fig5_vv_*` panels.
+
+**8. Two sentences of the current draft need care.** (i) Anything of the form "CoC-only
+loses the driving, trajectory-only loses the language": both single criteria lose the
+language on LingoQA (30.2 and 37.0), and free-running it is the CoC-only arm whose chains
+degenerate (12.1% against 2.7%); name the readout. (ii) Anything that reads late-layer
+`I_traj` as the action's dependence on late layers: at the shipped dose the action does not
+depend on them at all (R17). Late-layer `I_traj` is where the gradient travels.
+
 ## Caveats
 
 - The ratio's *levels* are not interpretable (different loss units); only its shape is.
@@ -564,3 +1088,20 @@ inconsistent.
   band-level version and before any port-map data.
 - One model, one calibration set of 100 clips for R9–R13. R2 suggests depth structure does
   not depend on the calibration set, but that was shown for the pooled score only.
+- R15–R18 read both losses teacher-forced on the dense model's text. That is what makes the
+  arms comparable clip by clip, and it is blind to what free-running generation does to a
+  pruned model (R19: 8–13% of the CoC-only arm's chains never stop). Read the two kinds of
+  language readout side by side.
+- R17's unit sets are one dose (19% of a band's heads or channels); the arms are the shipped
+  40%. "The action does not depend on late layers" is a statement at those doses.
+- R17 says the union selects a better trunk than either score; it does not say why, and the
+  one explanation tried (the rescued heads reach the expert through the early cache) is
+  wrong. It supports scoring with both losses, not the rank-max rule in particular.
+- R18's nested windows measure need given that every later (or earlier) layer is blocked
+  too. Its predictions, and those of A2-bands and A2-mix, were written after earlier results
+  of the same plan had been seen; the plan says which.
+- R16's probes are random *linear* readouts, one draw per clip. D4 was judged on the
+  cache-side profile, not on the unit-side port profile the plan named (72 backwards per clip
+  per probe were not run).
+- R19 is open loop (this repo has seen open and closed loop disagree), 279 turn clips, no
+  multiple-comparison correction.

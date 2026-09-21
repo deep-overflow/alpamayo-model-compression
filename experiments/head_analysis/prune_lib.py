@@ -159,6 +159,21 @@ class TypedUnitGates:
         """type_idx: (T,) long, the token type of every position of the coming forward."""
         self.type_idx = type_idx
 
+    def set_mask(self, q=None, mlp=None):
+        """Start the gates at a 0/1 keep mask, (L, H) / (L, I), instead of at one.
+
+        A gate at zero removes its unit exactly as mask_lib.PruneMasks does (zero output, zero
+        gradient to its input) without the extra (T, U) product a separate mask hook would
+        keep alive. The grad of a zeroed gate is the gain of switching the unit back on, not
+        an importance: callers multiply what they read by the mask.
+        """
+        with torch.no_grad():
+            for gates, mask in ((self.q_gates, q), (self.mlp_gates, mlp)):
+                if mask is not None:
+                    for i, g in enumerate(gates):
+                        g.copy_(torch.as_tensor(mask[i], device=g.device, dtype=g.dtype)
+                                .expand_as(g))  # (n_types, U)
+
     def _make_q_hook(self, i):
         def hook(module, args):
             x = args[0]  # (1, T, H*D)
@@ -515,7 +530,7 @@ def best_of_n_target(model, cache, rope_deltas, prefill, gt_xy, hist_xyz, hist_r
 
 
 def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_draws=1,
-                    dims=None, wt=None):
+                    dims=None, wt=None, readout=None):
     """Run the FM loss backward through the expert onto detached cache leaves.
 
     Returns the accumulated dL/d(cache) so a single VLM backward can follow, and
@@ -543,7 +558,15 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
     position-space influence goes as (n_tok - t). Closed loop points the same way -- it
     executes 0.1 s per plan and only ~1.9 s of the 6.4 s is realised at all
     (plans/2026-09-11_effective-plan-horizon.md). wt=None is the shipped path.
+
+    readout, an int seed, replaces the loss at every step by a random linear readout of the
+    predicted field, mean(R_s * v_theta(x_s, t_s)) with R_s ~ N(0, I), on the SAME x_s the FM
+    loss uses. It asks what any demand placed on the expert's output does to the cache,
+    with no target in it (plans/2026-09-21_importance-causal-validation.md, part D).
+    readout=None is the shipped path.
     """
+    if readout is not None and (dims is not None or wt is not None):
+        raise ValueError("readout replaces the loss; dims and wt do not apply to it")
     device = x1.device
     n_layers = len(model.expert.layers)
     leaves = []
@@ -563,6 +586,7 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
         forward_kwargs["is_causal"] = False
 
     losses = []
+    rgen = None if readout is None else torch.Generator(device="cpu").manual_seed(readout)
     for draw in range(k_draws):
         gen = torch.Generator(device="cpu").manual_seed(seed + draw)
         for s in range(fm_steps):
@@ -589,7 +613,9 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
             if dims is not None:
                 idx = torch.as_tensor(dims, device=device, dtype=torch.long)
                 p_, t_ = p_.index_select(-1, idx), t_.index_select(-1, idx)
-            if wt is None:
+            if rgen is not None:
+                loss = (torch.randn(p_.shape, generator=rgen).to(device) * p_).mean()
+            elif wt is None:
                 loss = F.mse_loss(p_, t_)
             else:
                 # weighted over the 64 trajectory waypoints. Normalised to sum to n_tok so
@@ -603,6 +629,46 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
 
     grads = [(k.grad, v.grad) for k, v in leaves]
     return float(np.mean(losses)), grads, leaves
+
+
+@torch.no_grad()
+def expert_fm_loss(model, cache, rope_deltas, x1, fm_steps, seed, prefill):
+    """The FM loss of expert_fm_grads, forward only: same noise stream, same t grid.
+
+    For reading a masked model's flow-matching loss on a cache that then goes on to be
+    sampled from (run_token_ablation.py); the cache is cropped back after every step.
+    """
+    device = x1.device
+    offset = torch.tensor([prefill], device=device)
+    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
+    n_tok = model.action_space.get_action_space_dims()[0]  # 64
+    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
+        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
+        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
+    )
+    forward_kwargs = {}
+    if model.config.expert_non_causal_attention:
+        forward_kwargs["is_causal"] = False
+
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    losses = []
+    for s in range(fm_steps):
+        t_val = (s + 0.5) / fm_steps
+        noise = torch.randn(x1.shape, generator=gen).to(device)  # (1, 64, 2)
+        x_t = (1.0 - t_val) * noise + t_val * x1
+        t = torch.full((1, 1, 1), t_val, device=device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
+            if embeds.dim() == 2:
+                embeds = embeds.view(1, n_tok, -1)
+            out = model.expert(
+                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+            )
+            cache.crop(prefill)
+            pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
+        losses.append(F.mse_loss(pred.float(), x1 - noise).item())
+    return float(np.mean(losses))
 
 
 # ---------------------------------------------------------------------------

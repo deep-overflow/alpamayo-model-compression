@@ -294,6 +294,13 @@ traj-절반B를 traj 자신만큼 예측). 17–24층에 걸쳐 네트워크가 
 잃고(0.660, −0.089), traj-only는 language를 잃는다(LingoQA 73.2 → 37.0). 계단 위치는 아키텍처(포트 21–23)가
 정하므로 calibration set마다 다시 구할 필요가 없다.</p>
 
+<div class="callout bad">
+<p><strong>정정 (2026-09-21, 후속 인과 검증 <code>2026-09-21_importance-causal-validation.html</code>).</strong> 위 문단의 두 주장은 측정으로 반박됐다(원문은 그대로 둔다).
+(1) <code>I_CoC</code>의 후반층 맹점은 점수 통화로는 실재하지만 <strong>CoC-only가 주행을 잃는 이유가 아니다</strong> — held-out 100클립에서 CoC-only 마스크를 후반층(22–35)에만
+적용하면 FM loss +0.1%, minADE +0.00 m이고, 주행 손실은 trunk(0–21층)에서 난다(FM +17.0%, +0.46 m). 언어 쪽 절반은 성립한다(traj-only 후반 마스크: NLL +65.5%).
+(2) union은 "hand-over 이전에는 거의 공짜"이긴 하나 <strong>실측 이득은 trunk에서 가장 크다</strong>(trunk만 자를 때 FM loss: dual +4.8% vs CoC-only +17.0% vs traj-only +26.1%).</p>
+</div>
+
 <h2><span class="num">7</span>한계</h2>
 
 <ul>

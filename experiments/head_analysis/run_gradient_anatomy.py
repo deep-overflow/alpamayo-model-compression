@@ -29,6 +29,21 @@ layer, which does not fit next to a 42 GB pass on a 48 GB card.
 
 Pre-registered gates (G0, P1-P4) are evaluated by analyze_gradient_anatomy.py.
 
+Two later modes, plans/2026-09-21_importance-causal-validation.md:
+
+--mask (part A) measures the same anatomy on a pruned model. The rollout runs before any
+hook is installed, so every arm is teacher-forced on the DENSE model's text with the same
+positions and noise; the typed gates then start at the 0/1 keep mask (TypedUnitGates.set_mask),
+which removes the masked units for the forward and both backwards. The per-clip CoC NLL and
+FM loss on that fixed text are the arm's matched functional readout.
+
+--probes (part D) keeps the CE and the full-seed FM backward and replaces the band and
+position splits by three random linear readouts with no language or driving content:
+  head    sum over the CE positions of <r_p, h_final(p)>
+  expert  the FM sweep with its loss replaced by <R_s, v_theta(x_s, t_s)> (same x_s)
+  cache   <R, [K_m; V_m]> on every cache layer and position alike, no expert involved
+analyze_pruned_anatomy.py and analyze_probes.py evaluate the gates of those two parts.
+
 Usage:
   ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 3 \
       experiments/head_analysis/run_gradient_anatomy.py --gpu 4 --exp-id gradanat_v1
@@ -84,7 +99,7 @@ def rel_err(a, b):
     return float(np.max(num[den > 0] / den[den > 0])) if (den > 0).any() else 0.0
 
 
-def process_clip(model, processor, data, args, seed):
+def process_clip(model, processor, data, args, seed, mask=None):
     inputs = lib.build_inputs(model, processor, data, "cuda")
     prompt_len = inputs["input_ids"].shape[1]
 
@@ -110,6 +125,9 @@ def process_clip(model, processor, data, args, seed):
     gates = pl.TypedUnitGates(layers, tc.num_attention_heads, tc.head_dim,
                               tc.intermediate_size, len(TYPES), "cuda", mlp=not args.verify)
     gates.set_types(type_idx)
+    if mask is not None:
+        # the rollout above ran with no hook installed: the text is the dense model's
+        gates.set_mask(q=mask[0], mlp=mask[1])
 
     # residual stream after every decoder layer, captured so its .grad can be read
     hs = [None] * n_vlm
@@ -148,6 +166,9 @@ def process_clip(model, processor, data, args, seed):
         """Signed typed grads of the backward that just ran, then reset. (n_types, L, U)."""
         q = gates.q_signed()
         mlp = None if args.verify else gates.mlp_signed()
+        if mask is not None:
+            # a zeroed gate's grad is the gain of switching the unit back on, not an importance
+            q, mlp = q * mask[0][None], mlp * mask[1][None]  # (5, L, H), (5, L, I)
         if args.verify:
             verify.append(rel_err(q.sum(0), ref.q_signed()))
             ref.zero_grads()
@@ -186,19 +207,39 @@ def process_clip(model, processor, data, args, seed):
     nll.backward(retain_graph=True)
     ce_q, ce_mlp = read()
     res_ce, _, _, ce_cpu = residual()
+    nll_val = float(nll)
+    probe = {}
+    if args.probes:
+        res_on[0] = False
+        gen = torch.Generator(device="cuda").manual_seed(seed + 7919)
+        h = hidden[0, coc_start - 1 : coc_end - 1].float()  # (Tc, 4096) the states the CE reads
+        r = torch.randn(h.shape, generator=gen, device=h.device)  # (Tc, 4096)
+        (r * h).sum(-1).mean().backward(retain_graph=True)
+        probe["head"] = read()
+        res_on[0] = True
+        del h, r
     del hidden, nll
 
     # ---- FM: the shipped expert pass, then the seed split two ways ----
     fm_loss, grads, leaves = pl.expert_fm_grads(
         model, cache, rope_deltas, x1, args.fm_steps, seed, prefill
     )
-    direct = np.zeros((n_vlm, len(TYPES)))
-    with torch.no_grad():
-        for m, ((k, v), (gk, gv)) in enumerate(zip(leaves, grads)):
-            if gk is None or gv is None:
-                raise RuntimeError(f"expert left no gradient on cache layer {m}")
-            a = (k * gk).abs().sum((0, 1, 3)) + (v * gv).abs().sum((0, 1, 3))  # (T,)
-            direct[m] = by_type(a, type_idx).cpu().numpy()
+
+    def cache_read(lv, gr):
+        """|k dL/dk| + |v dL/dv| on the expert-side leaves, and the energy of the cache
+        gradient itself, by (cache layer, position type). (L, 5) each."""
+        d, e = np.zeros((n_vlm, len(TYPES))), np.zeros((n_vlm, len(TYPES)))
+        with torch.no_grad():
+            for m, ((k, v), (gk, gv)) in enumerate(zip(lv, gr)):
+                if gk is None or gv is None:
+                    raise RuntimeError(f"expert left no gradient on cache layer {m}")
+                a = (k * gk).abs().sum((0, 1, 3)) + (v * gv).abs().sum((0, 1, 3))  # (T,)
+                d[m] = by_type(a, type_idx).cpu().numpy()
+                en = gk.float().pow(2).sum((0, 1, 3)) + gv.float().pow(2).sum((0, 1, 3))  # (T,)
+                e[m] = by_type(en, type_idx).cpu().numpy()
+        return d, e
+
+    direct, cg_fm = cache_read(leaves, grads)
 
     # the shipped operation itself: ONE backward seeded with the whole cache gradient. D1 and
     # the residual gradient are read off this backward, so the token-type split (P1, P2) is an
@@ -210,6 +251,38 @@ def process_clip(model, processor, data, args, seed):
     res_fm, res_dot, res_cos, _ = residual(ce_cpu)
     del ce_cpu
     res_on[0] = False
+
+    rec = {"coc_len": int(coc_end - coc_start), "prompt_len": int(prompt_len),
+           "n_tok": {k: int(n) for k, n in zip(TYPES, n_tok)}, "fm_loss": float(fm_loss),
+           "nll": nll_val}
+    out = {"ce_q": ce_q, "full_q": full_q, "direct": direct,
+           "res_ce": res_ce, "res_fm": res_fm, "res_dot": res_dot, "res_cos": res_cos}
+    if not args.verify:
+        out.update({"ce_mlp": ce_mlp, "full_mlp": full_mlp})
+
+    if args.probes:
+        _, pgrads, pleaves = pl.expert_fm_grads(
+            model, cache, rope_deltas, x1, args.fm_steps, seed, prefill, readout=seed + 104729
+        )
+        direct_pr, cg_pr = cache_read(pleaves, pgrads)
+        pl.vlm_backward_from_cache(cache_t, pgrads, retain=True)
+        probe["expert"] = read()
+        del pgrads, pleaves
+        gen = torch.Generator(device="cuda").manual_seed(seed + 15485863)
+        seeds = [(torch.randn(k.shape, generator=gen, device=k.device, dtype=k.dtype),
+                  torch.randn(v.shape, generator=gen, device=v.device, dtype=v.dtype))
+                 for k, v in cache_t]  # (1, KV, T, D) each
+        pl.vlm_backward_from_cache(cache_t, seeds, retain=False)
+        probe["cache"] = read()
+        del seeds
+        for name, (q, mlp) in probe.items():
+            out[f"pr_{name}_q"], out[f"pr_{name}_mlp"] = q, mlp  # (5, L, H), (5, L, I)
+        out.update({"direct_probe": direct_pr, "cg_fm": cg_fm, "cg_probe": cg_pr})
+        rec["peak_gb"] = round(torch.cuda.max_memory_allocated() / 1024**3, 2)
+        gates.remove()
+        hs.clear()
+        del cache, cache_t, leaves, grads, inputs
+        return out, rec
 
     band_q, band_mlp = [], []
     for lo, hi in BANDS:
@@ -234,11 +307,9 @@ def process_clip(model, processor, data, args, seed):
     gates.remove()
     if ref is not None:
         ref.remove()
-    out = {"ce_q": ce_q, "full_q": full_q, "band_q": band_q, "pos_q": pos_q, "direct": direct,
-           "res_ce": res_ce, "res_fm": res_fm, "res_dot": res_dot, "res_cos": res_cos}
+    out.update({"band_q": band_q, "pos_q": pos_q})
     if not args.verify:
-        out.update({"ce_mlp": ce_mlp, "full_mlp": full_mlp,
-                    "band_mlp": np.stack(band_mlp),  # (6, 5, L, I)
+        out.update({"band_mlp": np.stack(band_mlp),  # (6, 5, L, I)
                     "pos_mlp": np.stack(pos_mlp)})  # (5, 5, L, I)
     # how far each seed split's total lands from the single full-seed backward (Q heads)
     tot, bsum, psum = full_q.sum(0), band_q.sum((0, 1)), pos_q.sum((0, 1))  # (L, H)
@@ -250,12 +321,11 @@ def process_clip(model, processor, data, args, seed):
     def rank_min(a):
         return float(min(spearmanr(np.abs(a[l]), np.abs(tot[l]))[0] for l in range(35)))
 
-    rec = {"coc_len": int(coc_end - coc_start), "prompt_len": int(prompt_len),
-           "n_tok": {k: int(n) for k, n in zip(TYPES, n_tok)}, "fm_loss": float(fm_loss),
-           "peak_gb": round(peak, 2),
-           "bands_vs_full_relerr_by_layer": per_layer(bsum).tolist(),
-           "pos_vs_full_relerr_by_layer": per_layer(psum).tolist(),
-           "bands_vs_full_rank_rho_min": rank_min(bsum), "pos_vs_full_rank_rho_min": rank_min(psum)}
+    rec.update({"peak_gb": round(peak, 2),
+                "bands_vs_full_relerr_by_layer": per_layer(bsum).tolist(),
+                "pos_vs_full_relerr_by_layer": per_layer(psum).tolist(),
+                "bands_vs_full_rank_rho_min": rank_min(bsum),
+                "pos_vs_full_rank_rho_min": rank_min(psum)})
     if args.verify:
         rec["typed_vs_single_relerr"] = verify  # [CE, full seed, 6 bands, 5 position types]
     hs.clear()
@@ -278,7 +348,22 @@ def main():
                     help="G0: shipped UnitGates next to Q-head-only typed gates; checks the "
                          "typed grads sum to the single-gate grad on every backward. No MLP "
                          "arrays are produced in this mode")
+    ap.add_argument("--mask", type=str, default=None,
+                    help="npz with q_mask/mlp_mask (L,H)/(L,I) 0-1 keep masks (the key convention "
+                         "of run_importance --mask): the anatomy of that pruned model, teacher-"
+                         "forced on the dense model's rollout")
+    ap.add_argument("--probes", action="store_true",
+                    help="random-readout probes through the head, the expert and the bare cache "
+                         "in place of the band and position splits")
     args = ap.parse_args()
+    if args.verify and (args.mask or args.probes):
+        ap.error("--verify checks the shipped dense pass; it does not combine with --mask/--probes")
+    mask = None
+    if args.mask:
+        z = np.load(args.mask)
+        mask = (z["q_mask"].astype(np.float32), z["mlp_mask"].astype(np.float32))  # (L, H), (L, I)
+        print(f"mask {args.mask}: q keep {mask[0].mean():.4f}, mlp keep {mask[1].mean():.4f}",
+              flush=True)
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -308,26 +393,37 @@ def main():
     # sums over clips of |.|; every *_full / *tot / *_type entry takes the abs AFTER summing
     # the signed parts, the way the shipped single gate does
     acc = {}
+    probes = ("head", "expert", "cache") if args.probes else ()
     for a in axes:
         acc.update({
             f"ce_{a}": np.zeros((nT, L, U[a])), f"ce_full_{a}": np.zeros((L, U[a])),
             f"ce_text_{a}": np.zeros((L, U[a])),
-            f"fm_band_{a}": np.zeros((nB, nT, L, U[a])), f"fm_pos_{a}": np.zeros((nT, nT, L, U[a])),
             f"fm_type_{a}": np.zeros((nT, L, U[a])), f"fm_text_{a}": np.zeros((L, U[a])),
-            f"fm_bandtot_{a}": np.zeros((nB, L, U[a])), f"fm_postot_{a}": np.zeros((nT, L, U[a])),
             f"fm_full_{a}": np.zeros((L, U[a])),
         })
-    acc.update({k: np.zeros((L, nT)) for k in ("direct", "res_ce", "res_fm")})
+        if not args.probes:
+            acc.update({
+                f"fm_band_{a}": np.zeros((nB, nT, L, U[a])), f"fm_pos_{a}": np.zeros((nT, nT, L, U[a])),
+                f"fm_bandtot_{a}": np.zeros((nB, L, U[a])), f"fm_postot_{a}": np.zeros((nT, L, U[a])),
+            })
+        for p in probes:
+            acc.update({f"pr_{p}_{a}": np.zeros((nT, L, U[a])), f"pr_{p}_full_{a}": np.zeros((L, U[a]))})
+    extra_res = ("direct_probe", "cg_fm", "cg_probe") if args.probes else ()
+    acc.update({k: np.zeros((L, nT)) for k in ("direct", "res_ce", "res_fm") + extra_res})
     pt, co = TYPES.index("prompt_text"), TYPES.index("coc")
-    per_q = {"ce": [], "fm_full": [], "fm_band": [], "fm_pos": []}
+    per_q = {"ce": [], "fm_full": []}
+    per_q.update({f"pr_{p}": [] for p in probes} if args.probes else {"fm_band": [], "fm_pos": []})
     per_mlp = {"ce_type": [], "fm_type": []}
-    per_res = {"res_ce": [], "res_fm": [], "res_dot": [], "res_cos": [], "direct": []}
+    per_res = {k: [] for k in ("res_ce", "res_fm", "res_dot", "res_cos", "direct") + extra_res}
 
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
         "purpose": "token-type and cache-port decomposition of the shipped gate gradients",
-        "plan": "plans/2026-09-20_gradient-anatomy.md",
+        "plan": ("plans/2026-09-21_importance-causal-validation.md" if args.mask or args.probes
+                 else "plans/2026-09-20_gradient-anatomy.md"),
         "objectives": {"coc": "own-rollout CoC NLL", "traj": "flow-matching MSE vs GT action"},
+        "mask": args.mask, "probes": list(probes),
+        "text": "the dense model's rollout (masks are applied after it)" if args.mask else "own rollout",
         "types": TYPES, "bands": BANDS, "verify": args.verify,
         "num_clips": len(calib), "clip_ids": [c for c, _ in calib], "seed": args.seed,
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
@@ -342,26 +438,34 @@ def main():
         t0 = time.time()
         data = sc.load_cached(sc.path_for(args.cache, clip_id, clip_t0))
         torch.cuda.reset_peak_memory_stats()
-        g, rec = process_clip(model, processor, data, args, sc.clip_seed(args.seed, clip_id))
+        g, rec = process_clip(model, processor, data, args, sc.clip_seed(args.seed, clip_id), mask)
         for a in axes:
-            ce, band, pos = g[f"ce_{a}"], g[f"band_{a}"], g[f"pos_{a}"]
+            ce = g[f"ce_{a}"]
             fm_type = g[f"full_{a}"]  # (nT, L, U) the full-seed backward, by unit-side type
             acc[f"ce_{a}"] += np.abs(ce)
             acc[f"ce_full_{a}"] += np.abs(ce.sum(0))
             acc[f"ce_text_{a}"] += np.abs(ce[pt] + ce[co])
-            acc[f"fm_band_{a}"] += np.abs(band)
-            acc[f"fm_pos_{a}"] += np.abs(pos)
             acc[f"fm_type_{a}"] += np.abs(fm_type)
             acc[f"fm_text_{a}"] += np.abs(fm_type[pt] + fm_type[co])
-            acc[f"fm_bandtot_{a}"] += np.abs(band.sum(1))
-            acc[f"fm_postot_{a}"] += np.abs(pos.sum(1))
             acc[f"fm_full_{a}"] += np.abs(fm_type.sum(0))
-        for k in ("direct", "res_ce", "res_fm"):
+            if not args.probes:
+                band, pos = g[f"band_{a}"], g[f"pos_{a}"]
+                acc[f"fm_band_{a}"] += np.abs(band)
+                acc[f"fm_pos_{a}"] += np.abs(pos)
+                acc[f"fm_bandtot_{a}"] += np.abs(band.sum(1))
+                acc[f"fm_postot_{a}"] += np.abs(pos.sum(1))
+            for p in probes:
+                acc[f"pr_{p}_{a}"] += np.abs(g[f"pr_{p}_{a}"])
+                acc[f"pr_{p}_full_{a}"] += np.abs(g[f"pr_{p}_{a}"].sum(0))
+        for k in ("direct", "res_ce", "res_fm") + extra_res:
             acc[k] += g[k]
         per_q["ce"].append(g["ce_q"].astype(np.float32))
         per_q["fm_full"].append(g["full_q"].astype(np.float32))
-        per_q["fm_band"].append(g["band_q"].astype(np.float32))
-        per_q["fm_pos"].append(g["pos_q"].astype(np.float32))
+        for p in probes:
+            per_q[f"pr_{p}"].append(g[f"pr_{p}_q"].astype(np.float32))
+        if not args.probes:
+            per_q["fm_band"].append(g["band_q"].astype(np.float32))
+            per_q["fm_pos"].append(g["pos_q"].astype(np.float32))
         if not args.verify:
             # signed fp32, (5, 36, 12288) each: 17.7 MB per clip for the pair. The band and
             # position splits of the MLP axis are kept as accumulated means only
@@ -374,12 +478,14 @@ def main():
         del g
         extra = (f" typed-vs-single {max(rec['typed_vs_single_relerr']):.1e}"
                  if args.verify else "")
+        split = "" if args.probes else (
+            f"bands-vs-full {max(rec['bands_vs_full_relerr_by_layer']):.1e} (median layer "
+            f"{np.median(rec['bands_vs_full_relerr_by_layer']):.1e}, rho min "
+            f"{rec['bands_vs_full_rank_rho_min']:.4f}) pos-vs-full "
+            f"{max(rec['pos_vs_full_relerr_by_layer']):.1e} (rho min "
+            f"{rec['pos_vs_full_rank_rho_min']:.4f}){extra} ")
         print(f"[{ci + 1}/{len(calib)}] {clip_id} coc={rec['coc_len']} fm={rec['fm_loss']:.4f} "
-              f"bands-vs-full {max(rec['bands_vs_full_relerr_by_layer']):.1e} (median layer "
-              f"{np.median(rec['bands_vs_full_relerr_by_layer']):.1e}, rho min "
-              f"{rec['bands_vs_full_rank_rho_min']:.4f}) pos-vs-full "
-              f"{max(rec['pos_vs_full_relerr_by_layer']):.1e} (rho min "
-              f"{rec['pos_vs_full_rank_rho_min']:.4f}){extra} "
+              f"nll={rec['nll']:.4f} {split}"
               f"peak={rec['peak_gb']:.1f}GB ({time.time() - t0:.0f}s)", flush=True)
         if (ci + 1) % 10 == 0 or ci + 1 == len(calib):
             save(out_dir, acc, per_q, per_mlp, per_res, records, ci + 1)

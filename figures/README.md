@@ -193,3 +193,75 @@ Both runs use the protocol of `importance_v2` unchanged and reproduce
   (7.2%), layers >= 22 88.8% (84.4%).
   Caption guard: the partial-seed backwards behind both port panels are linear only up to
   bf16 rounding (median layer 0.4%, worst layer of a clip 1.5%); quote two digits.
+
+## Figure 5 panels: does the score anatomy predict function, and why score with both losses
+
+Source: `experiments/paper/fig_why_differs.py --only-causal` (reads the analysis outputs of
+`plans/2026-09-21_importance-causal-validation.md`; numbers in
+`figures/fig5_causal_validation_stats.json`, reading in
+`paper/2026-09-20_why-importance-differs.md` R14–R19). Every gate of that plan was written
+down before its run; several failed and the note says which.
+
+- `fig5_probe_ratio_mlp`, `fig5_probe_ratio_q_head`: `fig3_ratio_step` (black) next to the
+  same ratio for two **random linear readouts** through the same two doors — the expert's
+  output against the LM head's input (blue) — and for a random readout taken straight off
+  every cache entry against the head door (orange, dashed). Each curve is divided by its
+  layer 0–21 mean. The content-free probes step at layer 23 like the real scores (5.4× /
+  5.5× against 4.5× / 4.5×); the bare cache door declines as a ramp from about layer 10,
+  and what the expert adds to it is a 1.3–1.9× boost of layers 16–21.
+  Caption guard: say "interface" or "door", not "objective"; and the bare-cache curve is
+  the one prediction of this panel that failed (it was expected to be flat).
+- `fig5_probe_rank_q_head`: ceiling-corrected within-layer rank agreement. A random readout
+  through the expert ranks Q heads like `I_traj` at 0.990 (layers 6–21) and 0.992 (22–34);
+  through the head like `I_CoC` at 0.965 and 0.880; the two probes against each other at
+  0.786 and 0.353 — the 0.85 → 0.37 of `fig3_noise_ceiling_q_head` with no objective on
+  either side.
+- `fig5_matched_fm`, `fig5_matched_nll`: the three shipped arms teacher-forced on the dense
+  model's text (100 `calib_100` clips, same tokens and noise), arm minus dense per clip.
+  Means: FM loss 0.2553 (dense), 0.2728 (`dual`), 0.2846 (trajectory-only), 0.2899
+  (CoC-only); NLL 0.1593, 0.2182, 0.5022, 0.2714.
+  Caption guard: these are the calibration clips — each single criterion is in-sample for
+  its own loss; the held-out repeat is `fig5_damage_by_band`.
+- `fig5_failure_by_manoeuvre`: minADE increase of the three arms as a share of the dense
+  model's minADE in that situation, 2,533 stored open-loop clips. No cross-over: CoC-only is
+  worse than trajectory-only everywhere; trajectory-only is weakest at decelerate/stop and
+  turns (+40%, +27% against +22% for cruise); `dual` is even (+9 to +15%).
+  Caption guard: open loop; 279 turn clips; contrasts are significant pooled and on OOD,
+  not on the in-distribution sets alone.
+- `fig5_dissociation_q_head`, `fig5_dissociation_mlp`: token-targeted ablation in layers
+  22–34 on 100 held-out clips — change of the FM loss (x) against change of the CoC NLL (y)
+  when a unit set is removed from the dense model; circles are token-resolved sets, squares
+  pooled ones, dots random sets; bars are 95% bootstrap intervals. Every point sits on
+  x = 0: no late-layer set moves the FM loss (random sets −0.0% of dense on Q heads, −0.6%
+  on MLP channels) while the NLL moves (+6.1%, +8.3%); on Q heads the CoC-side sets cost
+  +14.4 / +15.0% against +1.6% for the token-resolved trajectory-side set.
+  Caption guard: the pre-registered prediction was a *double* dissociation; only the
+  language half held. Do not describe the trajectory-side sets as carrying the action.
+- `fig5_dual_saves`: NLL increase when the late-layer units that one single criterion dropped
+  and the dual criterion kept are removed, next to random sets of the same per-layer size
+  (whiskers: range of three). Only the heads kept over the trajectory-only criterion stand
+  out (+8.6% against +1.3 to +3.2%); no set moves the FM loss.
+- `fig5_damage_by_band_fm`, `fig5_damage_by_band_nll`: the three shipped arms' masks applied
+  in layers 0–21 only, in layers 22–35 only, and everywhere, on the same held-out clips
+  (mask minus dense, 95% intervals). Late only: FM loss +0.1 / −0.1 / +0.1%, NLL +10.1%
+  (`dual`), +65.5% (trajectory-only), +6.3% (CoC-only). Trunk only: FM loss +4.8%, +26.1%,
+  +17.0%. Everywhere: +5.5%, +6.6%, +15.8%; NLL +32.6%, +240.6%, +67.2%.
+  Caption guard: the bands do not add up for the single-criterion arms (trajectory-only:
+  trunk-only damage is four times the full mask's); say so rather than stacking the bars.
+- `fig5_vv_nested`: minADE change (paired median over the baseline median, 95% bootstrap band)
+  when the attention edge "vision token <- X" is blocked from layer l to the last, for X =
+  any other vision token (black), same-camera earlier frames, other cameras, the rest of its
+  own image; 50 `val` clips, K = 8, grey band ±5%. The stored 9-layer map's `E1@all` and
+  `E2@all` are the l = 0 points and are reproduced per clip exactly. Blocked one kind at a
+  time the curves are at zero by layer 18 (+0.1%, +4.3%, +2.1%); blocked together, +27.8%.
+  Caption guard: nested windows measure need *given* that every later layer is blocked too;
+  successive differences are conditional, not additive.
+- `fig5_vv_window_profile`: what each 3-layer window adds to the all-vision curve (bars)
+  against the vision-token part of the two scores (3-layer means), each over its maximum.
+  Spearman +0.85 (`I_traj`) and +0.87 (`I_CoC`) on Q heads; +0.84 with pooled `I_traj`,
+  +0.20 with pooled `I_CoC`.
+- `fig5_vision_census`: attention mass of the 2,880 vision queries on sink / text / own image
+  / earlier frames of the same camera / other cameras, mean over heads and 50 clips. Mass on
+  other images is 0.23–0.35 through layer 17 and 0.60–0.64 after it.
+  Caption guard: mass is not need — cross-image mass is highest where the knockouts do
+  nothing (layers 22–35).
