@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>점수의 해부는 기능을 예측하는가 — 그리고 왜 dual인가</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DDD8CC;
+    --c1: #2a78d6; --c2: #008300; --c3: #e87ba4; --c4: #eda100;
+    --good: #eef6ee; --warn: #fdf3e3; --bad: #fdeef2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.72 -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 22px 80px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 34px; }
+  h2 { font-size: 19px; margin: 46px 0 14px; padding-top: 18px;
+       border-top: 1px solid var(--rule); }
+  h2 .num { display: inline-block; min-width: 28px; color: var(--c1); font-weight: 700; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; }
+  p { margin: 11px 0; }
+  code { background: #F0EEE6; padding: 1px 5px; border-radius: 3px;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: #F0EEE6; padding: 13px 15px; border-radius: 6px; overflow-x: auto;
+        font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px;
+       text-transform: uppercase; letter-spacing: 0.04em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.hi td { background: #F3F1E9; font-weight: 600; }
+  .pass { color: var(--c2); font-weight: 700; }
+  .fail { color: #b0552f; font-weight: 700; }
+  figure { margin: 22px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; background: #fff; }
+  figure.half img { width: 62%; display: block; margin: 0 auto; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pair figure { margin: 8px 0; }
+  figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .callout { padding: 13px 17px; border-radius: 6px; margin: 18px 0;
+             border-left: 3px solid var(--muted); background: #F3F1E9; }
+  .callout.good { background: var(--good); border-left-color: var(--c2); }
+  .callout.warn { background: var(--warn); border-left-color: var(--c4); }
+  .callout.bad  { background: var(--bad);  border-left-color: var(--c3); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 16px; }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 640px) { .wrap { padding: 30px 15px 60px; } h1 { font-size: 22px; }
+                              .pair { grid-template-columns: 1fr; } figure.half img { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>점수의 해부는 기능을 예측하는가 — 그리고 왜 dual인가</h1>
+<div class="sub">
+  2026-09-21 · Alpamayo-1.5-10B (dense + 출하 arm <code>dual/traj/coc_u40_v2</code>) · RTX 5880 Ada × 4 ·
+  계획 <code>plans/2026-09-21_importance-causal-validation.md</code> (모든 예측을 실행 전에 push) ·
+  논문용 정리 <code>paper/2026-09-20_why-importance-differs.md</code> R14–R19 ·
+  앞선 보고서 <code>2026-09-21_why-importance-differs.html</code>
+</div>
+
+<div class="callout lede">
+<p><strong>질문.</strong> 앞선 분석은 <code>I_traj</code>와 <code>I_CoC</code>라는 두 <em>점수</em>가 왜 다른지를 설명했다. 그 설명이 네트워크의 <em>기능</em>에 대한 것인가?
+그리고 그것이 논문에서 <strong>dual 기준을 쓰는 이유</strong>로 이어지는가?</p>
+<p><strong>답 (네 문장).</strong>
+(1) 두 점수의 갈라짐은 "운전 vs 언어"가 아니라 <strong>"cache 문 vs LM-head 문"</strong>이다 — 내용이 전혀 없는 무작위 readout을 같은 두 문으로 흘려도
+같은 깊이 프로파일, 같은 23층 step(5.4×), 같은 후반 순위 불일치(0.79 → 0.35)가 나온다.
+(2) step 이후의 VLM은 <strong>기능적으로 언어 네트워크</strong>다 — 후반층(22–34)에서 무엇을 어떻게 19% 빼도 FM loss와 minADE는 움직이지 않고 NLL만 움직인다.
+<code>I_traj</code>의 후반 점수는 gradient 경로의 그림자다.
+(3) dual의 실측 근거는 <strong>공유 trunk</strong>에 있다 — 두 점수가 0.85–0.96으로 일치하는 0–21층에서조차, <code>I_traj</code> 혼자 고른 trunk는 FM loss +26% / minADE +2.6 m,
+<code>I_CoC</code> 혼자는 +17% / +0.46 m, 합집합(dual)은 +4.8% / +0.06 m다(held-out 100클립).
+(4) 단일 기준은 채널 하나를 크게 잃고(traj-only: NLL +241%, CoC-only: FM +16%·minADE +67%·CoC 종료 실패 12%), 주행 상황별로도 고르지 않게 실패한다. dual만 고르다.</p>
+<p><strong>사전 예측 성적.</strong> 게이트 가운데 절반가량이 실패했다(9절). 가장 크게 틀린 것 둘 — "후반층에서 이중 해리"(실제는 한쪽 해리)와
+"trunk에서 action을 더 해치는 것은 CoC-only"(실제는 traj-only) — 이 위의 (2)와 (3)을 만들었다.</p>
+</div>
+
+<h2><span class="num">1</span>무엇을 묻고, 어떻게 답하려 했나</h2>
+
+<p>앞선 분석(<code>2026-09-21_why-importance-differs.html</code>)은 두 <strong>점수</strong>가 왜 다른지를
+설명했다: 하나의 공유 깊이 프로파일 × 하나의 step, 17–24층에서의 vision→text 토큰 hand-over, 같은 토큰에서는
+두 loss가 일치, 그리고 FM gradient의 주 포트(cache 21–23)가 닫히는 자리에서의 step. 그러나 네 가지가 비어 있었다.</p>
+
+<table>
+<tr><th></th><th>질문</th><th>실험</th><th>GPU</th></tr>
+<tr><td>G1</td><td>전부 dense 모델에서 잰 것이다. <strong>우리가 실제로 출하하는 pruned 모델</strong>에서도 구조가 유지되는가?</td><td>Stage 0, A</td><td>Ada 3장 × 45분</td></tr>
+<tr><td>G2</td><td>1차 점수에 대한 이야기일 뿐이다. 점수가 가리키는 unit이 <strong>실제로 그 기능을</strong> 나르는가?</td><td>B</td><td>Ada 4장 × 1시간</td></tr>
+<tr><td>G3</td><td>사용자 가설: <strong>vision–vision interaction이 큰 구간</strong>과 action importance가 큰 구간이 일치하는가?</td><td>C</td><td>Ada 4장 × 1시간</td></tr>
+<tr><td>G4</td><td>공유 프로파일은 <strong>왜</strong> 그런 모양이고, step은 FM objective의 성질인가 인터페이스의 성질인가?</td><td>D</td><td>Ada 1장 × 25분</td></tr>
+</table>
+
+<p>모든 예측은 <strong>계산 전에</strong> plan에 적어 원격에 push했다(Rev. 1 <code>1b4f981</code>, Rev. 2 <code>84e24d9</code>,
+B5는 <code>c5774a2</code>, A2-heldout은 <code>a81eebb</code>). 틀린 예측은 9절에 그대로 모았다. 실험 도중 사용자가 던진 두 질문 —
+"단일 기준은 <em>어떤 주행 상황</em>에서 실패하는가", "CE-only의 importance에 <em>CoC 종료 토큰</em>이 들어갔는가" — 은 7절에서 답한다.</p>
+
+<h2><span class="num">2</span>Stage 0 — 각 기준이 실제로 무엇을 버렸나 (GPU 없음)</h2>
+
+<p>dense 모델의 토큰별 점수(<code>gradanat_v1</code>)를 출하된 세 arm(<code>dual/traj/coc_u40_v2</code>: 모든 층에서 head 19/32,
+채널 7,390/12,288 유지, expert는 그대로)의 유지집합과 교차시켰다. 값은 <strong>22–34층에서 dense 점수 질량 중 살아남은 unit에
+얹혀 있는 비율</strong>이고, 무작위로 남겼다면 0.59(head)/0.60(채널)이다.</p>
+
+<table>
+<tr><th></th><th>점수 (22–34층)</th><th class="r">dual</th><th class="r">traj-only</th><th class="r">CoC-only</th></tr>
+<tr><td>Q heads</td><td><code>I_traj</code> @ vision+history 토큰</td><td class="r">0.787</td><td class="r">0.828</td><td class="r"><strong>0.678</strong></td></tr>
+<tr><td></td><td><code>I_traj</code> @ text 쪽 토큰</td><td class="r">0.835</td><td class="r">0.842</td><td class="r">0.777</td></tr>
+<tr><td></td><td><code>I_CoC</code> @ CoC 토큰</td><td class="r">0.763</td><td class="r"><strong>0.650</strong></td><td class="r">0.827</td></tr>
+<tr><td></td><td><code>I_CoC</code> @ prompt 토큰</td><td class="r">0.852</td><td class="r">0.781</td><td class="r">0.865</td></tr>
+<tr><td>MLP 채널</td><td><code>I_traj</code> @ vision+history 토큰</td><td class="r">0.697</td><td class="r">0.712</td><td class="r"><strong>0.651</strong></td></tr>
+<tr><td></td><td><code>I_CoC</code> @ CoC 토큰</td><td class="r">0.715</td><td class="r"><strong>0.669</strong></td><td class="r">0.729</td></tr>
+</table>
+
+<ul>
+<li><span class="pass">순서 예측 PASS</span> (양 축): CoC-only는 vision/history 토큰에서 번 <code>I_traj</code>를, traj-only는 CoC 토큰에서 번
+<code>I_CoC</code>를 가장 많이 잃는다.</li>
+<li>"dual은 더 나은 단일 기준의 5 pp 이내": MLP 1.6 / 1.4 pp, Q의 trajectory 쪽 4.1 pp는 통과, <span class="fail">Q의 CoC 쪽은 6.4 pp로 미달</span>.</li>
+<li>CoC-only가 잃는 것은 <strong>후반층에 있고 토큰 특이적</strong>이다: traj-only 대비 22–34층에서 15 pp를 잃지만 6–21층에서는 3 pp,
+그리고 text 쪽보다 vision/history 쪽에서 10 pp 더 잃는다. 두 단일 기준의 후반 유지집합은 0.68(Q)/0.69(MLP)만 겹친다 — 층당
+19개 중 약 6개 head가 다르다(B의 k = 6의 근거).</li>
+</ul>
+
+<h2><span class="num">3</span>A — 출하 pruned 모델에서의 구조와, 같은 텍스트에서의 세 arm</h2>
+
+<p><code>run_gradient_anatomy.py --mask</code>, arm당 <code>calib_100</code> 100클립. 모든 arm을 <strong>dense 모델의 rollout</strong>에
+teacher forcing했다(토큰·위치·노이즈 seed 동일; 100개 텍스트가 모든 실행에서 일치했고 dense FM loss는 이전 실행을 정확히 재현).
+마스크가 제거하는 파라미터(2,657,452,032)가 빌드가 제거한 수와 같으므로 "마스크 = 출하 체크포인트"다.</p>
+
+<h3>A1 — 구조 (dual로 판정; 모든 통계는 남은 unit 기준)</h3>
+
+<table>
+<tr><th></th><th class="r">dense</th><th class="r">dual</th><th class="r">traj-only</th><th class="r">CoC-only</th></tr>
+<tr><td>비율 change point, Q / MLP</td><td class="r">23 / 23</td><td class="r"><strong>23 / 23</strong></td><td class="r">7 / 22</td><td class="r">21 / 22</td></tr>
+<tr><td>step 크기, Q / MLP</td><td class="r">4.5× / 4.5×</td><td class="r">3.3× / 4.0×</td><td class="r">— / 2.3×</td><td class="r">— / 2.3×</td></tr>
+<tr><td>MLP hand-over 층, <code>I_CoC</code> / <code>I_traj</code></td><td class="r">18 / 21</td><td class="r"><strong>18 / 21</strong></td><td class="r">10 / 20</td><td class="r">10 / 19</td></tr>
+<tr><td>vision 토큰에서의 두 loss 일치도 (후반 Q, 천장 보정)</td><td class="r">0.786</td><td class="r"><strong>0.804</strong></td><td class="r">0.746</td><td class="r">0.888</td></tr>
+<tr><td>층 프로파일의 dense와의 상관, MLP (<code>I_traj</code> / <code>I_CoC</code>)</td><td class="r">—</td><td class="r">0.977 / 0.990</td><td class="r">0.849 / 0.702</td><td class="r">0.939 / 0.804</td></tr>
+<tr><td>같은 것, Q heads</td><td class="r">—</td><td class="r"><span class="fail">0.919 / 0.664</span></td><td class="r">0.324 / −0.130</td><td class="r">0.699 / 0.327</td></tr>
+</table>
+
+<div class="callout warn">
+<p><strong>A1은 네 절 중 셋만 통과 → <span class="fail">FAIL</span>.</strong> change point 23/23, MLP hand-over 18/21(dense와 동일),
+vision 토큰 일치도 0.804는 통과했지만 "프로파일 상관 ≥ 0.98"이 Q 축에서 깨졌다. 원인은 step 근처가 아니라 <strong>네트워크 맨 아래</strong>다:
+dual에서 0–1층의 살아남은 head는 dense의 3.9배(<code>I_traj</code>)·8.3배(<code>I_CoC</code>)의 중요도를 지는데 6–34층은 1.1배·1.9배다.
+첫 두 층을 빼면 Q 상관은 0.985 / 0.925다(게이트가 아니라 "어디가 변했는지"를 말하려고 적는다). 층마다 같은 비율로 자르는 출하 방식이
+초기 층에 부하를 몰아준다는 뜻이기도 하다.</p>
+</div>
+
+<p>단일 기준 arm은 구조를 더 잃는다: Q 축에서 비율의 step이 사라지고(R² 0.34, 0.15; dual은 0.79), 초기 층 부하는
+14배/66배(traj-only), 11배/25배(CoC-only), <code>I_CoC</code>의 hand-over가 17–18층이 아니라 6–10층으로 당겨진다. FM gradient가
+cache 22–24로 들어오는 비중도 0.316(dense) → 0.272(dual) → 0.234(traj-only) → 0.167(CoC-only)로 줄고, 30–35로 들어오는 비중이
+0.262 → 0.292 → 0.424 → 0.543으로 는다(Q heads).</p>
+
+<h3>A2 — 같은 텍스트, 같은 노이즈에서의 기능 (<span class="pass">PASS 4/4</span>)</h3>
+
+<table>
+<tr><th></th><th class="r">FM loss</th><th class="r">CoC NLL (dense 텍스트)</th></tr>
+<tr><td>dense</td><td class="r">0.2553</td><td class="r">0.1593</td></tr>
+<tr class="hi"><td>dual</td><td class="r">0.2728</td><td class="r">0.2182</td></tr>
+<tr><td>traj-only</td><td class="r">0.2846</td><td class="r"><strong>0.5022</strong></td></tr>
+<tr><td>CoC-only</td><td class="r"><strong>0.2899</strong></td><td class="r">0.2714</td></tr>
+</table>
+
+<p>FM loss: CoC-only &gt; dual (p = 4.6e-06), CoC-only &gt; traj-only (p = 1.0e-03). NLL: traj-only &gt; dual (p = 1.1e-17),
+traj-only &gt; CoC-only (p = 5.0e-12). 사전 등록 밖의 관찰: <strong>dual은 각 전문 기준의 "자기 채널"에서도 그 기준보다 낫다</strong> —
+FM loss traj-only &gt; dual (p = 2.8e-03), NLL CoC-only &gt; dual (p = 7.8e-05).</p>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig5_matched_fm.png"><figcaption>FM loss, arm − dense (클립별, dense 텍스트).</figcaption></figure>
+<figure><img src="PLOT::fig::fig5_matched_nll.png"><figcaption>CoC NLL, arm − dense.</figcaption></figure>
+</div>
+
+<h2><span class="num">4</span>B — 토큰 표적 ablation: 점수가 가리키는 unit이 그 기능을 나르는가</h2>
+
+<p>dense 모델에서 unit 세트를 제거(<code>PruneMasks</code>)하고, <strong>세트를 고를 때 쓰지 않은</strong> held-out 클립(<code>indist_500</code>의 첫 100개;
+<code>calib_100</code>·<code>val</code>과 겹치지 않음)에서 dense 모델과 클립별로 짝지어 세 가지를 읽었다: dense rollout의 CoC NLL, GT 기준 10-step FM loss
+(<code>run_importance</code>와 같은 노이즈), K = 8 minADE. 세트는 dense의 <code>calib_100</code> 점수에서 층별로 골랐다(head 6/32개, 채널 2,304/12,288개 = 같은 19%).</p>
+
+<table>
+<tr><th>세트</th><th>규칙 (층 내 순위 차)</th></tr>
+<tr><td>T-tok / C-tok</td><td>rank(<code>I_traj</code> @ vision+history) − rank(pooled <code>I_CoC</code>) 상위 / rank(<code>I_CoC</code> @ CoC 토큰) − rank(pooled <code>I_traj</code>) 상위</td></tr>
+<tr><td>T-pool / C-pool</td><td>pooled 점수끼리의 순위 차 — Fig. 1이 말하는 바로 그 불일치</td></tr>
+<tr><td>R0–R4</td><td>층당 같은 수의 무작위 unit (null)</td></tr>
+<tr><td>S-coc / S-traj (B5)</td><td>출하 arm에서 그대로: CoC-only는 버렸지만 dual은 지킨 unit / traj-only는 버렸지만 dual은 지킨 unit (22–34층; 층당 약 head 4개, 채널 1,400개) + 크기를 맞춘 무작위 3세트</td></tr>
+<tr><td>대역</td><td>후반 22–34층, 그리고 통제로 trunk 6–17층</td></tr>
+</table>
+
+<p>측정 전에 적어 둔 장부(plan): 순위 <em>차</em> 규칙은 "최상위"가 아니라 "특화된" unit을 뽑으므로 T 세트가 쥔 자기 통화의 질량은 무작위 세트와 비슷하고
+(Q 후반 T-tok: <code>I_traj</code>의 18.6%, 무작위 15–21%), 상대 통화는 절반 이하(<code>I_CoC</code>의 8.0%)다.</p>
+<h3>4.1 한 대역의 값어치 — 후반층은 action을 나르지 않는다</h3>
+
+<p>규칙과 무관하게 한 대역에서 19%를 빼면 얼마나 아픈가(무작위 5세트 평균, dense 대비). held-out dense 기준값: FM loss 0.2425, CoC NLL 0.1708, minADE@8 0.837.</p>
+
+<table>
+<tr><th></th><th class="r">FM loss</th><th class="r">CoC NLL</th></tr>
+<tr><td>Q heads, 22–34층</td><td class="r"><strong>−0.0%</strong></td><td class="r">+6.1%</td></tr>
+<tr><td>Q heads, 6–17층</td><td class="r">+3.9%</td><td class="r">+3.8%</td></tr>
+<tr><td>MLP 채널, 22–34층</td><td class="r"><strong>−0.6%</strong></td><td class="r">+8.3%</td></tr>
+<tr><td>MLP 채널, 6–17층</td><td class="r">+0.7%</td><td class="r">+1.0%</td></tr>
+</table>
+
+<h3>4.2 후반층 세트별 손상 (dense 대비 평균, 괄호는 중앙값)</h3>
+
+<table>
+<tr><th>세트</th><th class="r">FM, Q</th><th class="r">NLL, Q</th><th class="r">FM, MLP</th><th class="r">NLL, MLP</th></tr>
+<tr><td>T-tok (<code>I_traj</code>만 아끼는 unit)</td><td class="r">+0.2%</td><td class="r">+1.6% (+1.6%)</td><td class="r">−0.4%</td><td class="r">+1.5% (−0.0%)</td></tr>
+<tr><td>C-tok (<code>I_CoC</code>만 아끼는 unit)</td><td class="r">−0.2%</td><td class="r"><strong>+14.4%</strong> (+7.3%)</td><td class="r">−0.1%</td><td class="r">+10.3% (+3.7%)</td></tr>
+<tr><td>T-pool</td><td class="r">+0.1%</td><td class="r">+13.5% (+1.7%)</td><td class="r">−0.9%</td><td class="r">+8.3% (+0.4%)</td></tr>
+<tr><td>C-pool</td><td class="r">−0.2%</td><td class="r"><strong>+15.0%</strong> (+8.1%)</td><td class="r">−0.3%</td><td class="r">+8.4% (+3.1%)</td></tr>
+<tr><td>무작위 5세트의 범위</td><td class="r">−0.6 ~ +0.4%</td><td class="r">+4.2 ~ +8.4%</td><td class="r">−0.9 ~ −0.2%</td><td class="r">+5.0 ~ +11.0%</td></tr>
+</table>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig5_dissociation_q_head.png"><figcaption>Q heads, 22–34층: 세트 제거 시 FM loss 변화(x)와 CoC NLL 변화(y). 모든 점이 x = 0 위에 서 있다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig5_dissociation_mlp.png"><figcaption>MLP 채널, 22–34층.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>게이트</th><th>예측</th><th class="r">측정</th><th>판정</th></tr>
+<tr><td>B1</td><td>후반층: ΔFM(T) &gt; ΔFM(C), 그리고 모든 무작위 세트보다 큼</td><td class="r">p = 0.23 / 0.13 (Q), 0.87 / 0.92 (MLP); 무작위 초과 0/5</td><td class="fail">FAIL (전부)</td></tr>
+<tr><td>B2</td><td>후반층: ΔNLL(C) &gt; ΔNLL(T), 그리고 모든 무작위 세트보다 큼</td><td class="r">Q: p = 1.6e-06 / 6.7e-04, 5/5 · MLP: p = 3.1e-04 / 0.038, 0/5</td><td><span class="pass">Q PASS</span> · <span class="fail">MLP는 교차 절(tok)만</span></td></tr>
+<tr><td>B3</td><td>trunk(6–17층)에서는 T와 C가 해리되지 <em>않음</em></td><td class="r">Q tok: 해리됨 (FM +2.8% vs +0.6%, p = 3.9e-04); Q pool: 해리 없음; MLP: 평가 불가(평균 손상 ≤ 0)</td><td class="fail">FAIL (Q tok)</td></tr>
+<tr><td>B4</td><td>토큰 분해 세트가 pooled 세트만큼은 특이적</td><td class="r">차이 없음</td><td class="pass">PASS (정보량 없음)</td></tr>
+<tr><td>B5</td><td>dual이 구한 unit: S-coc는 FM만, S-traj는 NLL만 무작위보다 더 해침</td><td class="r">Q S-traj: NLL +8.6% vs 무작위 +1.3~3.2% (3/3), FM 무변화 · Q S-coc: FM +0.6% (1/3) · MLP 둘 다 무작위 범위</td><td><span class="pass">1/4 PASS</span> (Q S-traj)</td></tr>
+</table>
+
+<div class="callout bad">
+<p><strong>이중 해리는 없었다 — 한쪽 해리다.</strong> 나는 "<code>I_traj</code>만 아끼는 후반 unit을 빼면 FM loss가, <code>I_CoC</code>만 아끼는 unit을 빼면 NLL이 오른다"고 예측했다.
+뒤 절반만 맞았다. 후반층의 어떤 세트도 FM loss를 움직이지 못한다(모든 95% 구간이 0을 포함하거나 dense의 1% 이내). 1차 점수의 예측력도 같은 말을 한다:
+제거된 unit의 <code>I_CoC</code> 합은 NLL 손상의 순서를 +0.65 / +0.71로 맞히지만, <code>I_traj</code> 합은 FM 손상의 순서를 맞히지 못한다(+0.09, MLP −0.80).
+<strong><code>I_traj</code>의 후반층 점수는 gradient가 지나가는 길(후반 cache 포트)의 그림자이지, action이 기대고 있는 곳이 아니다</strong> — knockout이 말해 온
+"expert의 인과적 의존은 cache 0–15"와 같은 이야기를 unit 수준에서 다시 본 것이다.</p>
+</div>
+
+<div class="callout good">
+<p><strong>그래도 "왜 dual인가"에는 답이 된다.</strong> 후반층에서 <code>I_CoC</code>의 순위는 기능적으로 실재한다(Q: C 세트의 NLL 손상은 무작위의 2.4배, T-tok은 1/4).
+그리고 traj-only가 버리고 dual이 지킨 head(S-traj)를 빼면 NLL이 +8.6% 오르는데 크기를 맞춘 무작위 세트는 +1.3~3.2%다.
+즉 <strong>traj-only 기준은 후반층에서 눈을 감은 채 언어에 중요한 head를 자르고 있고, 그 자리를 <code>I_CoC</code>에게 맡겨도 action 쪽 비용은 0이다.</strong></p>
+</div>
+
+<p>trunk에서는 반대 방향의 단서가 나왔다: 6–17층에서는 T 세트가 C 세트보다 FM loss를 더 올린다(+2.8% / +3.5% vs +0.6% / +1.3%, p = 3.9e-04 / 2.0e-03; NLL은 차이 없음).
+action 쪽에서 기준의 선택이 의미를 갖는 곳은 후반이 아니라 trunk다 — 다음 절이 arm 전체로 이를 확인한다. (두 세트 모두 무작위 세트(+1.8~6.0%)보다는 덜 아프다:
+순위 <em>차</em> 규칙은 "중요한" head가 아니라 "특화된" head를 뽑기 때문이다.) minADE@8은 계획대로 게이트가 아니며 후반 세트의 구간은 모두 0을 포함한다.</p>
+<h3>4.3 출하 arm 전체를 held-out에서, 그리고 깊이 대역으로 쪼개서</h3>
+
+<p>3절의 A2는 calib 클립에서 잰 것이라 각 단일 기준에게 "자기 loss의 표본 내" 조건이다. 같은 세 마스크를 B의 held-out 100클립에서 다시 읽고(<code>--arm-masks</code>),
+각 마스크를 <strong>0–21층에만(trunk)</strong> 또는 <strong>22–35층에만(late)</strong> 적용한 6개 config를 더했다(나머지 대역은 dense). dense 대비 평균 변화:</p>
+
+<table>
+<tr><th>마스크</th><th class="r">FM loss</th><th class="r">CoC NLL</th><th class="r">minADE@8 (m) [95% CI]</th></tr>
+<tr class="hi"><td>dual, 전 층</td><td class="r">+5.5%</td><td class="r">+32.6%</td><td class="r">+0.01 [−0.10, +0.11]</td></tr>
+<tr><td>traj-only, 전 층</td><td class="r">+6.6%</td><td class="r"><strong>+240.6%</strong></td><td class="r">+0.06 [−0.04, +0.16]</td></tr>
+<tr><td>CoC-only, 전 층</td><td class="r"><strong>+15.8%</strong></td><td class="r">+67.2%</td><td class="r"><strong>+0.56</strong> [+0.37, +0.76]</td></tr>
+<tr class="hi"><td>dual, late만</td><td class="r">+0.1%</td><td class="r">+10.1%</td><td class="r">−0.01</td></tr>
+<tr><td>traj-only, late만</td><td class="r">−0.1%</td><td class="r"><strong>+65.5%</strong></td><td class="r">−0.01</td></tr>
+<tr><td>CoC-only, late만</td><td class="r">+0.1%</td><td class="r">+6.3%</td><td class="r">+0.00</td></tr>
+<tr class="hi"><td>dual, trunk만</td><td class="r">+4.8%</td><td class="r">+25.2%</td><td class="r">+0.06 [−0.05, +0.15]</td></tr>
+<tr><td>traj-only, trunk만</td><td class="r"><strong>+26.1%</strong></td><td class="r">+51.2%</td><td class="r"><strong>+2.64</strong> [+1.81, +3.54]</td></tr>
+<tr><td>CoC-only, trunk만</td><td class="r">+17.0%</td><td class="r">+28.3%</td><td class="r">+0.46 [+0.29, +0.64]</td></tr>
+</table>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig5_damage_by_band_fm.png"><figcaption>FM loss 손상을 깊이 대역으로. 후반만 자르면 0, trunk만 자르면 traj-only가 최악, 전 층을 자르면 traj-only가 "복구"된다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig5_damage_by_band_nll.png"><figcaption>CoC NLL 손상. traj-only의 후반 마스크 하나가 +65.5%.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>게이트</th><th>예측</th><th class="r">측정</th><th>판정</th></tr>
+<tr><td>A2-heldout</td><td>표본 밖에서도 FM은 CoC-only, NLL은 traj-only가 최대이고 dual이 양쪽 최저</td>
+    <td class="r">순서 4개 검정 p ≤ 1.9e-06, NLL CoC-only &gt; dual p = 3.1e-05; <strong>FM traj-only &gt; dual은 p = 0.33</strong></td><td class="fail">FAIL (6개 중 1개)</td></tr>
+<tr><td>A2-bands (i)</td><td>late만 자르면 FM은 1% 이내, NLL은 traj-only &gt; CoC-only</td><td class="r">+0.13% / −0.07% / +0.08%; p = 2.9e-17</td><td class="pass">PASS</td></tr>
+<tr><td>A2-bands (ii)</td><td>trunk만 자르면 FM은 CoC-only &gt; traj-only</td><td class="r"><strong>반대</strong>: traj-only +26.1% vs CoC-only +17.0%</td><td class="fail">FAIL</td></tr>
+<tr><td>A2-bands (iii)</td><td>대역별 손상의 합 ≈ 전체 (±25%)</td><td class="r">dual 0.90 / 1.08 · CoC-only 1.08 / 0.51 · traj-only <strong>3.98</strong> / 0.49</td><td class="fail">FAIL (dual만 가법적)</td></tr>
+</table>
+
+<div class="callout good">
+<p><strong>"왜 dual인가"의 가장 직접적인 증거가 여기서 나왔다.</strong> (1) 후반층은 기능적으로 언어 채널이다: 거기서는 어떤 기준으로 잘라도 action이 변하지 않고,
+traj-only만 NLL을 크게 망친다(+65.5% vs +6.3%). (2) <strong>공유 trunk에서는 dual의 선택이 두 단일 기준을 모두 압도한다</strong> — FM loss +4.8% vs +17.0%(CoC-only) vs +26.1%(traj-only)
+(p = 6.7e-13, 3.1e-15), minADE +0.06 m vs +0.46 m vs +2.64 m. 두 점수가 trunk에서 0.85–0.96으로 일치하는데도, 둘의 합집합이 어느 한쪽보다 훨씬 나은 unit 집합을 고른다.
+A2의 언어 쪽 순서가 표본 내 효과일지 모른다는 걱정은 기각됐다(표본 밖에서 간격이 오히려 더 크다: +0.296 vs +0.231).</p>
+</div>
+
+<div class="callout bad">
+<p><strong>틀린 예측 둘.</strong> 나는 trunk에서 action을 더 해치는 쪽이 CoC-only일 것이라 썼다. 반대였다: <code>I_traj</code> <em>혼자</em> 고른 trunk가 action에 가장 나쁘다.
+그리고 traj-only arm은 trunk만 자른 것(+26.1%, minADE +2.64 m)이 전 층을 자른 것(+6.6%, +0.06 m)보다 훨씬 나쁘다 — 그 자체로는 action에 아무 영향이 없는 후반층 pruning이
+trunk pruning이 낸 피해의 3/4을 지운다. 마스크는 검증했다(trunk ∧ late = 전체, 세 arm·두 축). 다음 소절이 이 상호작용을 추적한다.</p>
+</div>
+
+<h2><span class="num">5</span>C — vision–vision interaction은 어느 깊이까지 필요한가 (사용자 가설)</h2>
+
+<p>가설: "action loss는 vision gradient 비중이 높으니, vision–vision interaction이 큰 구간이 action importance가 큰 구간과 일치할 것이다."
+<code>I_traj</code>의 vision 토큰 몫은 6층부터 올라 <strong>16–20층에서 정점</strong>을 찍고 22층 이후 사라진다(Q: 18–20층 창이 최대, MLP: 15–17층).</p>
+
+<div class="callout warn">
+<p><strong>설계를 바꾼 이유.</strong> 처음 계획은 3층 창 12개를 하나씩 막는 것이었다. 그런데 저장된 9층 밴드 지도(<code>pathway_e_v1</code>)에서
+"vision ← 같은 카메라의 이전 프레임"은 밴드별로 +6.5% / +16.5% / +1.0% / −0.1%인데 <strong>전 층을 막으면 +63.9%</strong>다. 층들이 서로를 보상하므로
+창 하나의 효과는 노이즈(±4.1%)에 묻힌다. 그래서 <strong>누적(nested) 녹아웃</strong>으로 바꿨다: 엣지를 [l, 36)에서 막으면 "이 상호작용이 어느 깊이까지
+<em>여전히 필요한가</em>", [0, l)에서 막으면 "뒤 층이 얼마나 <em>메울 수 있는가</em>"를 잰다. 같은 50 val 클립·같은 seed라서 새 실행의 기준선과
+<code>E1@all</code>, <code>E2@all</code>은 저장된 값을 클립 단위로 정확히 재현해야 한다(무결성 게이트).</p>
+</div>
+
+<table>
+<tr><th>엣지</th><th>막는 것 (vision 쿼리 → key)</th></tr>
+<tr><td>VV</td><td>자기 자신을 뺀 <strong>모든</strong> 다른 vision 토큰 (= V3 + E1 + E2)</td></tr>
+<tr><td>E1</td><td>같은 카메라의 이전 프레임 (시간)</td></tr>
+<tr><td>E2</td><td>다른 카메라 (공간)</td></tr>
+<tr><td>V3</td><td>자기 이미지 안의 다른 토큰 (신규)</td></tr>
+</table>
+
+<p>관찰 쪽 절반으로, 같은 클립에서 <strong>vision 쿼리의 attention 질량</strong>이 {sink, text, 자기 이미지, 같은 카메라 이전 프레임, 다른 카메라}에
+어떻게 나뉘는지를 head별로 셌다(eager attention, 한 층씩).</p>
+
+<h2><span class="num">6</span>D — 분포의 모양은 누구의 것인가: 무작위 readout probe</h2>
+
+<p>두 loss를 <strong>내용이 전혀 없는 무작위 선형 readout</strong>으로 바꿔 같은 문(door)으로 흘려보내고, 같은 토큰별 중요도를 다시 쟀다
+(dense, <code>calib_100</code> 100클립).</p>
+
+<table>
+<tr><th>probe</th><th>정의</th><th>무엇을 분리하나</th></tr>
+<tr><td>head door</td><td><code>Σ_p ⟨r_p, h_final(p)⟩</code>, CE가 읽는 위치들</td><td>LM head 쪽으로 읽는 <em>어떤</em> 요구든 갖는 성질</td></tr>
+<tr><td>expert door</td><td><code>Σ_s ⟨R_s, v_θ(x_s, t_s)⟩</code>, FM과 같은 <code>x_s</code> 10 step</td><td>expert 출력에 거는 <em>어떤</em> 요구든 갖는 성질</td></tr>
+<tr><td>bare cache door</td><td><code>⟨R, [K_m; V_m]⟩</code>, 모든 cache layer·위치에 균등</td><td>expert 없이 VLM 배선만의 성질</td></tr>
+</table>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig5_probe_ratio_mlp.png"><figcaption>깊이별 비율(각자 0–21층 평균으로 나눔, MLP). 검정: 실제 <code>I_traj/I_CoC</code>.
+파랑: 무작위 readout의 expert door / head door. 주황 점선: bare cache / head door.</figcaption></figure>
+<figure><img src="PLOT::fig::fig5_probe_rank_q_head.png"><figcaption>층 내 Q-head 순위 일치도(천장 보정). probe는 자기 문의 실제 loss와 거의 같은 순위를 매기고,
+두 문의 probe끼리는 실제 두 loss처럼 후반에서 갈라진다.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>게이트</th><th>기준</th><th class="r">측정</th><th>판정</th></tr>
+<tr><td>D1 expert-door probe가 <code>I_traj</code>의 층 프로파일을 재현, 두 문의 비율 change point = 23</td><td>Pearson ≥ 0.95, τ = 23</td>
+    <td class="r">0.980 (Q) / 0.964 (MLP); τ = 23 / 23, step 5.4× / 5.5× (실제 4.5× / 4.5×)</td><td class="pass">PASS</td></tr>
+<tr><td>D2 head-door probe가 <code>I_CoC</code>의 층 프로파일을 재현</td><td>Pearson ≥ 0.90</td><td class="r">0.871 (Q) / 0.936 (MLP)</td><td class="fail">FAIL (Q)</td></tr>
+<tr><td>D3 trunk(6–21층)에서 probe가 실제 loss처럼 Q head 순위를 매김</td><td>보정 ρ ≥ 0.8</td>
+    <td class="r">expert 0.990 (후반 0.992), head 0.965 (후반 0.880)</td><td class="pass">PASS</td></tr>
+<tr><td>D4 포트는 expert의 것: cache 쪽 프로파일 재현 + bare cache에는 step 없음</td><td>Pearson ≥ 0.9, 매끈함</td>
+    <td class="r">0.857; bare cache는 ramp</td><td class="fail">FAIL</td></tr>
+</table>
+
+<div class="callout good">
+<p><strong>핵심.</strong> (1) step은 objective의 것이 아니다. 주행도 언어도 들어 있지 않은 두 무작위 readout의 비율이 <strong>같은 23층에서 같은 크기로</strong>
+꺾인다. (2) 순위도 마찬가지다. 무작위 expert-door probe는 Q head를 <code>I_traj</code>와 <strong>0.99</strong>로 똑같이 줄 세운다 — <code>I_traj</code>의 순위에는
+"운전"에 대한 정보가 거의 없고, <em>expert라는 문으로 읽힌다</em>는 사실이 전부다. (3) 두 문의 probe끼리의 일치도는 trunk 0.786 → 후반
+<strong>0.353</strong>: 실제 두 loss의 0.85 → 0.37을 objective 없이 재현했다. <strong>Fig. 1의 후반 순위 불일치는 "운전 vs 언어"가 아니라 "cache 문 vs LM-head 문"이다.</strong></p>
+</div>
+
+<div class="callout bad">
+<p><strong>틀린 예측(D4).</strong> 나는 expert가 없는 bare cache door에는 step이 없을 것이라 썼다. step은 아니지만 평평하지도 않았다: head door 대비
+약 10층부터 <strong>완만한 ramp</strong>로 내려간다(MLP: 16–21층 0.70, 22–24층 0.33, 이후 0.16; 직선 적합 R² 0.72 vs step 0.85 — 실제 비율은 0.66 vs 0.93).
+expert가 여기에 더하는 것은 <strong>16–21층만 1.9배(Q)/1.3배(MLP) 끌어올리는 것</strong>이고, 이것이 cache 21–23 포트에 수요가 몰린다는 port map의 결과와 같은 말이다.
+즉 <strong>step = (VLM 배선의 ramp) × (expert의 포트 집중)</strong>이고, FM objective 자체의 기여는 22층 이후 ~0.8배에 그친다
+(<code>I_traj</code>/expert-probe: 22–24층 0.96, 25–34층 0.82). cache 쪽 프로파일의 상관은 0.857로 기준 0.9에 못 미쳤다(상위 층은 22, 21, 26, 23, 31 vs 21, 35, 22, 26, 31로 대부분 겹침).</p>
+</div>
+
+<p>probe들은 토큰 hand-over도 따라 한다: vision 토큰 비중(6–17층 → 27–34층, MLP)이 expert door 0.750 → 0.277(<code>I_traj</code> 0.754 → 0.276),
+head door 0.520 → 0.049(<code>I_CoC</code> 0.616 → 0.062). CE objective가 무작위 head readout과 다른 점은 후반층을 <em>덜</em> 쓴다는 것뿐이다
+(<code>I_CoC</code>/head-probe: 22–24층 0.73–0.81, 25–34층 0.57–0.63).</p>
+
+<h2><span class="num">7</span>단일 기준은 어디서 실패하나 — 주행 상황, 자유 생성 CoC, 종료 토큰</h2>
+
+<p>실험 도중 사용자가 던진 두 질문에 대한 답이다. 저장된 개루프 평가 기록만 사용했다(GPU 없음):
+<code>coc/traj/dual_u40_v2</code> vs <code>baseline_ada</code>, <code>indist_500</code> + <code>test_500</code> + OOD = 2,533클립, K = 8, 같은 seed로
+클립별 짝비교, GT 궤적의 manoeuvre(<code>eval_lib.bucket</code>)로 분할.</p>
+
+<h3>7.1 "CE 기반은 회전에서, Traj 기반은 직진에서 망가지는가?" — 교차는 없다</h3>
+
+<table>
+<tr><th>ΔminADE (해당 상황 dense 대비 %)</th><th class="r">cruise (1,385)</th><th class="r">accel (413)</th><th class="r">decel/stop (456)</th><th class="r">turn (279)</th><th class="r">전체</th></tr>
+<tr><td>CoC-only</td><td class="r">+0.641 (+88%)</td><td class="r">+0.387 (+46%)</td><td class="r">+0.551 (+68%)</td><td class="r">+0.888 (+83%)</td><td class="r">+0.611 (+76%)</td></tr>
+<tr><td>traj-only</td><td class="r">+0.162 (+22%)</td><td class="r">+0.080 (+10%)</td><td class="r"><strong>+0.325 (+40%)</strong></td><td class="r"><strong>+0.286 (+27%)</strong></td><td class="r">+0.192 (+24%)</td></tr>
+<tr class="hi"><td>dual</td><td class="r">+0.068 (+9%)</td><td class="r">+0.078 (+9%)</td><td class="r">+0.119 (+15%)</td><td class="r">+0.147 (+14%)</td><td class="r">+0.088 (+11%)</td></tr>
+</table>
+
+<figure class="half"><img src="PLOT::fig::fig5_failure_by_manoeuvre.png"><figcaption>주행 상황별 상대 손상(전체 2,533클립).</figcaption></figure>
+
+<ul>
+<li><strong>교차 없음.</strong> 클립별 차이 <code>d_coc − d_traj</code>가 모든 상황에서 양수다(cruise +0.479 [+0.416, +0.544], accel +0.307,
+decel/stop +0.226, turn +0.602). 좌회전과 우회전도 두 arm 모두에서 구분되지 않는다(−0.237 [−0.677, +0.184]).</li>
+<li><strong>traj-only의 약점은 직진이 아니라 감속·정지와 회전</strong>이다: cruise 대비 +0.163 [+0.058, +0.266], +0.124 [+0.002, +0.267].
+dual은 같은 대비가 +0.051, +0.079로 0을 포함하고, traj-only 대비 가장 크게 회복하는 곳이 바로 그 두 곳이다
+(OOD: decel/stop +0.381 → +0.102, turn +0.429 → +0.169). 이 대비는 OOD와 전체에서 유의하고 ID 단독으로는 아니다(다중비교 미보정).</li>
+<li><strong>CoC-only는 전반적으로 실패하고, 그 일부는 자기 CoC의 붕괴다.</strong> rollout의 12.1%가 퇴화(dense 0.6%, traj-only 2.7%, dual 2.4%)하고,
+그 클립들이 +2.06 m(건강한 클립 +0.41 m)로 이 arm의 action 손상 41%를 진다. CoC가 건강한 클립만 봐도 패턴은 같다
+(CoC-only +61/+25/+60/+49%, traj-only +17/+7/+38/+21%, dual +10/+8/+10/+14%).</li>
+</ul>
+
+<h3>7.2 CoC-only는 "언어에 안전한" 기준이 아니다</h3>
+
+<table>
+<tr><th>언어 지표</th><th class="r">dense</th><th class="r">dual</th><th class="r">traj-only</th><th class="r">CoC-only</th></tr>
+<tr><td>dense 텍스트의 teacher-forced NLL (calib, 3절)</td><td class="r">0.159</td><td class="r"><strong>0.218</strong></td><td class="r">0.502</td><td class="r">0.271</td></tr>
+<tr><td>GT CoC의 teacher-forced NLL 증가 (OOD)</td><td class="r">—</td><td class="r"><strong>+0.032</strong></td><td class="r">+0.143</td><td class="r">+0.192</td></tr>
+<tr><td>자유 생성 CoC 퇴화율 (2,533클립)</td><td class="r">0.6%</td><td class="r">2.4%</td><td class="r">2.7%</td><td class="r"><strong>12.1%</strong></td></tr>
+<tr><td>256토큰 안에 종료 실패 (indist / test / OOD)</td><td class="r">0 / 0 / 0</td><td class="r">4 / 4 / 13</td><td class="r">2 / 5 / 23</td><td class="r"><strong>62 / 65 / 118</strong></td></tr>
+<tr><td>LingoQA (논문 초안 6.1절)</td><td class="r">73.2</td><td class="r"><strong>68.8</strong></td><td class="r">37.0</td><td class="r">30.2</td></tr>
+</table>
+
+<p>CoC-only가 traj-only를 이기는 언어 지표는 <strong>자기가 선택된 바로 그 지표</strong>(dense 자신의 텍스트에 대한 NLL) 하나뿐이고, 거기서도 dual이 더 낫다.
+"CoC-only는 주행을 잃고 traj-only는 언어를 잃는다"는 문장은 지표를 명시해야 한다 — 두 단일 기준 모두 언어를 잃는다.</p>
+
+<h3>7.3 "CE-only의 importance에 CoC 종료 토큰이 들어갔는가?" — 들어갔고, 거의 침묵한다</h3>
+
+<p>채점 구간은 <code>seq[prompt_len : eos_pos + 1]</code>이다(<code>run_importance.py:70-72</code>): CoC 본문 + <code>&lt;|cot_end|&gt;</code> + 멈춤 토큰
+<code>&lt;|traj_future_start|&gt;</code>. calib 100클립 모두 이 쌍으로 끝났다. dense 모델 30클립에서 목표 토큰별로 재면:</p>
+
+<table>
+<tr><th>목표 토큰</th><th class="r">토큰 비중</th><th class="r">평균 NLL</th><th class="r">final hidden으로 보내는 gradient 에너지</th></tr>
+<tr><td>CoC 본문</td><td class="r">86.2%</td><td class="r">0.100</td><td class="r">94.5%</td></tr>
+<tr><td><code>&lt;|cot_end|&gt;</code></td><td class="r">6.9%</td><td class="r">0.061</td><td class="r">5.5%</td></tr>
+<tr><td><code>&lt;|traj_future_start|&gt;</code> (멈춤)</td><td class="r">6.9%</td><td class="r">0.0000</td><td class="r">0.0%</td></tr>
+</table>
+
+<p>멈춤 토큰은 <code>&lt;|cot_end|&gt;</code> 뒤에서 확정적이라 gradient가 없고, "끝내겠다"는 결정은 약 14개 위치 중 하나(<code>&lt;|cot_end|&gt;</code>)로만,
+그것도 <em>항상 온전한 prefix 위에서</em>(teacher forcing) <code>I_CoC</code>에 들어간다. pruned 모델이 자기 prefix로 그 상태에 도달할 수 있는지는
+이 점수가 보지 못한다 — 종료 토큰을 loss에 넣은 것과 종료 능력이 보존되는 것은 별개였다.</p>
+
+<h3>7.4 어떤 클립이 각 점수를 만드나 (가설 수준)</h3>
+
+<p><code>calib_100</code>에서 turn 클립은 17%인데 <code>I_traj</code> 질량의 46.7%를 만든다(평균 FM loss 0.53 vs cruise 0.18). decel/stop 클립은 18%인데
+7.6%만 만든다. <code>I_CoC</code> 질량은 클립 비율을 따른다(44/17/19/21%). 상위 10클립이 <code>I_traj</code>의 49%, <code>I_CoC</code>의 27%를 진다.
+traj-only가 가장 약한 상황이 <code>I_traj</code>에서 가장 덜 대표되는 상황과 일치하지만, 버킷 네 개의 일치는 결과가 아니라 검증해 볼 만한 우연이다.</p>
+
+<h2><span class="num">10</span>재현과 한계</h2>
+
+<pre>
+# 마스크 (slim_meta.json → q_mask/mlp_mask; --layers LO HI 로 한 깊이 대역만)
+python experiments/head_analysis/slim_to_mask.py --slim outputs/slim_dual_u40_v2 --out outputs/masks_u40_v2/dual.npz
+
+# A: pruned arm의 anatomy (dense 텍스트에 teacher forcing), D: 무작위 readout probe
+ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 3 experiments/head_analysis/run_gradient_anatomy.py \
+    --gpu 4 --exp-id gradanat_dual_u40 --mask outputs/masks_u40_v2/dual.npz
+ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 3 experiments/head_analysis/run_gradient_anatomy.py \
+    --gpu 7 --exp-id gradanat_probes_v1 --probes
+python experiments/head_analysis/analyze_pruned_anatomy.py --out gradanat_pruned_v1
+python experiments/head_analysis/analyze_probes.py --exp gradanat_probes_v1
+
+# B: unit 세트 → held-out ablation (4 shard), 그리고 arm 전체/깊이 대역 마스크
+python experiments/head_analysis/make_token_sets.py --exp-id tokabl_sets_v1
+ALPAMAYO_REPO=$PWD bash experiments/head_analysis/run_retry_host.sh 5 experiments/head_analysis/run_token_ablation.py \
+    --gpu 4 --exp-id tokabl_v1_s0 --shard 0 --n-shards 4
+python experiments/head_analysis/analyze_token_ablation.py --shards tokabl_v1_s0 tokabl_v1_s1 tokabl_v1_s2 tokabl_v1_s3 --out tokabl_v1
+... run_token_ablation.py --exp-id armheld_v1_s0 --shard 0 --n-shards 4 --arm-masks dual=outputs/masks_u40_v2/dual.npz \
+    traj=... coc=... dual_late=... traj_late=... coc_late=... dual_trunk=... traj_trunk=... coc_trunk=...
+python experiments/head_analysis/analyze_arm_heldout.py --shards armheld_v1_s0 armheld_v1_s1 armheld_v1_s2 armheld_v1_s3 --out armheld_v1
+
+# C: 누적 녹아웃 (pathway_e_v1과 같은 50 val 클립·seed), attention census
+bash experiments/head_analysis/run_pathway.sh 5 --stage2 --gpu 4 --num-clips 13 --clip-offset 0 --k 8 --exp-id vvdepth_s0 \
+    --edges VV_allvision E1_crossframe E2_crosscam V3_ownimage --upto-edges VV_allvision --cuts 0 3 6 9 12 15 18 21 24 27 30 33
+bash experiments/head_analysis/run_pathway.sh 5 --census --gpu 4 --num-clips 13 --clip-offset 0 --exp-id vision_census_v1_s0
+python experiments/head_analysis/analyze_vv_depth.py --shards vvdepth_s0 vvdepth_s13 vvdepth_s26 vvdepth_s38 \
+    --census vision_census_v1_s0 vision_census_v1_s13 vision_census_v1_s26 vision_census_v1_s38 --out vvdepth_v1
+
+# 저장 기록만으로: 주행 상황별 실패
+python experiments/evaluation/analyze_failure_by_situation.py --out failure_by_situation_v1
+
+# 논문 패널과 이 보고서
+cd experiments/paper &amp;&amp; python fig_why_differs.py --only-causal &amp;&amp; python build_why_differs_report.py --causal
+</pre>
+
+<h3>한계</h3>
+<ul>
+<li>모델 하나, 점수는 <code>calib_100</code> 100클립. B·held-out arm 비교는 <code>indist_500</code>의 첫 100클립, C는 <code>val</code> 50클립이다.</li>
+<li>A·D·B·C의 두 loss는 모두 <strong>dense 모델의 텍스트에 teacher forcing</strong>한 값이다. 자유 생성에서의 붕괴(7.2절)는 이 지표들이 보지 못한다 —
+두 종류의 언어 지표를 나란히 읽어야 한다.</li>
+<li>B의 세트는 한 가지 용량(층당 head 6개/채널 19%)이다. 용량-반응 곡선은 재지 않았다.</li>
+<li>C의 누적 곡선은 "이후(또는 이전) 층이 모두 막힌 조건에서의 필요"를 잰다. 연속한 차분은 조건부 기여이지 가법적 기여가 아니다.
+C의 예측은 저장된 9층 지도를 본 뒤에 쓴 것이다(blind가 아님). A2-bands의 예측도 B의 20클립 부분 점검을 본 뒤에 썼다(plan에 명시).</li>
+<li>D의 probe는 무작위 <em>선형</em> readout이다. "일반적인 readout이 무엇을 보는가"를 말할 뿐, 가능한 모든 loss에 대한 진술은 아니다.
+D4는 plan의 표현(unit 쪽 port profile)이 아니라 cache 쪽 profile로 판정했다(probe마다 72회 backward가 필요해 측정하지 않음).</li>
+<li>상황별 분석은 개루프 minADE 기준이고, 이 repo에는 개루프와 폐루프가 어긋난 전례가 있다. 대비 검정은 다중비교를 보정하지 않았다.</li>
+<li>1차(first-order) 점수에 대한 진술과 인과적 진술을 섞지 말 것: 인과적인 것은 B, held-out arm 비교, C뿐이다.</li>
+</ul>
+
+<footer>
+계획 <code>plans/2026-09-21_importance-causal-validation.md</code> · 논문용 정리 <code>paper/2026-09-20_why-importance-differs.md</code> (R14–R19) ·
+패널 <code>figures/fig5_*</code> · 실행 출력 <code>outputs/{gradanat_{dual,traj,coc}_u40, gradanat_probes_v1, gradanat_pruned_v1, tokabl_sets_v1,
+tokabl_v1*, armheld_v1*, vvdepth_*, vision_census_v1_*, failure_by_situation_v1}</code> · RTX 5880 Ada × 4
+</footer>
+
+</div>
+</body>
+</html>

@@ -11,6 +11,13 @@ explanation R1–R8 pointed to. **It confirmed the decisive prediction and refut
 the others, so the Analysis section below replaces the one written before the run**; what
 changed is listed at its top.
 
+A third pass on 2026-09-21 (branch `worktree-importance-causal-validation`,
+`plans/2026-09-21_importance-causal-validation.md`, approved by the user; panels
+`figures/fig5_*`, numbers in `figures/fig5_causal_validation_stats.json`) asked whether the
+account describes the network's *function*, and whether it makes the paper's case for the
+dual criterion: R14–R19. About half of its pre-registered gates failed; the plan's Outcome
+table lists them, and the Analysis section has a second part written after them.
+
 ## Purpose
 
 Figure 1 (`fig1_depth_mlp`, `fig1_depth_q_head`, `fig1_rank_agreement`) establishes
@@ -449,12 +456,17 @@ gradients are orthogonal everywhere, including where their rankings agree.
   nearly free before it (corrected agreement 0.85–0.96). That is a sharper statement of C2
   than "each loss illuminates its own substrate": the substrate is shared; what differs is
   which tokens each loss scores a late unit on.
-- It also says what a single criterion loses. `I_CoC` is blind to a late unit's work at
-  vision and history tokens (2% of its late score; 34–51% of `I_traj`'s). `I_traj` is not
+- It also says what a single criterion *cannot see*. `I_CoC` is blind to a late unit's work
+  at vision and history tokens (2% of its late score; 34–51% of `I_traj`'s). `I_traj` is not
   blind to text tokens (49–66%) but ranks heads differently at the CoC tokens themselves.
-  That matches the asymmetry the single-criterion arms showed: CoC-only is the
-  single-criterion arm that loses closed-loop driving (0.660, −0.089 against the unpruned
-  model), while trajectory-only loses language (LingoQA 73.2 → 37.0).
+  **Corrected by R17 (2026-09-21):** this paragraph went on to say that the blindness
+  "matches" CoC-only losing closed-loop driving (0.660, −0.089 against the unpruned model)
+  and trajectory-only losing language (LingoQA 73.2 → 37.0). Half of that does not survive
+  measurement. At the shipped dose the action does not depend on late-layer units at all —
+  the CoC-only arm's late mask costs +0.1% FM loss and 0.00 m — so what `I_CoC` cannot see
+  up there is not why it loses driving; it loses it in the trunk (R17). The language half
+  stands (the trajectory-only arm's late mask alone: NLL +65.5%), with the amendment that
+  on LingoQA *both* single criteria collapse (CoC-only 30.2).
 - R8 generalises beyond these two losses: late-layer units are specific to each output, so
   a criterion needs a term per output the compressed model must keep. VQA would not ride
   on `I_CoC`.
