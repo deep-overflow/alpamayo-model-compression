@@ -158,6 +158,13 @@ rollout, minADE/minFDE at K = 8.
   the FM loss no more than their mean (paired Wilcoxon, p < 0.01). *If it holds, the units
   the dual criterion rescues from each single criterion are exactly the ones the other
   output needs — the functional case for scoring with both losses.*
+- Set bookkeeping, written down before any B measurement
+  (`outputs/tokabl_sets_v1/summary.txt`): a rank-difference rule picks *specialised* units,
+  not top ones, so a T set holds about a random set's share of its own currency (Q heads,
+  late: T-tok 18.6% of `I_traj` against 15–21% for the random sets) and well under half a
+  random set's share of the other (8.0% of `I_CoC`). First order therefore expects the
+  cross-over clauses of B1/B2 to hold and the "above every random set" clauses to be
+  marginal. The gates stay as written.
 - Also reported, not gated: across all configs, how well the first-order prediction (the
   summed `I_traj` / `I_CoC` of the removed units) orders the measured ΔFM / ΔNLL.
 - minADE is measured for the dense model, every selected set and one random set per

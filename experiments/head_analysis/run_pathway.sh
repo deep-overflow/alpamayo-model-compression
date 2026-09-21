@@ -13,6 +13,9 @@ SCRIPT=run_pathway.py
 if [ "${1:-}" = "--stage2" ]; then
   SCRIPT=run_pathway2.py
   shift
+elif [ "${1:-}" = "--census" ]; then
+  SCRIPT=run_vision_census.py
+  shift
 fi
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VENV=/mnt/nvme1n1/ad_vla/venvs/alpamayo-mc/bin/python

@@ -631,6 +631,46 @@ def expert_fm_grads(model, cache, rope_deltas, x1, fm_steps, seed, prefill, k_dr
     return float(np.mean(losses)), grads, leaves
 
 
+@torch.no_grad()
+def expert_fm_loss(model, cache, rope_deltas, x1, fm_steps, seed, prefill):
+    """The FM loss of expert_fm_grads, forward only: same noise stream, same t grid.
+
+    For reading a masked model's flow-matching loss on a cache that then goes on to be
+    sampled from (run_token_ablation.py); the cache is cropped back after every step.
+    """
+    device = x1.device
+    offset = torch.tensor([prefill], device=device)
+    prefix_mask = torch.ones(1, prefill, device=device, dtype=torch.long)
+    n_tok = model.action_space.get_action_space_dims()[0]  # 64
+    position_ids, attention_mask = model._build_expert_pos_ids_and_attn_mask(
+        offset=offset, rope_deltas=rope_deltas, kv_cache_seq_len=prefill,
+        n_diffusion_tokens=n_tok, b_star=1, device=device, prefix_mask=prefix_mask,
+    )
+    forward_kwargs = {}
+    if model.config.expert_non_causal_attention:
+        forward_kwargs["is_causal"] = False
+
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    losses = []
+    for s in range(fm_steps):
+        t_val = (s + 0.5) / fm_steps
+        noise = torch.randn(x1.shape, generator=gen).to(device)  # (1, 64, 2)
+        x_t = (1.0 - t_val) * noise + t_val * x1
+        t = torch.full((1, 1, 1), t_val, device=device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            embeds = model.action_in_proj(x_t.to(torch.bfloat16), t)  # (1, 64, 2048)
+            if embeds.dim() == 2:
+                embeds = embeds.view(1, n_tok, -1)
+            out = model.expert(
+                inputs_embeds=embeds, position_ids=position_ids, past_key_values=cache,
+                attention_mask=attention_mask, use_cache=True, **forward_kwargs,
+            )
+            cache.crop(prefill)
+            pred = model.action_out_proj(out.last_hidden_state[:, -n_tok:])  # (1, 64, 2)
+        losses.append(F.mse_loss(pred.float(), x1 - noise).item())
+    return float(np.mean(losses))
+
+
 # ---------------------------------------------------------------------------
 # Denoising-step decomposition (2026-08-21)
 #
