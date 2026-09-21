@@ -214,6 +214,39 @@ def main():
             rt, rc = spearmanr(fo_t[sel], m_t[sel])[0], spearmanr(fo_c[sel], m_c[sel])[0]
             out["first_order"][f"{ax}|{band}"] = {"n": int(sel.sum()), "traj": float(rt), "coc": float(rc)}
             lines.append(f"  {ax:3s} {band:5s} ({int(sel.sum()):2d} configs): I_traj -> dFM {rt:+.2f}   I_CoC -> dNLL {rc:+.2f}")
+    # is a score calibrated across depth? measured damage per unit of removed score mass, on the
+    # five random sets of each band (an unbiased sample of that band's units)
+    lines.append("measured damage per unit of removed score mass, random sets (a depth-calibrated score has one rate)")
+    out["exchange_rate"] = {}
+    for ax in ("q", "mlp"):
+        rate = {}
+        for band in ("late", "trunk"):
+            rs = [f"{ax}_{band}_R{i}" for i in range(5)]
+            rate[band] = {"traj": float(np.mean([dfm[r].mean() for r in rs]) / np.mean([meta[r]["first_order"]["traj"] for r in rs])),
+                          "coc": float(np.mean([dnll[r].mean() for r in rs]) / np.mean([meta[r]["first_order"]["coc"] for r in rs]))}
+        out["exchange_rate"][ax] = rate
+        lines.append(f"  {ax:3s} dFM per I_traj: trunk {rate['trunk']['traj']:+.4f}  late {rate['late']['traj']:+.4f}   |   "
+                     f"dNLL per I_CoC: trunk {rate['trunk']['coc']:+.4f}  late {rate['late']['coc']:+.4f}")
+    # the score is E_c|G_u|, but the first-order change of the MEAN loss on removing u is -E_c[G_u]:
+    # how consistent is the gradient's sign across clips, and does the signed prediction order anything?
+    pq_path = REPO / "outputs" / json.loads((REPO / "outputs" / cfg0["sets"] / "sets.json").read_text())["anatomy"]
+    if (pq_path / "anatomy_perclip_q.npz").exists():
+        with np.load(pq_path / "anatomy_perclip_q.npz") as pq:
+            g = {"traj": pq["fm_full"].sum(1), "coc": pq["ce"].sum(1)}  # (N, 36, 32) signed, per clip
+        sets = np.load(REPO / "outputs" / cfg0["sets"] / "sets.npz")
+        out["signed_first_order"] = {}
+        lines.append("signed first order, Q heads: sign consistency |E G| / E|G| (mass-weighted) and Spearman of "
+                     "-sum E[G] with the measured damage")
+        for obj, measured, label in (("traj", dfm, "FM / I_traj"), ("coc", dnll, "NLL / I_CoC")):
+            mean_g, mag = g[obj].mean(0), np.abs(g[obj]).mean(0)  # (36, 32)
+            cons = {b: float(np.abs(mean_g[lo:hi]).sum() / mag[lo:hi].sum()) for b, (lo, hi) in
+                    (("trunk", (6, 18)), ("late", (22, 35)))}
+            qs = [c for c in names if c.startswith("q_")]
+            pred = np.array([-(mean_g * (sets[c] == 0)).sum() for c in qs])
+            rho = float(spearmanr(pred, [measured[c].mean() for c in qs])[0])
+            out["signed_first_order"][obj] = {"sign_consistency": cons, "spearman_signed_pred_vs_measured": rho}
+            lines.append(f"  {label:12s} consistency trunk {cons['trunk']:.2f} late {cons['late']:.2f}; signed prediction vs "
+                         f"measured over {len(qs)} Q configs: {rho:+.2f}")
 
     out_dir = REPO / "outputs" / args.out
     (out_dir / "plots").mkdir(parents=True, exist_ok=True)
