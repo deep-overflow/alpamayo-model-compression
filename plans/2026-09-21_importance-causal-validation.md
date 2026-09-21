@@ -132,6 +132,21 @@ statistic and split-half ceiling is taken among kept units only.
   side — the FM loss rises more under trunk-only `coc` than under trunk-only `traj`
   (p < 0.01); (iii) for every arm, trunk-only + late-only damage adds up to within 25% of
   the full mask's damage on both losses.
+- **A2-mix (added after A2-bands came out, before it was run).** A2-bands found the opposite
+  of (ii) and broke (iii): the trajectory-only mask applied in layers 0–21 alone costs the
+  action far more (FM loss +26.1%, minADE +2.64 m) than the same arm's full mask (+6.6%,
+  +0.06 m), so its late-layer pruning *repairs* what its trunk pruning breaks; the masks
+  were verified (trunk ∧ late = full, all arms, both axes). Which late units do the
+  repairing? Four more configs on the same 100 clips: the `traj` trunk mask with the late
+  mask of `coc`, of `dual`, and with a random late mask of the same size; and the `coc`
+  trunk mask with the late mask of `traj`. Hypothesis: a trunk pruned by `I_traj` alone
+  feeds the late layers a stream that the *language-side* late units — the ones `I_traj`
+  drops and `I_CoC` keeps — turn into a corrupted late cache, which the expert reads.
+  Predictions: (a) `traj` trunk + `coc` late does **not** repair (FM loss still ≥ +20%),
+  because it keeps exactly those units; (b) `traj` trunk + random late repairs partly
+  (between +6.6% and +26.1%); (c) `coc` trunk + `traj` late lowers the FM damage of the
+  `coc` trunk mask (+17.0%). If any late mask repairs equally, the effect is about late
+  capacity, not about which units.
 
 ## B — token-targeted ablation: does the score anatomy predict function? (GPU ~1 h on four cards)
 
