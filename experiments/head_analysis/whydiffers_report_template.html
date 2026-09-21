@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>I_traj와 I_CoC는 왜 다른가 — 하나의 프로파일, 하나의 hand-over, 하나의 포트</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --ink: #29261B; --muted: #6B6555; --rule: #DDD8CC;
+    --c1: #2a78d6; --c2: #008300; --c3: #e87ba4; --c4: #eda100;
+    --good: #eef6ee; --warn: #fdf3e3; --bad: #fdeef2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.72 -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 22px 80px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 34px; }
+  .part { margin: 58px 0 0; padding: 10px 16px; border-radius: 6px; background: #EFEDE4;
+          font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+          font-weight: 700; }
+  h2 { font-size: 19px; margin: 40px 0 14px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  h2 .num { display: inline-block; min-width: 30px; color: var(--c1); font-weight: 700; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; }
+  p { margin: 11px 0; }
+  code { background: #F0EEE6; padding: 1px 5px; border-radius: 3px;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: #F0EEE6; padding: 13px 15px; border-radius: 6px; overflow-x: auto;
+        font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px;
+       text-transform: uppercase; letter-spacing: 0.04em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hi td { background: #F3F1E9; font-weight: 600; }
+  .pass { color: var(--c2); font-weight: 700; }
+  .fail { color: #b0552f; font-weight: 700; }
+  figure { margin: 22px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; background: #fff; }
+  figure.half img { width: 60%; display: block; margin: 0 auto; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .trio { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .pair figure, .trio figure { margin: 8px 0; }
+  figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .callout { padding: 13px 17px; border-radius: 6px; margin: 18px 0;
+             border-left: 3px solid var(--muted); background: #F3F1E9; }
+  .callout.good { background: var(--good); border-left-color: var(--c2); }
+  .callout.warn { background: var(--warn); border-left-color: var(--c4); }
+  .callout.bad  { background: var(--bad);  border-left-color: var(--c3); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 16px; }
+  ol.toc { columns: 2; font-size: 13.5px; color: var(--muted); padding-left: 20px; }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 680px) { .wrap { padding: 30px 15px 60px; } h1 { font-size: 22px; }
+    .pair, .trio { grid-template-columns: 1fr; } figure.half img { width: 100%; } ol.toc { columns: 1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1><code>I_traj</code>와 <code>I_CoC</code>는 왜 다른가 — 하나의 프로파일, 하나의 hand-over, 하나의 포트</h1>
+<div class="sub">
+  2026-09-21 · dense Alpamayo-1.5-10B (VLM 36층, Q head 32, MLP channel 12,288) ·
+  <strong>1단계</strong>: 저장된 run 18개만 사용(GPU 0) · <strong>2단계</strong>: 새 GPU 측정
+  (<code>calib_100</code> 100클립, RTX 5880 Ada, 20분 × 1장 + 17분 × 3장) ·
+  계획 <code>plans/2026-09-20_gradient-anatomy.md</code> ·
+  논문용 영어 정리 <code>paper/2026-09-20_why-importance-differs.md</code>
+</div>
+
+<div class="callout lede">
+<p><strong>질문.</strong> 논문 Fig. 1은 trajectory 중요도 <code>I_traj</code>와 reasoning 중요도 <code>I_CoC</code>가
+서로 다른 깊이에서 peak를 찍고(18–19층 vs 24–27층), 22층 이후 unit 순위가 어긋난다는 것을 보인다.
+논문의 기전 주장(C2)이 이 관찰 위에 서 있는데, <strong>왜 그 지점에서 갈라지는지</strong>는 말하지 못하고 있었다.</p>
+<p><strong>답.</strong> (1) 두 깊이 프로파일은 독립된 두 곡선이 아니라 <strong>하나의 공통 프로파일에 22–23층의
+4.6배 계단 하나가 곱해진 것</strong>이고, 이 계단은 데이터가 아니라 네트워크의 성질이다(모든 run에서 23층).
+(2) 그 계단의 정체는 <strong>토큰 사이의 hand-over</strong>다 — 두 점수는 17–24층에서 <em>함께</em> vision 토큰에서
+text 토큰으로 넘어가며, 같은 토큰에서는 late layer에서도 두 loss가 대체로 일치한다(ρ 0.79–0.81, pooled는 0.38).
+순위가 갈라지는 것은 주로 두 점수가 late layer에서 토큰을 섞는 비율이 다르기 때문이다.
+(3) <code>I_traj</code>가 하필 22–23층에서 꺾이는 것은 <strong>구조적</strong>이다 — FM gradient의 주 포트가
+cache layer 21–23이고, 그 위의 unit은 거기에 쓸 수 없다(하락의 73–90%).</p>
+<p><strong>정직한 성적표.</strong> 1단계가 가리킨 설명을 2단계에서 사전 등록 후 검정했다. 결정적 검정과
+port map 예측 셋은 통과했고, <strong>내 예측 셋은 틀렸다</strong>(11절에 그대로 기록). 그래서 해석(12절)은
+2단계 측정에 맞춰 다시 썼다.</p>
+</div>
+
+<ol class="toc">
+<li>목적과 질문</li><li>설정</li>
+<li>R1 하나의 프로파일 × 계단 하나</li><li>R2–R3 계단은 네트워크의 성질</li>
+<li>R4 불일치는 진짜인가 (noise ceiling)</li><li>R5 무엇이 공유 성분을 대체하나</li>
+<li>R6 같은 깊이를 가리키는 독립 표지</li><li>R7–R8 late layer는 출력을 따른다</li>
+<li>2단계: 방법과 무결성</li><li>R9–R11 토큰</li><li>R12–R13 포트, 그리고 성적표</li>
+<li>종합 해석 (의견)</li><li>논문에 반영할 것</li><li>한계</li>
+</ol>
+
+<h2><span class="num">1</span>목적과 질문</h2>
+
+<div class="trio">
+<figure><img src="PLOT::fig::fig1_depth_mlp.png" alt="Fig. 1 depth, MLP">
+<figcaption>논문 Fig. 1a (MLP). 각 곡선을 자기 최댓값으로 정규화. peak: traj 18 / CoC 27.</figcaption></figure>
+<figure><img src="PLOT::fig::fig1_depth_q_head.png" alt="Fig. 1 depth, Q">
+<figcaption>Fig. 1b (Q head). peak: traj 19 / CoC 24.</figcaption></figure>
+<figure><img src="PLOT::fig::fig1_rank_agreement.png" alt="Fig. 1 rank agreement">
+<figcaption>Fig. 1c. 층내 unit 순위의 Spearman 일치도. 22층 이후 붕괴.</figcaption></figure>
+</div>
+
+<p>reviewer가 물을 네 가지 질문에 답하는 것이 목적이다.</p>
+<ol>
+<li>두 개의 독립된 깊이 프로파일인가, 하나의 현상을 두 번 본 것인가? (R1–R3)</li>
+<li>late layer의 순위 불일치는 진짜인가, 점수가 불안정해서 그렇게 보이는 것인가? (R4–R5)</li>
+<li>갈라지는 깊이에서 네트워크에 무엇이 바뀌는가? (R6–R8)</li>
+<li>각 loss는 unit을 <em>어느 토큰에서</em>, <em>어느 cache layer를 통해</em> 보는가? (R9–R13 — 출하 점수는 토큰
+위치에 대해 먼저 합한 뒤 절댓값을 취하므로 저장된 데이터로는 답할 수 없어 새로 쟀다)</li>
+</ol>
+
+<h2><span class="num">2</span>설정</h2>
+
+<table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>점수</td><td>gate-Taylor <code>E_c|dL/dg|</code>, Fig. 1과 동일(<code>paper/2026-09-09_figure-reproducibility.md</code>).
+  <code>I_CoC</code>: 모델 자신의 CoC rollout을 teacher forcing한 NLL. <code>I_traj</code>: GT action 기준 10-step flow-matching MSE</td></tr>
+<tr><td>1단계 주 데이터</td><td><code>outputs/importance_v2</code> (<code>calib_100</code>), 집계본과 per-clip 배열</td></tr>
+<tr><td>1단계 보조 run</td><td>강건성: <code>importance_rd100_a/b/c</code>, <code>se100_a</code>, <code>su100_a</code>, <code>val100</code>, <code>ood</code>,
+  <code>nt500</code>, <code>st4000</code>, <code>selftraj_v1</code>, <code>dim0</code>, <code>dim1</code> · 다른 objective: <code>importance_vqa</code>
+  (LingoQA 이미지에서 VQA-NLL과 CoC-NLL) · loss 없는 표지: <code>jlens_v2</code> (Jacobian lens)</td></tr>
+<tr><td>인용한 인과 증거</td><td><code>pathway_x_v1</code>, <code>pathway_e_v1</code> (attention knockout, n=50), <code>cacheuse_v1</code>
+  (expert cache-read knockout, n=100) — 모두 draft Sec. 7에 이미 있음</td></tr>
+<tr><td>2단계 새 run</td><td><code>outputs/gradanat_v1</code> (100클립, Ada 1장, 12초/클립, peak 42.8 GB), <code>gradanat_verify</code> (3클립, 무결성),
+  <code>portmap_v1</code> (100클립, 3 shard, 30초/클립). 출하 프로토콜 그대로이며 <code>importance_v2_ada</code>의 층내 순위를
+  모든 층에서 ρ ≥ 0.9993으로 재현</td></tr>
+<tr><td>35층</td><td>전 구간에서 제외: <code>I_traj</code>가 정확히 0 (35층 출력은 어떤 cache에도 들어가지 않는다)</td></tr>
+<tr><td>구간</td><td>"early" = 0–21층, "late" = 22–34층 (Fig. 1c의 음영과 동일)</td></tr>
+</table>
+
+<div class="part">1단계 — 저장된 run만으로 (GPU 0)</div>
+
+<h2><span class="num">3</span>R1 — 두 프로파일은 "하나의 프로파일 × 계단 하나"다</h2>
+
+<p>Fig. 1은 각 곡선을 자기 최댓값으로 정규화해서 모양만 비교한다. 정규화하지 않은 layer 합으로 비율을 내면
+구조가 훨씬 단순하다.</p>
+
+<figure class="half"><img src="PLOT::fig::fig3_ratio_step.png" alt="ratio step">
+<figcaption><code>I_traj / I_CoC</code>, 층별 raw 합, log 축. 점선은 2-level 최소제곱 적합.</figcaption></figure>
+
+<table>
+<tr><th>축</th><th class="r">0–22층</th><th class="r">23–34층</th><th class="r">계단</th><th class="r">bootstrap 95% CI</th><th class="r">단일 계단의 R²</th></tr>
+<tr><td>Q head</td><td class="r">14.4×</td><td class="r">3.1×</td><td class="r">4.64×</td><td class="r">[3.85, 5.47]</td><td class="r">0.86</td></tr>
+<tr><td>MLP channel</td><td class="r">12.7×</td><td class="r">2.8×</td><td class="r">4.56×</td><td class="r">[3.37, 6.07]</td><td class="r">0.93</td></tr>
+</table>
+
+<ul>
+<li>MLP의 early 고원에서 비율의 변동계수는 9%인데, 같은 구간에서 <code>I_traj</code> 자체는 15.0배 변한다. 두 곡선은 <strong>같이</strong> 올라간다.</li>
+<li>변화점은 두 축 모두 23층(아래 고원의 첫 층). 클립 bootstrap 2,000회 중 Q 100%, MLP 97.9%에서 23층이고,
+  클립을 하나씩 따로 봐도 100% / 99%에서 계단이 나타난다.</li>
+<li>계단만으로 Fig. 1의 peak 이동이 재현된다: <code>I_CoC</code>에 2-level 비율을 곱하면 traj peak가 18층(Q; 실제 19),
+  21층(MLP; 실제 18, 18–21이 평평한 꼭대기)에 오고, <code>I_traj</code>를 나누면 CoC peak가 24층(Q; 실제 24), 25층(MLP; 실제 27)에 온다.</li>
+<li>14배·3배라는 <em>수준</em>은 의미가 없다(두 loss의 단위가 다름). 발견은 "평평–계단–평평"이라는 <strong>모양</strong>이다.</li>
+</ul>
+
+<p>따라서 Fig. 1a/1b의 "서로 다른 peak"와 Fig. 1c의 "22층 이후 붕괴"는 같은 하나의 사건이고, 질문은
+"22–23층에서 무슨 일이 일어나는가"로 줄어든다.</p>
+
+<h2><span class="num">4</span>R2–R3 — 계단은 데이터가 아니라 네트워크의 성질이다</h2>
+
+<figure class="half"><img src="PLOT::fig::fig3_ratio_step_draws.png" alt="ratio step, other runs">
+<figcaption>다른 12개 run의 MLP 비율을 각자의 early 고원으로 나눈 것(회색)과 출하 run(파랑).</figcaption></figure>
+
+<table>
+<tr><th>run</th><th><code>importance_v2</code>와 다른 점</th><th class="r">변화점 (MLP, Q)</th></tr>
+<tr><td><code>rd100_a/b/c</code>, <code>se100_a</code>, <code>su100_a</code>, <code>val100</code></td><td>서로소인 100클립 calibration 세트, 추출 규칙 3종</td><td class="r">23, 23</td></tr>
+<tr><td><code>nt500</code>, <code>st4000</code></td><td>500 / 4,000 클립</td><td class="r">23, 23</td></tr>
+<tr><td><code>ood</code></td><td>long-tail OOD 클립</td><td class="r">23, 23</td></tr>
+<tr class="hi"><td><code>selftraj_v1</code></td><td>trajectory target을 GT 대신 모델 자신의 샘플로</td><td class="r">23, 23</td></tr>
+<tr><td><code>dim0</code></td><td>가속도 차원만</td><td class="r">23, 23</td></tr>
+<tr><td><code>dim1</code></td><td>곡률 차원만</td><td class="r">24, 23</td></tr>
+</table>
+
+<p><code>selftraj_v1</code>이 가장 중요하다. <code>I_CoC</code>는 모델 자신의 rollout을, <code>I_traj</code>는 GT를 기준으로
+삼는다는 비대칭이 자연스러운 용의자인데, 그 비대칭을 없애면 계단의 <em>크기</em>는 움직이지만(MLP 4.6× → 3.2×)
+<em>위치</em>는 그대로다.</p>
+
+<p><strong>R3 — 경계에서 무엇이 움직이는지는 축마다 다르다.</strong></p>
+<table>
+<tr><th></th><th class="r"><code>I_traj</code>, 21 → 23층</th><th class="r"><code>I_CoC</code>, 23 → 27층</th></tr>
+<tr><td>MLP channel</td><td class="r">÷2.36</td><td class="r">×2.32</td></tr>
+<tr><td>Q head</td><td class="r">÷2.90</td><td class="r">×0.41 (상승 없음)</td></tr>
+</table>
+<p>MLP에서는 계단이 두 부분(trajectory 하락, 이어서 CoC 상승)이고, Q head에서는 trajectory 하락뿐이다.
+(R11에서 이 차이의 위치가 밝혀진다.)</p>
+
+<h2><span class="num">5</span>R4 — late layer의 순위 불일치는 진짜인가</h2>
+
+<p>100개 calibration 클립을 서로소인 절반으로 나누고(무작위 50회) 절반 표본 점수끼리 상관을 낸다.
+"자기 자신과의 일치도"가 어떤 일치도든 도달할 수 있는 <strong>천장</strong>이다.</p>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig3_noise_ceiling_q_head.png" alt="noise ceiling, Q">
+<figcaption>Q head. 천장(파랑·주황)은 깊이에 평평하고, objective 간 일치도(검정)만 무너진다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig3_noise_ceiling_mlp.png" alt="noise ceiling, MLP">
+<figcaption>MLP. late layer에서 천장 자체가 내려간다.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>축, early → late</th><th class="r"><code>I_traj</code> vs 자신</th><th class="r"><code>I_CoC</code> vs 자신</th><th class="r"><code>I_traj</code> vs <code>I_CoC</code></th><th class="r">천장 보정</th></tr>
+<tr><td>Q head</td><td class="r">0.85 → 0.82</td><td class="r">0.90 → 0.89</td><td class="r">0.74 → 0.33</td><td class="r"><strong>0.85 → 0.37</strong></td></tr>
+<tr><td>MLP</td><td class="r">0.69 → 0.46</td><td class="r">0.80 → 0.50</td><td class="r">0.69 → 0.26</td><td class="r"><strong>0.92 → 0.54</strong></td></tr>
+</table>
+
+<ul>
+<li><strong>Q head: 불일치는 진짜다.</strong> 각 objective는 두 구간 모두에서 자기 순위를 똑같이 잘 재현한다.
+  일치도 하락(곱셈 기준) 중 천장 하락이 설명하는 몫은 3%뿐.</li>
+<li><strong>MLP: 하락의 약 1/3은 천장이 내려간 것이다.</strong> 서로소인 100클립 추출 3개를 별개 GPU run으로 잰
+  full-sample(n = 100) 자기 일치도가 0.87 → 0.68, 0.87 → 0.63이다. 따라서 Fig. 1c의 late 값 0.34는 1이 아니라
+  도달 가능한 ~0.65에 대해 읽어야 한다. 천장 하락의 몫은 n = 100에서 34%(n = 50에서 44%)이고, 나머지가
+  불일치다(보정 후 0.92 → 0.54). late MLP 일치도는 도달 가능치의 약 절반(0.52), Q head는 0.38.</li>
+<li>같은 보정값이 다른 경로로도 나온다: 위의 서로소 추출 3개로 Q 0.85 → 0.37, MLP 0.90 → 0.53.</li>
+<li>MLP 6–19층에서는 <em>다른</em> objective가 held-out 절반을 같은 objective만큼 잘 예측한다:
+  CoC-절반A vs traj-절반B 0.60, traj-A vs traj-B 0.59. 경계 아래에서 두 점수는 <strong>서로 대체 가능</strong>하다.</li>
+</ul>
+
+<h2><span class="num">6</span>R5 — 무엇이 공유 성분을 대체하는가 (클립 × objective 분산 분해)</h2>
+
+<p>single-clip 순위 벡터로 층마다 세 가지 평균 상관을 낸다: 다른 클립·다른 objective(= 공유 성분),
+같은 클립·다른 objective(+ 클립 고유 성분), 다른 클립·같은 objective(+ objective 고유 성분).</p>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig3_partition_q_head.png" alt="partition, Q">
+<figcaption>Q head. 공유 성분이 절반이 되고 objective 고유 성분이 세 배가 된다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig3_partition_mlp.png" alt="partition, MLP">
+<figcaption>MLP (log 축). late에서 커지는 것은 <em>클립</em> 고유 성분이다.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>축</th><th>구간</th><th class="r">공유</th><th class="r">objective 고유</th><th class="r">클립 고유</th><th class="r">공유 / (공유 + objective)</th></tr>
+<tr><td>Q head</td><td>0–5</td><td class="r">0.353</td><td class="r">0.040</td><td class="r">0.045</td><td class="r">0.89</td></tr>
+<tr><td>Q head</td><td>6–21</td><td class="r">0.251</td><td class="r">0.042</td><td class="r">0.066</td><td class="r">0.85</td></tr>
+<tr class="hi"><td>Q head</td><td>22–34</td><td class="r">0.138</td><td class="r">0.127</td><td class="r">0.040</td><td class="r">0.49</td></tr>
+<tr><td>MLP</td><td>0–5</td><td class="r">0.613</td><td class="r">0.003</td><td class="r">0.019</td><td class="r">0.99</td></tr>
+<tr><td>MLP</td><td>6–21</td><td class="r">0.096</td><td class="r">0.008</td><td class="r">0.082</td><td class="r">0.92</td></tr>
+<tr class="hi"><td>MLP</td><td>22–34</td><td class="r">0.036</td><td class="r">0.027</td><td class="r">0.118</td><td class="r">0.60</td></tr>
+</table>
+
+<ul>
+<li>마지막 열은 클립 잡음이 평균되어 사라졌을 때의 집계 일치도 예측치다. R4의 천장 보정값을 <em>쓰지 않고</em>
+  재현한다 — early에서는 정확히(0.85, 0.92 대 0.85, 0.92), late에서는 0.06–0.12 이내(0.49, 0.60 대 0.37, 0.54).
+  분해가 실제로 무언가를 재고 있다는 점검이다.</li>
+<li>Q head: objective 고유 성분이 공유 성분을 넘는 층은 23, 28, 29, 30, 31, 33층. 28·29층에서는 0.20, 0.17 대 0.04, 0.04.</li>
+<li>MLP: late에서 커지는 것은 클립 고유 성분이다 — 어떤 late channel이 중요한지는 <em>장면</em>에 달렸고 두 objective가
+  이를 공유한다. R4에서 천장이 내려간 이유이자, 100클립 calibration이 가장 얇아지는 구간이다.</li>
+<li>MLP 1–5층은 별개 체제다: single-clip 순위 분산의 60–82%가 모든 클립·두 objective에 공유되고, 순위는 곧
+  unit의 write norm이다(ρ 0.88–0.97).</li>
+<li>표에 없는 나머지(구간 평균 36–82%; 공유 성분이 지배하는 MLP 0–5층에서 가장 작다)는 single-clip 측정 잡음과 클립 × objective
+  상호작용으로, 클립당 측정 한 번으로는 분리할 수 없다.</li>
+</ul>
+
+<h2><span class="num">7</span>R6 — 서로 독립인 세 측정이 같은 깊이를 가리킨다</h2>
+
+<figure class="half"><img src="PLOT::fig::fig3_boundary.png" alt="boundary markers">
+<figcaption>각각 min–max 정규화. 음영은 21–24층.</figcaption></figure>
+
+<table>
+<tr><th>신호</th><th>무엇을 쓰나</th><th class="r">전</th><th class="r">후</th><th>위치</th></tr>
+<tr><td>중요도 비율</td><td>두 loss의 gradient</td><td class="r">12.7×</td><td class="r">2.8×</td><td>변화점 23</td></tr>
+<tr><td>cache 텐서에 대한 FM 민감도 (<code>traj_kv_k + traj_kv_v</code>)</td><td>trajectory loss, expert 쪽</td><td class="r">8–22층 평균</td><td class="r">25–35층의 3.6배</td><td>전체의 81%가 22층 이하</td></tr>
+<tr class="hi"><td>Jacobian-lens readout의 excess kurtosis (무작위 vocabulary)</td><td><strong>loss를 전혀 쓰지 않음</strong></td><td class="r">6.4 (14–20층)</td><td class="r">21.0 (24–34층)</td><td>2-level 변화점 22, R² 0.91</td></tr>
+</table>
+
+<p>셋째 행이 순환논리가 아닌 증거다: 텍스트 위치의 residual stream이 21–24층에서 token-peaked — 이산적이고 말로 옮길 수
+있는 내용 — 로 바뀐다는 것을 어느 objective도 쓰지 않고 잰 것이다. (둘째 행은 R12와 함께 읽을 것. 이것은 cache 텐서
+<em>자체</em>에 대한 민감도 <code>|k·dk| + |v·dv|</code>이고, upstream unit이 움직일 수 있는 부분은 대부분 더 뒤쪽 cache layer로
+들어온다. 둘 다 측정값이며 서로 다른 질문에 답한다.)</p>
+
+<p>draft Sec. 7의 인과적 knockout도 9층 해상도에서 일치한다.</p>
+<ul>
+<li>expert cache-read knockout: cache layer 대역 [0–7, 8–15, 16–23, 24–35]별 의존도 0.41 / 0.40 / 0.09 / 0.10.</li>
+<li>VLM 내부 edge knockout: <em>vision 위치로 들어가는</em> attention edge는 17층 이후 의미가 없다 — 모든 셀이 두 채널에서
+  ±3% 이내(같은 카메라의 이전 프레임: L18–26 +1.0% / +1.1%, L27–35 −0.1% / +0.2%). 18–35층에서 의미 있는 edge는
+  텍스트가 vision을 읽는 것들이고(CoC←vision NLL +18.2%, +12.8%; instruction←vision +12.4%, +4.2%) language만 움직인다(action ±1.8% 이내).</li>
+<li>expert span knockout: expert attention mass의 73%가 2,880개 vision 위치에 있고 그것을 막으면 +2.38 m. vision이 아닌 것은 전부 216 위치.</li>
+</ul>
+
+<h2><span class="num">8</span>R7–R8 — late layer는 입력도 read-out head도 아닌 "출력"을 따른다</h2>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig3_text_write_q_head.png" alt="text write norm, Q">
+<figcaption>R7 (Q head). 각 objective의 중요도와 "텍스트 위치에서의 write norm"의 순위 상관.</figcaption></figure>
+<figure><img src="PLOT::fig::fig3_pairs_q_head.png" alt="objective pairs, Q">
+<figcaption>R8 (Q head). 입력·출력 계열을 공유하거나 공유하지 않는 네 쌍의 일치도.</figcaption></figure>
+</div>
+
+<p><strong>R7.</strong> J-lens run은 unit의 write norm을 텍스트·CoC 위치에서만 잰다. 그것과 각 점수의 순위 상관(6–21층 → 22–34층):
+Q head에서 <code>I_CoC</code> 0.50 → <strong>0.77</strong>, <code>I_traj</code> 0.24 → 0.25. late-layer head가 텍스트 위치에서 얼마나 쓰느냐가
+CoC 중요도를 거의 결정하지만 trajectory 중요도에 대해서는 아무것도 말해주지 않는다. MLP에서는 이 대비가 없다
+(<code>I_CoC</code> 0.48 → 0.44, <code>I_traj</code> 0.23 → 0.30).</p>
+
+<table>
+<tr><th>쌍 (6–21층 → 22–34층)</th><th>공유하는 것</th><th class="r">Q head</th><th class="r">MLP</th></tr>
+<tr><td><code>calib_100</code>의 CoC-NLL vs LingoQA 이미지의 CoC-NLL</td><td>출력 (입력은 다름)</td><td class="r">0.80 → <strong>0.87</strong></td><td class="r">0.74 → 0.50</td></tr>
+<tr><td>가속도 vs 곡률 (FM loss의 두 절반)</td><td>입력과 read-out</td><td class="r">0.79 → 0.67</td><td class="r">0.55 → 0.36</td></tr>
+<tr><td>VQA-NLL vs CoC-NLL, 같은 이미지</td><td>입력 이미지와 LM head (텍스트는 다름)</td><td class="r">0.57 → 0.42</td><td class="r">0.63 → 0.27</td></tr>
+<tr class="hi"><td>trajectory vs CoC</td><td>입력 (같은 forward pass)</td><td class="r">0.77 → <strong>0.33</strong></td><td class="r">0.68 → 0.34</td></tr>
+</table>
+
+<ul>
+<li>Q head, late: 데이터셋을 바꿔도 아무것도 변하지 않는데(0.87), <em>같은 forward pass</em>에서 출력만 바꾸면 거의 모든 것이 변한다(0.33).</li>
+<li>같은 LM head로 읽는 두 <em>language</em> objective도 late에서 traj 대 CoC만큼 불일치한다(0.42 vs 0.33; MLP 0.27 vs 0.34).
+  즉 late-layer의 분리는 "action head 대 language head"가 아니다. 출력마다 고유하다.</li>
+<li>MLP 축에서는 같은 loss의 두 절반을 포함해 모든 쌍이 late에서 떨어진다 — R4의 천장 하락이다. MLP 열은 noise ceiling 옆에서만 읽을 것.</li>
+</ul>
+
+<div class="callout warn">
+<p><strong>1단계가 가리킨 설명과, 그것을 검정하기로 한 이유.</strong> R6–R8을 합치면 이런 가설이 나온다: 경계 아래에서는 두
+loss의 gradient가 같은 토큰(장면 표현이 만들어지는 vision 위치)에 떨어지고, 경계 위에서는 CE gradient가 ~200개
+text 위치에, FM gradient는 여전히 ~2,900개 vision 위치에 떨어진다. gate는 모든 위치에 공유되므로 late unit은 서로 다른
+두 가지 일로 채점된다. 그런데 저장된 데이터는 이를 <em>간접적으로만</em> 지지했다. 틀렸다면 논문에 쓰면 안 되고, 재는 데
+GPU 30–45분이면 충분했으므로, 예측을 사전 등록하고 쟀다.</p>
+</div>
+
+<div class="part">2단계 — 새 GPU 측정 (gradient anatomy + port map)</div>
+
+<h2><span class="num">9</span>방법과 무결성</h2>
+
+<p>unit <code>u</code>의 gate gradient는 토큰 위치에 대한 합이다: <code>dL/dg_u = Σ_p x_u(p) · dL/dx_u(p)</code>. 이 합을 세 가지로
+<strong>정확히</strong> 쪼갠다(부분의 합이 원래 gradient와 같아야 하므로 무결성 검사가 내장된다).</p>
+
+<table>
+<tr><th></th><th>무엇으로 나누나</th><th>방법</th></tr>
+<tr><td>D1</td><td>unit이 <strong>작용하는 토큰 타입</strong>: vision 2,880 / ego history 48 / prompt text 157 / 생성된 CoC 평균 16.4 / sink 1. Q head에서는 <em>query</em> 위치</td>
+    <td><code>TypedUnitGates</code> — (타입, unit)마다 gate 하나. custom autograd Function이라 출하 경로와 같은 메모리</td></tr>
+<tr><td>D2</td><td>FM gradient가 VLM에 들어오는 <strong>cache layer</strong></td><td>VLM backward는 seed에 선형 → 대역 6개, 이어서 단일 층 36개씩 seed (port map)</td></tr>
+<tr><td>D3</td><td>FM gradient가 들어오는 <strong>cache 위치 타입</strong></td><td>seed를 위치 타입으로 마스킹</td></tr>
+</table>
+
+<p>share는 두 가지로 센다. <code>E|G_part|</code>의 비율은 상쇄 때문에 합이 1이 아니므로(cancellation index 1.2–1.5),
+"출하 점수의 몇 %가 어디서 오는가"에는 <strong>가법 분해</strong> <code>Σ_u G_part,u · sign(G_full,u)</code>를 쓴다 — 부분에 대해 합하면
+정확히 그 층의 출하 점수가 된다. 사전 등록 게이트는 계획대로 <code>E|G|</code> 비율로 판정했고 결론은 같다.</p>
+
+<table>
+<tr><th>무결성 검사</th><th>기준</th><th class="r">측정</th><th>판정</th></tr>
+<tr><td>(a) 타입별 gradient의 합 = 출하 single gate</td><td>&lt; 1e-3</td><td class="r">최대 6.0e-06 (3클립 × 13 backward)</td><td class="pass">PASS</td></tr>
+<tr><td>(c) <code>importance_v2_ada</code>의 층내 순위 재현</td><td>모든 층 ρ ≥ 0.99</td><td class="r">Q 최소 0.9996 / 0.9993, MLP 1.0000 / 1.0000</td><td class="pass">PASS</td></tr>
+<tr><td>(b) seed 분할의 합 = full-seed backward 한 번</td><td>&lt; 1e-3</td><td class="r">층 중앙값 3.2e-03~3.8e-03, 최악 층 1.3e-02~1.5e-02, 순위 ρ ≥ 0.961</td><td class="fail">미달</td></tr>
+<tr><td>port map: 포트별 signed share의 합 / 출하 layer 합</td><td>1</td><td class="r">중앙값 1.0000, 층별 0.9995–1.0002</td><td class="pass">PASS</td></tr>
+<tr><td>port map: 구조적으로 0이어야 하는 셀 (cache layer m ≤ unit 층 l)</td><td>0</td><td class="r">정확히 0</td><td class="pass">PASS</td></tr>
+</table>
+
+<p>(b)는 구현 오류가 아니라 <strong>깊은 bf16 backward의 반올림 바닥</strong>이다(<code>analyze_stepvlm</code>의 V0 게이트가 같은 연산에서
+중앙값 ~5e-3을 재고 기준을 2e-2로 둔 바 있다). R12에만 들어간다. R9–R11은 출하 점수가 쓰는 <strong>바로 그 full-seed backward
+한 번</strong>에서 읽었다 — smoke test 뒤, 본 실행 전에 그렇게 설계를 바꿨다.</p>
+
+<h2><span class="num">10</span>R9–R11 — 토큰: 두 점수는 같이 넘어가고, 같은 토큰에서는 일치한다</h2>
+
+<h3>R9. 두 점수 모두 vision 토큰에서 text 토큰으로 넘어간다</h3>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig4_token_handoff_mlp.png" alt="token handoff, MLP">
+<figcaption>MLP. 각 층 점수 중 "unit이 vision 토큰에서 한 일"로 번 몫(가법).</figcaption></figure>
+<figure><img src="PLOT::fig::fig4_token_handoff_q_head.png" alt="token handoff, Q">
+<figcaption>Q head. head가 32개뿐이라 들쭉날쭉하지만 구조는 같다.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>층 점수 중 …에서 번 몫 (L6–17 → L27–34)</th><th class="r"><code>I_traj</code></th><th class="r"><code>I_CoC</code></th></tr>
+<tr><td>vision 토큰, MLP</td><td class="r">0.90 → 0.26</td><td class="r">0.75 → 0.02</td></tr>
+<tr><td>vision 토큰, Q head</td><td class="r">0.72 → 0.35</td><td class="r">0.63 → 0.02</td></tr>
+<tr><td>text-side 토큰(prompt + CoC), MLP</td><td class="r">0.07 → 0.66</td><td class="r">0.24 → 0.98</td></tr>
+<tr><td>text-side 토큰, Q head</td><td class="r">0.18 → 0.49</td><td class="r">0.34 → 0.98</td></tr>
+</table>
+
+<p>vision 몫이 1/2 아래로 <em>완전히</em> 내려가는 층은 MLP에서 <code>I_CoC</code> 18층, <code>I_traj</code> 21층(Q head 17층, 19층).
+<code>I_CoC</code>는 끝까지 넘어가고(late 2%), <code>I_traj</code>는 26–35%가 vision에, 8–16%가 ego-history 토큰에 남는다.</p>
+
+<h3>R10. 같은 토큰으로 제한하면 late layer에서도 일치한다 — 사전 등록한 결정적 검정</h3>
+
+<figure class="half"><img src="PLOT::fig::fig4_same_token_q_head.png" alt="same-token agreement">
+<figcaption>Q head, <code>I_traj</code> 대 <code>I_CoC</code>. 비교 대상 점수 자체의 split-half 천장으로 보정(천장 0.78–0.94).</figcaption></figure>
+
+<table>
+<tr><th>Q head: <code>I_traj</code> vs <code>I_CoC</code> (천장 보정)</th><th class="r">L0–21</th><th class="r">L22–34</th></tr>
+<tr><td>pooled — 출하 점수</td><td class="r">0.85</td><td class="r"><strong>0.38</strong></td></tr>
+<tr class="hi"><td>둘 다 vision 토큰에서 (결정값, 기준 ≥ 0.70 지지 / ≤ 0.45 기각)</td><td class="r">0.96</td><td class="r">0.79</td></tr>
+<tr><td>둘 다 prompt text 토큰에서</td><td class="r">0.86</td><td class="r">0.81</td></tr>
+<tr><td>둘 다 text-side(prompt + CoC)에서</td><td class="r">0.72</td><td class="r">0.53</td></tr>
+<tr><td>둘 다 생성된 CoC 토큰에서만</td><td class="r">0.47</td><td class="r">0.41</td></tr>
+<tr><td><code>I_traj</code>@vision vs <code>I_CoC</code>@text-side</td><td class="r">0.32</td><td class="r">0.24</td></tr>
+<tr><td><em>같은 loss 안에서</em>: <code>I_traj</code>@vision vs <code>I_traj</code>@text-side</td><td class="r">0.39</td><td class="r">0.44</td></tr>
+<tr><td><em>같은 loss 안에서</em>: <code>I_CoC</code>@vision vs <code>I_CoC</code>@text-side</td><td class="r">0.35</td><td class="r">0.48</td></tr>
+</table>
+
+<div class="callout good">
+<p><strong>판정: 지지 (0.786 ≥ 0.70).</strong> 2×2로 읽으면 분명하다 — head의 순위는 <em>어느 loss로 재느냐</em>보다 <em>어느 토큰에서
+재느냐</em>에 훨씬 크게 달렸다. 같은 토큰·다른 loss: 0.79–0.96. 같은 loss·다른 토큰: 0.35–0.48(모든 깊이). pooled 값
+0.85 → 0.38은 1단계에서 저장된 run으로 구한 0.85 → 0.37을 독립적으로 재현한다.</p>
+</div>
+
+<p>예외는 <strong>생성된 CoC 토큰</strong>이다: 두 loss가 모든 깊이에서 head를 다르게 매긴다(0.41–0.47). trunk에서는 이 ~16개 토큰이 층
+점수의 5%(<code>I_traj</code>)~18%(<code>I_CoC</code>)만 차지해 pooled 점수에 드러나지 않지만, late에서는 32%와 62%를 차지한다(Q head).
+MLP(서술적, 천장 0.45–0.84)도 같은 패턴: pooled 0.92 → 0.54, vision 0.98 → 0.72, text-side 0.85 → 0.59, CoC만 0.78 → 0.37.</p>
+
+<h3>R11. 비율의 계단은 text 토큰에 있고, vision 토큰에는 없다</h3>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig4_ratio_by_token_mlp.png" alt="ratio by token, MLP">
+<figcaption>MLP. pooled 곡선은 앞에서는 vision 곡선을, 뒤에서는 text 곡선을 따른다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig4_ratio_by_token_q_head.png" alt="ratio by token, Q">
+<figcaption>Q head.</figcaption></figure>
+</div>
+
+<table>
+<tr><th><code>I_traj / I_CoC</code></th><th class="r">L0–21</th><th class="r">L23–34</th><th class="r">계단</th><th class="r">단일 계단의 R²</th></tr>
+<tr><td>MLP, pooled</td><td class="r">12.9×</td><td class="r">2.8×</td><td class="r">4.6×</td><td class="r">0.93</td></tr>
+<tr class="hi"><td>MLP, vision 토큰</td><td class="r">15.0×</td><td class="r">12.4×</td><td class="r">1.2×</td><td class="r">0.21</td></tr>
+<tr><td>MLP, text-side 토큰</td><td class="r">6.3×</td><td class="r">2.1×</td><td class="r">3.0×</td><td class="r">0.82</td></tr>
+<tr><td>Q head, pooled</td><td class="r">14.3×</td><td class="r">3.1×</td><td class="r">4.6×</td><td class="r">0.86</td></tr>
+<tr class="hi"><td>Q head, vision 토큰</td><td class="r">16.7×</td><td class="r">18.2×</td><td class="r">0.9×</td><td class="r">0.25</td></tr>
+<tr><td>Q head, text-side 토큰</td><td class="r">9.0×</td><td class="r">1.9×</td><td class="r">4.8×</td><td class="r">0.74</td></tr>
+</table>
+
+<p>즉 R1의 두 고원은 대략 "vision 토큰의 비율(~15×)"과 "text 토큰의 비율(~2×)"이고, 계단은 R9의 hand-over에 text 성분
+내부의 계단이 더해진 것이다. 무엇이 움직이나(MLP, L18–21 → L24–29): <code>I_traj</code>는 vision 성분이 ×0.23으로 무너져서
+떨어지고(text 성분 ×0.77), <code>I_CoC</code>는 text 성분이 <strong>×2.84</strong>로 올라서 상승한다(vision 성분 ×0.39). Q head에서는
+CoC의 text 성분이 오르지 않고(×0.98) <code>I_traj</code>의 두 성분만 떨어진다(×0.12, ×0.24) — R3의 축별 차이가 여기서 온다.</p>
+
+<h2><span class="num">11</span>R12–R13 — 포트: <code>I_traj</code>는 왜 하필 22–23층에서 꺾이는가</h2>
+
+<p>FM loss는 KV cache를 통해서만 VLM unit에 닿고, 층 <code>l</code>의 unit은 <code>m &gt; l</code>인 cache layer만 바꿀 수 있다(층 <code>m</code>의
+key/value는 층 <code>m</code>이 stream에 쓰기 <em>전에</em> 계산된다). cache layer를 하나씩 seed로 주면 각 unit의 gradient 중 그 층을 통해
+들어온 부분이 나오고, signed share로 세면 가법이 된다: <code>I_traj(l) = Σ_m S(m, l)</code>.</p>
+
+<div class="pair">
+<figure><img src="PLOT::fig::fig4_itraj_ports_mlp.png" alt="I_traj by port, MLP">
+<figcaption>MLP. Fig. 1a의 <code>I_traj</code> 곡선(검은 선)을 "gradient가 들어온 cache layer"로 쌓아 재구성. 주황 띠(cache 22–24)가
+사라지는 곳이 곧 계단이다.</figcaption></figure>
+<figure><img src="PLOT::fig::fig4_port_profile.png" alt="port profile">
+<figcaption>VLM 전체 <code>I_traj</code>(MLP)가 들어오는 cache layer. 0–18층으로는 거의 아무것도 들어오지 않는다.</figcaption></figure>
+</div>
+
+<table>
+<tr><th>unit의 <code>I_traj</code>가 들어오는 곳</th><th class="r">MLP</th><th class="r">Q head</th></tr>
+<tr class="hi"><td>L16–21 unit: cache 22–24 (단 3개 층) 경유</td><td class="r">43.1%</td><td class="r">43.1%</td></tr>
+<tr><td>… cache 25–29 / 30–35 / ≤ 21 경유</td><td class="r">22.8 / 20.2 / 13.9%</td><td class="r">21.2 / 19.5 / 16.2%</td></tr>
+<tr><td>VLM 전체: cache 22층 하나</td><td class="r">19.1%</td><td class="r">22.0%</td></tr>
+<tr><td>… cache 21–23</td><td class="r">34.7%</td><td class="r">40.9%</td></tr>
+<tr><td>… cache ≤ 20 (21개 층 전부)</td><td class="r">3.7%</td><td class="r">7.2%</td></tr>
+<tr><td>… cache ≥ 22</td><td class="r">88.8%</td><td class="r">84.4%</td></tr>
+<tr><td>trunk unit(L6–21): cache ≥ 22 경유</td><td class="r">84.0%</td><td class="r">81.0%</td></tr>
+</table>
+
+<p><code>I_traj(21) − I_traj(23)</code> 하락은 정확히 [23층 unit이 도달할 수 없는 cache 22–23 경유분] + [cache ≥ 24 경유분의 변화]로
+나뉘는데, 첫 항이 MLP <strong>89.5%</strong>, Q head <strong>72.6%</strong>다. 포트 ≤ 15는 vision cache entry로 읽히고(signed share의 78% / 89%),
+포트 ≥ 22는 주로 비-vision entry로 읽힌다(vision 39% / 36%; 예외는 22층 65%, 26층 82%, 그리고 23층은 13%).</p>
+
+<div class="callout warn">
+<p><strong>이것은 "1차 중요도 점수가 어디서 오는가"이지 "expert가 무엇을 필요로 하는가"가 아니다.</strong> knockout map은 expert의 인과적
+의존을 cache 0–15층에 둔다(81%). 점수의 포트는 21–35층이다. cache layer 하나를 통째로 가리는 큰 섭동과 unit 하나를 통한
+무한소 섭동은 다른 질문이고, 논문의 점수는 후자다. expert의 <em>직접</em> read <code>|k·dk| + |v·dv|</code>는 73%가 vision entry로, attention
+mass와 일치한다. "expert는 late cache를 읽는다"고 쓰면 안 된다.</p>
+</div>
+
+<p><strong>R13 — fallback 측정.</strong> 같은 위치에서 두 loss의 residual-stream gradient 사이 cosine은 모든 깊이·모든 토큰 타입에서 ≈ 0이다
+(+0.019 ~ −0.001). unit 순위가 0.96으로 일치하는 trunk에서도 두 gradient는 직교한다 — trunk의 일치는 "두 loss가 같은 방향을
+원해서"가 아니라 내적의 <em>unit 쪽</em>에서 온다. (위치별 gradient <em>에너지</em>는 또 다른 양이다: CE는 97%(6–17층)~99.5%(27–34층)가
+text-side 위치에, FM은 76%~97%가 vision이 아닌 위치에 있다. 그런데도 trunk의 중요도가 vision 토큰에서 벌리는 것은 그 수가
+2,880개이고 unit의 기여가 위치에 걸쳐 누적되기 때문이다.)</p>
+
+<figure><img src="PLOT::ga::residual_gradients.png" alt="residual gradients">
+<figcaption>왼쪽: residual gradient 에너지의 토큰 타입별 몫(unit 무관). 오른쪽: 두 loss의 residual gradient 사이 cosine.</figcaption></figure>
+
+<h3>사전 등록 성적표</h3>
+
+<table>
+<tr><th>게이트</th><th>사전 등록한 기준</th><th class="r">측정</th><th>판정</th></tr>
+<tr><td>P1 (CE) late에서 text-side, early에서 vision</td><td>&lt; 0.35 (L6–17), &gt; 0.65 (L27–34)</td><td class="r">Q 0.404 / 0.940, MLP 0.337 / 0.930</td><td>late 조항은 두 축 통과, early 조항은 Q가 0.05 미달</td></tr>
+<tr><td>P1 (FM) vision에 머문다</td><td>두 구간 모두 &gt; 0.65</td><td class="r">Q 0.605 / 0.333, MLP 0.754 / 0.276</td><td class="fail">FAIL</td></tr>
+<tr class="hi"><td>P2 같은 토큰에서의 일치 (Q, vision, L22–34, 보정)</td><td>≥ 0.70 지지, ≤ 0.45 기각</td><td class="r">0.786</td><td class="pass">지지</td></tr>
+<tr><td>P3 late cache layer는 부차적 포트</td><td>&lt; 0.20 (&gt; 0.40이면 기각)</td><td class="r">Q 0.417, MLP 0.433</td><td class="fail">기각</td></tr>
+<tr><td>P4 FM은 vision cache entry로 들어온다</td><td>모든 unit 깊이에서 ≥ 0.65</td><td class="r">평균 0.35 / 0.38, 최소 0.15 / 0.20</td><td class="fail">FAIL</td></tr>
+<tr><td>PM1 cache 22–24는 실제 포트다</td><td>peak가 22–24 안, ≥ 0.30</td><td class="r">peak 22층, 0.431 (두 축)</td><td class="pass">PASS</td></tr>
+<tr><td>PM2 계단은 포트가 닫히는 것이다</td><td>닫힌 포트 항 ≥ 하락의 50%</td><td class="r">MLP 89.5%, Q 72.6%</td><td class="pass">PASS</td></tr>
+<tr><td>PM3 late 포트는 비-vision entry로 읽힌다</td><td>vision 몫: m ≥ 22에서 &lt; 0.5, m ≤ 15에서 &gt; 0.5</td><td class="r">0.39 / 0.36 vs 0.78 / 0.89</td><td class="pass">PASS</td></tr>
+</table>
+
+<div class="callout bad">
+<p><strong>내가 틀린 것.</strong> (i) FM gradient가 late layer에서도 vision 토큰에 머문다고 예측했다 — 실제로는 두 점수 모두 같은 층에서
+text 토큰으로 넘어간다. P2가 그래도 통과한 것은 그 검정(같은 토큰에서의 일치)이 이 그림에 의존하지 않기 때문이다.
+(ii) expert의 유용한 포트가 cache 24층 근처에서 끝난다고 예측했다 — 실제로는 cache 25–35가 mid-layer unit FM mass의 42–43%를
+나른다. 계단이 포트 효과인 것은 맞았지만 <em>내가 말한 포트 효과는 아니었다</em>. (iii) expert가 vision cache entry를 통해 unit에
+닿는다고 예측했다 — 실제는 35–38%이고 ~16개의 CoC 토큰만으로 29–32%다(토큰당 prompt text의 12–15배, vision의 ~140–160배).</p>
+</div>
+
+<div class="part">종합</div>
+
+<h2><span class="num">12</span>종합 해석 (의견)</h2>
+
+<p><strong>하나의 스위치이고, 그것은 토큰 사이의 hand-over다.</strong> R1의 재구성 — 공통 프로파일 하나에 계단 하나 — 은 그대로 서고,
+R9–R11이 그 계단의 정체를 말해준다. 17층 무렵까지 두 점수는 unit이 vision 토큰에서 하는 일로 벌리고, 거기서 두 loss는 서로
+대체 가능하다(비율 일정, 순위 0.96, CoC-절반A가 traj-절반B를 traj 자신만큼 예측). 17–24층에 걸쳐 네트워크가 일을 vision
+토큰에서 text 토큰으로 넘기고 두 점수가 따라간다. 그 뒤로는 주로 text 토큰에서 벌리며, 거기서는 비율이 ~15× 대신 ~2×이고
+MLP에서는 CoC 자신의 성분이 거의 세 배가 된다(같은 깊이에서 lens kurtosis 6.4 → 21.0).</p>
+
+<p><strong>순위가 갈라지는 이유.</strong> 두 loss가 같은 계산에서 다른 것을 원해서가 아니다 — 같은 토큰에서는 late에서도 대체로
+일치한다. 갈라지는 이유는 (i) head가 vision 토큰과 text 토큰에서 <em>다른 일</em>을 하고(같은 loss 안에서도 두 순위의 상관이
+0.35–0.48), (ii) hand-over 이후 두 점수가 그 일들을 <em>다른 비율로</em> 섞기 때문이다: <code>I_CoC</code>는 98%가 text-side,
+<code>I_traj</code>는 26–35%를 vision에, 8–16%를 ego-history 토큰에 남긴다. 같은 토큰에서도 어긋나는 유일한 곳은 생성된 CoC
+토큰(0.41) — CE loss가 걸리는 곳이자 expert가 토큰당 가장 조밀하게 읽는 곳이다.</p>
+
+<p><strong><code>I_traj</code>가 정확히 22–23층에서 떨어지는 이유.</strong> FM loss는 VLM unit을 거의 late cache를 통해서만 본다(84–89%가
+cache ≥ 22). 가장 조밀한 포트가 cache 21–23(35–41%)이고 그 위의 unit은 거기에 쓸 수 없다 — 하락의 73–90%. 두 타워
+인터페이스의 구조적 사실이라서 R2의 모든 run에서 계단이 23층에 있었던 것이다.</p>
+
+<p><strong>trunk가 일치하는 이유.</strong> R12는 R4의 "대체 가능성"을 trajectory 쪽에서 설명한다: trunk unit은 CE loss에 닿는 것과
+같은 문(late layer)을 통해 FM loss에 닿는다. expert가 읽을 것으로 기대했던 mid-layer vision cache를 통한 몫은 trunk unit
+<code>I_traj</code>의 12%뿐이다. 다만 이것은 <em>gradient의 경로</em>다 — knockout은 expert의 trajectory가 앞·중간 cache에 의존함을
+보이고, 그럼에도 1차 점수는 late cache가 지배한다.</p>
+
+<p><strong>아닌 것들.</strong> 추정 잡음이 아니다(Q head: R4, 그리고 천장 0.78–0.94의 R10). calibration set·크기·추출 규칙이 아니다(R2).
+GT 대 own-rollout 비대칭이 아니다(R2). "LM head 대 expert" 자체가 아니다(R8). 그리고 R13에 따르면 gradient 방향의
+정렬/비정렬도 아니다 — 두 gradient는 순위가 일치하는 곳에서도 직교한다.</p>
+
+<p><strong>방법론에 주는 함의.</strong></p>
+<ul>
+<li>union은 토큰 혼합비가 달라지는 hand-over 이후에 필요하고 그 전에는 거의 공짜다(보정 일치도 0.85–0.96). C2의 "각 loss가
+  자기 substrate만 비춘다"보다 날카로운 진술: substrate는 공유되고, 다른 것은 각 loss가 late unit을 채점하는 <em>토큰의 혼합</em>이다.</li>
+<li>단일 criterion이 무엇을 잃는지도 말해준다. <code>I_CoC</code>는 late unit이 vision·history 토큰에서 하는 일을 보지 못한다(late 점수의
+  2%; <code>I_traj</code>에서는 34–51%). <code>I_traj</code>는 text 토큰을 보지만(49–66%) CoC 토큰 자체에서는 head를 다르게 매긴다.
+  단일 criterion arm의 비대칭과 맞는다 — CoC-only가 폐루프 주행을 잃고(0.660, 무압축 대비 −0.089), trajectory-only는
+  language를 잃는다(LingoQA 73.2 → 37.0).</li>
+<li>R8은 두 loss를 넘어 일반화된다: late-layer unit은 출력마다 고유하므로, 압축 모델이 유지해야 할 출력마다 criterion에 항이
+  하나씩 필요하다. VQA는 <code>I_CoC</code>에 얹혀 가지 않을 것이다.</li>
+<li>계단 위치는 아키텍처(포트 21–23)가 정하므로, ≤ 21층과 ≥ 23층을 두 체제로 다루는 allocation은 calibration set마다 다시
+  구할 필요가 없다.</li>
+</ul>
+
+<h2><span class="num">13</span>논문에 반영할 것 (제안)</h2>
+
+<ol>
+<li><strong>Sec. 7(또는 Fig. 1 뒤)에 문단 하나.</strong> 영어 초안은 <code>paper/2026-09-20_why-importance-differs.md</code>의
+  "Suggested manuscript changes"에 있다. 요지: 비율이 0–21층과 23–34층에서 일정하고 그 사이에서 4.6배 떨어진다 → gate
+  gradient를 토큰 타입으로 정확히 분해하면 17층까지 두 점수 모두 vision 토큰에서 벌리고 거기서는 계단도 없고 순위도
+  같다(ρ = 0.96) → 17–24층에서 text 토큰으로 넘어가며 <code>I_CoC</code>는 전부, <code>I_traj</code>는 일부만 → Fig. 1c의 불일치는
+  주로 토큰 혼합비의 차이(같은 토큰에서는 0.79 / 0.81, pooled 0.38, CoC 토큰에서만 0.41) → 계단의 위치는 구조적(cache
+  21–23 포트, 하락의 90% / 73%).</li>
+<li><strong>Figure 3을 4패널로.</strong> (a) <code>fig3_ratio_step</code>, (b) <code>fig4_token_handoff_mlp</code>, (c) <code>fig4_same_token_q_head</code>,
+  (d) <code>fig4_itraj_ports_mlp</code>. 네 개가 많으면 (a)+(d)가 구조 논증, (b)+(c)가 토큰 논증이다. 나머지는 supplementary.</li>
+<li><strong>Fig. 1c 서술 수정.</strong> MLP 곡선이 ~0.3까지 떨어지는 것을 objective 불일치로만 읽는 문장은 완화해야 한다 — 하락의 약
+  1/3은 천장 하락이고 0.34는 도달 가능치의 절반이다. 보정값(Q 0.85 → 0.37, MLP 0.92 → 0.54)을 인용하거나 천장을
+  supplementary에 넣고 가리킬 것. Q head 곡선은 수정할 필요가 없다.</li>
+<li><strong>C2와 Sec. 7 마지막 문단의 문구.</strong> "FM loss는 early-layer … 회로를, CE loss는 late-layer decode path를 비춘다"는 R9–R12가
+  지지하는 것보다 강하다. FM gradient는 early layer에 국한되지 않고(MLP 23–34층이 peak 층 <code>I_traj</code>의 18–47%를 유지하며 주로
+  text 토큰에서 벌린다), trunk에서는 두 gradient가 <em>같은</em> unit을 비춘다. 데이터가 받쳐주는 버전: "약 22층 아래에서는 두
+  loss가 같은 unit을 같은 방식으로 채점하고, 그 위에서는 각 loss가 unit을 서로 다른 토큰 혼합으로 채점하므로, 한 loss에
+  중요한 unit이 다른 loss에는 보이지 않을 수 있다".</li>
+<li><strong>layer 구간 표기.</strong> C2와 Sec. 7의 "action: L0–17; language: L18–35"는 knockout grid의 9층 해상도다. 중요도 비율은 스위치를
+  22–23층으로, 토큰 hand-over는 17–24층으로 단일 층 해상도에서 국소화하며 knockout과 양립한다. 숫자들이 모순처럼 보이지
+  않도록 한 번 언급할 것.</li>
+</ol>
+
+<h2><span class="num">14</span>한계</h2>
+
+<ul>
+<li>비율의 <em>수준</em>은 해석할 수 없다(loss 단위가 다름). 모양만 발견이다.</li>
+<li>천장 보정은 Pearson 감쇠 공식을 Spearman 값에 적용하고 절반 표본 신뢰도를 쓴다. 믿는 근거는 공식이 아니라 세 경로
+  (split half, 서로소 추출, 새 run R10)가 같은 값을 준다는 점이다.</li>
+<li>R9–R13은 <strong>1차 중요도 점수</strong>의 해부이지 네트워크의 계산이 아니다(11절의 경고).</li>
+<li>"text-side"는 prompt text와 생성된 CoC를 합친 것이다. CE의 첫 target 토큰은 마지막 <em>prompt</em> 위치에서 예측되므로 prompt
+  text로 분류된 것의 일부는 생성이다. R10의 CoC-only / prompt-only 행만 둘을 분리한다.</li>
+<li>gate는 같은 토큰 타입 안에서는 여전히 위치에 공유된다. "vision"은 4카메라 × 4프레임의 2,880 위치를 합친다.</li>
+<li>seed 분할(R12)은 사전 등록한 1e-3 선형성 기준에 못 미친다(bf16 바닥: 중앙값 ~0.4%, 최악 층 ~1.5%). 인용한 share는
+  수십 %p 규모라 결론은 영향받지 않지만 두 자리까지만 인용할 것.</li>
+<li>cache 21–23·26·33층이 <em>왜</em> 조밀한 포트인지는 설명하지 못했다. lens readout이 token-peaked로 바뀌는 깊이와 겹치지만
+  인과인지 우연인지는 expert 쪽 실험이 필요하다.</li>
+<li>lens kurtosis는 구성상 텍스트·CoC 위치에서만 잰 값이고, "17층 이후 vision으로 들어가는 edge가 무의미"는 attention edge에
+  한한 것이다. late layer의 vision 위치 MLP 업데이트는 knockout한 적이 없다.</li>
+<li>port map은 승인된 측정을 더 높은 해상도로 반복한 것으로 <strong>내 판단으로 추가 실행</strong>했다(유휴 Ada 카드 약 1 GPU-hour).
+  세 예측은 band 수준 3클립 smoke를 본 뒤, port map 데이터를 보기 전에 기록했다. 3클립 smoke의 위치 share는 100클립에서
+  크게 움직였으므로(0.80 → 0.44) smoke 수치는 어디에도 인용하지 않았다.</li>
+<li>모델 하나. R9–R13은 calibration 100클립 한 세트(R2는 깊이 구조가 calibration set에 의존하지 않음을 보였지만 pooled 점수에
+  한해서다).</li>
+</ul>
+
+<footer>
+  재현 — 1단계·원고용 패널: <code>experiments/paper/fig_why_differs.py</code> (CPU 약 3분, 수치는
+  <code>figures/fig3_why_differs_stats.json</code>). 2단계: <code>run_gradient_anatomy.py --exp-id gradanat_v1</code>
+  (+ <code>--verify</code> 3클립) → <code>analyze_gradient_anatomy.py</code>; <code>run_port_map.py</code> 3 shard →
+  <code>analyze_port_map.py</code>. 이 보고서: <code>experiments/paper/build_why_differs_report.py</code>
+  (그림을 폭 1,050 px로 줄여 <code>build_report.py</code>에 넘긴다). 보고서의 수치는 생성 파일 세 개에 대해 자동 대조했다.
+  2단계만 다룬 짧은 보고서는 <code>2026-09-20_gradient-anatomy.html</code>.
+</footer>
+
+</div>
+</body>
+</html>

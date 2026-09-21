@@ -440,9 +440,11 @@ tyrK      0.622      4.95 m        0.648      257 m   &larr; 가장 가깝다, 1
   {h.loc['progress', 'rho']:+.2f} 처럼 부호가 갈리는 대비만 근거로 삼는다.</p>
   <p><strong>안 나온 지표도 있다.</strong> <code>safety_monitor_triggered</code> 는 전
   rollout 에서 0 이고, <code>gt_dist_traveled_m</code> 은 씬의 속성이라 arm 과 무관하다
-  (둘 다 0/28 인 것이 정상이다). <code>min_ade@{{0.5,1.0,2.5,5.0}}s(gt)</code> 는 일부 런에만
-  있어 이번 표에서 빠졌다 &mdash; 폐루프 안에서 잰 궤적 정확도라 이 연구의
-  개루프&ndash;폐루프 해리 주제와 맞닿는데, 아직 아무도 쓰지 않았다.</p>
+  (둘 다 0/28 인 것이 정상이다). <code>min_ade@{{0.5,1.0,2.5,5.0}}s(gt)</code> 는 스키마에
+  선언만 돼 있고 <strong>우리 런에서 값이 한 번도 채워지지 않았다</strong>(두 세트 전 arm
+  0/300, 0/200 rollout, 2026-09-20 확인). 이 표에서 빠진 이유는 &ldquo;일부 런에만
+  있어서&rdquo;가 아니라 <em>아무 런에도 없어서</em>이고, 쓰려면 해당 채점기를 켜고 전
+  런을 다시 돌려야 한다.</p>
 </div>
 
 <h2><span class="num">7.</span>재현</h2>

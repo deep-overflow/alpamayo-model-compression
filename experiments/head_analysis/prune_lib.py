@@ -94,6 +94,108 @@ class UnitGates:
         self._handles = []
 
 
+class _TypedGate(torch.autograd.Function):
+    """y = x * gate[type(p)], with dL/dgate split by the token type of position p.
+
+    Written as a Function so nothing of size (T, U) is saved for backward: only x is kept,
+    which UnitGates' multiplication keeps as well. Indexing a (n_types, U) gate by a (T,)
+    type vector inside autograd would save a (T, U) fp32 tensor per layer instead -- 5.5 GB
+    over the 36 MLP layers, on a pass that already peaks at 42 GB of a 48 GB card.
+    """
+
+    @staticmethod
+    def _per_pos(x, gate, type_idx):
+        g = gate.index_select(0, type_idx)  # (T, U)
+        return g.view(1, x.shape[1], x.shape[2], *([1] * (x.dim() - 3)))  # (1, T, U[, 1])
+
+    @staticmethod
+    def forward(ctx, x, gate, type_idx):
+        # x (1, T, U) or (1, T, U, D); gate (n_types, U) fp32; type_idx (T,) long
+        ctx.save_for_backward(x, gate, type_idx)
+        return x * _TypedGate._per_pos(x, gate, type_idx)  # fp32, as UnitGates' product is
+
+    @staticmethod
+    def backward(ctx, grad_y):
+        x, gate, type_idx = ctx.saved_tensors
+        prod = grad_y.float() * x.float()  # (1, T, U[, D])
+        if prod.dim() == 4:
+            prod = prod.sum(-1)  # (1, T, U)
+        # index_add_ rather than a one-hot matmul: an exact fp32 sum whatever autocast and
+        # TF32 are set to, which a matmul is not
+        grad_gate = torch.zeros_like(gate).index_add_(0, type_idx, prod[0])  # (n_types, U)
+        return (grad_y * _TypedGate._per_pos(x, gate, type_idx)).to(x.dtype), grad_gate, None
+
+
+class TypedUnitGates:
+    """UnitGates with one gate per (token type, unit) instead of one per unit.
+
+    dL/dg_u = sum_p x_u(p) dL/dx_u(p) is a sum over positions, and UnitGates takes the abs
+    after it, so where the gradient lands is never recorded. Here the same sum is split by
+    the token type of p. The split is exact: summing the rows of a gate's grad over types
+    gives UnitGates' grad. Call set_types() once per clip, before the forward.
+    """
+
+    def __init__(self, layers, n_heads, head_dim, intermediate, n_types, device,
+                 q=True, mlp=True):
+        self.n_heads = n_heads
+        self.head_dim = head_dim
+        self.intermediate = intermediate
+        self.n_types = n_types
+        self.type_idx = None
+        self.q_gates = [torch.ones(n_types, n_heads, device=device, requires_grad=True)
+                        for _ in layers] if q else []
+        self.mlp_gates = [torch.ones(n_types, intermediate, device=device, requires_grad=True)
+                          for _ in layers] if mlp else []
+        self._handles = []
+        for i, layer in enumerate(layers):
+            if q:
+                self._handles.append(
+                    layer.self_attn.o_proj.register_forward_pre_hook(self._make_q_hook(i)))
+            if mlp:
+                self._handles.append(
+                    layer.mlp.down_proj.register_forward_pre_hook(self._make_mlp_hook(i)))
+
+    def set_types(self, type_idx):
+        """type_idx: (T,) long, the token type of every position of the coming forward."""
+        self.type_idx = type_idx
+
+    def _make_q_hook(self, i):
+        def hook(module, args):
+            x = args[0]  # (1, T, H*D)
+            b, t, _ = x.shape
+            y = _TypedGate.apply(x.view(b, t, self.n_heads, self.head_dim),
+                                 self.q_gates[i], self.type_idx)  # (1, T, H, D)
+            return (y.view(b, t, -1),)
+        return hook
+
+    def _make_mlp_hook(self, i):
+        def hook(module, args):
+            return (_TypedGate.apply(args[0], self.mlp_gates[i], self.type_idx),)  # (1, T, I)
+        return hook
+
+    @staticmethod
+    def _signed(gates):
+        return np.stack([
+            g.grad.float().cpu().numpy() if g.grad is not None else np.zeros(tuple(g.shape))
+            for g in gates
+        ], 1)
+
+    def q_signed(self):
+        return self._signed(self.q_gates)  # (n_types, L, H)
+
+    def mlp_signed(self):
+        return self._signed(self.mlp_gates)  # (n_types, L, I)
+
+    def zero_grads(self):
+        for g in self.q_gates + self.mlp_gates:
+            g.grad = None
+
+    def remove(self):
+        for h in self._handles:
+            h.remove()
+        self._handles = []
+
+
 def retain_cache_grads(cache, n_layers):
     """Keep .grad on the (non-leaf) cache k/v so KV groups can be scored.
 
