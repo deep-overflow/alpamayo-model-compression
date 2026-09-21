@@ -600,6 +600,27 @@ def causal_panels(outputs, out):
             save(fig, fname)
         out["pruned"] = {"A1_gate": pa["A1"]["gate"], "A2": pa["A2"], "S0": {k: v for k, v in pa["S0"].items() if "gate" in k}}
 
+    ah = _load(outputs / "armheld_v1" / "metrics.json")
+    if ah and "bands" in ah:
+        for key, fname, ylabel in (("fm", "fig5_damage_by_band_fm", "FM loss: mask - dense"),
+                                   ("nll", "fig5_damage_by_band_nll", "CoC NLL: mask - dense")):
+            fig, ax = plt.subplots(figsize=SINGLE)
+            for i, (a, col, label) in enumerate((("dual", "#009E73", "dual"), ("traj", TRAJ, "trajectory-only"),
+                                                 ("coc", COC, "CoC-only"))):
+                cfgs = (f"{a}_trunk", f"{a}_late", a)
+                vals = [ah["configs"][c][key]["delta"] for c in cfgs]
+                err = [[v - ah["configs"][c][key]["ci"][0] for v, c in zip(vals, cfgs)],
+                       [ah["configs"][c][key]["ci"][1] - v for v, c in zip(vals, cfgs)]]
+                ax.bar(np.arange(3) + 0.27 * (i - 1), vals, width=0.25, color=col, yerr=err,
+                       error_kw={"lw": 0.6}, label=label)
+            ax.set_xticks(np.arange(3), ["layers 0-21\nonly", "layers 22-35\nonly", "all layers"])
+            ax.axhline(0, color="black", lw=0.5)
+            ax.set_ylabel(ylabel)
+            legend_above(ax, 3)
+            save(fig, fname)
+        out["arm_heldout"] = {"tests": ah["tests"], "pass": ah["pass"], "bands": ah["bands"],
+                              "nll_gap_traj_minus_coc": ah["nll_gap_traj_minus_coc"]}
+
     tb = _load(outputs / "tokabl_v1" / "metrics.json")
     if tb:
         meta = {c["name"]: c for c in _load(outputs / "tokabl_v1_s0" / "config.json")["configs"]}
@@ -619,25 +640,33 @@ def causal_panels(outputs, out):
             ax.axvline(0, color="black", lw=0.5)
             ax.set_xlabel("FM loss: set removed - dense")
             ax.set_ylabel("CoC NLL: set removed - dense")
+            # the CoC handle's colour as RGBA: save() dashes every legend line whose colour == COC,
+            # which would draw a line through a marker-only handle
             ax.legend(handles=[plt.Line2D([], [], marker="o", ls="", ms=4, color=TRAJ, label="trajectory-side sets"),
-                               plt.Line2D([], [], marker="o", ls="", ms=4, color=COC, label="CoC-side sets"),
+                               plt.Line2D([], [], marker="o", ls="", ms=4, color=plt.matplotlib.colors.to_rgba(COC),
+                                          label="CoC-side sets"),
                                plt.Line2D([], [], marker=".", ls="", ms=5, color=GREY, label="random sets")],
                       loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3, fontsize=6, handletextpad=0.2,
                       columnspacing=0.8, borderaxespad=0.2)
             save(fig, fname)
-        fig, axs = plt.subplots(1, 2, figsize=SINGLE, sharey=False)
-        for ax, key, ylabel in ((axs[0], "dfm_mean", "FM loss increase"), (axs[1], "dnll_mean", "CoC NLL increase")):
-            labels, vals, cols = [], [], []
-            for name in ("q", "mlp"):
-                for st, col in (("Scoc", TRAJ), ("Straj", COC)):
-                    rs = [tb["configs"][f"{name}_late_R{st}{i}"][key] for i in range(3)]
-                    labels += [f"{name}\n{st}", f"{name}\nrand"]
-                    vals += [tb["configs"][f"{name}_late_{st}"][key], float(np.mean(rs))]
-                    cols += [col, GREY]
-            ax.bar(np.arange(len(vals)), vals, color=cols, width=0.8)
-            ax.set_xticks(np.arange(len(vals)), labels, fontsize=4.5)
-            ax.set_ylabel(ylabel, fontsize=7)
-            ax.axhline(0, color="black", lw=0.5)
+        # what the dual criterion saves: NLL only (no late-layer set moves the FM loss by 1%)
+        fig, ax = plt.subplots(figsize=SINGLE)
+        groups = (("q", "Straj", "heads\nkept over\ntrajectory-only"), ("q", "Scoc", "heads\nkept over\nCoC-only"),
+                  ("mlp", "Straj", "channels\nkept over\ntrajectory-only"), ("mlp", "Scoc", "channels\nkept over\nCoC-only"))
+        base = tb["dense"]["nll"]
+        for i, (name, st, _) in enumerate(groups):
+            rs = [100 * tb["configs"][f"{name}_late_R{st}{j}"]["dnll_mean"] / base for j in range(3)]
+            r = tb["configs"][f"{name}_late_{st}"]
+            ax.bar(i - 0.2, 100 * r["dnll_mean"] / base, width=0.38, color=COC if st == "Straj" else TRAJ,
+                   yerr=[[100 * (r["dnll_mean"] - r["dnll_ci"][0]) / base], [100 * (r["dnll_ci"][1] - r["dnll_mean"]) / base]],
+                   error_kw={"lw": 0.6}, label="removed set" if i == 0 else None)
+            ax.bar(i + 0.2, np.mean(rs), width=0.38, color=GREY,
+                   yerr=[[np.mean(rs) - min(rs)], [max(rs) - np.mean(rs)]], error_kw={"lw": 0.6},
+                   label="random sets of the same size" if i == 0 else None)
+        ax.set_xticks(np.arange(len(groups)), [g[2] for g in groups], fontsize=5.5)
+        ax.set_ylabel("CoC NLL increase (% of dense)")
+        ax.axhline(0, color="black", lw=0.5)
+        legend_above(ax, 2)
         save(fig, "fig5_dual_saves")
         out["token_ablation"] = {"gates": tb["gates"], "first_order": tb["first_order"], "n_clips": tb["n_clips"]}
 

@@ -92,10 +92,12 @@ def main():
                              "dnll_median": float(np.median(dnll[c])),
                              "dnll_rel": float(dnll[c].mean() / dense["nll"].mean()),
                              "dade_mean": float(dade[c].mean()) if c in dade else None,
+                             "dade_ci": list(ci(dade[c])) if c in dade else None,
                              "dade_median": float(np.median(dade[c])) if c in dade else None}
         lines.append(f"{c:20s} {meta[c]['removed_per_layer_mean']:9.1f} {dfm[c].mean():+10.4f} [{lo_f:+.4f},{hi_f:+.4f}] "
                      f"{dnll[c].mean():+10.4f} [{lo_n:+.4f},{hi_n:+.4f}] "
-                     + (f"{dade[c].mean():+13.4f}" if c in dade else f"{'-':>13s}")
+                     + (f"{dade[c].mean():+8.4f} [{out['configs'][c]['dade_ci'][0]:+.3f},{out['configs'][c]['dade_ci'][1]:+.3f}]"
+                        if c in dade else f"{'-':>25s}")
                      + f"   rel dFM {dfm[c].mean() / dense['fm'].mean():+6.1%} dNLL {dnll[c].mean() / dense['nll'].mean():+6.1%}")
     lines.append("")
     # the scale of each band's effect, whatever the set: the mean over that band's random sets
@@ -149,7 +151,8 @@ def main():
                                                   "random_spread": spread, "verdict": verdict}
                 lines.append(f"B3 {ax:3s} {band:5s} {fam:4s}: log(dFM/dNLL) of T minus C = {gap:+.2f}; spread over the "
                              f"random sets {spread:.2f} -> {verdict}"
-                             + (f" -> {'PASS' if verdict == 'no dissociation' else 'FAIL'}" if band == "trunk" else ""))
+                             + ("" if band != "trunk" else " -> not evaluable" if verdict.startswith("undefined")
+                                else f" -> {'PASS' if verdict == 'no dissociation' else 'FAIL'}"))
 
         # descriptive, the same two paired tests inside the trunk band: a per-clip reading of B3
         for fam in ("tok", "pool"):
@@ -160,6 +163,15 @@ def main():
                                                 "dNLL_C_gt_T": {"p": p2, "median_diff": m2}}
             lines.append(f"   {ax:3s} trunk {fam:4s} (descriptive): dFM(T) > dFM(C) p={p1:.1e} ({m1:+.4f}); "
                          f"dNLL(C) > dNLL(T) p={p2:.1e} ({m2:+.4f})")
+
+        # descriptive: minADE, T against C, in both bands (K = 8, heavy-tailed; medians and a paired test)
+        for band in ("late", "trunk"):
+            for fam in ("tok", "pool"):
+                t, c = f"{ax}_{band}_T{fam}", f"{ax}_{band}_C{fam}"
+                p_a, m_a = greater(dade[t], dade[c])
+                gates[f"ade_pairs|{ax}|{band}|{fam}"] = {"dADE_T_gt_C": {"p": p_a, "median_diff": m_a}}
+                lines.append(f"   {ax:3s} {band:5s} {fam:4s} (descriptive): dminADE(T) > dminADE(C) p={p_a:.1e} "
+                             f"(median diff {m_a:+.4f}; means {dade[t].mean():+.3f} vs {dade[c].mean():+.3f})")
 
         # B4: token-resolved vs pooled selection
         for side, own, other in (("T", dfm, dnll), ("C", dnll, dfm)):
