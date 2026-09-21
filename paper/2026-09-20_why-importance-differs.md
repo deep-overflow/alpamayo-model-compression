@@ -154,8 +154,9 @@ clip and same objective (adds the objective-specific part).
 - MLP layers 1–5 are a separate regime: 60–82% of single-clip rank variance is shared by
   every clip and both objectives, and the ranking is the unit's write norm (ρ 0.88–0.97).
 
-The unplotted remainder (55–82%) is single-clip measurement noise plus the clip ×
-objective interaction; one measurement per clip cannot separate them.
+The unplotted remainder (36–82% by band, smallest in MLP layers 0–5 where the shared part
+dominates) is single-clip measurement noise plus the clip × objective interaction; one
+measurement per clip cannot separate them.
 
 Panels: `fig3_partition_q_head`, `fig3_partition_mlp`.
 

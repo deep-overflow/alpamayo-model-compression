@@ -115,8 +115,8 @@ identically zero there.
   objective minus shared (clip-specific), other clip and same objective minus shared
   (objective-specific, averaged over the two objectives). The MLP panel uses a log axis
   because layers 1-5 sit at 0.6-0.8; every plotted value is positive. The unplotted
-  remainder (55-82%) is single-clip noise plus the clip x objective interaction, which
-  one measurement per clip cannot separate.
+  remainder (36-82% by band, smallest in MLP layers 0-5) is single-clip noise plus the
+  clip x objective interaction, which one measurement per clip cannot separate.
 - `fig3_boundary`: three signals, each min-max normalised over layers 0-34. Importance
   ratio = log of the MLP curve in `fig3_ratio_step`. FM cache sensitivity = the stored
   `traj_kv_k + traj_kv_v` summed over KV groups: 81% of it lies at or below layer 22 and
