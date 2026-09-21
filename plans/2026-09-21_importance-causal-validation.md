@@ -1,7 +1,7 @@
 # Does the score anatomy predict function — and why is the shared profile shaped as it is?
 
 Date: 2026-09-21. Branch: `worktree-importance-causal-validation`.
-Status: **awaiting approval — no experiment code written, no GPU used.**
+Status: **approved by the user on 2026-09-21 (all of A–D); in progress.**
 Follows `paper/2026-09-20_why-importance-differs.md` (R1–R13) and
 `plans/2026-09-20_gradient-anatomy.md`.
 
@@ -9,7 +9,9 @@ Revision history. *Rev. 1* (commit `1b4f981`, pushed before anything was compute
 the first set of predictions. *Rev. 2* (this text) records the Stage 0 outcome against the
 Rev. 1 prediction, folds in a read-only survey of the evaluation harnesses, and redesigns
 part C **before any C measurement**, because a stored result showed the Rev. 1 design had
-no power (see C). Nothing in A, B, D was weakened; B and D were widened.
+no power (see C). Nothing in A, B, D was weakened; B and D were widened. *Rev. 3* adds gate
+B5 to part B while A and D were running and before any B code existed; A–D are otherwise
+as approved.
 
 ## Why
 
@@ -129,7 +131,8 @@ heads per layer on which the two shipped single criteria actually disagree (Stag
 - **R:** k random units per layer, 5 seeds (the null);
 - each family once in layers 22–34 and once, as the control, in layers 6–17.
 
-That is 18 masks per axis + dense = 37 configs, each measured on 100 **held-out** clips
+That is 18 masks per axis + dense = 37 configs (53 with the B5 sets of Rev. 3), each
+measured on 100 **held-out** clips
 (the first 100 of `indist_500`; verified disjoint from `calib_100` and from `val`), paired
 with the dense model on the same clip, dense text and noise: FM loss, NLL of the dense
 rollout, minADE/minFDE at K = 8.
@@ -144,8 +147,22 @@ rollout, minADE/minFDE at K = 8.
   T-pool (ΔFM no smaller, ΔNLL no larger), and symmetrically for C. If not, the token split
   explains the scores but selects no better than the pooled scores — worth knowing before
   anyone proposes a token-resolved criterion.
-- minADE is reported for every config but gates nothing: at K = 8 and n = 100 its paired
-  CI half-width is ~4% of baseline, coarser than the two losses.
+- **B5 (what `dual` saves — added in Rev. 3, before any B run, after the user asked how
+  this analysis leads to the paper's case for the dual criterion).** Two more late-layer
+  sets per axis, taken from the shipped arms rather than from a rule of mine: **S-coc** =
+  units `coc_u40_v2` removed and `dual_u40_v2` kept; **S-traj** = units `traj_u40_v2`
+  removed and `dual_u40_v2` kept (layers 22–34, about 4 heads and 1,400 channels per
+  layer), each with three random sets of the same per-layer size. Prediction: removing
+  S-coc raises the FM loss more than every size-matched random set and the NLL no more than
+  their mean; removing S-traj raises the NLL more than every size-matched random set and
+  the FM loss no more than their mean (paired Wilcoxon, p < 0.01). *If it holds, the units
+  the dual criterion rescues from each single criterion are exactly the ones the other
+  output needs — the functional case for scoring with both losses.*
+- Also reported, not gated: across all configs, how well the first-order prediction (the
+  summed `I_traj` / `I_CoC` of the removed units) orders the measured ΔFM / ΔNLL.
+- minADE is measured for the dense model, every selected set and one random set per
+  family (random sets otherwise skip the K denoisings); it gates nothing: at K = 8 and
+  n = 100 its paired CI half-width is ~4% of baseline, coarser than the two losses.
 - *Refuted if* T and C damage both channels alike in late layers. Then the token-mixture
   account describes the scores and nothing else, and the paper must say so.
 
@@ -239,7 +256,7 @@ is recorded for the FM loss and the expert-door probe.
 | 0 | kept-set × token-resolved scores | none — done |
 | A | 3 arms × anatomy pass, 100 `calib_100` clips | ~20 min each, three cards in parallel |
 | D | probe pass, 100 `calib_100` clips | ~15 min, the fourth card, alongside A |
-| B | 37 configs × 100 held-out clips (≈ 3.9 s per config per clip) | ~4 GPU-h → ~1 h on four cards |
+| B | 53 configs × 100 held-out clips (≈ 3.9 s per config per clip with the K denoisings, ≈ 0.8 s without) | ~3.5 GPU-h → ~1 h on four cards |
 | C | 61 configs × 50 clips × K = 8 (3.4 s per config per clip, measured on `pathway_e_s*`) + attention census | ~3 GPU-h → ~45 min on four cards |
 
 Ada cards only (4–7), to stay on the architecture of every score used; all eight cards
