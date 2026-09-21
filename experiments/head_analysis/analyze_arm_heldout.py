@@ -131,6 +131,21 @@ def main():
             lines.append(f"  descriptive {label:6s} {hi:10s} > {lo:10s}: median {med:+.4f}, p = {p:.2e}")
         out["bands"] = bands
 
+    # descriptive: the full masks by driving situation (small n per bucket; the 2,533-clip stored
+    # records of analyze_failure_by_situation.py are the place to read situations from)
+    b = np.array(buckets)
+    out["by_bucket"] = {}
+    lines += ["", "full masks by driving situation (mean delta; descriptive, small n)",
+              f"  {'bucket':11s} {'n':>3s} " + " ".join(f"{a + ' dFM':>10s} {a + ' dNLL':>10s}" for a in ARMS)]
+    for name in ("cruise", "accel", "decel_stop", "turn"):
+        m = b == name
+        if m.sum() < 3:
+            continue
+        out["by_bucket"][name] = {"n": int(m.sum()), **{
+            a: {k: float((x[k][a][m] - x[k]["dense"][m]).mean()) for k in ("fm", "nll", "ade")} for a in ARMS}}
+        lines.append(f"  {name:11s} {int(m.sum()):3d} " + " ".join(
+            f"{out['by_bucket'][name][a]['fm']:+10.4f} {out['by_bucket'][name][a]['nll']:+10.4f}" for a in ARMS))
+
     out_dir = REPO / "outputs" / args.out
     (out_dir / "plots").mkdir(parents=True, exist_ok=True)
     if has_bands:

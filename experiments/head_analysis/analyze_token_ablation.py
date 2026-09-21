@@ -87,13 +87,27 @@ def main():
         lo_f, hi_f = ci(dfm[c])
         lo_n, hi_n = ci(dnll[c])
         out["configs"][c] = {"dfm_mean": float(dfm[c].mean()), "dfm_ci": [lo_f, hi_f], "dfm_median": float(np.median(dfm[c])),
+                             "dfm_rel": float(dfm[c].mean() / dense["fm"].mean()),
                              "dnll_mean": float(dnll[c].mean()), "dnll_ci": [lo_n, hi_n],
                              "dnll_median": float(np.median(dnll[c])),
+                             "dnll_rel": float(dnll[c].mean() / dense["nll"].mean()),
                              "dade_mean": float(dade[c].mean()) if c in dade else None,
                              "dade_median": float(np.median(dade[c])) if c in dade else None}
         lines.append(f"{c:20s} {meta[c]['removed_per_layer_mean']:9.1f} {dfm[c].mean():+10.4f} [{lo_f:+.4f},{hi_f:+.4f}] "
                      f"{dnll[c].mean():+10.4f} [{lo_n:+.4f},{hi_n:+.4f}] "
-                     + (f"{dade[c].mean():+13.4f}" if c in dade else f"{'-':>13s}"))
+                     + (f"{dade[c].mean():+13.4f}" if c in dade else f"{'-':>13s}")
+                     + f"   rel dFM {dfm[c].mean() / dense['fm'].mean():+6.1%} dNLL {dnll[c].mean() / dense['nll'].mean():+6.1%}")
+    lines.append("")
+    # the scale of each band's effect, whatever the set: the mean over that band's random sets
+    out["band_scale"] = {}
+    for ax in ("q", "mlp"):
+        for band in ("late", "trunk"):
+            rs = [f"{ax}_{band}_R{i}" for i in range(5)]
+            out["band_scale"][f"{ax}|{band}"] = {
+                "dfm_rel": float(np.mean([out["configs"][r]["dfm_rel"] for r in rs])),
+                "dnll_rel": float(np.mean([out["configs"][r]["dnll_rel"] for r in rs]))}
+            s = out["band_scale"][f"{ax}|{band}"]
+            lines.append(f"scale, five random sets, {ax:3s} {band:5s}: FM loss {s['dfm_rel']:+.1%} of dense, NLL {s['dnll_rel']:+.1%}")
     lines.append("")
 
     gates = {}
@@ -136,6 +150,16 @@ def main():
                 lines.append(f"B3 {ax:3s} {band:5s} {fam:4s}: log(dFM/dNLL) of T minus C = {gap:+.2f}; spread over the "
                              f"random sets {spread:.2f} -> {verdict}"
                              + (f" -> {'PASS' if verdict == 'no dissociation' else 'FAIL'}" if band == "trunk" else ""))
+
+        # descriptive, the same two paired tests inside the trunk band: a per-clip reading of B3
+        for fam in ("tok", "pool"):
+            t, c = f"{ax}_trunk_T{fam}", f"{ax}_trunk_C{fam}"
+            p1, m1 = greater(dfm[t], dfm[c])
+            p2, m2 = greater(dnll[c], dnll[t])
+            gates[f"trunk_pairs|{ax}|{fam}"] = {"dFM_T_gt_C": {"p": p1, "median_diff": m1},
+                                                "dNLL_C_gt_T": {"p": p2, "median_diff": m2}}
+            lines.append(f"   {ax:3s} trunk {fam:4s} (descriptive): dFM(T) > dFM(C) p={p1:.1e} ({m1:+.4f}); "
+                         f"dNLL(C) > dNLL(T) p={p2:.1e} ({m2:+.4f})")
 
         # B4: token-resolved vs pooled selection
         for side, own, other in (("T", dfm, dnll), ("C", dnll, dfm)):
