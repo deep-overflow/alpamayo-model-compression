@@ -65,7 +65,8 @@
   <strong>1단계</strong>: 저장된 run 18개만 사용(GPU 0) · <strong>2단계</strong>: 새 GPU 측정
   (<code>calib_100</code> 100클립, RTX 5880 Ada, 20분 × 1장 + 17분 × 3장) ·
   계획 <code>plans/2026-09-20_gradient-anatomy.md</code> ·
-  논문용 영어 정리 <code>paper/2026-09-20_why-importance-differs.md</code>
+  논문용 영어 정리 <code>paper/2026-09-20_why-importance-differs.md</code> ·
+  <strong>후속(인과 검증, "왜 dual인가")</strong>: <code>2026-09-21_importance-causal-validation.html</code> — 이 보고서의 "방법론에 주는 함의" 두 항목을 정정한다
 </div>
 
 <div class="callout lede">
@@ -530,6 +531,19 @@ GT 대 own-rollout 비대칭이 아니다(R2). "LM head 대 expert" 자체가 �
 <li>계단 위치는 아키텍처(포트 21–23)가 정하므로, ≤ 21층과 ≥ 23층을 두 체제로 다루는 allocation은 calibration set마다 다시
   구할 필요가 없다.</li>
 </ul>
+
+<div class="callout bad">
+<p><strong>정정 (2026-09-21, 후속 인과 검증 <code>2026-09-21_importance-causal-validation.html</code>).</strong> 위 함의 가운데 둘은 측정으로 반박됐다.
+원문은 그대로 두고 여기에 정정을 남긴다.</p>
+<p>(1) <em>"<code>I_CoC</code>가 late unit의 vision·history 작업을 못 보는 것이 CoC-only가 주행을 잃는 것과 맞는다"</em> — 맹점 자체는 점수 통화로 확인되지만
+(CoC-only가 남긴 후반 <code>I_traj</code>@vision/history 질량 0.678 vs traj-only 0.828), <strong>그것이 주행을 잃는 이유는 아니다.</strong> held-out 100클립에서 CoC-only의
+마스크를 후반층(22–35)에만 적용하면 FM loss +0.1%, minADE +0.00 m다 — 출하 용량에서 action은 후반층 unit에 전혀 의존하지 않는다. CoC-only는
+<strong>trunk(0–21층)에서</strong> action을 잃는다(trunk 마스크만으로 FM +17.0%, +0.46 m; arm 전체 +15.8%, +0.56 m). 언어 쪽 절반(traj-only가 language를 잃는다)은
+성립한다(traj-only의 후반 마스크 하나로 NLL +65.5%). 다만 LingoQA에서는 <em>두</em> 단일 기준이 모두 바닥이다(CoC-only 30.2).</p>
+<p>(2) <em>"union은 hand-over 이후에 필요하고 그 전에는 거의 공짜다"</em> — 비용 면에서는 맞지만(두 기준의 trunk 유지집합은 층당 head 2개 남짓만 다르다),
+<strong>union의 실측 이득은 오히려 trunk에서 가장 크다</strong>: trunk만 자를 때 FM loss +4.8%(dual) vs +17.0%(CoC-only) vs +26.1%(traj-only), minADE +0.06 / +0.46 / +2.64 m.
+후반층에서 union이 하는 일은 언어 채널을 지키는 것이고, action에는 어느 쪽으로도 영향이 없다.</p>
+</div>
 
 <h2><span class="num">13</span>논문에 반영할 것 (제안)</h2>
 
