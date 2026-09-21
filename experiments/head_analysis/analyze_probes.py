@@ -80,15 +80,23 @@ def main():
             lines.append(f"  {a:13s}" + " ".join(f"{m[i, j]:13.3f}" for j in range(len(names))))
     lines.append("")
 
-    lines.append("change point of log-ratios by depth (two-level least-squares step; tau, step, R2)")
+    lines.append("log-ratios by depth: two-level least-squares step (tau, size, R2) against a straight line (R2), "
+                 "and the ratio's level in three depth bands relative to layers 0-15")
     out["steps"] = {}
     pairs = (("I_traj", "I_CoC"), ("expert probe", "head probe"), ("cache probe", "head probe"),
              ("I_traj", "expert probe"), ("expert probe", "cache probe"), ("I_CoC", "head probe"))
+    depth = np.arange(LAST)
     for ax in ("q", "mlp"):
         for a, b in pairs:
-            tau, step, r2 = step_fit(np.log(prof[ax][a] / prof[ax][b]))
-            out["steps"][f"{ax}|{a}/{b}"] = {"tau": tau, "step": step, "r2": r2}
-            lines.append(f"  {ax:3s} {a:12s} / {b:12s}: tau {tau:2d}  step {step:6.2f}x  R2 {r2:.2f}")
+            y = np.log(prof[ax][a] / prof[ax][b])
+            tau, step, r2 = step_fit(y)
+            fit = np.polyval(np.polyfit(depth, y, 1), depth)
+            lin = float(1 - ((y - fit) ** 2).sum() / ((y - y.mean()) ** 2).sum())
+            lv = [float(np.exp(y[s].mean() - y[:16].mean())) for s in (slice(16, 22), slice(22, 25), slice(25, LAST))]
+            out["steps"][f"{ax}|{a}/{b}"] = {"tau": tau, "step": step, "r2": r2, "linear_r2": lin,
+                                            "level_L16_21": lv[0], "level_L22_24": lv[1], "level_L25_34": lv[2]}
+            lines.append(f"  {ax:3s} {a:12s} / {b:12s}: tau {tau:2d}  step {step:6.2f}x  R2 {r2:.2f} (line {lin:.2f}) | "
+                         f"L16-21 {lv[0]:.2f}  L22-24 {lv[1]:.2f}  L25-34 {lv[2]:.2f}")
     lines.append("")
 
     d1 = {ax: {"pearson": out["profile_pearson"][ax]["expert probe"]["I_traj"],

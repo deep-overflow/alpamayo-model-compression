@@ -96,8 +96,9 @@ def main():
         def hook(module, a, kw, output):
             attn = output[1]  # (1, H, T, T) attention probabilities (eager)
             assert attn is not None, "eager attention required"
-            rows = attn[0].index_select(1, state["vis_idx"]).float()  # (H, Nv, T)
-            m = rows.reshape(n_h, -1) @ state["onehot"].reshape(len(GROUPS), -1).T  # (H, 5)
+            with torch.autocast("cuda", enabled=False):  # a bf16 matmul cannot sum 9M products
+                rows = attn[0].index_select(1, state["vis_idx"]).float()  # (H, Nv, T)
+                m = rows.reshape(n_h, -1) @ state["onehot"].reshape(len(GROUPS), -1).T  # (H, 5)
             state["mass"][li] = (m / state["vis_idx"].numel()).cpu().numpy()
         return hook
 

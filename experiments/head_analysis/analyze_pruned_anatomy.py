@@ -141,11 +141,19 @@ def main():
             a1[f"{k}|{ax}"] = {"change_point": tau, "step": step, "r2": r2,
                                "profile_corr_traj": float(np.corrcoef(t, td)[0, 1]),
                                "profile_corr_coc": float(np.corrcoef(c, cd)[0, 1]),
+                               # not gated: the same without the first two layers, where the surviving
+                               # units of a pruned model take on several times the dense importance
+                               "profile_corr_traj_L2_34": float(np.corrcoef(t[2:], td[2:])[0, 1]),
+                               "profile_corr_coc_L2_34": float(np.corrcoef(c[2:], cd[2:])[0, 1]),
+                               "layer_sum_over_dense_L0_1": [float((t[:2] / td[:2]).mean()), float((c[:2] / cd[:2]).mean())],
+                               "layer_sum_over_dense_L6_34": [float((t[6:] / td[6:]).mean()), float((c[6:] / cd[6:]).mean())],
                                "peak_traj": int(t.argmax()), "peak_coc": int(c.argmax())}
             r = a1[f"{k}|{ax}"]
             lines.append(f"    {k:6s} {ax:3s} ratio change point {tau} (step {step:.2f}x, R2 {r2:.2f}) | profile corr with "
-                         f"dense: I_traj {r['profile_corr_traj']:.3f} I_CoC {r['profile_corr_coc']:.3f} | peaks "
-                         f"{r['peak_traj']}/{r['peak_coc']}")
+                         f"dense: I_traj {r['profile_corr_traj']:.3f} I_CoC {r['profile_corr_coc']:.3f} (layers 2-34: "
+                         f"{r['profile_corr_traj_L2_34']:.3f} / {r['profile_corr_coc_L2_34']:.3f}) | layer sum / dense, "
+                         f"L0-1: {r['layer_sum_over_dense_L0_1'][0]:.1f}x / {r['layer_sum_over_dense_L0_1'][1]:.1f}x, L6-34: "
+                         f"{r['layer_sum_over_dense_L6_34'][0]:.1f}x / {r['layer_sum_over_dense_L6_34'][1]:.1f}x")
             axs[ax_i].plot(L, t / c, color=ARM_COL[k], lw=1.6 if k == "dense" else 1.1, label=k)
         axs[ax_i].set_yscale("log")
         axs[ax_i].set_title(f"I_traj / I_CoC by depth, {'Q heads' if ax == 'q' else 'MLP channels'}")
@@ -253,7 +261,15 @@ def main():
         lines.append(f"    {label:3s} {hi} > {lo}: median paired diff {np.median(x[hi] - x[lo]):+.4f}, "
                      f"one-sided Wilcoxon p = {p:.2e} -> {'PASS' if p < 0.01 else 'FAIL'}")
     a2["pass"] = bool(all(t["pass"] for t in a2["tests"].values()))
-    lines += [f"    A2 -> {'PASS' if a2['pass'] else 'FAIL'}", ""]
+    lines += [f"    A2 -> {'PASS' if a2['pass'] else 'FAIL'}"]
+    # not pre-registered: does the dual criterion beat each specialist on the specialist's OWN channel?
+    a2["own_channel"] = {}
+    for label, x, spec in (("FM", fm, "traj"), ("NLL", nll, "coc")):
+        p = float(wilcoxon(x[spec], x["dual"], alternative="greater").pvalue)
+        a2["own_channel"][f"{label}:{spec}>dual"] = {"p": p, "median_diff": float(np.median(x[spec] - x["dual"]))}
+        lines.append(f"    descriptive, {label:3s} {spec} > dual (the specialist on its own channel): median paired diff "
+                     f"{np.median(x[spec] - x['dual']):+.4f}, one-sided Wilcoxon p = {p:.2e}")
+    lines.append("")
     out["A2"] = a2
 
     fig, axs = plt.subplots(1, 2, figsize=(9, 3.6))
