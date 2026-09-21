@@ -1,0 +1,146 @@
+% Appendix: closed-loop scene selection for the hard-100 set.
+%
+% GENERATED -- do not hand-edit. Rebuild with
+%   python experiments/evaluation/hard100_appendix.py --out <this file>
+%
+% Sources (all recomputed at build time):
+%   outputs/scene_difficulty/scene_difficulty_public2601.csv  static features, 913 scenes
+%   outputs/scene_difficulty/hard100_suite.csv                the realized 100-scene draw
+%   /mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5
+%       an unpruned 913-scene run produced independently of this work (1 rollout/scene)
+%   /home/cvlab21/project/chan/alpasim-runs/h100_merged_baseline
+%       our own unpruned run on the selected 100 (200 rollouts)
+%
+% The load-bearing distinction: the static score PREDICTS the unpruned model's score; it
+% is not "similar to" it. Selection never touches a model output, which is what keeps the
+% regression-to-the-mean bias out (see the paragraph on stratifying by the model's score).
+
+\section{Closed-loop scene selection}
+\label{app:hard100}
+
+\paragraph{Why a second scene set.}
+The shipped closed-loop matrix is the first 150 scenes of \texttt{public\_2601}
+under a sort by scene identifier. That is unbiased in expectation, deterministic and
+nested, but the \emph{realized} sample is easier than the suite it came from: measured
+against an independently produced unpruned run over all 913 scenes, those
+150 scenes score 0.742 against 0.660 on
+the remaining 763 (Mann--Whitney $p=0.039$). Absolute closed-loop
+numbers on the matrix are therefore optimistic relative to the suite, and a second,
+harder, \emph{disjoint} set is needed before any absolute claim is made. The two sets
+together cover 250 of the suite's 913 scenes
+(27.4\%) and are disjoint by construction.
+
+\paragraph{Scene release.}
+All closed-loop evaluation in this work uses the \texttt{public\_2601} suite
+(913 scenes). The later \texttt{public\_2604} release (1606 scenes) shares
+159 scene identifiers with it but \textbf{zero} artifact UUIDs --- every scene was
+re-rendered --- so results from the two are not comparable and their caches are separate.
+Because of that overlap, a scene must be addressed by its artifact UUID: resolving a bare
+identifier returns the newer render for those 159 scenes, silently substituting
+different pixels for the same nominal scene. Every suite file written here therefore
+carries the UUID, and the launcher rejects any UUID that does not belong to the declared
+parent release.
+
+\paragraph{A model-free difficulty score.}
+Each scene ships as a \texttt{usdz}, which is a ZIP archive; the ego pose track
+(\texttt{rig\_trajectories.usda}, ground-truth pose at 10\,Hz) can be read by random
+access without touching the several hundred megabytes of mesh data, so all 913
+scenes are featurised in well under a minute. From that track alone we form
+\[
+  \texttt{hard\_score} \;=\; z(\bar v) \;+\; z(\textstyle\sum |\Delta\psi|),
+\]
+the sum of within-suite $z$-scores of mean ego speed and total yaw traversed. The parse is
+verified against the simulator: path length recovered from the track matches the
+simulator's reported \texttt{gt\_dist\_traveled\_m} at $r = 1.00000$.
+
+\textbf{No model output enters this score.} No rollout is run, no checkpoint is loaded,
+and no evaluation metric is consulted.
+
+\paragraph{Out-of-sample validation.}
+The score is validated on the 763 scenes that the 150-scene matrix does
+\emph{not} contain, against the independent unpruned run. It ranks them:
+Spearman $\rho = -0.293$ ($p<10^{-15}$), with the top
+$100$ scenes averaging $0.499$ and the bottom $100$ averaging $0.847$.
+Table~\ref{tab:hard100-deciles} shows that the relationship \emph{saturates} above
+roughly the 80th percentile, which is why the set is drawn from that plateau rather than
+from the extreme tail --- cutting higher buys no additional difficulty and costs sample
+diversity.
+
+\begin{table}[t]
+\centering\small
+\caption{Unpruned closed-loop score by decile of the model-free difficulty score, on the
+  763 scenes held out from the 150-scene matrix. The top two deciles are
+  indistinguishable, so the hard set is drawn from the whole 80--100\% band.}
+\label{tab:hard100-deciles}
+\begin{tabular}{lrr}
+\toprule
+\texttt{hard\_score} decile & Scenes & Unpruned score \\
+\midrule
+    0--10\% & 77 & 0.826 \\
+    10--20\% & 76 & 0.812 \\
+    20--30\% & 76 & 0.722 \\
+    30--40\% & 76 & 0.727 \\
+    40--50\% & 77 & 0.597 \\
+    50--60\% & 76 & 0.694 \\
+    60--70\% & 76 & 0.655 \\
+    70--80\% & 76 & 0.549 \\
+    80--90\% & 76 & 0.512 \\
+    90--100\% & 77 & 0.505 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Why not stratify by the model's own score.}
+The obvious alternative --- rank scenes by the unpruned model's closed-loop score and take
+the worst --- is unsound for the comparisons this set is used for. Grouping scenes by a
+model's score and then reading a \emph{paired delta against that same model} induces
+regression to the mean: in an earlier analysis this flipped the sign of 11 of 17 arms in
+the easy stratum. A model-free criterion has no such coupling, which is the reason for the
+indirection through static scene features.
+
+\paragraph{What the score selects for.}
+It selects for progress and lane-keeping stress, \emph{not} for safety stress
+(Table~\ref{tab:hard100-what}, upper block): difficulty is essentially uncorrelated with
+at-fault collisions. Within the features, ego kinematics carry the signal and traffic
+density carries none (lower block); of the two terms in the score, total yaw dominates.
+Absolute collision rates on this set should therefore not be read as a safety stratum.
+
+\begin{table}[t]
+\centering\small
+\caption{Spearman correlations on the 763 held-out scenes. Upper: what the
+  difficulty score predicts. Lower: which scene features predict the unpruned score.}
+\label{tab:hard100-what}
+\begin{tabular}{lrl}
+\toprule
+\multicolumn{3}{l}{\emph{\texttt{hard\_score} vs.\ outcome}} \\
+\midrule
+    Closed-loop score & $-0.293$ & $p<10^{-15}$ \\
+    At-fault collision & $+0.040$ & $p=0.27$ \\
+    Off-road & $+0.169$ & $p<10^{-5}$ \\
+\midrule
+\multicolumn{3}{l}{\emph{Scene feature vs.\ unpruned score}} \\
+\midrule
+    Total yaw (deg) & $-0.292$ & $p<10^{-15}$ \\
+    Mean speed (m/s) & $-0.099$ & $p=0.006$ \\
+    Agent count & $-0.027$ & $p=0.45$ \\
+    Agents within 30\,m & $-0.037$ & $p=0.31$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The realized set.}
+Scenes already in the 150-scene matrix are excluded, as are scenes whose
+ground-truth ego path is shorter than $5$\,m (for those the progress term is overridden to
+$1.0$ and the scene carries no information); the shortest retained path is
+$29.5$\,m. The remaining scenes are ranked and the top
+$100$ taken, giving \texttt{hard\_score} in
+$[1.87, 5.43]$ against a suite-wide range of
+$[-1.99, 5.43]$. Overlap with the matrix is
+\textbf{0} scenes by construction, and the disjointness is
+asserted before the file is written.
+
+As a pre-registration check, the independent unpruned run puts these 100 scenes
+at $0.499$; our own unpruned run over them (two rollouts per scene,
+200 rollouts) measures $0.510$, inside the pre-registered
+acceptance window $[0.42, 0.58]$. A value outside that window would have indicated a
+setup fault rather than a property of the scenes.
