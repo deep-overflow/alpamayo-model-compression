@@ -22,7 +22,8 @@ on {sink, text, own image, same-camera earlier frames, other cameras}.
 
 Usage:
   python experiments/head_analysis/analyze_vv_depth.py --shards vvdepth_s0 vvdepth_s13 \
-      vvdepth_s26 vvdepth_s38 --census vision_census_v1 --out vvdepth_v1
+      vvdepth_s26 vvdepth_s38 --census vision_census_v1_s0 vision_census_v1_s13 \
+      vision_census_v1_s26 vision_census_v1_s38 --out vvdepth_v1
 """
 
 import argparse
@@ -47,7 +48,7 @@ VIS = 0
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shards", nargs="+", required=True)
-    ap.add_argument("--census", default="vision_census_v1")
+    ap.add_argument("--census", nargs="+", default=["vision_census_v1"], help="census run(s); shards are clip-weighted")
     ap.add_argument("--anatomy", default="gradanat_v1")
     ap.add_argument("--stored", default="pathway_e_v1", help="the 9-layer map, for the reproduction check")
     ap.add_argument("--stored-shards", nargs="+",
@@ -173,9 +174,13 @@ def main():
     c4 = {"nll_vs_action_profile": float(spearmanr(vv["ade"][below], vv["nll"][below])[0])}
 
     # ------------------------------------------------------------------ census
-    cpath = outs / args.census / "census.npz"
-    if cpath.exists():
-        mass = np.load(cpath)["mass"]  # (36, 32, 5): sink, text, own image, cross frame, cross camera
+    cdirs = [outs / c for c in args.census if (outs / c / "census.npz").exists()]
+    have_census = bool(cdirs)
+    if have_census:
+        # shards are means over their own clips: weight by clip count
+        w = np.array([json.loads((c / "metrics.json").read_text())["n_clips"] for c in cdirs], float)
+        mass = sum(wi * np.load(c / "census.npz")["mass"] for wi, c in zip(w, cdirs)) / w.sum()
+        out["census_clips"] = int(w.sum())  # mass (36, 32, 5): sink, text, own image, cross frame, cross camera
         lay = mass.mean(1)  # (36, 5)
         cross = mass[..., 3] + mass[..., 4]  # (36, 32)
         out["census_layer_mean"] = lay.tolist()
@@ -252,7 +257,7 @@ def main():
         fig.savefig(out_dir / "plots" / "vv_from_vs_upto.png", dpi=150)
         plt.close(fig)
 
-    if cpath.exists():
+    if have_census:
         fig, ax_ = plt.subplots(figsize=(7, 3.8))
         ax_.stackplot(np.arange(36), lay.T, labels=("sink", "text", "own image", "same-camera earlier frames",
                                                     "other cameras"),
