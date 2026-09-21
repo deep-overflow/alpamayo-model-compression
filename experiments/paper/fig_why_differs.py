@@ -619,7 +619,11 @@ def causal_panels(outputs, out):
             legend_above(ax, 3)
             save(fig, fname)
         out["arm_heldout"] = {"tests": ah["tests"], "pass": ah["pass"], "bands": ah["bands"],
-                              "nll_gap_traj_minus_coc": ah["nll_gap_traj_minus_coc"]}
+                              "nll_gap_traj_minus_coc": ah["nll_gap_traj_minus_coc"],
+                              "configs": ah["configs"]}
+    mx = _load(outputs / "armmix_v1" / "metrics.json")
+    if mx:
+        out["arm_mix"] = {k: mx[k] for k in ("configs", "a", "b", "c", "reproducibility_max_abs_diff")}
 
     tb = _load(outputs / "tokabl_v1" / "metrics.json")
     if tb:

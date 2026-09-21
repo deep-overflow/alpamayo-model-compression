@@ -1,7 +1,7 @@
 # Does the score anatomy predict function — and why is the shared profile shaped as it is?
 
 Date: 2026-09-21. Branch: `worktree-importance-causal-validation`.
-Status: **approved by the user on 2026-09-21 (all of A–D); in progress.**
+Status: **approved by the user on 2026-09-21 (all of A–D); run the same day — see Outcome.**
 Follows `paper/2026-09-20_why-importance-differs.md` (R1–R13) and
 `plans/2026-09-20_gradient-anatomy.md`.
 
@@ -343,3 +343,67 @@ attention census) + `analyze_vv_depth.py` (new), a mask converter. `UnitGates`,
 - D's probes are random linear readouts. They say what a generic readout sees, not what
   every possible loss would.
 - First-order scores throughout; B and C are the only causal parts.
+
+## Outcome (2026-09-21)
+
+All of A–D ran as approved, on the four Ada cards (the Blackwell cards were taken by another
+user for the whole day). Numbers and their reading are in
+`paper/2026-09-20_why-importance-differs.md` (R14–R19) and
+`reports/evaluation/2026-09-21_importance-causal-validation.html`; this is the scorecard.
+
+| gate | prediction | measured | verdict |
+|---|---|---|---|
+| S0 ordering | `coc` keeps least `I_traj` at vision/history, `traj` least `I_CoC` at CoC tokens | Q 0.678 < 0.787 < 0.828; 0.650 < 0.763 < 0.827 (MLP alike) | **PASS** |
+| S0 5 pp | `dual` within 5 pp of the better single criterion | MLP 1.6 / 1.4 pp, Q 4.1 / **6.4** pp | 3 of 4 cells; **FAIL** on Q, CoC side |
+| A1 | `dual` keeps change point 23, profile corr ≥ 0.98, MLP hand-over ±1, vision agreement ≥ 0.70 | 23 / 23; **Q corr 0.919 / 0.664** (MLP 0.977 / 0.990); 18 / 21 → 18 / 21; 0.804 | **FAIL** (one clause: early-layer load on the Q axis) |
+| A2 | FM loss highest under `coc`, NLL highest under `traj`, on the dense text | four tests, p ≤ 1.0e-03 | **PASS** |
+| D1 | expert-door probe has `I_traj`'s profile; probe ratio steps at 23 | 0.980 / 0.964; 23 / 23 (5.4× / 5.5×) | **PASS** |
+| D2 | head-door probe has `I_CoC`'s profile (≥ 0.90) | **0.871** (Q) / 0.936 (MLP) | **FAIL** on Q |
+| D3 | probes rank trunk Q heads like the real losses (≥ 0.8) | 0.990 / 0.965 (late: 0.992 / 0.880) | **PASS** |
+| D4 | cache-side profile reproduced (≥ 0.9); bare cache door has no step | **0.857**; bare door declines as a ramp | **FAIL** |
+| B1 | late layers: ΔFM(T) > ΔFM(C), and above every random set | p = 0.23 / 0.13 (Q), 0.87 / 0.92 (MLP); 0/5. **No late-layer set moves the FM loss** (random sets: −0.0% Q, −0.6% MLP) | **FAIL** (all four) |
+| B2 | late layers: ΔNLL(C) > ΔNLL(T), and above every random set | Q: p = 1.6e-06 / 6.7e-04, 5/5; MLP: p = 3.1e-04 / 0.038, 0/5 | **PASS** on Q; MLP cross-over only (tok) |
+| B3 | trunk control: T and C do not dissociate | Q tok dissociates on the action side (FM +2.8% vs +0.6%, p = 3.9e-04); Q pool does not; MLP not evaluable | **FAIL** (Q tok) |
+| B4 | token-resolved sets at least as specific as pooled ones | no difference either way | PASS (uninformative) |
+| B5 | S-coc hurts the FM loss only, S-traj the NLL only, each above size-matched random sets | Q S-traj: NLL +8.6% vs +1.3 to +3.2% (3/3), FM unchanged; the other three inside the random range | **1 of 4** |
+| A2-heldout | A2's ordering out of sample, `dual` lowest on both | ordering: four tests p ≤ 1.9e-06; NLL `coc` > `dual` p = 3.1e-05; **FM `traj` > `dual` p = 0.33**; NLL gap larger out of sample (+0.296 vs +0.231), predicted smaller | **FAIL** (one of six tests) |
+| A2-bands (i) | late-only masks: FM within 1%, NLL `traj` > `coc` | +0.13% / −0.07% / +0.08%; p = 2.9e-17 | **PASS** |
+| A2-bands (ii) | trunk-only masks: FM `coc` > `traj` | **reversed**: `traj` +26.1%, `coc` +17.0%, `dual` +4.8% | **FAIL** |
+| A2-bands (iii) | trunk-only + late-only within 25% of the full mask | `dual` 0.90 / 1.08; `coc` 1.08 / 0.51; `traj` 3.98 / 0.49 | **FAIL** (additive under `dual` only) |
+| C integrity | causal-mask-only control; reproduce the stored 9-layer map | +1.8e-04 NLL; `E0_none`, `E1@all`, `E2@all` reproduced per clip exactly | **PASS** |
+| C1 | VV action-damage window profile follows `I_traj` at vision tokens (ρ ≥ 0.6) | +0.85 (Q), +0.83 (MLP) | **PASS** |
+| C2 | my prediction: VV[18, 36) < 10% of VV[0, 36); ≥ 25% would carry the user's hypothesis to the peak | +27.8% / +58.9% = **0.47** | my prediction **FAILED**; the hypothesis holds |
+| C3 | every from-l-on action curve inside ±5% for l ≥ 24 | VV +6.5% [−0.9, +11.0] at l = 24, +1.3% at 27; single edges within 1% | **FAIL** (narrowly) |
+| C4 | shared substrate: NLL profile follows the action profile (ρ ≥ 0.6); cross-image attention mass predicts both scores alike at head level (gap < 0.1) | +0.86; +0.64 vs +0.59 | **PASS** |
+| A2-mix (a) | `traj` trunk + `coc` late does not repair (FM ≥ +20%) | +13.5% | **FAIL** |
+| A2-mix (b) | `traj` trunk + random late repairs partly | +8.8%: nearly all the way to the full mask's +6.6% (p = 0.016 against it) | **FAIL** |
+| A2-mix (c) | `coc` trunk + `traj` late lowers the `coc` trunk's FM damage | +18.1% against +17.0% | **FAIL** |
+
+**What I got wrong, and what it bought.**
+
+- *A double dissociation in the late layers (B1).* There is a single one. No late-layer set
+  or mask moves the FM loss; `I_traj`'s late scores are the first-order shadow of the
+  gradient's route through the late cache ports, and only `I_CoC`'s late ranking is
+  functional. This is the functional counterpart of the caveat the first note carried
+  ("the score's route is not the expert's reliance").
+- *The CoC-only criterion is the one whose trunk hurts the action (A2-bands ii).* It is the
+  trajectory-only trunk (+26.1% against +17.0%), and the union beats both (+4.8%). A2-mix
+  then failed three more predictions and showed why: most of that damage is amplified by
+  the intact late layers and goes away when they are thinned at random.
+- *Vision–vision interaction ends before the importance peak (C2).* It reaches under it
+  (+27.8% from layer 18 on); the stored one-edge-at-a-time map hid it because the three
+  kinds of vision–vision attention substitute for each other there. The user's hypothesis
+  was right.
+- *The bare cache door has no depth structure (D4).* It has a ramp; the expert turns it into
+  a step.
+- Smaller: the S0 5 pp bound (one cell, 6.4 pp), A1's profile clause (early-layer load on the
+  Q axis), D2 on the Q axis (0.871), C3 (6.5% at layer 24), "`dual` below `traj` on the FM
+  loss out of sample" (p = 0.33), the predicted shrinkage of the NLL gap out of sample (it
+  grew).
+
+Additions made while the plan ran, each written into this file and pushed before its run:
+B5 (the user asked how the work leads to the case for the dual criterion), A2-heldout,
+A2-bands (after a 20-clip partial look at B — not blind, and said so), A2-mix. Two questions
+the user asked mid-run — in which driving situations each single criterion fails, and whether
+the CoC end tokens were in `I_CoC`'s loss — were answered from stored records and one
+30-clip measurement; they are R19 of the note.
