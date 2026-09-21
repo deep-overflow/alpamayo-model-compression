@@ -43,6 +43,7 @@ outputs/stepimp_fm_perstep_v2 (ten per-step expert gradients).
 
 Usage:
   .venv/bin/python experiments/paper/fig_criterion.py
+  .venv/bin/python experiments/paper/fig_criterion.py --paper-style
 """
 
 import argparse
@@ -68,6 +69,15 @@ KEEP_M, N_M = 7390, 12288
 TRAJ, COC, GREY = "#0072B2", "#D55E00", "#777777"
 SINGLE = (3.5, 2.8)  # 89 mm, one manuscript column
 WIDE = SINGLE
+PAPER_PANELS = {
+    "fig1_depth_q_head", "fig1_depth_mlp", "fig1_rank_agreement",
+    "fig2_steps_q_head", "fig2_steps_mlp", "fig2_mass_curve",
+}
+ALL_PANELS = PAPER_PANELS | {"fig1_kept_overlap", "fig2_stability_vs_mass"}
+EXPORT_PANELS = None
+PAPER_STYLE = False
+PAPER_LABEL_SIZE = 12
+PAPER_TEXT_SIZE = 10
 
 plt.rcParams.update({
     "figure.facecolor": "white", "axes.facecolor": "white", "savefig.facecolor": "white",
@@ -87,8 +97,58 @@ plt.rcParams.update({
 })
 
 
+def paper_style(fig, name):
+    """Use 12 pt axis labels and 10 pt other text on the original canvas."""
+    fig.set_size_inches(*SINGLE)
+    ax = fig.axes[0]
+    if name.startswith("fig1_depth_"):
+        ax.set_xlabel("VLM layer index")
+        ax.set_ylabel("Normalized layer importance")
+    elif name == "fig1_rank_agreement":
+        ax.set_xlabel("VLM layer index")
+        ax.set_ylabel(r"Spearman’s $\rho$")
+    elif name == "fig2_mass_curve":
+        ax.set_xlabel("Fraction of units removed")
+        ax.set_ylabel("Removed importance fraction")
+    elif name.startswith("fig2_steps_"):
+        ax.set_xlabel("Denoising step")
+        ax.set_ylabel("Denoising step")
+        fig.axes[1].set_ylabel(r"Spearman’s $\rho$")
+    for ax in fig.axes:
+        for text in (ax.xaxis.label, ax.yaxis.label, ax.title):
+            text.set_fontsize(PAPER_LABEL_SIZE)
+        for text in (ax.xaxis.get_offset_text(), ax.yaxis.get_offset_text(), *ax.texts):
+            text.set_fontsize(PAPER_TEXT_SIZE)
+        ax.tick_params(axis="both", which="both", labelsize=PAPER_TEXT_SIZE)
+        for line in ax.lines:
+            line.set_linestyle("-")
+        legend = ax.get_legend()
+        if legend is not None:
+            prop = legend.prop.copy()
+            prop.set_size(PAPER_TEXT_SIZE)
+            loc = "lower left" if name == "fig1_rank_agreement" else "upper left"
+            ax.legend(loc=loc, prop=prop, handlelength=1.2, handletextpad=0.45,
+                      borderpad=0.2, labelspacing=0.2)
+        # Keep the enlarged mass labels separated from their marked data points.
+        for text in ax.texts:
+            if isinstance(text, matplotlib.text.Annotation):
+                x, y = text.get_position()
+                text.set_position((2 * x, 2 * y))
+                if name == "fig2_mass_curve" and text.get_color() == TRAJ:
+                    text.set_position((-60, 22))
+    if name.startswith("fig2_steps_"):
+        # Sparse labels keep all ten cells readable at the requested font size.
+        fig.axes[0].set_xticks([0, 3, 6, 9])
+        fig.axes[0].set_yticks([0, 3, 6, 9])
+    if name == "fig2_mass_curve":
+        fig.axes[0].set_xticks(np.linspace(0, 1, 6))
+
+
 def save(fig, name):
     """Export fixed-size, embedded-font artwork and a high-resolution preview."""
+    if EXPORT_PANELS is not None and name not in EXPORT_PANELS:
+        plt.close(fig)
+        return
     OUT.mkdir(parents=True, exist_ok=True)
     for ax in fig.axes:
         if ax.get_xlabel() == "VLM layer":
@@ -106,7 +166,22 @@ def save(fig, name):
             for handle in legend.legend_handles:
                 if isinstance(handle, matplotlib.lines.Line2D) and handle.get_color() == COC:
                     handle.set_linestyle((0, (4, 2)))
+    if PAPER_STYLE and name in PAPER_PANELS:
+        paper_style(fig, name)
     fig.tight_layout(pad=0.8)
+    if PAPER_STYLE and name in PAPER_PANELS:
+        # tight_layout does not account for the full height of long rotated labels.
+        # Shift the label within the fixed canvas rather than resizing the artwork.
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        margin = 3 * fig.dpi / 72
+        for ax in fig.axes:
+            label = ax.yaxis.label
+            box = label.get_window_extent(renderer)
+            shift = min(0, fig.bbox.height - margin - box.y1)
+            shift += max(0, margin - box.y0 - shift)
+            if shift:
+                label.set_y(label.get_position()[1] + shift / ax.bbox.height)
     for ext in ("png", "pdf", "svg"):
         fig.savefig(OUT / f"{name}.{ext}")
     plt.close(fig)
@@ -286,13 +361,21 @@ def figure2(s):
 
 
 def main():
-    global OUT
+    global OUT, EXPORT_PANELS, PAPER_STYLE, TRAJ, COC
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--importance", type=Path, default=IMP)
     parser.add_argument("--step-importance", type=Path, default=STEP)
-    parser.add_argument("--out-dir", type=Path, default=OUT)
+    parser.add_argument("--out-dir", type=Path, default=None)
+    parser.add_argument("--paper-style", action="store_true",
+                        help="six panels: 12 pt labels, 10 pt text, solid lines; paper-fig/")
+    parser.add_argument("--panels", nargs="+", choices=sorted(ALL_PANELS),
+                        default=None, help="write only the named panels")
     args = parser.parse_args()
-    OUT = args.out_dir
+    PAPER_STYLE = args.paper_style
+    OUT = args.out_dir or (REPO / "paper-fig" if PAPER_STYLE else OUT)
+    EXPORT_PANELS = set(args.panels or (PAPER_PANELS if PAPER_STYLE else ALL_PANELS))
+    if PAPER_STYLE:
+        TRAJ, COC = "#618BC8", "#ECAE3C"
     with np.load(args.importance) as importance, np.load(args.step_importance) as steps:
         figure1(importance)
         figure2(steps)
