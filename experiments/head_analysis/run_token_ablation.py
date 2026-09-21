@@ -96,21 +96,33 @@ def main():
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--reserve-gb", type=float, default=30.0)
     ap.add_argument("--gpu", type=str, default=None)
+    ap.add_argument("--arm-masks", nargs="+", default=None, metavar="NAME=NPZ",
+                    help="instead of the unit sets: whole pruned arms, each an npz with q_mask/mlp_mask "
+                         "(slim_to_mask.py). Same readouts, so the arms of run_gradient_anatomy --mask can "
+                         "be read on held-out clips, where no criterion has seen the text or the actions")
     args = ap.parse_args()
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     clips = sc.calib_samples(REPO, args.manifest)[: args.num_clips][args.shard :: args.n_shards]
-    sets = np.load(REPO / "outputs" / args.sets / "sets.npz")
-    set_meta = json.loads((REPO / "outputs" / args.sets / "sets.json").read_text())["configs"]
     # (name, q keep mask or None, mlp keep mask or None, sample trajectories?)
     cfgs = [("dense", None, None, True)]
-    for name in sets.files:
-        m = set_meta[name]
-        keep = sets[name].astype(np.float32)  # (36, U)
-        sampled = not m["set"].startswith("R") or m["set"] == "R0"
-        cfgs.append((name, keep if m["axis"] == "q" else None,
-                     keep if m["axis"] == "mlp" else None, sampled))
+    set_meta = {}
+    if args.arm_masks:
+        for spec in args.arm_masks:
+            name, path = spec.split("=", 1)
+            z = np.load(REPO / path)
+            cfgs.append((f"arm_{name}", z["q_mask"].astype(np.float32), z["mlp_mask"].astype(np.float32), True))
+            set_meta[f"arm_{name}"] = {"axis": "both", "set": "arm", "mask": path}
+    else:
+        sets = np.load(REPO / "outputs" / args.sets / "sets.npz")
+        set_meta = json.loads((REPO / "outputs" / args.sets / "sets.json").read_text())["configs"]
+        for name in sets.files:
+            m = set_meta[name]
+            keep = sets[name].astype(np.float32)  # (36, U)
+            sampled = not m["set"].startswith("R") or m["set"] == "R0"
+            cfgs.append((name, keep if m["axis"] == "q" else None,
+                         keep if m["axis"] == "mlp" else None, sampled))
 
     devices = None if args.gpu is None else [int(x) for x in args.gpu.split(",")]
     device = reserve_gpu(args.reserve_gb, devices=devices)
@@ -132,7 +144,8 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
         "plan": "plans/2026-09-21_importance-causal-validation.md (part B)",
-        "sets": args.sets, "manifest": args.manifest, "cache": args.cache,
+        "sets": None if args.arm_masks else args.sets, "arm_masks": args.arm_masks,
+        "manifest": args.manifest, "cache": args.cache,
         "num_clips": len(clips), "clip_ids": [c for c, _ in clips],
         "shard": args.shard, "n_shards": args.n_shards, "k_samples": args.k,
         "seed": args.seed, "seed_rule": "sample_cache.clip_seed: sha256(f'{seed}:{clip_id}')[:4]",

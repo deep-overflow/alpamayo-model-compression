@@ -110,6 +110,16 @@ statistic and split-half ceiling is taken among kept units only.
   than under `dual` and `coc` (paired Wilcoxon over clips, p < 0.01 each).
 - Descriptive: the port profile is *not* re-measured (72 backwards per clip); the band
   split from the same pass says whether cache 22–24 is still the main port.
+- **A2-heldout (added after A2 came out, before it was run).** A2 is measured on
+  `calib_100`, the clips every criterion was computed on, so each single criterion is
+  in-sample for its own loss; and the stored OOD records have the CoC-only arm *worse* than
+  the trajectory-only arm on the GT-CoC NLL (+0.192 vs +0.143). The same three masks are
+  therefore read on the 100 held-out `indist_500` clips of part B
+  (`run_token_ablation.py --arm-masks`, dense text, same seeds). Prediction: A2's ordering
+  holds out of sample — FM loss highest under `coc`, NLL highest under `traj`, `dual`
+  lowest on both (paired Wilcoxon, p < 0.01) — with a smaller NLL gap between `traj` and
+  `coc` than in sample. *If the NLL ordering flips, A2's language half was an in-sample
+  artefact and must be reported as one.*
 
 ## B — token-targeted ablation: does the score anatomy predict function? (GPU ~1 h on four cards)
 

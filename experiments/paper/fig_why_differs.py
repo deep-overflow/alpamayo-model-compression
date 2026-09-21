@@ -60,6 +60,22 @@ ranks after layer ~22. These panels ask why, using only stored runs (CPU, no mod
       Share of all VLM I_traj carried by each cache layer, split by whether it enters
       through vision or non-vision cache entries.
 
+  fig5_*   does the score anatomy predict function?   (plans/2026-09-21_importance-causal-validation.md)
+      fig5_probe_ratio_mlp / _q_head   the ratio of fig3_ratio_step next to the same ratio for two
+          RANDOM linear readouts through the same two doors (expert output vs LM-head input) and
+          for a random readout taken straight off every cache entry: the step is the doors'.
+      fig5_probe_rank_q_head           ceiling-corrected rank agreement of each probe with the real
+          loss through its door, and of the two doors' probes with each other.
+      fig5_matched_fm / fig5_matched_nll   the three shipped arms on the dense model's text (same
+          tokens, same noise): FM loss and CoC NLL, arm minus dense, per clip.
+      fig5_dissociation_q_head / _mlp  token-targeted ablation on held-out clips: damage to the FM
+          loss against damage to the CoC NLL for the trajectory-side, CoC-side and random sets.
+      fig5_dual_saves                  the units each single criterion dropped and the dual one kept.
+      fig5_vv_nested / fig5_vv_window_profile / fig5_vision_census   vision-vision interaction by
+          depth: nested knockouts, their window profile against I_traj at vision tokens, and where
+          vision queries put their attention.
+      fig5_failure_by_manoeuvre        open-loop damage of the three arms by driving situation.
+
 Sources: outputs/importance_v2 (+ importance_perclip.npz), outputs/importance_vqa,
 outputs/importance_dim0 / _dim1, outputs/jlens_v2, and the independent draws listed in
 DRAWS. Numbers quoted in paper/2026-09-20_why-importance-differs.md are written to
@@ -523,16 +539,187 @@ def port_panels(outputs, out, exp="portmap_v1"):
         out["port_gates"]["integrity"] = m["integrity"]
 
 
+def _load(path):
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def causal_panels(outputs, out):
+    """fig5_*: panels from the analysis outputs of the causal-validation plan; each is skipped
+    when its run is not there yet."""
+    print("causal validation")
+    L = np.arange(LAST)
+    ORANGE = "#E69F00"
+
+    probes = outputs / "gradanat_probes_v1" / "anatomy.npz"
+    pm = _load(outputs / "gradanat_probes_v1" / "metrics_analysis.json")
+    if probes.exists() and pm:
+        with np.load(probes) as z:
+            for name, fname in (("mlp", "fig5_probe_ratio_mlp"), ("q", "fig5_probe_ratio_q_head")):
+                prof = {k: z[f"{k}_full_{name}"].sum(1)[:LAST] for k in ("fm", "ce", "pr_head", "pr_expert", "pr_cache")}
+                fig, ax = depth_axes("Ratio / its layer 0-21 mean")
+                for (a, b), col, ls, lw, label in (
+                        (("fm", "ce"), "black", "-", 1.6, r"$I_{\mathrm{traj}}\,/\,I_{\mathrm{CoC}}$"),
+                        (("pr_expert", "pr_head"), TRAJ, "-", 1.2, "random readouts: expert door / head door"),
+                        (("pr_cache", "pr_head"), ORANGE, (0, (4, 2)), 1.2, "random readouts: bare cache / head door")):
+                    y = prof[a] / prof[b]
+                    ax.plot(L, y / y[:22].mean(), color=col, ls=ls, lw=lw, label=label)
+                ax.set_yscale("log")
+                ax.set_yticks([0.1, 0.2, 0.5, 1, 2])
+                ax.set_yticklabels(["0.1", "0.2", "0.5", "1", "2"])
+                legend_above(ax, 1)
+                save(fig, fname)
+        d3 = pm["D3"]
+        rows = (("expert probe\nvs $I_{\\mathrm{traj}}$", d3["expert"]), ("head probe\nvs $I_{\\mathrm{CoC}}$", d3["head"]),
+                ("expert probe\nvs head probe", d3["expert_vs_head_probe"]))
+        fig, ax = plt.subplots(figsize=SINGLE)
+        x = np.arange(len(rows))
+        ax.bar(x - 0.2, [r[1]["trunk"]["corrected"] for r in rows], width=0.38, color=TRAJ, label="layers 6-21")
+        ax.bar(x + 0.2, [r[1]["late"]["corrected"] for r in rows], width=0.38, color=ORANGE, label="layers 22-34")
+        ax.set_xticks(x, [r[0] for r in rows], fontsize=6)
+        ax.set_ylabel("Rank agreement (ceiling corrected)")
+        ax.set_ylim(0, 1.05)
+        legend_above(ax, 2)
+        save(fig, "fig5_probe_rank_q_head")
+        out["probes"] = {k: pm[k] for k in ("D1", "D2", "D3", "steps")}
+        out["probes"]["D4"] = {k: v for k, v in pm["D4"].items() if not isinstance(v, dict) or "fm" not in v}
+
+    pa = _load(outputs / "gradanat_pruned_v1" / "metrics.json")
+    if pa:
+        arms = ("dual", "traj", "coc")
+        per = {a: {r["clip_id"]: r for r in _load(outputs / f"gradanat_{a}_u40" / "metrics.json")["per_clip"]} for a in arms}
+        dense = {r["clip_id"]: r for r in _load(outputs / "gradanat_probes_v1" / "metrics.json")["per_clip"]}
+        for key, fname, ylabel in (("fm_loss", "fig5_matched_fm", "FM loss: arm - dense"),
+                                   ("nll", "fig5_matched_nll", "CoC NLL: arm - dense")):
+            d = [np.array([per[a][c][key] - dense[c][key] for c in dense]) for a in arms]
+            fig, ax = plt.subplots(figsize=SINGLE)
+            ax.boxplot(d, showfliers=False, widths=0.55, medianprops={"color": "black", "lw": 1.0},
+                       boxprops={"lw": 0.7}, whiskerprops={"lw": 0.7}, capprops={"lw": 0.7})
+            ax.axhline(0, color="black", lw=0.6)
+            ax.set_xticks([1, 2, 3], ["dual", "trajectory-only", "CoC-only"])
+            ax.set_ylabel(ylabel)
+            save(fig, fname)
+        out["pruned"] = {"A1_gate": pa["A1"]["gate"], "A2": pa["A2"], "S0": {k: v for k, v in pa["S0"].items() if "gate" in k}}
+
+    tb = _load(outputs / "tokabl_v1" / "metrics.json")
+    if tb:
+        meta = {c["name"]: c for c in _load(outputs / "tokabl_v1_s0" / "config.json")["configs"]}
+        for name, fname in (("q", "fig5_dissociation_q_head"), ("mlp", "fig5_dissociation_mlp")):
+            fig, ax = plt.subplots(figsize=SINGLE)
+            for c, r in tb["configs"].items():
+                if not c.startswith(f"{name}_late_") or meta[c]["set"].startswith(("S", "RS")):
+                    continue
+                st = meta[c]["set"]
+                col = TRAJ if st.startswith("T") else COC if st.startswith("C") else GREY
+                ax.errorbar(r["dfm_mean"], r["dnll_mean"],
+                            xerr=[[r["dfm_mean"] - r["dfm_ci"][0]], [r["dfm_ci"][1] - r["dfm_mean"]]],
+                            yerr=[[r["dnll_mean"] - r["dnll_ci"][0]], [r["dnll_ci"][1] - r["dnll_mean"]]],
+                            fmt="o" if st.endswith("tok") else "s" if st.endswith("pool") else ".",
+                            color=col, ms=4, lw=0.6, capsize=0)
+            ax.axhline(0, color="black", lw=0.5)
+            ax.axvline(0, color="black", lw=0.5)
+            ax.set_xlabel("FM loss: set removed - dense")
+            ax.set_ylabel("CoC NLL: set removed - dense")
+            ax.legend(handles=[plt.Line2D([], [], marker="o", ls="", ms=4, color=TRAJ, label="trajectory-side sets"),
+                               plt.Line2D([], [], marker="o", ls="", ms=4, color=COC, label="CoC-side sets"),
+                               plt.Line2D([], [], marker=".", ls="", ms=5, color=GREY, label="random sets")],
+                      loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3, fontsize=6, handletextpad=0.2,
+                      columnspacing=0.8, borderaxespad=0.2)
+            save(fig, fname)
+        fig, axs = plt.subplots(1, 2, figsize=SINGLE, sharey=False)
+        for ax, key, ylabel in ((axs[0], "dfm_mean", "FM loss increase"), (axs[1], "dnll_mean", "CoC NLL increase")):
+            labels, vals, cols = [], [], []
+            for name in ("q", "mlp"):
+                for st, col in (("Scoc", TRAJ), ("Straj", COC)):
+                    rs = [tb["configs"][f"{name}_late_R{st}{i}"][key] for i in range(3)]
+                    labels += [f"{name}\n{st}", f"{name}\nrand"]
+                    vals += [tb["configs"][f"{name}_late_{st}"][key], float(np.mean(rs))]
+                    cols += [col, GREY]
+            ax.bar(np.arange(len(vals)), vals, color=cols, width=0.8)
+            ax.set_xticks(np.arange(len(vals)), labels, fontsize=4.5)
+            ax.set_ylabel(ylabel, fontsize=7)
+            ax.axhline(0, color="black", lw=0.5)
+        save(fig, "fig5_dual_saves")
+        out["token_ablation"] = {"gates": tb["gates"], "first_order": tb["first_order"], "n_clips": tb["n_clips"]}
+
+    vv = _load(outputs / "vvdepth_v1" / "metrics.json")
+    if vv:
+        cols = {"VV_allvision": "black", "E1_crossframe": TRAJ, "E2_crosscam": "#009E73", "V3_ownimage": ORANGE}
+        labels = {"VV_allvision": "any other vision token", "E1_crossframe": "same-camera earlier frames",
+                  "E2_crosscam": "other cameras", "V3_ownimage": "own image"}
+        fig, ax = plt.subplots(figsize=SINGLE)
+        for e, col in cols.items():
+            d = vv["curves"].get(f"{e}|from")
+            if d:
+                x = [int(c) for c in d]
+                ax.plot(x, [100 * d[str(c)]["ade"]["rel"] for c in x], color=col, lw=1.3, marker="o", ms=2.5, label=labels[e])
+                ax.fill_between(x, [100 * d[str(c)]["ade"]["rel_lo"] for c in x],
+                                [100 * d[str(c)]["ade"]["rel_hi"] for c in x], color=col, alpha=0.10, lw=0)
+        ax.axhspan(-5, 5, color=GREY, alpha=0.15, lw=0)
+        ax.set_xlabel("Vision <- ... blocked from this layer to the last")
+        ax.set_ylabel("minADE change (% of baseline)")
+        ax.set_xticks([0, 6, 12, 18, 24, 30])
+        legend_above(ax, 2)
+        save(fig, "fig5_vv_nested")
+        cuts = vv["cuts"] + [36]
+        centers = [(a + b - 1) / 2 for a, b in zip(cuts[:-1], cuts[1:])]
+        prof = np.array(vv["window_profile"]["VV_allvision"]["ade"])
+        with np.load(outputs / "gradanat_v1" / "anatomy.npz") as z:
+            fig, ax = plt.subplots(figsize=SINGLE)
+            ax.bar(centers, prof / prof.max(), width=2.6, color=GREY, alpha=0.45, lw=0,
+                   label="action damage added by the window")
+            for key, col, label in (("fm_type_q", TRAJ, r"$I_{\mathrm{traj}}$ at vision tokens"),
+                                    ("ce_q", COC, r"$I_{\mathrm{CoC}}$ at vision tokens")):
+                lay = z[key][0].sum(1)
+                w = np.array([lay[a:b].mean() for a, b in zip(cuts[:-1], cuts[1:])])
+                ax.plot(centers, w / w.max(), color=col, lw=1.3, marker="o", ms=2.5, label=label)
+            ax.set_xlabel("VLM layer")
+            ax.set_ylabel("Window profile / its maximum")
+            legend_above(ax, 1)
+            save(fig, "fig5_vv_window_profile")
+        out["vv_depth"] = {k: vv[k] for k in ("C1", "C2", "C3", "C4", "integrity", "window_profile") if k in vv}
+        if "census_layer_mean" in vv:
+            lay = np.array(vv["census_layer_mean"])  # (36, 5)
+            fig, ax = plt.subplots(figsize=SINGLE)
+            ax.stackplot(np.arange(N_L), lay.T, colors=("#BBBBBB", "#DDDDDD", ORANGE, TRAJ, "#009E73"), lw=0,
+                         labels=("sink", "text", "own image", "earlier frames, same camera", "other cameras"))
+            ax.set_xlabel("VLM layer")
+            ax.set_ylabel("Attention mass of vision queries")
+            ax.set_xlim(0, 35)
+            ax.set_ylim(0, 1)
+            legend_above(ax, 3)
+            save(fig, "fig5_vision_census")
+
+    fs = _load(outputs / "failure_by_situation_v1" / "metrics.json")
+    if fs:
+        b4 = ["cruise", "accel", "decel_stop", "turn"]
+        fig, ax = plt.subplots(figsize=SINGLE)
+        for i, (a, col, label) in enumerate((("coc", COC, "CoC-only"), ("traj", TRAJ, "trajectory-only"), ("dual", "#009E73", "dual"))):
+            ax.bar(np.arange(4) + 0.27 * (i - 1), [100 * fs["ALL"][b][a]["rel"] for b in b4], width=0.25, color=col, label=label)
+        ax.set_xticks(np.arange(4), ["cruise", "accelerate", "decelerate\n/ stop", "turn"])
+        ax.set_ylabel("minADE increase (% of dense)")
+        legend_above(ax, 3)
+        save(fig, "fig5_failure_by_manoeuvre")
+        out["failure_by_situation"] = {k: fs[k] for k in ("ALL", "confound", "calib_mass") if k in fs}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs", type=Path, default=REPO / "outputs")
     parser.add_argument("--out-dir", type=Path, default=fc.OUT)
     parser.add_argument("--anatomy", default="gradanat_v1")
     parser.add_argument("--portmap", default="portmap_v1")
+    parser.add_argument("--only-causal", action="store_true",
+                        help="only the fig5_* panels and their stats file; fig3_* / fig4_* stay untouched")
     args = parser.parse_args()
     fc.OUT = args.out_dir
     o = args.outputs
     out = {}
+    causal = {}
+    causal_panels(o, causal)
+    (args.out_dir / "fig5_causal_validation_stats.json").write_text(json.dumps(causal, indent=2))
+    print(f"  {args.out_dir / 'fig5_causal_validation_stats.json'}")
+    if args.only_causal:
+        return
     with np.load(o / "importance_v2" / "importance.npz") as z, \
             np.load(o / "importance_v2" / "importance_perclip.npz") as pc, \
             np.load(o / "jlens_v2" / "jlens.npz") as jl:
