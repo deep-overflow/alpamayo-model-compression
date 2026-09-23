@@ -97,7 +97,8 @@ stubs were removed, so the commands above start clean.
 
 Reusing `run_baseline.py` would re-run the rollout and 8 trajectory samples per clip
 (~14 s/clip, ~12 GPU-hours for seven arms) to get one forward pass. A dedicated script
-is the right tool: **`experiments/evaluation/run_nll_dense.py`** (not yet written).
+is the right tool: **`experiments/evaluation/run_nll_dense.py`** (written 2026-09-23,
+not yet run on a GPU).
 
 Design:
 - Reference text: `gen_coc` from `outputs/baseline_ada_ps_test/*.json` (500 clips, Ada,
@@ -105,26 +106,40 @@ Design:
   `run_baseline.gt_coc_seq`, the same construction the OOD teacher-forced condition uses,
   so the span rule is identical.
 - Per clip: `sample_cache.load_cached` → `analysis_lib.build_inputs` → one forward on
-  `[prompt, reference CoC]` → `cross_entropy` over the CoC span. No sampling.
+  `[prompt, reference CoC]` with `use_cache=False` → per-token `cross_entropy` over the
+  CoC span, stored as its mean. No sampling.
 - Same determinism block as `run_baseline.py`; `--model` accepts `baseline` or a slim dir;
-  `--gpu`, `--shard`/`--n-shards`, `--limit`, resume by `clip_id`.
-- Rows: `clip_id, bucket, nll_dense, ref_len, ref_coc`. Output convention
-  `outputs/nll_dense_<arm>_test/` with `config.json` (model, revision, reference run dir,
-  gpu) and `summary.txt`.
+  `--gpu`, `--shard`/`--n-shards`, `--limit`, resume by `clip_id`, `--ref-run` override.
+- Rows: `clip_id, bucket, nll_dense, n_tok, ref_len, ref_nll_self, ref_empty,
+  ref_degenerate, ref_coc`. Output convention `outputs/nll_dense_<arm>_<set>/` with
+  `config.json` (model, revision, reference run, gpu) and `summary_s*.txt`.
 - Gate before trusting it: **baseline on its own rollout must reproduce `nll_self`**
-  (0.175 mean) up to decode→encode round-trip differences; report the max per-clip gap.
+  (0.175 mean). The spans are identical by construction: the rollout stops on
+  `<|traj_future_start|>` and `nll_self` scored `sequences[:, prompt_len:eos_pos + 1]`,
+  which ends in the same `<|cot_end|>`, `<|traj_future_start|>` pair `gt_coc_seq`
+  appends. The only residual is the decode→encode round trip of the text; the summary
+  line prints the mean and max per-clip gap and how many clips changed span length.
+- Checked offline without a GPU (2026-09-23): the tokenizer rebuilt as
+  `base_model._build_tokenizer` does it (`nvidia/Cosmos-Reason2-8B` processor + 4,000
+  trajectory tokens + special tokens) maps `<|cot_end|>` / `<|traj_future_start|>` to
+  155678 / 155681 as the runner assumes, and re-tokenising every stored `gen_coc` gives
+  exactly `gen_len` on **500/500** clips, with no leftover special markers in the text.
+  The import chain also loads cleanly (`--help`).
 - Cost: ~500 × 1.5 s ≈ 13 min per arm plus a 1–2 min model load; seven arms ≈ 1.7
   GPU-hours, one card.
 
-Launch shape, once the script exists:
+Launch shape:
 
 ```bash
 for m in baseline outputs/slim_wanda_u40_v2 $LP outputs/slim_tyr_u40_r \
          outputs/slim_traj_u40_v2 outputs/slim_coc_u40_v2 outputs/slim_dual_u40_v2; do
   bash $R 1440 experiments/evaluation/run_nll_dense.py --set test --model $m \
-      --ref-run baseline_ada_ps_test --gpu 4 --reserve-gb 26
+      --ref-run baseline_ada_ps_test --gpu 4 --reserve-gb 30
 done
 ```
+
+Sequential on one card is enough at ~15 min per arm; `--reserve-gb 30` covers the
+22.2 GiB unpruned model, and the slim arms fit under it as well.
 
 ## Analysis
 
