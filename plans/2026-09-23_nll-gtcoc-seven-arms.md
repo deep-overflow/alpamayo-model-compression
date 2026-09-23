@@ -1,8 +1,17 @@
 # Plan: CoC NLL for seven arms — reference NLL on OOD-val, dense-reference NLL on test500
 
 Status 2026-09-23 17:26: launched on Ada cards 4–7 on the user's go (the box had been
-held by other members until then). Both tracks below are running from the commands as
-written; 11 launcher processes, one running job per card, the rest waiting on memory.
+held by other members until then). **17:36: track A (OOD-val for wanda / llm-pruner)
+withdrawn on the user's request — test500 only.** Its four shards were stopped after
+2–10 clips; the partial rows under `wanda_u40_v2_tf_oodval/` and `lp_r50_oodval/` are
+resumable by the same commands. Track B runs on all four cards, `traj` split into two
+shards so the tail is balanced; expected done ~18:15.
+
+Two launch lessons recorded here because they cost time: (1) processes launched in the
+same second collide on the per-card memory reservation and, since the retry launcher
+sleeps a fixed 60 s, keep colliding — stagger launches by 20–30 s; (2) `pgrep -f` on a
+launcher pattern matches the shell issuing it — use a bracketed pattern such as
+`run_retry_host.sh 48[0]`.
 
 ## Purpose
 
