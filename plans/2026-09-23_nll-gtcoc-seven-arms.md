@@ -1,7 +1,8 @@
 # Plan: CoC NLL for seven arms — reference NLL on OOD-val, dense-reference NLL on test500
 
-Status 2026-09-23: **plan only. No GPU run is launched**; the box is needed by another
-member. Everything below that needs a card is written as a command to run later.
+Status 2026-09-23 17:26: launched on Ada cards 4–7 on the user's go (the box had been
+held by other members until then). Both tracks below are running from the commands as
+written; 11 launcher processes, one running job per card, the rest waiting on memory.
 
 ## Purpose
 
@@ -143,12 +144,13 @@ Sequential on one card is enough at ~15 min per arm; `--reserve-gb 30` covers th
 
 ## Analysis
 
-`experiments/evaluation/nll_gtcoc_table.py` (written, CPU only) builds the OOD-val
-column: per-arm mean / median / sd, paired Δ vs baseline with bootstrap 95% CI of the
-mean (10,000 draws, seed 0) and Wilcoxon, share of clips worse, per-bucket means, one
-plot. Arms without rows are listed as pending, so it is rebuilt as runs land. The
-test500 column gets the same treatment once `run_nll_dense.py` exists; the two columns
-are then reported side by side, with the `coc` vs `traj` order called out.
+`experiments/evaluation/nll_table.py --metric {nll_gtcoc,nll_dense}` (CPU only) builds
+either column with one format: per-arm mean / median / sd, paired Δ vs baseline with
+bootstrap 95% CI of the mean (10,000 draws, seed 0) and Wilcoxon, share of clips worse,
+per-bucket means, one plot, into `outputs/<metric>_table/`. Arms without rows are listed
+as pending, so it is rebuilt as runs land. For `nll_dense` it also prints the round-trip
+gate (baseline `nll_dense` minus stored `nll_self`, mean and max over clips). The two
+columns are then reported side by side, with the `coc` vs `traj` order called out.
 
 ## Confounds held fixed
 
