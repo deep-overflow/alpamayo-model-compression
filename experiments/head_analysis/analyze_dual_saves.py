@@ -108,39 +108,103 @@ def analyse(clips, buckets, per, prefixes, lines, gates, tag):
     return d, base
 
 
+def analyse_addback(clips, buckets, per, lines, gates):
+    """Part 2: the sets switched back ON inside the single-criterion arm. d = config - dense per
+    clip; recovery = 1 - mean d(arm+X) / mean d(arm)."""
+    per = {("dense" if c == "dense" else c.replace("arm_", "")): v for c, v in per.items()}
+    dense = per["dense"]
+    base = {k: float(np.nanmean(dense[k])) for k in ("nll", "fm", "ade")}
+    d = {c: {k: per[c][k] - dense[k] for k in ("nll", "fm", "ade")} for c in per if c != "dense"}
+    lines.append(f"\n[add-back] dense: FM {base['fm']:.4f} NLL {base['nll']:.4f} minADE {base['ade']:.3f}; n = {len(clips)} clips")
+    lines.append(f"{'config':18s} {'dFM mean [CI]':>28s} {'rel':>7s} {'recov':>6s} {'dNLL mean [CI]':>28s} {'rel':>7s} {'recov':>6s} "
+                 f"{'dminADE mean [CI]':>26s} {'recov':>6s}   rel dFM by manoeuvre (cruise/accel/decel_stop/turn)")
+    out = {}
+    for arm, S, M, R in (("trajarm", "Straj", "MStraj", ("RStraj0", "RStraj1", "RStraj2")),
+                         ("cocarm", "Scoc", "MScoc", ("RScoc0", "RScoc1", "RScoc2"))):
+        if arm not in d:
+            continue
+        names = [arm] + [f"{arm}+{x}" for x in (S, M) + R]
+        for c in names:
+            if c not in d:
+                continue
+            cells = []
+            for k in ("fm", "nll", "ade"):
+                m = ci(d[c][k])
+                rec = 1 - m[0] / d[arm][k].mean() if c != arm and d[arm][k].mean() != 0 else 0.0
+                cells.append((m, rec))
+                out[f"{c}:{k}"] = {"mean": m[0], "lo": m[1], "hi": m[2], "recovery": rec}
+            byb = " ".join(f"{np.nanmean(d[c]['fm'][buckets == b]) / np.nanmean(dense['fm'][buckets == b]):+.1%}" for b in ("cruise", "accel", "decel_stop", "turn"))
+            (f, rf), (n_, rn), (a, ra) = cells
+            lines.append(f"{c:18s} {f[0]:+.4f} [{f[1]:+.4f},{f[2]:+.4f}] {f[0] / base['fm']:+6.1%} {rf:+6.0%} {n_[0]:+.4f} [{n_[1]:+.4f},{n_[2]:+.4f}] {n_[0] / base['nll']:+6.1%} {rn:+6.0%} "
+                         f"{a[0]:+.3f} [{a[1]:+.3f},{a[2]:+.3f}] {ra:+6.0%}   {byb}")
+        cS, cM = f"{arm}+{S}", f"{arm}+{M}"
+        if cS not in d or cM not in d:
+            continue
+        # one-sided: the S add-back leaves LESS damage than the control (control - S > 0)
+        p_fm_M = wil(d[cM]["fm"], d[cS]["fm"])
+        p_fm_R = max(wil(d[f"{arm}+{r}"]["fm"], d[cS]["fm"]) for r in R)
+        p_ade_M = wil(d[cM]["ade"], d[cS]["ade"])
+        p_ade_R = max(wil(d[f"{arm}+{r}"]["ade"], d[cS]["ade"]) for r in R)
+        rmean_nll = np.mean([d[f"{arm}+{r}"]["nll"] for r in R], 0)
+        p_nll_S_lower = wil(rmean_nll, d[cS]["nll"])  # S recovers more NLL than random?
+        g = {"fm_vs_matched_p": p_fm_M, "fm_vs_random_max_p": p_fm_R, "ade_vs_matched_p": p_ade_M, "ade_vs_random_max_p": p_ade_R,
+             "nll_S_recovers_more_than_random_p": p_nll_S_lower}
+        if arm == "trajarm":
+            g["A1"] = p_fm_M < 0.01 and p_fm_R < 0.01
+            g["A2"] = p_ade_M < 0.05 and p_ade_R < 0.05
+            lines.append(f"  gates add-back traj-side: A1 {'PASS' if g['A1'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}) | "
+                         f"A2 {'PASS' if g['A2'] else 'FAIL'} (minADE: p={p_ade_M:.2g} / {p_ade_R:.2g}) | A3 NLL: S recovers more than random p={p_nll_S_lower:.2g}")
+        else:
+            g["A4"] = p_fm_M < 0.01 and p_fm_R < 0.01 and p_nll_S_lower >= 0.05
+            lines.append(f"  gates add-back coc-side: A4 {'PASS' if g['A4'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}; "
+                         f"NLL recovery beyond random p={p_nll_S_lower:.2g}, pass if >= 0.05)")
+        gates[f"add-back:{arm}"] = g
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--per-axis", nargs="+", required=True)
+    ap.add_argument("--per-axis", nargs="*", default=[])
     ap.add_argument("--joint", nargs="*", default=[])
+    ap.add_argument("--addback", nargs="*", default=[], help="shards of the add-back run (run_token_ablation --arm-masks)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out = REPO / "outputs" / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
-    lines, gates, results = ["dual-saves trunk ablation -- " + ", ".join(args.per_axis)], {}, {}
-    clips, buckets, per = merge(args.per_axis)
-    prefixes = sorted({c.rsplit("_", 1)[0] for c in per if c != "dense"})
-    d, base = analyse(clips, buckets, per, prefixes, lines, gates, "per-axis")
-    results["per_axis"] = {c: {k: ci(v) for k, v in dd.items()} for c, dd in d.items()}
+    lines, gates, results = ["dual-saves trunk ablation -- " + ", ".join(args.per_axis + args.joint + args.addback)], {}, {}
+    n_clips = 0
+    if args.per_axis:
+        clips, buckets, per = merge(args.per_axis)
+        n_clips = len(clips)
+        prefixes = sorted({c.rsplit("_", 1)[0] for c in per if c != "dense"})
+        d, base = analyse(clips, buckets, per, prefixes, lines, gates, "per-axis")
+        results["per_axis"] = {c: {k: ci(v) for k, v in dd.items()} for c, dd in d.items()}
+        # plot: dFM per config, grouped by prefix
+        fig, axes = plt.subplots(1, len(prefixes), figsize=(3.2 * len(prefixes), 3.4), squeeze=False)
+        for ax, pre in zip(axes[0], prefixes):
+            names = [n for n in ("Straj", "MStraj", "RStraj0", "RStraj1", "RStraj2", "Scoc", "MScoc", "RScoc0", "RScoc1", "RScoc2") if f"{pre}_{n}" in d]
+            vals = [ci(d[f"{pre}_{n}"]["fm"]) for n in names]
+            cols = ["#2a78d6" if n == "Straj" else "#9ec3f0" if n == "MStraj" else "#e87ba4" if n == "Scoc" else "#f5c0d3" if n == "MScoc" else "#bbbbbb" for n in names]
+            ax.bar(range(len(names)), [v[0] / base["fm"] for v in vals], color=cols,
+                   yerr=[[(v[0] - v[1]) / base["fm"] for v in vals], [(v[2] - v[0]) / base["fm"] for v in vals]], capsize=2)
+            ax.set_xticks(range(len(names))); ax.set_xticklabels(names, rotation=60, fontsize=7); ax.set_title(pre, fontsize=9)
+            ax.axhline(0, color="black", lw=0.6); ax.set_ylabel("dFM / dense FM")
+        fig.tight_layout(); fig.savefig(out / "plots" / "dfm_by_config.png", dpi=150); plt.close(fig)
     if args.joint:
         cj, bj, pj = merge(args.joint)
+        n_clips = n_clips or len(cj)
         pj = {("dense" if c == "dense" else c.replace("arm_", "")): v for c, v in pj.items()}
         prefixes_j = sorted({c.rsplit("_", 1)[0] for c in pj if c != "dense"})
         dj, _ = analyse(cj, bj, pj, prefixes_j, lines, gates, "joint")
         results["joint"] = {c: {k: ci(v) for k, v in dd.items()} for c, dd in dj.items()}
-    # plot: dFM per config, grouped by prefix
-    fig, axes = plt.subplots(1, len(prefixes), figsize=(3.2 * len(prefixes), 3.4), squeeze=False)
-    for ax, pre in zip(axes[0], prefixes):
-        names = [n for n in ("Straj", "MStraj", "RStraj0", "RStraj1", "RStraj2", "Scoc", "MScoc", "RScoc0", "RScoc1", "RScoc2") if f"{pre}_{n}" in d]
-        vals = [ci(d[f"{pre}_{n}"]["fm"]) for n in names]
-        cols = ["#2a78d6" if n == "Straj" else "#9ec3f0" if n == "MStraj" else "#e87ba4" if n == "Scoc" else "#f5c0d3" if n == "MScoc" else "#bbbbbb" for n in names]
-        ax.bar(range(len(names)), [v[0] / base["fm"] for v in vals], color=cols,
-               yerr=[[(v[0] - v[1]) / base["fm"] for v in vals], [(v[2] - v[0]) / base["fm"] for v in vals]], capsize=2)
-        ax.set_xticks(range(len(names))); ax.set_xticklabels(names, rotation=60, fontsize=7); ax.set_title(pre, fontsize=9)
-        ax.axhline(0, color="black", lw=0.6); ax.set_ylabel("dFM / dense FM")
-    fig.tight_layout(); fig.savefig(out / "plots" / "dfm_by_config.png", dpi=150); plt.close(fig)
+    if args.addback:
+        ca, ba, pa = merge(args.addback)
+        n_clips = n_clips or len(ca)
+        results["addback"] = analyse_addback(ca, ba, pa, lines, gates)
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
-    (out / "metrics.json").write_text(json.dumps({"gates": gates, "results": results, "n_clips": len(clips)}, indent=1, default=float))
-    (out / "config.json").write_text(json.dumps({"per_axis": args.per_axis, "joint": args.joint, "plan": "plans/2026-09-24_dual-saves-trunk.md"}, indent=2))
+    (out / "metrics.json").write_text(json.dumps({"gates": gates, "results": results, "n_clips": n_clips}, indent=1, default=float))
+    (out / "config.json").write_text(json.dumps({"per_axis": args.per_axis, "joint": args.joint, "addback": args.addback,
+                                                 "plan": "plans/2026-09-24_dual-saves-trunk.md"}, indent=2))
     print("\n".join(lines))
 
 

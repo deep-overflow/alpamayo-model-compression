@@ -93,3 +93,48 @@ about 70 min end to end. Disk: a few MB per shard.
 `outputs/tokabl_trunk_v1_s{0..3}`, `outputs/tokabl_trunkjoint_v1_s{0..3}`,
 `outputs/dual_saves_trunk_v1/{summary.txt,metrics.json,config.json,plots/}`; findings appended to
 `paper-analysis/2026-09-24_arm_failure_cases.md`.
+
+## Part 1 result (per-axis, 2026-09-24): H not supported in the dense model
+
+Removing Straj from the dense model leaves the action channel unchanged on every band and axis
+(dFM +0.2–0.3%, dminADE +0.025 MLP / −0.039 Q, all CIs include 0; random sets of the same size
+hurt FM more, up to +2.7% for Q heads). Only the language channel moves: MLP Straj dNLL +1.7%
+against −0.1% for the matched control. G1–G4 FAIL. Joint (both-axis) run pending.
+
+## Part 2: the same question in the PRUNED context (add-back)
+
+A unit's function can be invisible when every redundant partner is intact (the 2026-09-21 round:
+one-edge-at-a-time knockouts understate redundant edges). The decisive form of the question is
+therefore: inside the trajectory-only arm, does switching the Straj units back on repair its
+trajectory damage more than switching on the same number of other dropped units?
+Masks: `experiments/head_analysis/make_addback_masks.py` → `outputs/tokabl_sets_trunk_v1/addback/`
+(controls drawn from the arm's own removed trunk units: MStraj matched per unit on pooled
+I_traj, three random draws; every add-back restores +46 Q heads and +15,592 channels).
+
+Gates (paired per clip, d = config − dense on the same clip):
+- A1: d(trajarm+Straj) < d(trajarm+MStraj) and < every d(trajarm+RStraj_i) on FM, one-sided
+  Wilcoxon p < 0.01; A2: the same on minADE, p < 0.05.
+- A3 (reported): NLL recovery of trajarm+Straj vs the controls (expected largest for Straj).
+- A4 (mirror): d(cocarm+Scoc) < controls on FM (p < 0.01) with NLL recovery no larger than
+  the controls'.
+Reading: A1 + A2 pass → the union's extra trunk units carry trajectory function that only shows
+once the arm's redundancy is gone (H holds in the pruned context, not in the dense one). Fail →
+the trunk units dual keeps over the trajectory arm are language-only; dual's action-channel
+advantage is attributed to the trunk–late interaction and reported as such.
+
+```bash
+cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+A=outputs/tokabl_sets_trunk_v1/addback
+for s in 0 1 2 3; do
+  ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 150 experiments/head_analysis/run_token_ablation.py \
+      --exp-id tokabl_addback_v1_s$s --shard $s --n-shards 4 --gpu $((4 + s)) --arm-masks \
+      trajarm=$A/trajarm.npz trajarm+Straj=$A/trajarm+Straj.npz trajarm+MStraj=$A/trajarm+MStraj.npz \
+      trajarm+RStraj0=$A/trajarm+RStraj0.npz trajarm+RStraj1=$A/trajarm+RStraj1.npz trajarm+RStraj2=$A/trajarm+RStraj2.npz \
+      cocarm=$A/cocarm.npz cocarm+Scoc=$A/cocarm+Scoc.npz cocarm+MScoc=$A/cocarm+MScoc.npz \
+      cocarm+RScoc0=$A/cocarm+RScoc0.npz cocarm+RScoc1=$A/cocarm+RScoc1.npz cocarm+RScoc2=$A/cocarm+RScoc2.npz \
+      > outputs/tokabl_addback_v1_s$s.launch.log 2>&1 &
+done
+```
+Cost: 12 whole-arm configs, all sampled at K = 8 ≈ 60 s per clip → 25 clips per shard ≈ 25 min on
+Ada 4–7. Analysis: `analyze_dual_saves.py --addback tokabl_addback_v1_s0 … --out dual_saves_addback_v1`
+(to be added to the analyzer).
