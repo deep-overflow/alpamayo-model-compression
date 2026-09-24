@@ -81,10 +81,16 @@ def main():
     out = REPO / "outputs" / args.sets / "addback"
     out.mkdir(parents=True, exist_ok=True)
     lines, meta = [], {}
-    for arm, sname, key in (("traj", "Straj", "fm_full"), ("coc", "Scoc", "ce_full")):
+    for arm, sname, key, trunk_only in (("traj", "Straj", "fm_full", False), ("coc", "Scoc", "ce_full", False),
+                                        ("traj", "Straj", "fm_full", True), ("coc", "Scoc", "ce_full", True)):
         base = {ax: kept(arm, ax, n) for ax, n in (("q", 32), ("mlp", 12288))}
-        np.savez(out / f"{arm}arm.npz", q_mask=base["q"].astype(np.float32), mlp_mask=base["mlp"].astype(np.float32))
-        lines.append(f"{arm}arm: kept q {int(base['q'].sum())} mlp {int(base['mlp'].sum())}")
+        tag = f"{arm}trunk" if trunk_only else f"{arm}arm"
+        if trunk_only:  # the arm's trunk selection with every late layer intact (armheld_v1's band masks)
+            for m in base.values():
+                m[span[1]:] = True
+        np.savez(out / f"{tag}.npz", q_mask=base["q"].astype(np.float32), mlp_mask=base["mlp"].astype(np.float32))
+        lines.append(f"{tag}: kept q {int(base['q'].sum())} mlp {int(base['mlp'].sum())}")
+        arm = tag
         adds = {}
         for ax in ("q", "mlp"):
             S = sets[f"{ax}_{args.band}_{sname}"] == 0  # the set's units (removed in the ablation)
@@ -98,11 +104,11 @@ def main():
                 adds.setdefault(f"R{sname}{i}", {})[ax] = random_from_pool(S.sum(1), pool, span, np.random.default_rng([4000 + i, span[0], ax == "q"]))
         for name, m in adds.items():
             keep = {ax: base[ax] | m[ax] for ax in ("q", "mlp")}
-            np.savez(out / f"{arm}arm+{name}.npz", q_mask=keep["q"].astype(np.float32), mlp_mask=keep["mlp"].astype(np.float32))
-            meta[f"{arm}arm+{name}"] = {ax: {"added": int(m[ax].sum()), "added_I_traj_share": float((z[f"fm_full_{ax}"][span[0]:span[1]] * m[ax][span[0]:span[1]]).sum() / z[f"fm_full_{ax}"][span[0]:span[1]].sum()),
-                                            "added_I_CoC_share": float((z[f"ce_full_{ax}"][span[0]:span[1]] * m[ax][span[0]:span[1]]).sum() / z[f"ce_full_{ax}"][span[0]:span[1]].sum())} for ax in ("q", "mlp")}
-            mm = meta[f"{arm}arm+{name}"]
-            lines.append(f"{arm}arm+{name:8s}: +q {mm['q']['added']:3d} (band I_traj {mm['q']['added_I_traj_share']:.3f} I_CoC {mm['q']['added_I_CoC_share']:.3f}) "
+            np.savez(out / f"{arm}+{name}.npz", q_mask=keep["q"].astype(np.float32), mlp_mask=keep["mlp"].astype(np.float32))
+            meta[f"{arm}+{name}"] = {ax: {"added": int(m[ax].sum()), "added_I_traj_share": float((z[f"fm_full_{ax}"][span[0]:span[1]] * m[ax][span[0]:span[1]]).sum() / z[f"fm_full_{ax}"][span[0]:span[1]].sum()),
+                                         "added_I_CoC_share": float((z[f"ce_full_{ax}"][span[0]:span[1]] * m[ax][span[0]:span[1]]).sum() / z[f"ce_full_{ax}"][span[0]:span[1]].sum())} for ax in ("q", "mlp")}
+            mm = meta[f"{arm}+{name}"]
+            lines.append(f"{arm}+{name:8s}: +q {mm['q']['added']:3d} (band I_traj {mm['q']['added_I_traj_share']:.3f} I_CoC {mm['q']['added_I_CoC_share']:.3f}) "
                          f"+mlp {mm['mlp']['added']:6d} (band I_traj {mm['mlp']['added_I_traj_share']:.3f} I_CoC {mm['mlp']['added_I_CoC_share']:.3f})")
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     (out / "meta.json").write_text(json.dumps({"sets": args.sets, "band": args.band, "anatomy": args.anatomy, "configs": meta}, indent=1))

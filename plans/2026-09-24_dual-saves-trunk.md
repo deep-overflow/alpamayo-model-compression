@@ -94,12 +94,18 @@ about 70 min end to end. Disk: a few MB per shard.
 `outputs/dual_saves_trunk_v1/{summary.txt,metrics.json,config.json,plots/}`; findings appended to
 `paper-analysis/2026-09-24_arm_failure_cases.md`.
 
-## Part 1 result (per-axis, 2026-09-24): H not supported in the dense model
+## Part 1 result (2026-09-24): H not supported in the dense model
 
 Removing Straj from the dense model leaves the action channel unchanged on every band and axis
-(dFM +0.2–0.3%, dminADE +0.025 MLP / −0.039 Q, all CIs include 0; random sets of the same size
-hurt FM more, up to +2.7% for Q heads). Only the language channel moves: MLP Straj dNLL +1.7%
-against −0.1% for the matched control. G1–G4 FAIL. Joint (both-axis) run pending.
+(per-axis dFM +0.2–0.3%, dminADE +0.025 MLP / −0.039 Q; joint both-axis dFM +0.5%
+[−0.4%, +1.3%], dminADE −0.032 [−0.092, +0.015]; random sets of the same size hurt FM more, up to
++2.7% per-axis and +3.2% joint). Only the language channel moves: joint Straj dNLL +4.5%
+[+2.3%, +6.8%] against +1.2% for the matched control and +1.3–2.7% for random (G5 p = 0.016);
+MLP-only Straj +1.7% vs −0.1%. Scoc moves nothing (joint dFM +0.2%, dNLL +0.6%). G1–G4 FAIL
+in every condition (`outputs/dual_saves_trunk_v1/summary.txt`). In the dense model the units dual
+keeps over the trajectory arm are language units with no measurable trajectory function, which
+is what their low first-order trajectory score predicts. Whether they matter once the arm's other
+units are gone is part 2.
 
 ## Part 2: the same question in the PRUNED context (add-back)
 
@@ -122,6 +128,13 @@ once the arm's redundancy is gone (H holds in the pruned context, not in the den
 the trunk units dual keeps over the trajectory arm are language-only; dual's action-channel
 advantage is attributed to the trunk–late interaction and reported as such.
 
+Two contexts per side: the shipped arm (trunk and late pruned; its FM damage on these clips is
++6.6% traj / +15.8% coc) and the arm's trunk-only mask with every late layer intact (`trajtrunk`,
+`coctrunk`; the condition of `armheld_v1`, where the band-level gap was +26.1% traj vs +4.8% dual
+and +17.0% coc). In the trunk-only context dual's trunk differs from the arm's only by the swap
+Straj ↔ (units the arm kept and dual dropped), so `trajtrunk+Straj` versus `trajtrunk+MStraj`
+says whether restoring Straj is what closes that gap.
+
 ```bash
 cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
 A=outputs/tokabl_sets_trunk_v1/addback
@@ -132,9 +145,12 @@ for s in 0 1 2 3; do
       trajarm+RStraj0=$A/trajarm+RStraj0.npz trajarm+RStraj1=$A/trajarm+RStraj1.npz trajarm+RStraj2=$A/trajarm+RStraj2.npz \
       cocarm=$A/cocarm.npz cocarm+Scoc=$A/cocarm+Scoc.npz cocarm+MScoc=$A/cocarm+MScoc.npz \
       cocarm+RScoc0=$A/cocarm+RScoc0.npz cocarm+RScoc1=$A/cocarm+RScoc1.npz cocarm+RScoc2=$A/cocarm+RScoc2.npz \
+      trajtrunk=$A/trajtrunk.npz trajtrunk+Straj=$A/trajtrunk+Straj.npz trajtrunk+MStraj=$A/trajtrunk+MStraj.npz trajtrunk+RStraj0=$A/trajtrunk+RStraj0.npz \
+      coctrunk=$A/coctrunk.npz coctrunk+Scoc=$A/coctrunk+Scoc.npz coctrunk+MScoc=$A/coctrunk+MScoc.npz coctrunk+RScoc0=$A/coctrunk+RScoc0.npz \
       > outputs/tokabl_addback_v1_s$s.launch.log 2>&1 &
 done
+.venv/bin/python experiments/head_analysis/analyze_dual_saves.py \
+    --addback tokabl_addback_v1_s0 tokabl_addback_v1_s1 tokabl_addback_v1_s2 tokabl_addback_v1_s3 --out dual_saves_addback_v1
 ```
-Cost: 12 whole-arm configs, all sampled at K = 8 ≈ 60 s per clip → 25 clips per shard ≈ 25 min on
-Ada 4–7. Analysis: `analyze_dual_saves.py --addback tokabl_addback_v1_s0 … --out dual_saves_addback_v1`
-(to be added to the analyzer).
+Cost: 20 whole-arm configs, all sampled at K = 8 ≈ 95 s per clip → 25 clips per shard ≈ 40 min on
+Ada 4–7.

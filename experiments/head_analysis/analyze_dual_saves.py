@@ -120,9 +120,12 @@ def analyse_addback(clips, buckets, per, lines, gates):
                  f"{'dminADE mean [CI]':>26s} {'recov':>6s}   rel dFM by manoeuvre (cruise/accel/decel_stop/turn)")
     out = {}
     for arm, S, M, R in (("trajarm", "Straj", "MStraj", ("RStraj0", "RStraj1", "RStraj2")),
-                         ("cocarm", "Scoc", "MScoc", ("RScoc0", "RScoc1", "RScoc2"))):
+                         ("cocarm", "Scoc", "MScoc", ("RScoc0", "RScoc1", "RScoc2")),
+                         ("trajtrunk", "Straj", "MStraj", ("RStraj0", "RStraj1", "RStraj2")),
+                         ("coctrunk", "Scoc", "MScoc", ("RScoc0", "RScoc1", "RScoc2"))):
         if arm not in d:
             continue
+        R = tuple(r for r in R if f"{arm}+{r}" in d)
         names = [arm] + [f"{arm}+{x}" for x in (S, M) + R]
         for c in names:
             if c not in d:
@@ -149,14 +152,14 @@ def analyse_addback(clips, buckets, per, lines, gates):
         p_nll_S_lower = wil(rmean_nll, d[cS]["nll"])  # S recovers more NLL than random?
         g = {"fm_vs_matched_p": p_fm_M, "fm_vs_random_max_p": p_fm_R, "ade_vs_matched_p": p_ade_M, "ade_vs_random_max_p": p_ade_R,
              "nll_S_recovers_more_than_random_p": p_nll_S_lower}
-        if arm == "trajarm":
+        if arm.startswith("traj"):
             g["A1"] = p_fm_M < 0.01 and p_fm_R < 0.01
             g["A2"] = p_ade_M < 0.05 and p_ade_R < 0.05
-            lines.append(f"  gates add-back traj-side: A1 {'PASS' if g['A1'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}) | "
+            lines.append(f"  gates add-back {arm} traj-side: A1 {'PASS' if g['A1'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}) | "
                          f"A2 {'PASS' if g['A2'] else 'FAIL'} (minADE: p={p_ade_M:.2g} / {p_ade_R:.2g}) | A3 NLL: S recovers more than random p={p_nll_S_lower:.2g}")
         else:
             g["A4"] = p_fm_M < 0.01 and p_fm_R < 0.01 and p_nll_S_lower >= 0.05
-            lines.append(f"  gates add-back coc-side: A4 {'PASS' if g['A4'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}; "
+            lines.append(f"  gates add-back {arm} coc-side: A4 {'PASS' if g['A4'] else 'FAIL'} (FM: S below matched p={p_fm_M:.2g}, below random max p={p_fm_R:.2g}; "
                          f"NLL recovery beyond random p={p_nll_S_lower:.2g}, pass if >= 0.05)")
         gates[f"add-back:{arm}"] = g
     return out
