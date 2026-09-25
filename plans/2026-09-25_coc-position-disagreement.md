@@ -2,8 +2,10 @@
 
 Stored-data analysis (`experiments/head_analysis/analyze_coc_position_heads.py`, calib_100 anatomy
 `outputs/gradanat_v1`, Q heads) of the one exception in `fig4_same_token5_q_head`: with both scores
-restricted to one position type, the late-band rank agreement is 0.79 (vision), 0.81 (prompt
-text), 0.94 (ego history) but 0.41 at generated-CoC positions, and 0.42 in layers 0–21.
+restricted to one position type, the late-band rank agreement (raw Spearman on the 100-clip
+means; ceiling-corrected in parentheses) is 0.72 (0.79) at vision, 0.75 (0.81) at prompt-text,
+0.86 (0.94) at ego-history but 0.36 (0.41) at generated-CoC positions, and 0.42 (0.47) in layers
+0–21. Numbers below are raw unless marked corrected.
 
 ## What is ruled out
 
