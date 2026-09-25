@@ -24,8 +24,8 @@ from scipy.stats import spearmanr
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 sys.path.insert(0, str(Path(__file__).parent))
-import eval_lib as el  # noqa: E402
-import sample_cache as sc  # noqa: E402
+import eval_lib as el
+import sample_cache as sc
 
 VIS, HIST, PT, COC, SINK = range(5)
 TYPES = ("vision", "hist", "prompt", "CoC", "sink")
@@ -96,7 +96,7 @@ def main():
     diff = rT - rC
     K = 6
     print("\n1. Q heads at CoC positions: T-fav = top-6 per layer by rank(I_traj@CoC) - rank(I_CoC@CoC); C-fav = bottom-6")
-    for bname, layers in (("0-21", range(0, 22)), ("22-34", range(22, 35))):
+    for bname, layers in (("0-21", range(22)), ("22-34", range(22, 35))):
         rows = {"T-fav": [], "C-fav": []}
         for l in layers:
             order = np.argsort(diff[l])
