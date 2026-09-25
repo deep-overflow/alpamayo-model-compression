@@ -63,8 +63,26 @@ the CE-favoured "next-token heads" carry, and it is absent from `I_traj` by cons
    ≥ 0.7 (like the other positions) while vs the own-token path stays ≤ 0.45. Pass → the exception
    is the loss-evaluation path, and the paper can say the two scores agree wherever they read a
    position through the same interface.
-2. **Attention targets at CoC queries** (eager-attention census as `run_vision_census.py` but
-   for CoC-token queries, ~15 min): per head, mass on vision / ego-history / prompt / earlier CoC /
-   sink keys. Gate: FM-favoured heads put more mass on vision + ego-history keys than CE-favoured
-   heads (grounding the reasoning for the expert), CE-favoured heads more on prompt + earlier CoC
-   keys (language continuation). This is the "what do they do" half.
+2. **Attention targets at CoC queries** (`run_coc_census.py`, eager-attention census as
+   `run_vision_census.py` but for CoC-token queries, same calib_100 clips and rollout seeds as the
+   anatomy): per head and layer, the mean attention mass of the CoC queries on sink / vision /
+   ego-history / prompt / earlier-CoC / self keys. Analysis `analyze_coc_census.py` joins it with
+   the same-position scores. Gates (per band 0–21 and 22–34, one-sided Mann–Whitney over heads):
+   G-A FM-favoured heads put more mass on vision + ego-history keys than CE-favoured heads
+   (p < 0.01); G-B CE-favoured heads put more on prompt + earlier-CoC keys (p < 0.01). Continuous
+   check: within-layer Spearman of each key-group mass with `I_traj`@CoC and `I_CoC`@CoC.
+   Reading: both pass → the FM-favoured heads ground the reasoning tokens in the scene for the
+   expert, the CE-favoured heads continue the text; that is the mechanism behind the exception.
+   One or both fail → the two groups read the same keys and differ in what they write, which the
+   path split (test 1) would then have to carry alone.
+
+   ```bash
+   cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+   for s in 0 1; do
+     ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_coc_census.py \
+         --exp-id coc_census_v1_s$s --shard $s --n-shards 2 --gpu $((4 + s)) > outputs/coc_census_v1_s$s.launch.log 2>&1 &
+   done
+   .venv/bin/python experiments/head_analysis/analyze_coc_census.py --shards coc_census_v1_s0 coc_census_v1_s1 --out coc_census_v1
+   ```
+   Cost: rollout + one eager forward per clip ≈ 10 s → 50 clips per shard ≈ 10 min on two Ada
+   cards; 3 MB of output.
