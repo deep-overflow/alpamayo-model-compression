@@ -226,6 +226,36 @@ through the heads whose CoC-position outputs the action needs (B). Analyzer
 `analyze_coc_query_census.py`; token-category importance in `analyze_coc_token_importance.py`
 (`outputs/coc_tokimp_v1/`); notes in `paper-analysis/2026-09-25_coc_token_importance.md`.
 
+## D. Which text tokens carry I_FM (`run_text_position_anatomy.py` → `analyze_text_position_anatomy.py`, calib_100; prepared 2026-09-26, launch on the user's go)
+
+Known from the anatomy (additive split of the shipped gate gradient, Q heads): I_FM's mass is
+vision 0.62 / hist 0.10 / prompt text 0.17 / CoC 0.11 in layers 0–21 and vision 0.31 / hist 0.10 /
+prompt text 0.21 / CoC 0.38 in 22–34 (I_CE: 0.50 / 0.04 / 0.24 / 0.22 and 0.05 / 0.00 / 0.42 /
+0.53). The CoC part is resolved to the token (A: boundary tokens). The prompt text (157 tokens:
+chat markers, the system sentence, 32 vision markers, camera text, the two history markers, the
+instruction sentence, `<|cot_start|>`) and the 48 ego-history tokens are not. D gives every
+non-vision position its own typed gate (vision stays one type; MLP not kept per position).
+
+Readings, with the prediction stated before the run:
+- D1 role weighting: share of I_FM by prompt role vs token share. Prediction from A: the
+  boundary/marker tokens (`<|cot_start|>`, `<|traj_history_end|>`, the `<|vision_end|>`s) carry a
+  disproportionate share; the instruction and system sentences carry little. I_CE alongside.
+- D2 ego-history recency: I_FM share over the 48 history tokens by index; prediction: the last
+  tokens (most recent motion) carry more than the first (last 8 / first 8 > 1.5).
+- D3 same-role agreement: I_FM vs I_CE within each prompt role (raw / corrected). Prediction:
+  ≥ 0.70 corrected on every role with ≥ 5 tokens (no second CoC-like exception hidden inside the
+  pooled prompt-text 0.75 / 0.81); if a role falls below, name it.
+
+```bash
+cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+for s in 0 1 2 3; do
+  ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 60 experiments/head_analysis/run_text_position_anatomy.py \
+      --exp-id textpos_v1_s$s --shard $s --n-shards 4 --gpu $((4 + s)) > outputs/textpos_v1_s$s.launch.log 2>&1 &
+done
+.venv/bin/python experiments/head_analysis/analyze_text_position_anatomy.py --shards textpos_v1_s0 textpos_v1_s1 textpos_v1_s2 textpos_v1_s3 --out textpos_v1
+```
+Cost as A: ~3 min per shard on Ada 4–7 (44 GB reserved), ~130 MB of per-clip arrays per loss.
+
 ## Proposed C (not launched — on the user's go): make the boundary-token reading causal
 
 A's 63–75% is a gradient share. Two cheap position-level knockouts would make it a cause:
