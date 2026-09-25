@@ -86,8 +86,6 @@ def main():
     model.vlm.enable_input_require_grads()
     tc = model.vlm.config.text_config
     layers = model.vlm.model.language_model.layers
-    gates = pl.TypedUnitGates(layers, tc.num_attention_heads, tc.head_dim, tc.intermediate_size,
-                              len(TYPES), "cuda", mlp=not args.no_mlp)
 
     (out_dir / "config.json").write_text(json.dumps({
         "model": "nvidia/Alpamayo-1.5-10B", "model_revision": MODEL_REV,
@@ -100,7 +98,7 @@ def main():
     per = {"q_full": [], "q_direct": [], "mlp_coc_full": [], "mlp_coc_direct": [], "mlp_pool_full": [], "mlp_pool_direct": []}
     rows, done = [], []
 
-    def ce_backward(inputs, seq_tf, coc_start, coc_end, detach_coc):
+    def ce_backward(gates, inputs, seq_tf, coc_start, coc_end, detach_coc):
         handles = []
         if detach_coc:
             def hook(module, inp, out):
@@ -135,9 +133,15 @@ def main():
         coc_start, coc_end = prompt_len, roll["eos_pos"] + 1
         seq_tf = roll["sequences"][:, :coc_end]
         del roll
+        # the gates go on AFTER the rollout (their hooks index a fixed (T,) type vector, which a
+        # growing generation cannot use) and come off after the clip, as in run_gradient_anatomy
+        gates = pl.TypedUnitGates(layers, tc.num_attention_heads, tc.head_dim, tc.intermediate_size,
+                                  len(TYPES), "cuda", mlp=not args.no_mlp)
         gates.set_types(token_types(model, seq_tf, prompt_len).to("cuda"))
-        nll_f, q_f, m_f = ce_backward(inputs, seq_tf, coc_start, coc_end, False)
-        nll_d, q_d, m_d = ce_backward(inputs, seq_tf, coc_start, coc_end, True)
+        nll_f, q_f, m_f = ce_backward(gates, inputs, seq_tf, coc_start, coc_end, False)
+        nll_d, q_d, m_d = ce_backward(gates, inputs, seq_tf, coc_start, coc_end, True)
+        gates.remove()
+        del gates
         per["q_full"].append(q_f)
         per["q_direct"].append(q_d)
         if m_f is not None:
