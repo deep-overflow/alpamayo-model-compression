@@ -27,7 +27,7 @@ from scipy.stats import spearmanr
 REPO = Path(__file__).resolve().parents[2]
 COC, LAST = 3, 35
 BANDS = {"0-21": slice(0, 22), "22-34": slice(22, LAST)}
-SPANS = ("head clause", "rest", "end token")
+SPANS = ("head clause", "rest", "<|traj_future_start|>")
 
 
 def rho_layers(a, b):
@@ -109,21 +109,59 @@ def main():
                     prof[j] += res[i, 7:22, n_coc[i] - 1 - j].sum() / max(tot, 1e-30) / N
         lines.append(f"  {name} residual-gradient share by position from the END (layers 7-21): last {prof[0]:.2f}, -1 {prof[1]:.2f}, -2 {prof[2]:.2f}, -3 {prof[3]:.2f}, -4 {prof[4]:.2f}, -5 {prof[5]:.2f}")
 
+    # finer split: the last two CoC positions are the special tokens <|cot_end|> and <|traj_future_start|>;
+    # <|cot_end|> is separated from the rest of the sentence because the FM gradient concentrates there
+    fine = sub.copy()  # 0 head clause, 1 rest of sentence, 2 <|traj_future_start|>, 3 <|cot_end|>
+    for i in range(N):
+        if n_coc[i] >= 2 and sub[i, n_coc[i] - 2] == 1:
+            fine[i, n_coc[i] - 2] = 3
+    FINE = ((0, "head clause"), (1, "rest of sentence"), (3, "<|cot_end|>"), (2, "<|traj_future_start|>"))
+    lines.append("\nA1b the same shares with <|cot_end|> separated from the rest of the sentence (|Q-head contribution|, bands 0-21 / 22-34)")
+    for name, X in (("CE", qce), ("FM", qfm)):
+        arr = np.abs(X).sum(3).transpose(0, 2, 1)  # (N, L, PAD)
+        parts = []
+        for fi, fname in FINE:
+            num = np.array([[arr[i, l][fine[i] == fi].sum() for l in range(LAST)] for i in range(N)])
+            den = np.array([[arr[i, l][fine[i] >= 0].sum() for l in range(LAST)] for i in range(N)])
+            sh = num / np.maximum(den, 1e-30)
+            tok = float(np.mean([(fine[i] == fi).sum() / n_coc[i] for i in range(N)]))
+            gates[f"A1b_{name}_{fname}"] = {b: float(sh[:, sl].mean()) for b, sl in BANDS.items()} | {"tokens": tok}
+            parts.append(f"{fname} {sh[:, BANDS['0-21']].mean():.2f} / {sh[:, BANDS['22-34']].mean():.2f} (tokens {tok:.2f})")
+        lines.append(f"  {name}: " + " | ".join(parts))
+
+    # per-clip robustness of the boundary-token concentration (the last two positions)
+    for name, X in (("CE", qce), ("FM", qfm)):
+        arr = np.abs(X).sum(3).transpose(0, 2, 1)
+        for b, sl in BANDS.items():
+            tot = np.array([arr[i, sl, : n_coc[i]].sum() for i in range(N)])
+            bnd = np.array([arr[i, sl, n_coc[i] - 2 : n_coc[i]].sum() for i in range(N)]) / np.maximum(tot, 1e-30)
+            per_b = np.array([arr[i, sl, n_coc[i] - 2 : n_coc[i]].mean() for i in range(N)])
+            per_w = np.array([arr[i, sl, : n_coc[i] - 2].mean() for i in range(N)])
+            ratio = per_b / np.maximum(per_w, 1e-30)
+            gates[f"A1c_{name}_{b}"] = {"boundary_share_mean": float(bnd.mean()), "boundary_share_median": float(np.median(bnd)),
+                                        "clips_above_half": float((bnd > 0.5).mean()), "per_token_ratio_median": float(np.median(ratio))}
+            lines.append(f"  {name} {b}: share of |Q contributions| on <|cot_end|> + <|traj_future_start|> per clip: mean {bnd.mean():.3f}, median {np.median(bnd):.3f}, "
+                         f"IQR {np.percentile(bnd, 25):.3f}-{np.percentile(bnd, 75):.3f}, clips > 0.5: {(bnd > 0.5).mean():.2f}; per token vs a word: median {np.median(ratio):.1f}x")
+    res_fm = np.nan_to_num(per["res_fm_norm"].astype(np.float64))
+    rb = np.array([res_fm[i, 7:22, n_coc[i] - 2 : n_coc[i]].mean() for i in range(N)])
+    rw = np.array([res_fm[i, 7:22, : n_coc[i] - 2].mean() for i in range(N)])
+    lines.append(f"  FM residual-gradient norm per token, boundary vs word (layers 7-21): median {np.median(rb / rw):.1f}x (IQR {np.percentile(rb / rw, 25):.1f}-{np.percentile(rb / rw, 75):.1f})")
+
     # A2 same sub-span agreement (Q)
     lines.append("\nA2 agreement of I_traj and I_CoC restricted to the same sub-span (Q heads; raw on 100-clip means / split-half corrected, self-reliabilities)")
     curves = {}
-    for si, sname in enumerate([None] + list(SPANS)):
-        if sname is None:
-            T = np.abs(qfm.sum(1)); C = np.abs(qce.sum(1)); label = "all CoC"
-        else:
-            msk = (sub == si - 1)[:, :, None, None]
-            T = np.abs((qfm * msk).sum(1)); C = np.abs((qce * msk).sum(1)); label = sname
+    sels = [("all CoC", fine >= 0)] + [(fname, fine == fi) for fi, fname in FINE] + \
+        [("words only (head + rest)", (fine == 0) | (fine == 1)), ("drop <|traj_future_start|> only", fine != 2)]
+    for label, m in sels:
+        msk = m[:, :, None, None]
+        T = np.abs((qfm * msk).sum(1)); C = np.abs((qce * msk).sum(1))
         raw = rho_layers(T.mean(0), C.mean(0))[:LAST]
         corr, st, sc_ = corrected(T[:, :LAST], C[:, :LAST], 50, rng)
-        curves[label] = raw
+        if label in ("all CoC", "head clause", "rest of sentence", "<|cot_end|>"):
+            curves[label] = raw
         gates[f"A2_{label}"] = {b: {"raw": float(np.nanmean(raw[sl])), "corrected": float(np.nanmean(corr[sl]))} for b, sl in BANDS.items()}
-        lines.append(f"  {label:12s} " + " | ".join(f"{b}: raw {np.nanmean(raw[sl]):+.2f} corr {np.nanmean(corr[sl]):+.2f} (self {np.nanmean(st[sl]):.2f}/{np.nanmean(sc_[sl]):.2f})" for b, sl in BANDS.items()))
-    best = max(gates[f"A2_{s}"]["22-34"]["corrected"] for s in SPANS)
+        lines.append(f"  {label:26s} " + " | ".join(f"{b}: raw {np.nanmean(raw[sl]):+.2f} corr {np.nanmean(corr[sl]):+.2f} (self {np.nanmean(st[sl]):.2f}/{np.nanmean(sc_[sl]):.2f})" for b, sl in BANDS.items()))
+    best = max(gates[f"A2_{s}"]["22-34"]["corrected"] for _, s in FINE if np.isfinite(gates[f"A2_{s}"]["22-34"]["corrected"]))
     lines.append(f"  verdict (22-34): best same-sub-span corrected agreement {best:.2f} -> " + ("token mixture inside the CoC (>= 0.70)" if best >= 0.70 else "different content at the same tokens (< 0.50)" if best < 0.50 else "intermediate"))
     # MLP sub-spans
     if "mlp_ce_sub" in per:
@@ -149,6 +187,20 @@ def main():
     for b in BANDS:
         gates[f"A3_{b}"] = {"single_position": float(np.nanmean(single[b])), "per_clip_pooled": float(np.nanmean(pooled[b]))}
         lines.append(f"  {b}: single position {np.nanmean(single[b]):+.2f} | same clip, positions summed {np.nanmean(pooled[b]):+.2f}")
+    # per clip, positions summed within one span only
+    for fi, fname in FINE[:3]:
+        vals = {b: [] for b in BANDS}
+        for i in range(N):
+            m = fine[i] == fi
+            if not m.any():
+                continue
+            for b, sl in BANDS.items():
+                for l in range(sl.start, sl.stop):
+                    a, c = np.abs(qfm[i, m, l].sum(0)), np.abs(qce[i, m, l].sum(0))
+                    if np.ptp(a) > 0 and np.ptp(c) > 0:
+                        vals[b].append(spearmanr(a, c)[0])
+        gates[f"A3_pooled_{fname}"] = {b: float(np.nanmean(vals[b])) for b in BANDS}
+        lines.append(f"  same clip, positions summed within {fname:12s}: " + " | ".join(f"{b} {np.nanmean(vals[b]):+.2f}" for b in BANDS))
     # by sub-span
     for si, sname in enumerate(SPANS):
         vals = []

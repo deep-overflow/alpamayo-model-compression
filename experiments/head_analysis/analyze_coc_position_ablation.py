@@ -66,9 +66,11 @@ def main():
             continue
         n_, f, a = ci(d[c]["nll"]), ci(d[c]["fm"]), (ci(d[c]["ade"]) if np.isfinite(d[c]["ade"]).any() else None)
         byb = " ".join(f"{np.nanmean(d[c]['fm'][buckets == b]) / np.nanmean(dense['fm'][buckets == b]):+.1%}" for b in ("cruise", "accel", "decel_stop", "turn"))
-        res[c] = {"nll": n_, "fm": f, "ade": a}
+        med = {k: float(np.nanmedian(d[c][k])) for k in ("nll", "fm", "ade")}
+        res[c] = {"nll": n_, "fm": f, "ade": a, "median": med}
         lines.append(f"{c:10s} {n_[0]:+.4f} [{n_[1]:+.4f},{n_[2]:+.4f}] {n_[0] / base['nll']:+6.1%} {f[0]:+.4f} [{f[1]:+.4f},{f[2]:+.4f}] {f[0] / base['fm']:+6.1%} "
-                     + (f"{a[0]:+.3f} [{a[1]:+.3f},{a[2]:+.3f}]" if a else f"{'-':>26s}") + f"   {byb}")
+                     + (f"{a[0]:+.3f} [{a[1]:+.3f},{a[2]:+.3f}]" if a else f"{'-':>26s}") + f"   {byb}"
+                     + f"   | medians dNLL {med['nll']:+.4f} dFM {med['fm']:+.4f}" + (f" dminADE {med['ade']:+.3f}" if a else ""))
     gates = {}
     for band in ("all", "trunk"):
         T, C = f"T_{band}", f"C_{band}"
