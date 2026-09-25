@@ -112,7 +112,16 @@ def classify(units, strict=False):
         if w in PREPOSITIONS and nxt not in DECISION_VERBS and not (head in DIRECTION_VERBS and (nxt in DETERMINERS or nxt in ("left", "right"))):
             end = j
             break
+    clause = ["special"] * len(units)  # decision clause / connective / cause clause / special
+    seen_conn = False
     for j, (i, w) in enumerate(words):
+        if j < end:
+            clause[i] = "decision clause"
+        elif w in CONNECTIVES and not seen_conn:  # the first connective after the action clause
+            clause[i] = "connective"
+            seen_conn = True
+        else:
+            clause[i] = "cause clause"
         if w == "" or all(ch in ".,;:!?-/" for ch in w):
             cats[i] = "other"
         elif j < end:
@@ -123,7 +132,7 @@ def classify(units, strict=False):
             cats[i] = "spatial"
         else:
             cats[i] = "scene"
-    return cats, norm
+    return cats, norm, clause
 
 
 def ci_of(vals, n=3000):
@@ -152,12 +161,13 @@ def main():
     clips = [r["clip_id"] for r in rows]
 
     # units, categories, per-unit importance per band (sum of |contribution| over the unit's tokens and the band's heads)
-    unit_cat, unit_word, unit_qpos, imp = [], [], [], {L: {b: [] for b in BANDS} for L in q}
+    unit_cat, unit_word, unit_clause, unit_qpos, imp = [], [], [], [], {L: {b: [] for b in BANDS} for L in q}
     for i, r in enumerate(rows):
         units, spans = merge_words(r["tokens"])
-        cats, norm = classify(units)
+        cats, norm, clause = classify(units)
         unit_cat.append(cats)
         unit_word.append(norm)
+        unit_clause.append(clause)
         n_words = sum(u not in SPECIAL for u in units)
         wi, qpos = 0, []
         for u in units:
@@ -273,7 +283,7 @@ def main():
         share = {L: np.zeros(N) for L in q}
         ts = np.zeros(N)
         for i in range(N):
-            cats = np.array(classify(merge_words(rows[i]["tokens"])[0], strict=True)[0])
+            cats = np.array(classify(merge_words(rows[i]["tokens"])[0], strict=True)[0])  # strict: first two words
             sel = ~np.isin(cats, ("cot_end", "traj_start"))
             ts[i] = (cats[sel] == "decision").mean()
             for L in q:
@@ -288,6 +298,59 @@ def main():
         mb["strict_decision_words_only"] = {"token_share": float(ts.mean()), "CE_share": float(share["CE"].mean()), "FM_share": float(share["FM"].mean()),
                                             "CE_enrich": float(ec), "FM_enrich": float(ef), "d_enrich": float(ef - ec), "d_enrich_ci": [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))]}
         lines.append(f"[{b}] sensitivity, strict decision = first two words (words-only normalisation): tokens {ts.mean():.3f} | CE share {share['CE'].mean():.3f} enrich {ec:.2f} | FM share {share['FM'].mean():.3f} enrich {ef:.2f} | FM-CE {ef - ec:+.2f} [{np.percentile(boot, 2.5):+.2f}, {np.percentile(boot, 97.5):+.2f}]")
+        # clause view: decision clause / connective / cause clause (/ special), both normalisations
+        CL = ("decision clause", "connective", "cause clause", "special")
+        mb["clauses"] = {}
+        for normname, keep_special in (("all", True), ("words", False)):
+            share = {L: {c: np.zeros(N) for c in CL} for L in q}
+            tshare = {c: np.zeros(N) for c in CL}
+            for i in range(N):
+                cl = np.array(unit_clause[i])
+                sel = np.ones(len(cl), bool) if keep_special else cl != "special"
+                for L in q:
+                    v = imp[L][b][i] * sel
+                    v = v / max(v.sum(), 1e-30)
+                    for c in CL:
+                        share[L][c][i] = v[cl == c].sum()
+                for c in CL:
+                    tshare[c][i] = (cl[sel] == c).mean()
+            lines.append(f"[{b}] clause view, normalisation: {normname}")
+            lines.append(f"  {'clause':16s} {'tokens':>7s} | {'CE share':>9s} {'enrich':>7s} | {'FM share':>9s} {'enrich':>7s} | FM-CE enrichment [CI]")
+            for c in CL:
+                if not keep_special and c == "special":
+                    continue
+                ts_ = tshare[c].mean()
+                e = {L: share[L][c].mean() / max(ts_, 1e-30) for L in q}
+                boot = []
+                for _ in range(3000):
+                    idx = rng.integers(0, N, N)
+                    boot.append((share["FM"][c][idx].mean() - share["CE"][c][idx].mean()) / max(tshare[c][idx].mean(), 1e-30))
+                mb["clauses"][f"{normname}:{c}"] = {"token_share": float(ts_), "CE_share": float(share["CE"][c].mean()), "FM_share": float(share["FM"][c].mean()),
+                                                    "CE_enrich": float(e["CE"]), "FM_enrich": float(e["FM"]), "d_enrich": float(e["FM"] - e["CE"]),
+                                                    "d_enrich_ci": [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))]}
+                lines.append(f"  {c:16s} {ts_:7.3f} | {share['CE'][c].mean():9.3f} {e['CE']:7.2f} | {share['FM'][c].mean():9.3f} {e['FM']:7.2f} | {e['FM'] - e['CE']:+.2f} [{np.percentile(boot, 2.5):+.2f}, {np.percentile(boot, 97.5):+.2f}]")
+        # top words inside the decision clause and inside the cause clause, by FM (words-only normalisation)
+        acc = {}
+        for i in range(N):
+            cl = np.array(unit_clause[i]); sel = cl != "special"
+            units = merge_words(rows[i]["tokens"])[0]
+            v = {L: imp[L][b][i] * sel for L in q}
+            v = {L: v[L] / max(v[L].sum(), 1e-30) for L in q}
+            for j, (u, w, c) in enumerate(zip(units, unit_word[i], cl)):
+                if c in ("decision clause", "cause clause"):
+                    a = acc.setdefault((c, w), {"n": 0, "CE": 0.0, "FM": 0.0})
+                    a["n"] += 1
+                    a["CE"] += float(v["CE"][j])
+                    a["FM"] += float(v["FM"][j])
+        mb["top_words"] = {}
+        for c in ("decision clause", "cause clause"):
+            items = [(w, a) for (cc, w), a in acc.items() if cc == c and a["n"] >= 3]
+            items.sort(key=lambda kv: -kv[1]["FM"] / kv[1]["n"])
+            mb["top_words"][c] = [{"word": w, "n": a["n"], "FM_per_occ": a["FM"] / a["n"], "CE_per_occ": a["CE"] / a["n"], "FM_total": a["FM"] / N, "CE_total": a["CE"] / N} for w, a in items]
+            lines.append(f"[{b}] words in the {c} with >= 3 occurrences, by FM share per occurrence (words-only normalisation); 'total' = contribution to the average clip")
+            lines.append(f"  {'word':16s} {'n':>4s} | {'FM/occ':>7s} {'CE/occ':>7s} {'FM/CE':>6s} | {'FM total':>9s} {'CE total':>9s}")
+            for w, a in items[:18]:
+                lines.append(f"  {w:16s} {a['n']:4d} | {a['FM'] / a['n']:7.4f} {a['CE'] / a['n']:7.4f} {a['FM'] / max(a['CE'], 1e-30):6.2f} | {a['FM'] / N:9.4f} {a['CE'] / N:9.4f}")
         metrics["bands"][b] = mb
 
     # 3. head groups (census definition) -- share of each group's importance on decision words / special tokens

@@ -63,7 +63,10 @@ def main():
     ap.add_argument("--max-gen", type=int, default=256)
     ap.add_argument("--reserve-gb", type=float, default=34.0)
     ap.add_argument("--gpu", type=int, default=None)
+    ap.add_argument("--per-query", action="store_true",
+                    help="also keep every CoC query position's mass (census_pos.npz: mass_pos (N, L, PAD, H, 6) f16, tokens in metrics.json); clips with more than PAD CoC tokens are skipped")
     args = ap.parse_args()
+    PAD = 64
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -89,8 +92,13 @@ def main():
             with torch.autocast("cuda", enabled=False):
                 rows = attn[0].index_select(1, state["coc_idx"]).float()  # (H, Nc, T)
                 m = torch.einsum("hqt,gt->hg", rows, state["onehot"])  # (H, 5): sink, vision, hist, prompt, coc(all)
-                self_mass = rows[:, torch.arange(rows.shape[1], device=rows.device), state["coc_idx"]].sum(1)  # (H,)
+                self_q = rows[:, torch.arange(rows.shape[1], device=rows.device), state["coc_idx"]]  # (H, Nc)
+                self_mass = self_q.sum(1)  # (H,)
                 out = torch.cat([m[:, :4], (m[:, 4] - self_mass).unsqueeze(1), self_mass.unsqueeze(1)], 1)  # (H, 6)
+                if args.per_query:
+                    mp = torch.einsum("hqt,gt->hqg", rows, state["onehot"])  # (H, Nc, 5)
+                    outp = torch.cat([mp[:, :, :4], (mp[:, :, 4] - self_q).unsqueeze(2), self_q.unsqueeze(2)], 2)  # (H, Nc, 6)
+                    state["mass_pos"][li, : rows.shape[1]] = outp.permute(1, 0, 2).cpu().numpy()
             state["mass"][li] = (out / state["coc_idx"].numel()).cpu().numpy()
         return hook
 
@@ -101,7 +109,7 @@ def main():
         "groups": GROUPS, "queries": "generated-CoC tokens (teacher-forced own rollout)",
         "gpu": torch.cuda.get_device_name(device)}, indent=2))
 
-    per_clip, done, n_coc, lens = [], [], [], []
+    per_clip, per_pos, tokens, done, n_coc, lens = [], [], [], [], [], []
     for ci, (clip_id, clip_t0) in enumerate(clips):
         t0 = time.time()
         data = sc.load_cached(sc.path_for(args.cache, clip_id, clip_t0))
@@ -116,11 +124,16 @@ def main():
         seq_tf = roll["sequences"][:, : roll["eos_pos"] + 1].clone()  # (1, T) prompt + generated CoC
         del roll
         T = seq_tf.shape[1]
+        if args.per_query and T - prompt_len > PAD:
+            print(f"[{ci + 1}/{len(clips)}] {clip_id} skipped: coc={T - prompt_len} > PAD", flush=True)
+            continue
         type_idx = token_types(model, seq_tf, prompt_len)
         onehot = torch.stack([type_idx == TYPES.index(t) for t in ("sink", "vision", "hist", "prompt_text", "coc")]).float()  # (5, T)
         state["coc_idx"] = torch.arange(prompt_len, T, device="cuda")
         state["onehot"] = onehot.to("cuda")
         state["mass"] = np.zeros((n_l, n_h, len(GROUPS)))
+        if args.per_query:
+            state["mass_pos"] = np.full((n_l, PAD, n_h, len(GROUPS)), np.nan, np.float32)
         lib.set_vlm_attn_impl(model, "eager")
         handles = [layer.self_attn.register_forward_hook(make_hook(i), with_kwargs=True) for i, layer in enumerate(layers)]
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
@@ -132,6 +145,9 @@ def main():
         for h in handles:
             h.remove()
         per_clip.append(state["mass"].copy())
+        if args.per_query:
+            per_pos.append(state["mass_pos"].astype(np.float16))
+            tokens.append([model.tokenizer.decode([int(t)]) for t in seq_tf[0, prompt_len:].tolist()])
         done.append(clip_id)
         n_coc.append(int(T - prompt_len))
         lens.append(int(T))
@@ -143,8 +159,11 @@ def main():
         if (ci + 1) % 5 == 0 or ci + 1 == len(clips):
             arr = np.stack(per_clip)  # (N, L, H, 6)
             np.savez(out_dir / "census.npz", mass_by_clip=arr, mass=arr.mean(0))
+            if args.per_query:
+                np.savez(out_dir / "census_pos.npz", mass_pos=np.stack(per_pos))  # (N, L, PAD, H, 6)
             (out_dir / "metrics.json").write_text(json.dumps({
                 "n_clips": len(done), "clip_ids": done, "n_coc": n_coc, "T": lens, "groups": GROUPS,
+                "tokens": tokens if args.per_query else None,
                 "layer_mean_mass": arr.mean((0, 2)).tolist()}, indent=2))
     lay = np.stack(per_clip).mean((0, 2))  # (L, 6)
     lines = [f"CoC-query attention census -- {len(done)} clips", "", "layer  " + "  ".join(f"{g:>9s}" for g in GROUPS)]
