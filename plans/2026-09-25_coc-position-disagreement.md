@@ -103,6 +103,36 @@ the CE-favoured "next-token heads" carry, and it is absent from `I_traj` by cons
    Cost: rollout + one eager forward per clip ≈ 10 s → 50 clips per shard ≈ 10 min on two Ada
    cards; 3 MB of output.
 
+## Test 1 result (2026-09-25, `outputs/coc_pathsplit_v1/summary.txt`, 100 clips): the path is not the cause
+
+- G0 PASS: the full CE backward reproduces the anatomy's CoC row exactly (per-layer Spearman
+  1.000); the repeated forward gives the same NLL to 4 decimals on every clip.
+- The own-token path does carry most of `I_CoC` at CoC positions: 87% of the |gradient| (Q heads;
+  additive share 0.80), 0.70 in layers 0–21 and **0.93 in 22–34**; MLP 0.89 / 0.69 / 0.92.
+- But the cross-position part (K/V read by later CoC queries) ranks the heads the same way as the
+  own-token part — corrected agreement between the two parts 0.95 (0–21) / 0.91 (22–34) for Q,
+  0.96 / 0.89 for MLP — and agrees with `I_traj`@CoC no better than the full score:
+
+| Q heads, corrected ρ with `I_traj`@CoC | 0–21 | 22–34 |
+|---|---:|---:|
+| full `I_CoC`@CoC | 0.47 | 0.41 |
+| own-token part | 0.45 | 0.39 |
+| cross-position part | **0.50** | **0.49** |
+
+  MLP channels: full 0.77 / 0.37, own-token 0.77 / 0.37, cross 0.78 / 0.39 (for MLP the
+  CoC-position exception is late-band only). T1-a FAIL (0.50 / 0.49 < 0.70), T1-b moot.
+- **Reading.** The hypothesis that the exception comes from the loss-evaluation (own-token) path
+  is rejected: even the part of `I_CoC` that reaches the loss through the same kind of interface
+  the expert uses (the position's K/V) disagrees with `I_traj`. The disagreement is between the
+  two *readers* of the CoC-position representation — the later CoC queries and the expert's
+  diffusion tokens — which is what test 2 found directly: the heads whose CoC-position writes
+  matter to the text are the ones reading earlier CoC tokens, the heads whose writes matter to
+  the expert are the ones reading ego-history. At vision, prompt and ego-history positions the
+  two readers want the same content (the scene, the instruction, the ego state) and rank the
+  writers alike; at the reasoning tokens the representation carries two separable contents —
+  text continuation and action state — written by different heads. Figure:
+  `outputs/coc_pathsplit_v1/plots/coc_path_split_q.png`.
+
 ## Test 2 result (2026-09-25, `outputs/coc_census_v1/summary.txt`, 100 clips, 4 shards on Ada 4–7)
 
 Mean attention of the generated-CoC queries by key group (all heads): layers 0–6 prompt 0.59 /
