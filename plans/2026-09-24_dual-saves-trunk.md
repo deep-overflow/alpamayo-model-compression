@@ -154,3 +154,33 @@ done
 ```
 Cost: 20 whole-arm configs, all sampled at K = 8 ≈ 95 s per clip → 25 clips per shard ≈ 40 min on
 Ada 4–7.
+
+## Part 2 result (2026-09-25, `outputs/dual_saves_addback_v1/summary.txt`): A1–A4 FAIL; a different finding
+
+Paired with dense on the same 100 clips (rel. FM / minADE / rel. NLL):
+
+| context | arm alone | + S (dual-saves units) | + M (score-matched) | + random |
+|---|---|---|---|---|
+| trajectory arm (shipped) | +6.6% / +0.061 / +241% | +3.1% / −0.003 / +92% | +2.5% / −0.011 / +132% | +2.8–4.0% / −0.03–+0.02 / +114–143% |
+| trajectory trunk-only | +26.1% / +2.64 / +51% | +2.7% / +0.003 / +10.5% | +2.1% / −0.017 / +22.9% | +3.4% / +0.012 / +23.0% |
+| CoC arm (shipped) | +15.8% / +0.564 / +67% | +2.8% / +0.033 / +37% | +3.9% / +0.086 / +16% | +3.0–4.1% / +0.03–0.05 / +37–51% |
+| CoC trunk-only | +17.0% / +0.459 / +28% | +2.4% / +0.021 / +12.6% | +3.9% / +0.267 / +5.4% | +3.5% / +0.026 / +12.5% |
+
+- A1 / A2 FAIL in both contexts: restoring Straj repairs FM and minADE no better than the matched
+  or random units (FM vs matched p = 0.76 / 0.78; minADE p = 0.56 / 0.77). A3: Straj is the
+  language set — it recovers 62% (arm) / 79% (trunk) of the NLL damage against 45–55% for any
+  other set (p = 7.5e-15 / 1.2e-8). A4 FAIL: Scoc beats the matched control on FM only in the
+  trunk-only context (p = 0.0028) and not the random sets at 0.01 (p = 0.033).
+- The finding that replaces H: **restoring any tenth of the removed trunk units repairs the
+  single-criterion arms' driving damage** — trunk-only trajectory FM +26.1% → +2–3% and minADE
+  +2.64 → 0.00 with Straj, matched or random alike; CoC trunk-only +17.0% → +2–4%; in the shipped
+  arms about half (traj) to four fifths (coc) of the FM damage and nearly all the minADE damage.
+  The single criteria's driving damage is therefore a fragility of the selection as a whole, not
+  the loss of identifiable units, and the dual arm's selection at the same per-layer budget is
+  off that cliff (trunk-only FM +4.8%, `armheld_v1`). KV groups left without a surviving Q head
+  do not explain it (trunk layers: trajectory 19, CoC 12, dual 13).
+- Reading for the paper: (a) the units dual keeps over the trajectory arm are language units,
+  and their restoration is what repairs the trajectory arm's language channel — a causal
+  statement; (b) on the action channel the union does not rescue specific units the other score
+  sees; it yields a selection that is robust where either single selection is fragile. The
+  mechanism of that fragility (what a 10% restoration of arbitrary units relieves) is open.
