@@ -106,6 +106,15 @@ def main():
         lines.append("  all heads " + " ".join(f"{v:9.3f}" for v in M[list(layers)].mean((0, 1))))
         lines.append(f"  G-A vision+hist: T-fav {vh['T-fav'].mean():.3f} vs C-fav {vh['C-fav'].mean():.3f}, diff CI [{gates[bname]['d_vh_ci'][0]:+.3f}, {gates[bname]['d_vh_ci'][1]:+.3f}], MWU p={pA:.2g} -> {'PASS' if pA < 0.01 else 'FAIL'}")
         lines.append(f"  G-B prompt+coc_prev: C-fav {pc['C-fav'].mean():.3f} vs T-fav {pc['T-fav'].mean():.3f}, diff CI [{gates[bname]['d_pc_ci'][0]:+.3f}, {gates[bname]['d_pc_ci'][1]:+.3f}], MWU p={pB:.2g} -> {'PASS' if pB < 0.01 else 'FAIL'}")
+        # post hoc (not pre-registered): each key group on its own, T-fav vs C-fav over heads
+        post = []
+        for i, gname in enumerate(GROUPS):
+            a, b = g["T-fav"][:, i], g["C-fav"][:, i]
+            p_t = float(mannwhitneyu(a, b, alternative="greater")[1])
+            p_c = float(mannwhitneyu(b, a, alternative="greater")[1])
+            post.append(f"{gname} {a.mean():.3f} vs {b.mean():.3f} (T>C p={p_t:.2g}, C>T p={p_c:.2g})")
+            gates[bname][f"posthoc_{gname}"] = {"T-fav": float(a.mean()), "C-fav": float(b.mean()), "p_T_greater": p_t, "p_C_greater": p_c}
+        lines.append("  post hoc, single key groups (T-fav vs C-fav): " + " | ".join(post))
         # continuous, within layer
         rows = []
         for i, gname in enumerate(GROUPS):
