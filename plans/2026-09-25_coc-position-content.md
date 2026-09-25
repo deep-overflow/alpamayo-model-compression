@@ -208,6 +208,24 @@ Figures: `outputs/coc_posabl_v1/plots/dissociation.png`; paper-style
   the heads `I_traj` flags are the ones the text needs most (+247% vs +59%).
 - Draft replacements are in `paper-analysis/2026-09-25_coc_position_note.md` (판 3).
 
+## Results, per-query census (2026-09-26, `run_coc_census.py --per-query` → `outputs/coc_census_pos_v1/`, 99 calib clips, Ada 4–7)
+
+Which CoC queries read the ego history. Mean attention mass of one CoC query on the ego-history
+keys (0–21 | 22–34; all heads / FM-favoured / CE-favoured, the census groups of 6 per layer):
+words 0.027–0.033 / 0.029–0.040 / 0.018–0.019 | 0.014–0.017 / 0.016–0.024 / 0.010–0.014;
+`<|cot_end|>` 0.042 / **0.090** / 0.018 | 0.025 / 0.046 / 0.011; `<|traj_future_start|>` **0.079 /
+0.193 / 0.027** | 0.065 / 0.155 / 0.014. The two boundary tokens (14.6% of tokens) carry 27% | 34%
+of the CoC queries' ego-history attention for all heads and **43% | 47%** for the FM-favoured
+heads; FM-favoured − CE-favoured at the special tokens +0.119 [+0.116, +0.122] | +0.088
+[+0.084, +0.092], at words +0.014 | +0.008. No word category is enriched (ratio 0.8–1.0); the
+words with the most ego-history reading are the speed/steering verbs (down, turn, slow, adapt,
+nudge, yield, speed: 0.04–0.05 for the FM-favoured heads, 0–21). The CE-favoured heads read no
+ego history anywhere and attend the sink at the boundary tokens (0.41–0.42). So the ego-history
+reading sits where the FM gradient (A) and the expert's read sit — at the boundary tokens — and
+through the heads whose CoC-position outputs the action needs (B). Analyzer
+`analyze_coc_query_census.py`; token-category importance in `analyze_coc_token_importance.py`
+(`outputs/coc_tokimp_v1/`); notes in `paper-analysis/2026-09-25_coc_token_importance.md`.
+
 ## Proposed C (not launched — on the user's go): make the boundary-token reading causal
 
 A's 63–75% is a gradient share. Two cheap position-level knockouts would make it a cause:
