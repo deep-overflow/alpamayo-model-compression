@@ -42,6 +42,10 @@ Configs:
                       losses, each z-scored within a layer and averaged (1/11 each). Needs
                       --stepvlm (per-step VLM gradients). Kept set overlaps dual's by
                       87-88%. plans/2026-08-31_znorm11-criterion.md.
+  dualv3_u40_v2    -- depth-aware dual: max(rank I_traj, rank I_CoC) in layers 0-21, rank
+                      I_CoC ALONE in layers 22-35 (plans/2026-09-25_depth-aware-dual.md).
+                      Same budget, allocation, expert and KV as dual_u40_v2; its late
+                      layers are coc_u40_v2's unit for unit.
   dualfix_u40_v2   -- dual with the degenerate-layer guard: a layer whose half is constant
                       (the last layer's trajectory importance is structurally zero) no
                       longer contributes its INDEX ORDER to max(rank, rank).
@@ -134,6 +138,7 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 # pinned to the blobs every result in this track was produced with, matching run_baseline
 MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
+DEPTH_CUT = 22  # dualv3: first layer of the "late" band (paper: layers 22-34, plus 35)
 
 
 def scope_matched_counts(scope_len, target_removed, tc, ratio):
@@ -743,6 +748,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         fm = re.match(r"^dualfm(\d+)$", stem)
         delta = float(fm.group(1)) / 100 if fm else 0.0
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
+                 "dualv3": ("traj", "coc"),
                  "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
                  "dual2nd": ("traj2", "coc2"),
@@ -779,6 +785,16 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             # shipped checkpoints
             sq = op(rank(sq), rank(oq) - delta)
             sm = op(rank(sm), rank(om) - delta)
+        if stem == "dualv3":
+            # Depth-aware dual (plans/2026-09-25_depth-aware-dual.md): the union below
+            # layer DEPTH_CUT, the CoC score ALONE from it on. In layers 22-34 the
+            # trajectory score is a first-order shadow -- no late-layer set or mask moves
+            # the FM loss or minADE (2026-09-21 causal round) -- so under max() its rank
+            # only displaces language units the CoC score would keep. select_mask_ratios
+            # ranks within a layer, so mixing scores across layers is exact.
+            cq, cm = half("coc")
+            sq[DEPTH_CUT:] = rank(cq)[DEPTH_CUT:]
+            sm[DEPTH_CUT:] = rank(cm)[DEPTH_CUT:]
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)
