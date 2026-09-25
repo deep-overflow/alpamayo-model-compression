@@ -125,7 +125,36 @@ def main():
             res[f"{bname}:{gname}"] = {"rho_traj": float(rt), "rho_coc": float(rc), "rho_diff": float(rd)}
         lines.append("  within-layer Spearman of a head's key-group mass with I_traj@CoC / I_CoC@CoC / their rank difference:")
         lines.append("    " + " | ".join(f"{gname} {rt:+.2f} / {rc:+.2f} / {rd:+.2f}" for gname, rt, rc, rd in rows))
-    # figure
+    # figure 2: the group table as grouped bars with clip-bootstrap 95% CIs
+    fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.4), sharey=True)
+    for ax, (bname, layers) in zip(axes, BANDS.items()):
+        sel = {}
+        for name in ("T-fav", "C-fav"):
+            hs = []
+            for l in layers:
+                order = np.argsort(diff[l])
+                hs += [(l, h) for h in (order[-K:] if name == "T-fav" else order[:K])]
+            sel[name] = (np.array([l for l, _ in hs]), np.array([h for _, h in hs]))
+        x = np.arange(len(GROUPS))
+        for i, (name, col) in enumerate((("T-fav", "#2a78d6"), ("C-fav", "#e87ba4"))):
+            L_, H_ = sel[name]
+            boot = np.array([mass[rng.integers(0, len(mass), len(mass))].mean(0)[L_, H_].mean(0) for _ in range(500)])  # (500, 6)
+            mean = M[L_, H_].mean(0)
+            ax.bar(x + (i - 0.5) * 0.38, mean, 0.38, color=col, label=f"{name} heads ({'I_traj' if name == 'T-fav' else 'I_CoC'}-favoured at CoC)",
+                   yerr=[mean - np.percentile(boot, 2.5, 0), np.percentile(boot, 97.5, 0) - mean], capsize=2)
+        for i, gname in enumerate(GROUPS):
+            pg = gates[bname].get(f"posthoc_{gname}", {})
+            p = min(pg.get("p_T_greater", 1.0), pg.get("p_C_greater", 1.0))
+            if p < 0.01:
+                ax.text(x[i], max(M[sel["T-fav"][0], sel["T-fav"][1]][:, i].mean(), M[sel["C-fav"][0], sel["C-fav"][1]][:, i].mean()) + 0.03,
+                        "**" if p < 1e-4 else "*", ha="center", fontsize=9)
+        ax.set_xticks(x); ax.set_xticklabels(["sink", "vision", "ego-history", "prompt", "earlier CoC", "self"], rotation=30, fontsize=8)
+        ax.set_title(f"layers {bname} ({len(sel['T-fav'][0])} heads per group)", fontsize=9)
+        ax.set_ylabel("attention mass of CoC queries")
+    axes[0].legend(fontsize=7, loc="upper right")
+    fig.text(0.5, 0.005, "* p < 0.01, ** p < 1e-4 (Mann-Whitney over heads, post hoc single groups); error bars: clip-bootstrap 95% CI", ha="center", fontsize=7)
+    fig.tight_layout(rect=(0, 0.04, 1, 1)); fig.savefig(out / "plots" / "coc_census_bars.png", dpi=170); plt.close(fig)
+    # figure 1
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.4))
     ax = axes[0]
     for name, col in (("T-fav", "#2a78d6"), ("C-fav", "#e87ba4")):

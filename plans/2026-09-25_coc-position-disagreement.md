@@ -56,13 +56,29 @@ the CE-favoured "next-token heads" carry, and it is absent from `I_traj` by cons
 
 ## Proposed tests (GPU, on the user's go)
 
-1. **Path split of `I_CoC` at CoC positions** (one extra CE backward in `run_gradient_anatomy.py`,
-   calib_100, ~25 min): detach the K and V of CoC positions in every layer during the CE backward,
-   so the typed gate gradient at CoC positions carries the own-token path only; attention path =
-   full − direct (exact, linear). Gate: rank(`I_traj`@CoC) vs rank(`I_CoC`@CoC, attention path)
-   ≥ 0.7 (like the other positions) while vs the own-token path stays ≤ 0.45. Pass → the exception
-   is the loss-evaluation path, and the paper can say the two scores agree wherever they read a
-   position through the same interface.
+1. **Path split of `I_CoC` at CoC positions** (`run_coc_path_split.py`, calib_100, same rollout
+   seeds and typed gates as the anatomy): two CE backwards per clip, the second with the K and V
+   of every generated-CoC position detached in every layer, so the CoC-position gate gradient
+   carries the own-token path only; cross-position path = full − direct (linear, exact up to bf16
+   rounding). `analyze_coc_path_split.py` gates: G0 the full backward's CoC row reproduces the
+   anatomy's (per-layer Spearman ≥ 0.99); T1-a ceiling-corrected agreement of `I_traj`@CoC with
+   the cross-position part ≥ 0.70 in both bands (like vision / prompt / ego-history positions);
+   T1-b with the own-token part ≤ 0.45. Both pass → the exception is the loss-evaluation path and
+   the paper can say the two scores agree wherever they read a position through the same
+   interface. T1-a fails → the cross-position readers also differ (the expert and the later CoC
+   queries want different things from the same K/V), and the census result (ego-history vs
+   earlier-CoC readers) is the whole story.
+
+   ```bash
+   cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+   for s in 0 1 2 3; do
+     ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_coc_path_split.py \
+         --exp-id coc_pathsplit_v1_s$s --shard $s --n-shards 4 --gpu $((4 + s)) > outputs/coc_pathsplit_v1_s$s.launch.log 2>&1 &
+   done
+   .venv/bin/python experiments/head_analysis/analyze_coc_path_split.py --shards coc_pathsplit_v1_s0 coc_pathsplit_v1_s1 coc_pathsplit_v1_s2 coc_pathsplit_v1_s3 --out coc_pathsplit_v1
+   ```
+   Cost: rollout + two typed-gate CE backwards per clip ≈ 20 s → 25 clips per shard ≈ 10 min on
+   Ada 4–7; ~400 MB of per-clip arrays per shard (MLP rows).
 2. **Attention targets at CoC queries** (`run_coc_census.py`, eager-attention census as
    `run_vision_census.py` but for CoC-token queries, same calib_100 clips and rollout seeds as the
    anatomy): per head and layer, the mean attention mass of the CoC queries on sink / vision /
