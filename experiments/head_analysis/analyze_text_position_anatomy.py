@@ -47,10 +47,11 @@ rng = np.random.default_rng(0)
 def roles_for(kind, tokens):
     n = len(tokens)
     role = ["other text"] * n
-    first_vs = next((i for i, t in enumerate(tokens) if t == "<|vision_start|>"), n)
-    last_ve = max((i for i, t in enumerate(tokens) if t == "<|vision_end|>"), default=-1)
+    im_ends = [i for i, t in enumerate(tokens) if t == "<|im_end|>"]
+    sys_end = im_ends[0] if im_ends else n  # the system turn closes at the first <|im_end|>
+    hist_start = next((i for i, t in enumerate(tokens) if t == "<|traj_history_start|>"), n)
     hist_end = next((i for i, t in enumerate(tokens) if t == "<|traj_history_end|>"), n)
-    im_end_after = next((i for i, t in enumerate(tokens) if t == "<|im_end|>" and i > hist_end), n)
+    im_end_after = next((i for i in im_ends if i > hist_end), n)
     n_coc = sum(k == 3 for k in kind)
     coc_idx = [i for i, k in enumerate(kind) if k == 3]
     for i, (k, t) in enumerate(zip(kind, tokens)):
@@ -68,9 +69,9 @@ def roles_for(kind, tokens):
             role[i] = "cot_start"
         elif t.strip() in CHAT or t in CHAT:
             role[i] = "chat markers"
-        elif i < first_vs:
+        elif i < sys_end:
             role[i] = "system text"
-        elif i < last_ve:
+        elif i < hist_start:
             role[i] = "camera text"
         elif hist_end < i < im_end_after:
             role[i] = "instruction"
@@ -126,7 +127,9 @@ def main():
     roles = [roles_for(r["kind"], r["tokens"]) for r in rows]
     n_pos = np.array([r["n_pos"] for r in rows])
     n_prompt = np.array([sum(k != 3 for k in r["kind"]) for r in rows])
-    aligned = all(r["tokens"][: n_prompt[0]] == rows[0]["tokens"][: n_prompt[0]] for r in rows) and (n_prompt == n_prompt[0]).all()
+    def prompt_sig(r):  # prompt tokens with the clip-specific history token ids blanked
+        return [("<hist>" if k == 1 else t) for k, t in zip(r["kind"], r["tokens"]) if k != 3]
+    aligned = (n_prompt == n_prompt[0]).all() and all(prompt_sig(r) == prompt_sig(rows[0]) for r in rows)
     lines = [f"Text-position anatomy -- {N} clips, shards {', '.join(args.shards)}; prompt positions aligned across clips: {aligned}", ""]
     lines.append("prompt roles (clip 0):")
     for role in ROLES:

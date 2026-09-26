@@ -256,6 +256,37 @@ done
 ```
 Cost as A: ~3 min per shard on Ada 4–7 (44 GB reserved), ~130 MB of per-clip arrays per loss.
 
+### Results D (2026-09-26, `outputs/textpos_v1/summary.txt`, 99 clips; shard 2 on Ada 6, the other three queued on the same card)
+
+Non-vision normalisation, Q heads, 0–21 | 22–34 (enrichment = share / token share):
+- **D1 — half right.** I_FM's largest text-side sink is the **48 ego-history tokens**: 36.6% (1.69×) |
+  20.2% (0.93×); then the `<|vision_end|>`/`<|vision_start|>` markers 19.7% (1.36×) | 3.1%, the two CoC
+  boundary tokens 11.1% (12×) | 28.4% (22–41×), `<|traj_history_end|>`+start 1.9% (2.2×) | 2.4% (2.7×),
+  `<|cot_start|>` 1.7% (3.9×) | 4.1% (9.1×). Natural language is under its token share for I_FM:
+  camera labels 0.38× | 0.36×, instruction 0.76× | 1.28×, system sentence 0.14× | 0.27×, CoC words
+  0.97× | 1.61×. I_CE is the mirror: CoC words 28.8% (4.8×) | 49.6% (8.3×), `<|cot_start|>` 5.7% (12.5×)
+  | 15.4% (34×), turn markers 8.6% (1.5×) | 13.1% (2.2×), ego history 0.76× | 0.11×, vision markers
+  0.83× | 0.05×. FM − CE: history +0.202 [+0.177, +0.226], vision markers +0.077, CoC words −0.230,
+  `<|cot_start|>` −0.039 (0–21). Top single prompt positions for FM: `-th` of "chain-of-thought"
+  (0.038 | 0.065; also large for CE — a sink-like token, as is a space token inside the camera
+  labels at position 72), the last image's `<|vision_end|>` (0.033), the newest history tokens
+  (0.028 …), `<|cot_start|>` (0.018), `<|traj_history_end|>` (0.016); for CE the assistant-turn
+  `<|im_start|>` (0.070 | 0.126) and `<|cot_start|>` (0.057 | 0.154).
+- **D2 — PASS.** The history block is 16 timesteps × 3 slots. I_FM's share rises monotonically from
+  step 4 to the newest step (0.036 → 0.130 | 0.033 → 0.118), the oldest step alone is second (first-
+  token effect); last 8 / first 8 tokens = **1.78 | 1.74** (> 1.5), Spearman(index, share) +0.39 | +0.50.
+  I_CE is U-shaped and flat (1.02 | 0.99). Slot 1 of each step carries 42–57%.
+- **D3 — PASS.** Same-role agreement, split-half corrected: every role ≥ 0.93 in 0–21 (raw 0.83–0.98;
+  ego history 1.00, vision markers 0.99, CoC words 0.95, `<|cot_start|>` 1.00) and ≥ 0.86 in 22–34
+  except the single sink token (0.74). No second CoC-like exception hides inside the prompt.
+- Residual-gradient shares (unit-free): FM 0–21 history 0.282, camera labels 0.226, vision markers
+  0.160; CE camera labels 0.286, turn markers 0.229, CoC words 0.189.
+Reading: outside vision, I_FM reads numbers and block boundaries (ego history with recency, the
+markers that close each image, the tokens that close the reasoning); I_CE reads the language at the
+positions where the next token is uncertain. At any token the two rank the heads alike. Note
+`paper-analysis/2026-09-26_text_token_importance.md`; figures `fig13_text_tokens.*`,
+`fig13_text_role_shares_analysis.png`, `fig13b_prompt_position_share_analysis.png`.
+
 ## Proposed C (not launched — on the user's go): make the boundary-token reading causal
 
 A's 63–75% is a gradient share. Two cheap position-level knockouts would make it a cause:
