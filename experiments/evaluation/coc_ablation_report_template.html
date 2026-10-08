@@ -331,6 +331,121 @@ rollout이 비트 단위로 재현되므로 페어링은 정확하다.</li>
 그대로 재사용하고 no-CoC 시퀀스 세 개를 같은 <code>eval_config_samples</code>에 넣는다.
 </p>
 
+<h2><span class="num">5</span>추가 분석 (2026-10-08): CoC가 GT에 가까울수록 CoC가 더 돕는가</h2>
+
+<p>
+3절의 가설("맞는 CoC는 돕고 틀린 CoC는 해친다")을 직접 검정했다. 생성 CoC와 GT CoC의 유사도를 세 가지로
+재고, Δ = minADE@6(<code>trajprompt</code>) − minADE@6(<code>rollout</code>)(&gt;0이면 CoC가 도움)과의 관계를 봤다.
+새 주행 평가는 없고 저장된 1,533행을 썼다. 가설·판정 기준·대조는 결과를 보기 전에 계획서에 적었다.
+</p>
+
+<table>
+<thead><tr><th>척도</th><th>정의</th><th class="r">자기 CoC</th><th class="r">다른 클립의 CoC</th><th class="r">GT 자신</th></tr></thead>
+<tbody>
+<tr><td>judge 행동</td><td rowspan="2">로컬 <code>Qwen/Qwen3-8B</code>가 행동 일치·원인 일치를 각각 0/1/2로 채점(답 토큰 확률의 기댓값). 합(0–4)이 주 척도</td><td class="r">1.240</td><td class="r">0.656</td><td class="r">2.000</td></tr>
+<tr><td>judge 원인</td><td class="r">1.056</td><td class="r">0.341</td><td class="r">2.000</td></tr>
+<tr><td>임베딩</td><td><code>all-mpnet-base-v2</code> 평균 풀링 코사인</td><td class="r">0.596</td><td class="r">0.488</td><td class="r">1.000</td></tr>
+<tr><td>NLL</td><td>저장된 <code>nll_gtcoc</code>의 부호 반전. 생성 문장이 아니라 클립·모델의 속성</td><td class="r" colspan="3">평균 −3.01</td></tr>
+</tbody></table>
+
+<p>
+두 텍스트 척도는 자기 클립의 CoC와 다른 클립의 CoC를 AUC 0.73–0.76으로 구분한다. 척도 간 순위상관은
+judge–임베딩 +0.65, judge–NLL +0.33, 임베딩–NLL +0.34다. judge 합이 정확히 4.0(완전 일치)인 클립이 20% 이상이다.
+</p>
+
+<h3>5.1 사전 등록 판정: 유사도는 CoC의 이득을 예측하지 못한다</h3>
+
+<table>
+<thead><tr><th>척도</th><th class="r">H1: ρ(S, Δ) [95% CI]</th><th class="r">난이도 통제 편상관</th><th class="r">음성 대조 ρ(S, empty − trajprompt)</th><th class="r">양성 대조 ρ(S, GT − rollout)</th></tr></thead>
+<tbody>
+<tr><td>judge (합)</td><td class="r ns">−0.006 [−0.053, +0.041]</td><td class="r">+0.026</td><td class="r ns">+0.017 [−0.031, +0.065]</td><td class="r ns">+0.014 [−0.036, +0.062]</td></tr>
+<tr><td>judge 행동</td><td class="r ns">+0.003 [−0.045, +0.050]</td><td class="r">+0.035</td><td class="r ns">+0.014 [−0.034, +0.065]</td><td class="r ns">+0.010 [−0.042, +0.059]</td></tr>
+<tr><td>judge 원인</td><td class="r ns">−0.013 [−0.060, +0.034]</td><td class="r">+0.018</td><td class="r ns">+0.020 [−0.027, +0.067]</td><td class="r ns">+0.015 [−0.033, +0.066]</td></tr>
+<tr><td>임베딩</td><td class="r ns">−0.034 [−0.086, +0.015]</td><td class="r">−0.014</td><td class="r ns">+0.049 [−0.001, +0.096]</td><td class="r ns">−0.010 [−0.062, +0.040]</td></tr>
+<tr><td>NLL</td><td class="r ns">+0.010 [−0.039, +0.064]</td><td class="r">+0.014</td><td class="r ns">+0.020 [−0.031, +0.071]</td><td class="r ns">−0.038 [−0.085, +0.014]</td></tr>
+</tbody></table>
+
+<p>
+<b>H1은 세 척도 모두 불성립</b>이다. CI 폭이 ±0.05라 |ρ| &gt; 0.09인 관계는 배제된다. train·val로 나눠도,
+minFDE로 바꿔도, <code>empty</code> 기준으로 바꿔도 같다(전부 CI가 0 포함). 음성 대조는 순위 기준으로 깨끗하다.
+</p>
+
+<h3>5.2 rollout이 이긴 클립과 진 클립의 유사도 (H2)</h3>
+
+<table>
+<thead><tr><th>집단</th><th class="r">n</th><th class="r">judge (0–4)</th><th class="r">judge 행동</th><th class="r">judge 원인</th><th class="r">임베딩</th><th class="r">−NLL</th></tr></thead>
+<tbody>
+<tr><td>rollout이 이김 (Δ &gt; +0.05)</td><td class="r">536</td><td class="r">2.278</td><td class="r">1.240</td><td class="r">1.038</td><td class="r">0.589</td><td class="r">−3.002</td></tr>
+<tr><td>동률 (|Δ| ≤ 0.05)</td><td class="r">445</td><td class="r">2.305</td><td class="r">1.232</td><td class="r">1.073</td><td class="r">0.598</td><td class="r">−3.040</td></tr>
+<tr><td>rollout이 짐 (Δ &lt; −0.05)</td><td class="r">552</td><td class="r">2.306</td><td class="r">1.246</td><td class="r">1.060</td><td class="r">0.602</td><td class="r">−2.980</td></tr>
+<tr><td>이김 − 짐</td><td class="r"></td><td class="r ns">−0.028</td><td class="r ns">−0.006</td><td class="r ns">−0.022</td><td class="r ns">−0.013</td><td class="r ns">−0.022</td></tr>
+<tr><td>Mann-Whitney p</td><td class="r"></td><td class="r">0.46</td><td class="r">0.79</td><td class="r">0.26</td><td class="r">0.17</td><td class="r">0.83</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::sim_by_winner.png" alt="승패별 유사도">
+<figcaption>rollout이 trajprompt를 이긴 클립, 비긴 클립, 진 클립의 GT 유사도. 세 척도 모두 차이가 없다.</figcaption></figure>
+
+<h3>5.3 유사도 5분위별 (judge 기준)</h3>
+
+<table>
+<thead><tr><th>judge 5분위</th><th class="r">n</th><th class="r">rollout minADE@6</th><th class="r">Δ trajprompt − rollout [95% CI]</th><th class="r">GT − rollout (@8)</th><th class="r">GT − trajprompt (@8)</th></tr></thead>
+<tbody>
+<tr><td>Q1 (0.00–0.62, 가장 다름)</td><td class="r">307</td><td class="r">1.112</td><td class="r ns">−0.046 [−0.135, +0.033]</td><td class="r">−0.140</td><td class="r">−0.083</td></tr>
+<tr><td>Q2 (0.62–1.38)</td><td class="r">307</td><td class="r">1.102</td><td class="r ns">+0.016 [−0.083, +0.107]</td><td class="r">−0.124</td><td class="r">−0.086</td></tr>
+<tr><td>Q3 (1.38–3.33)</td><td class="r">306</td><td class="r">0.962</td><td class="r ns">−0.062 [−0.167, +0.021]</td><td class="r">−0.047</td><td class="r">+0.024</td></tr>
+<tr><td>Q4 (3.34–4.00)</td><td class="r">307</td><td class="r">0.753</td><td class="r ns">+0.009 [−0.036, +0.054]</td><td class="r">−0.036</td><td class="r">−0.057</td></tr>
+<tr><td>Q5 (4.00, 완전 일치)</td><td class="r">306</td><td class="r">0.743</td><td class="r ns">+0.003 [−0.052, +0.060]</td><td class="r">+0.010</td><td class="r">+0.005</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::sim_dose_response.png" alt="유사도 5분위별 델타">
+<figcaption>유사도 5분위별 Δ(파랑)와 음성 대조(회색). 세 척도 모두 Δ가 유사도에 따라 올라가지 않는다.</figcaption></figure>
+
+<h3>5.4 사후 분석 (평균 기반)</h3>
+
+<p>
+등록한 통계량은 순위상관인데, 이 델타는 꼬리가 두껍고 프로토콜의 1차 통계는 평균이다. 5분위 평균에서
+"GT − rollout" 열이 단조로 보여, 평균 기반 기울기(유사도 1 SD당)와 Q5 − Q1 차이를 결과를 본 뒤에 추가했다.
+</p>
+
+<table>
+<thead><tr><th>결과 변수</th><th class="r">judge 기울기 [95% CI]</th><th class="r">judge Q5 − Q1</th><th class="r">임베딩 기울기</th><th class="r">NLL 기울기</th></tr></thead>
+<tbody>
+<tr><td>Δ trajprompt − rollout (주 질문)</td><td class="r ns">+0.009 [−0.022, +0.042]</td><td class="r ns">+0.048 [−0.050, +0.155]</td><td class="r ns">−0.024 [−0.059, +0.010]</td><td class="r ns">+0.020 [−0.010, +0.053]</td></tr>
+<tr><td>음성 대조 empty − trajprompt</td><td class="r">+0.020 [+0.003, +0.037]</td><td class="r ns">+0.022 [−0.025, +0.073]</td><td class="r">+0.019 [+0.002, +0.037]</td><td class="r ns">−0.007 [−0.025, +0.010]</td></tr>
+<tr><td>양성 대조 GT − rollout</td><td class="r">+0.057 [+0.018, +0.105]</td><td class="r">+0.150 [+0.030, +0.290]</td><td class="r ns">+0.001 [−0.039, +0.041]</td><td class="r ns">−0.017 [−0.056, +0.021]</td></tr>
+<tr><td>GT − trajprompt</td><td class="r ns">+0.032 [−0.002, +0.075]</td><td class="r ns">+0.088 [−0.019, +0.219]</td><td class="r ns">+0.012 [−0.019, +0.043]</td><td class="r">−0.032 [−0.062, −0.001]</td></tr>
+</tbody></table>
+
+<h3>5.5 해석 (의견)</h3>
+
+<div class="callout">
+<p><b>CoC의 정확도는 CoC를 쓰는 것의 이득을 예측하지 못한다.</b> judge가 GT와 완전히 일치한다고 본 20%의
+클립에서도 CoC를 쓴 쪽과 안 쓴 쪽은 같다(+0.003 [−0.052, +0.060]). 3절에서 세운 "맞는 CoC는 돕는다"는
+가설은 지지되지 않는다.</p>
+</div>
+
+<ul>
+<li><b>틀린 CoC를 정답으로 바꾸면 좋아진다는 것은 judge에서만, 평균 기준으로만 보인다(사후).</b> 자기 CoC가
+GT와 가장 다른 클립에서 GT로 바꾸면 −0.14 m, 완전 일치 클립에서는 0이다(Q5 − Q1 +0.150 [+0.030, +0.290]).
+임베딩과 NLL에서는 보이지 않고, 등록한 순위상관으로는 세 척도 모두 보이지 않는다. 여러 검정 중 하나이므로
+확정으로 읽으면 안 된다.</li>
+<li><b>두 결과를 함께 읽으면(가설):</b> 모델이 맞는 CoC를 쓸 수 있는 클립에서는 쓰지 않아도 같은 궤적을 낸다.
+GT CoC가 이득을 주는 곳은 모델이 스스로 맞는 CoC를 쓰지 못한 클립, 즉 GT 문장이 모델에게 없던 정보를
+주는 곳이다. 이 모델에서 자기 CoC는 궤적의 원인이라기보다 같은 내부 상태의 또 다른 출력처럼 행동한다.</li>
+<li><b>음성 대조가 평균 기준으로는 완전히 깨끗하지 않다.</b> judge와 임베딩의 기울기가 +0.02 m로 0을 살짝
+배제한다(둘 다 CoC가 없는 조건 사이인데도). 크기가 주 질문의 기울기(+0.009)보다 크므로, 유사도 척도가
+클립 속성을 일부 재고 있다는 뜻이고, 주 질문에서 양의 기울기가 나왔더라도 CoC 효과로 귀속할 수 없었다.</li>
+<li><b>한계.</b> 클립 간 상관이다. 유사도가 높은 클립은 애초에 쉽다(rollout 0.743 대 1.112). judge는 관대한
+편이다("Gentle deceleration approaching the intersection…"과 "Keep distance to the lead scooter…"에 2/2).
+CoC는 클립당 한 번만 샘플링했다. 결정적인 검정은 같은 클립에서 CoC를 여러 개 샘플링해 클립 내부에서
+유사도와 궤적을 비교하는 것이다.</li>
+</ul>
+
+<p>
+재현: <code>score_coc_similarity.py --gpu 0</code> → <code>outputs/coc_ablation_ood/coc_similarity.json</code>,
+<code>analyze_coc_similarity.py</code> → <code>metrics_similarity.json</code>, <code>summary_similarity.txt</code>.
+</p>
+
 <footer>
 Alpamayo-1.5-10B rev 7aba8293 · OOD 1,533 (<code>outputs/eval_sets/ood.parquet</code>) · k=8, seed 42 ·
 RTX 5880 Ada × 4 · 결정적 설정(CUBLAS_WORKSPACE_CONFIG=:4096:8, TF32 off)
