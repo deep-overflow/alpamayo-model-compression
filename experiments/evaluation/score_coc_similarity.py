@@ -16,6 +16,7 @@ No driving model is involved, so this is not bound to the Ada cards.
 
 Usage:
   python experiments/evaluation/score_coc_similarity.py --gpu 0
+  python experiments/evaluation/score_coc_similarity.py --gpu 0,1 --judge Qwen/Qwen3-32B --tag q32
 """
 
 import argparse
@@ -60,9 +61,16 @@ def load_rows(exp_dir):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp-id", default="coc_ablation_ood")
-    ap.add_argument("--gpu", type=int, default=0)
+    ap.add_argument("--gpu", default="0", help="card, or comma list to spread a large judge")
+    ap.add_argument("--judge", default=JUDGE)
+    ap.add_argument("--tag", default=None,
+                    help="suffix of the output file, so a second judge does not overwrite the first")
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--shard", type=int, default=0)
+    ap.add_argument("--n-shards", type=int, default=1,
+                    help="strided split of the pairs, one judge replica per shard; the last "
+                         "shard to finish merges them")
     args = ap.parse_args()
 
     cp = configparser.ConfigParser()
@@ -106,9 +114,10 @@ def main():
     print("emb cos mean", {k: round(float(v.mean()), 4) for k, v in emb.items()}, flush=True)
 
     # judge
-    jt = AutoTokenizer.from_pretrained(JUDGE)
+    jt = AutoTokenizer.from_pretrained(args.judge)
     jt.padding_side = "left"
-    jm = AutoModelForCausalLM.from_pretrained(JUDGE, dtype=torch.bfloat16).cuda().eval()
+    jm = AutoModelForCausalLM.from_pretrained(args.judge, dtype=torch.bfloat16,
+                                              device_map="auto").eval()
     digit_ids = [jt.encode(d, add_special_tokens=False) for d in "012"]
     assert all(len(d) == 1 for d in digit_ids)
     digit_ids = torch.tensor([d[0] for d in digit_ids], device="cuda")  # (3,)
@@ -123,17 +132,18 @@ def main():
     @torch.no_grad()
     def judge(question, cands):
         exp, mass = [], []
-        for i in range(0, n, args.batch):
-            texts = [prompt(question, gt[j], cands[j]) for j in range(i, min(i + args.batch, n))]
+        for i in range(0, len(todo), args.batch):
+            texts = [prompt(question, gt[j], cands[j]) for j in todo[i:i + args.batch]]
             b = jt(texts, padding=True, return_tensors="pt").to("cuda")
-            p = jm(**b).logits[:, -1].float().softmax(-1)[:, digit_ids]  # (B, 3)
+            p = jm(**b).logits[:, -1].float().softmax(-1).to("cuda")[:, digit_ids]  # (B, 3)
             mass.append(p.sum(-1).cpu())
             p = p / p.sum(-1, keepdim=True)
             exp.append((p * torch.arange(3, device="cuda")).sum(-1).cpu())  # (B,)
         return torch.cat(exp).numpy(), torch.cat(mass).numpy()
 
-    res = {"clip_id": [r["clip_id"] for r in rows], "perm": perm.tolist(),
-           "judge_model": JUDGE, "emb_model": EMB, "questions": Q}
+    todo = list(range(n))[args.shard::args.n_shards]
+    res = {"clip_id": [r["clip_id"] for r in rows], "perm": perm.tolist(), "idx": todo,
+           "judge_model": args.judge, "emb_model": EMB, "questions": Q}
     for k, cands in pairs.items():
         res[f"emb_{k}"] = [round(float(x), 5) for x in emb[k]]
         for qn, qt in Q.items():
@@ -141,8 +151,27 @@ def main():
             res[f"judge_{qn}_{k}"] = [round(float(x), 5) for x in s]
             print(f"judge {qn:6s} {k:8s} mean {s.mean():.3f}  digit mass {mass.mean():.4f} "
                   f"(min {mass.min():.3f})", flush=True)
-    (out_dir / "coc_similarity.json").write_text(json.dumps(res))
-    print("->", out_dir / "coc_similarity.json")
+    name = "coc_similarity.json" if not args.tag else f"coc_similarity_{args.tag}.json"
+    if args.n_shards > 1:
+        part = out_dir / f"{Path(name).stem}_s{args.shard}of{args.n_shards}.json"
+        part.write_text(json.dumps(res))
+        print("->", part, flush=True)
+        parts = [out_dir / f"{Path(name).stem}_s{i}of{args.n_shards}.json"
+                 for i in range(args.n_shards)]
+        if not all(q.exists() for q in parts):
+            return
+        loaded = [json.loads(q.read_text()) for q in parts]
+        res = dict(loaded[0])
+        for key in [k for k in res if k.startswith("judge_") and k != "judge_model"]:
+            full = [None] * n
+            for d in loaded:
+                for j, v in zip(d["idx"], d[key]):
+                    full[j] = v
+            assert None not in full
+            res[key] = full
+        res["idx"] = list(range(n))
+    (out_dir / name).write_text(json.dumps(res))
+    print("->", out_dir / name)
 
 
 if __name__ == "__main__":

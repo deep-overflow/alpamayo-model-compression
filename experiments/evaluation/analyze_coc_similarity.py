@@ -87,11 +87,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp-id", default="coc_ablation_ood")
     ap.add_argument("--ref", default="baseline_ada_ood")
+    ap.add_argument("--tag", default=None,
+                    help="read coc_similarity_<tag>.json (a second judge) and suffix the outputs")
     args = ap.parse_args()
     out = REPO / "outputs" / args.exp_id
+    sfx = f"_{args.tag}" if args.tag else ""
     by = load(out)
     ref = load(REPO / "outputs" / args.ref)
-    sim = json.loads((out / "coc_similarity.json").read_text())
+    sim = json.loads((out / f"coc_similarity{sfx}.json").read_text())
     ids = sim["clip_id"]
     assert set(ids) == set(by) and len(ids) == 1533
     rows = [by[c] for c in ids]
@@ -126,6 +129,32 @@ def main():
         L.append(f"  {name:13s} own {c['own']:.3f}  other clip's CoC {c['shuffled']:.3f}  GT itself "
                  f"{c['identity']:.3f}  AUC(own vs other) {c['auc_own_vs_shuffled']:.3f}")
     L.append("")
+
+    if args.tag:
+        # same prompt, same pairs, other judge: agreement is the only reliability estimate
+        # available without human labels
+        base = json.loads((out / "coc_similarity.json").read_text())
+        assert base["clip_id"] == ids
+        M["judge_agreement"] = {"this": sim["judge_model"], "other": base["judge_model"]}
+        L.append(f"-- judge agreement: {sim['judge_model']} vs {base['judge_model']} --")
+        for qn in ("action", "cause"):
+            a, b = np.array(sim[f"judge_{qn}_own"]), np.array(base[f"judge_{qn}_own"])
+            ra, rb = np.rint(a).astype(int), np.rint(b).astype(int)
+            tab = [[int(((ra == i) & (rb == j)).sum()) for j in range(3)] for i in range(3)]
+            M["judge_agreement"][qn] = {
+                "spearman": float(spearmanr(a, b)[0]), "exact": float((ra == rb).mean()),
+                "mean_this": float(a.mean()), "mean_other": float(b.mean()), "table": tab}
+            L.append(f"  {qn:6s} Spearman {spearmanr(a, b)[0]:+.3f}  same rounded score "
+                     f"{(ra == rb).mean():.1%}  mean {a.mean():.3f} vs {b.mean():.3f}  "
+                     f"rows=this 0/1/2, cols=other: {tab}")
+        ta = np.array(sim["judge_action_own"]) + np.array(sim["judge_cause_own"])
+        tb = np.array(base["judge_action_own"]) + np.array(base["judge_cause_own"])
+        M["judge_agreement"]["total_spearman"] = float(spearmanr(ta, tb)[0])
+        M["judge_agreement"]["full_match_this"] = float((ta > 3.5).mean())
+        M["judge_agreement"]["full_match_other"] = float((tb > 3.5).mean())
+        L.append(f"  total  Spearman {spearmanr(ta, tb)[0]:+.3f}  scored >3.5 (full match): "
+                 f"{(ta > 3.5).mean():.1%} vs {(tb > 3.5).mean():.1%}")
+        L.append("")
 
     L.append("-- agreement between measures (Spearman) --")
     for i, a in enumerate(MEAS):
@@ -247,12 +276,12 @@ def main():
         L.append(f"  act {S['judge_action'][i]:.2f} cause {S['judge_cause'][i]:.2f} emb "
                  f"{S['emb'][i]:.2f} | GT: {rows[i]['gt_coc']} | GEN: {rows[i]['gen_coc']}")
 
-    (out / "metrics_similarity.json").write_text(json.dumps(M, indent=2))
-    (out / "summary_similarity.txt").write_text("\n".join(L) + "\n")
+    (out / f"metrics_similarity{sfx}.json").write_text(json.dumps(M, indent=2))
+    (out / f"summary_similarity{sfx}.txt").write_text("\n".join(L) + "\n")
     print("\n".join(L))
 
     fig, axes = plt.subplots(1, 3, figsize=(11, 3.5), sharey=True)
-    lab = {"judge": "LLM judge (action + cause, 0-4)", "emb": "embedding cosine",
+    lab = {"judge": f"LLM judge {sim['judge_model'].split('/')[-1]} (0-4)", "emb": "embedding cosine",
            "nll": "-NLL of GT CoC"}
     for ax, m in zip(axes, ("judge", "emb", "nll")):
         for y, c, name in (("d_trajprompt", C1, "trajprompt - rollout"),
@@ -267,7 +296,7 @@ def main():
         ax.set_title(f"{lab[m]}\nrho {r['rho']:+.3f} [{r['ci'][0]:+.3f},{r['ci'][1]:+.3f}]")
     axes[0].set_ylabel(f"Δ minADE@{K} (m), >0: CoC helped")
     axes[0].legend(frameon=False, fontsize=8)
-    fig.tight_layout(), fig.savefig(out / "plots" / "sim_dose_response.png", dpi=150), plt.close(fig)
+    fig.tight_layout(), fig.savefig(out / "plots" / f"sim_dose_response{sfx}.png", dpi=150), plt.close(fig)
 
     fig, axes = plt.subplots(1, 3, figsize=(11, 3.2))
     for ax, m in zip(axes, ("judge", "emb", "nll")):
@@ -280,7 +309,7 @@ def main():
         ax.set_ylim(min(ms) - 4 * max(ci), max(ms) + 4 * max(ci))
         ax.set_title(f"{lab[m]}\nwins vs loses p={M['h2']['mwu_p'][m]:.2g}")
     axes[0].set_ylabel("similarity to GT CoC (mean ± 95% CI)")
-    fig.tight_layout(), fig.savefig(out / "plots" / "sim_by_winner.png", dpi=150), plt.close(fig)
+    fig.tight_layout(), fig.savefig(out / "plots" / f"sim_by_winner{sfx}.png", dpi=150), plt.close(fig)
 
 
 if __name__ == "__main__":
