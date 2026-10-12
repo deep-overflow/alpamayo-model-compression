@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-12</div>
+  <h1>캘리브레이션 세트를 고정해도 성능은 흔들린다 &mdash; 중요도 측정의 시드만 바꿔 0.95에서 1.67까지</h1>
+  <div class="meta">
+    <code>calib_100</code> 고정, <code>dual_u40_v2</code> 레시피 &middot; 중요도 측정의 CoC 시드 4종 + FM 노이즈 시드 4종 + 기준 1 = 9 arm, 같은 추정량의 기존 3 arm 포함 12 arm &middot;
+    test500, minADE@6, 무압축 <code>baseline_ada_ps_test</code>와 페어드 &middot; RTX 5880 Ada &times;4 &middot; <code>outputs/seed_arms/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>같은 100클립, 같은 레시피에서 시드만 바꾼 12개 arm의 test500 minADE@6이 0.950에서 1.670까지 퍼진다.</b> 10개는 0.95&ndash;1.05에 모이고, CoC 시드 하나(c3, 1.139)와 FM 노이즈 시드 하나(n1, 1.670)가 벗어난다. 12 arm의 표준편차는 0.201, n1을 빼면 0.055다.</li>
+    <li><b>FM 노이즈 시드 하나만 바꿔도 나쁜 캘리브레이션 추출과 같은 붕괴가 난다.</b> n1은 기준 arm 대비 +0.619 [+0.528, +0.718]이고 손상이 cruise에 몰린다(cruise +1.21, 나머지 +0.24~+0.46). 이것은 서로 다른 100클립을 뽑았을 때 나쁜 추출(블록 c&middot;d&middot;e)이 보이던 것과 같은 모양이다.</li>
+    <li><b>시드를 전혀 안 바꾼 재실행도 구별된다.</b> 기준 arm은 같은 추정량의 예전 런과 클립별 FM 손실이 1e-9까지 같고 중요도 지도 상관이 0.9999인데, 선택이 Q head 2개와 MLP 채널 316개만큼 달라졌고 성능이 +0.083 [+0.040, +0.124] 나쁘다(p=2e-9). 같은 조건의 다른 두 재실행끼리는 +0.0005로 같다.</li>
+    <li><b>CoC 시드와 노이즈 시드 중 어느 쪽이 더 위험한지는 이 표본으로 가릴 수 없다.</b> 그룹 평균은 노이즈 쪽이 +0.13 나쁘지만 전부 n1 하나에서 온다. n1을 빼면 오히려 CoC 쪽이 +0.040 나쁘다. 그룹당 4 arm으로는 "드문 붕괴"의 빈도를 잴 수 없다.</li>
+    <li><b>출하본(0.950)은 12 arm 중 1위다.</b> 이 레포가 인용해 온 24% 프루닝의 대가(+0.052 중앙값)는 같은 클립 위에서도 좋은 쪽 끝의 값이다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>앞선 측정은 CoC를 바꾸면 클립의 중요도가 바뀌고 세트의 유지집합이 2&ndash;6% 움직임을 보였지만, 그것이 성능에 닿는지는 재지 않았다. 여기서는 캘리브레이션 클립을 고정한 채 중요도 측정 안의 두 난수원 &mdash; CoC 샘플링과 flow-matching 노이즈 &mdash; 만 바꿔 프루닝된 모델을 만들고 성능을 잰다. 가설: 클립이 같으면 성능도 같다(시드는 무해하다). 이 가설이 맞아야 "추출 간 성능 차이는 클립의 성질"이라는 지금까지의 해석이 성립한다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>arm</th><th>CoC rollout 시드</th><th>FM 노이즈 시드</th><th>역할</th></tr>
+  <tr><td><code>ref</code></td><td>0</td><td>0</td><td>출하 추정량을 그대로 다시 잰 것</td></tr>
+  <tr><td><code>c1</code>&ndash;<code>c4</code></td><td>1&ndash;4</td><td>0</td><td>클립마다 다른 CoC, 노이즈 고정</td></tr>
+  <tr><td><code>n1</code>&ndash;<code>n4</code></td><td>0</td><td>1&ndash;4</td><td>같은 CoC, 다른 FM 노이즈</td></tr>
+  <tr><td><code>dual_ada</code>, <code>dualgtref</code></td><td>0</td><td>0</td><td>같은 추정량의 예전 Ada 재측정 (2026-09-03, 09-10)</td></tr>
+  <tr><td><code>shipped</code></td><td>0</td><td>0</td><td>출하본. 중요도를 Blackwell에서 잼</td></tr>
+</table>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>고정</td><td><code>calib_100</code> 100클립, 기준 <code>max(rank I_traj, rank I_CoC)</code>, 층당 Q 13/32 &middot; MLP 4898/12288 제거, expert&middot;KV 불변. 12 arm 전부 2,657,452,032 파라미터 제거로 동일</td></tr>
+  <tr><td>시드 규칙</td><td>CoC j: <code>clip_seed + j&middot;100003</code>, 노이즈 m: <code>clip_seed + m</code>. <code>run_importance.py</code>의 <code>--roll-offset</code> / <code>--noise-offset</code>(둘 다 0이면 기존과 동일)</td></tr>
+  <tr><td>평가</td><td>test500, 클립당 CoC 1개 &middot; 궤적 8개 중 앞 6개, seed 42, Ada. 12 arm의 평가 설정이 동일함을 <code>config.json</code>에서 확인</td></tr>
+  <tr><td>통계</td><td>클립 단위 페어드. 평균의 부트스트랩 95% CI(20,000회)가 헤드라인, 중앙값과 Wilcoxon 병기</td></tr>
+  <tr><td>비용</td><td>arm당 중요도 10분 + 빌드 30초 + test500 약 68분; 9 arm, Ada 4장, 3시간 52분</td></tr>
+</table>
+<div class="callout opinion">
+  <strong>측정이 맞는지 확인한 것</strong>
+  <ul>
+    <li><code>ref</code>의 중요도 실행은 <code>importance_v2_ada</code>와 클립 목록이 같고, 100클립 전부 CoC 길이와 FM 손실이 일치한다(차이 &lt; 1e-9). 중요도 지도의 층내 순위 상관은 0.9999&ndash;1.0000이다. 즉 추정량은 정확히 재현됐고 남은 차이는 backward의 실행 간 비결정성이다.</li>
+    <li><code>n1</code>의 중요도에 이상은 없다(NaN 없음, FM 손실 평균 0.248로 다른 arm과 같은 수준). <code>n1</code>과 <code>n2</code>는 <code>ref</code>와 다른 유닛 수가 거의 같다(Q 37 대 34, MLP 16,436 대 15,925).</li>
+    <li>노이즈 arm에서 <code>I_CoC</code>는 변하지 않고(상관 0.9999) <code>I_traj</code>만 변한다(Q 0.954, MLP 0.894). CoC arm에서는 둘 다 변한다. 인자가 의도대로 작동한다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 12 arm의 test500 성적</h3>
+<table>
+  <tr><th>arm</th><th class="num">minADE@6 평균</th><th class="num">중앙값</th><th class="num">minFDE@6</th><th class="num">&Delta; vs 무압축 (평균)</th><th class="num">(중앙값)</th><th class="num">CoC 퇴화</th><th class="num">ref와 유지집합 겹침 Q / MLP</th></tr>
+  <tr><td>무압축</td><td class="num">0.8417</td><td class="num">0.5086</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+  <tr><td><code>shipped</code></td><td class="num"><b>0.9498</b></td><td class="num">0.6637</td><td class="num">2.546</td><td class="num">+0.108</td><td class="num">+0.052</td><td class="num">3.0%</td><td class="num">96.9 / 97.3%</td></tr>
+  <tr><td><code>n4</code></td><td class="num">0.9670</td><td class="num">0.6899</td><td class="num">2.562</td><td class="num">+0.125</td><td class="num">+0.071</td><td class="num">1.8%</td><td class="num">95.2 / 93.6%</td></tr>
+  <tr><td><code>dualgtref</code></td><td class="num">0.9684</td><td class="num">0.6629</td><td class="num">2.586</td><td class="num">+0.127</td><td class="num">+0.060</td><td class="num">2.6%</td><td class="num">&mdash;</td></tr>
+  <tr><td><code>dual_ada</code></td><td class="num">0.9689</td><td class="num">0.6394</td><td class="num">2.588</td><td class="num">+0.127</td><td class="num">+0.060</td><td class="num">2.4%</td><td class="num">99.7 / 99.9%</td></tr>
+  <tr><td><code>c2</code></td><td class="num">0.9719</td><td class="num">0.6616</td><td class="num">2.654</td><td class="num">+0.130</td><td class="num">+0.053</td><td class="num">1.2%</td><td class="num">94.4 / 92.5%</td></tr>
+  <tr><td><code>c4</code></td><td class="num">0.9721</td><td class="num">0.6634</td><td class="num">2.618</td><td class="num">+0.130</td><td class="num">+0.051</td><td class="num">2.0%</td><td class="num">93.6 / 92.2%</td></tr>
+  <tr><td><code>n3</code></td><td class="num">0.9749</td><td class="num">0.6797</td><td class="num">2.598</td><td class="num">+0.133</td><td class="num">+0.083</td><td class="num">2.6%</td><td class="num">95.9 / 94.9%</td></tr>
+  <tr><td><code>n2</code></td><td class="num">1.0095</td><td class="num">0.6555</td><td class="num">2.697</td><td class="num">+0.168</td><td class="num">+0.085</td><td class="num">2.6%</td><td class="num">95.0 / 94.0%</td></tr>
+  <tr><td><code>c1</code></td><td class="num">1.0124</td><td class="num">0.6807</td><td class="num">2.706</td><td class="num">+0.171</td><td class="num">+0.090</td><td class="num">1.4%</td><td class="num">93.1 / 90.6%</td></tr>
+  <tr><td><code>ref</code></td><td class="num">1.0516</td><td class="num">0.7284</td><td class="num">2.832</td><td class="num">+0.210</td><td class="num">+0.100</td><td class="num">1.2%</td><td class="num">100 / 100%</td></tr>
+  <tr><td><code>c3</code></td><td class="num"><b>1.1391</b></td><td class="num">0.8006</td><td class="num">3.078</td><td class="num">+0.297</td><td class="num">+0.180</td><td class="num">1.0%</td><td class="num">92.7 / 92.2%</td></tr>
+  <tr><td><code>n1</code></td><td class="num"><b>1.6703</b></td><td class="num">1.1862</td><td class="num">4.829</td><td class="num"><b>+0.829</b></td><td class="num"><b>+0.422</b></td><td class="num">1.4%</td><td class="num">94.6 / 93.8%</td></tr>
+</table>
+<p>12 arm: 평균 1.055, 표준편차 0.201, 중앙값 0.974, 범위 0.950&ndash;1.670. n1을 빼면 표준편차 0.055, 범위 0.950&ndash;1.139. CoC 퇴화율은 전 arm 1.0&ndash;3.0%로 성능과 무관하다(가장 나쁜 n1이 1.4%).</p>
+<figure>
+  <img src="PLOT::sa::arm_cost.png" alt="arm별 무압축 대비 대가">
+  <figcaption>무압축 대비 페어드 차이. 왼쪽 평균, 오른쪽 중앙값, 막대 위 선은 95% CI. 회색은 같은 추정량의 기존 런, 노랑은 기준 arm, 분홍은 CoC 시드, 파랑은 노이즈 시드.</figcaption>
+</figure>
+
+<h3>3.2 기준 arm 대비 페어드 차이 (500클립)</h3>
+<table>
+  <tr><th>arm &minus; ref</th><th class="num">평균 [95% CI]</th><th class="num">중앙값 [95% CI]</th><th class="num">p</th><th class="num">10% 절사평균</th><th class="num">0.05 m 넘게 움직인 클립 (악화 / 개선)</th></tr>
+  <tr><td><code>c1</code></td><td class="num">&minus;0.039 [&minus;0.077, +0.002]</td><td class="num">&minus;0.014 [&minus;0.039, &minus;0.002]</td><td class="num">0.006</td><td class="num">&minus;0.035</td><td class="num">180 / 218</td></tr>
+  <tr><td><code>c2</code></td><td class="num">&minus;0.080 [&minus;0.122, &minus;0.036]</td><td class="num">&minus;0.022 [&minus;0.044, &minus;0.004]</td><td class="num">3e-4</td><td class="num">&minus;0.051</td><td class="num">170 / 222</td></tr>
+  <tr><td><code>c3</code></td><td class="num"><b>+0.088</b> [+0.044, +0.133]</td><td class="num">+0.053 [+0.027, +0.070]</td><td class="num">9e-6</td><td class="num">+0.065</td><td class="num">251 / 160</td></tr>
+  <tr><td><code>c4</code></td><td class="num">&minus;0.080 [&minus;0.120, &minus;0.039]</td><td class="num">&minus;0.033 [&minus;0.051, &minus;0.017]</td><td class="num">3e-6</td><td class="num">&minus;0.059</td><td class="num">162 / 229</td></tr>
+  <tr><td><code>n1</code></td><td class="num"><b>+0.619</b> [+0.528, +0.718]</td><td class="num">+0.302 [+0.242, +0.356]</td><td class="num">9e-49</td><td class="num">+0.431</td><td class="num">375 / 69</td></tr>
+  <tr><td><code>n2</code></td><td class="num">&minus;0.042 [&minus;0.093, +0.014]</td><td class="num">&minus;0.011 [&minus;0.040, +0.008]</td><td class="num">0.032</td><td class="num">&minus;0.036</td><td class="num">191 / 219</td></tr>
+  <tr><td><code>n3</code></td><td class="num">&minus;0.077 [&minus;0.121, &minus;0.033]</td><td class="num">&minus;0.031 [&minus;0.051, &minus;0.008]</td><td class="num">2e-4</td><td class="num">&minus;0.056</td><td class="num">174 / 230</td></tr>
+  <tr><td><code>n4</code></td><td class="num">&minus;0.085 [&minus;0.129, &minus;0.041]</td><td class="num">&minus;0.023 [&minus;0.055, &minus;0.001]</td><td class="num">0.001</td><td class="num">&minus;0.050</td><td class="num">172 / 233</td></tr>
+  <tr><td><code>dual_ada</code></td><td class="num">&minus;0.083 [&minus;0.125, &minus;0.038]</td><td class="num">&minus;0.032 [&minus;0.047, &minus;0.016]</td><td class="num">2e-9</td><td class="num">&minus;0.064</td><td class="num">127 / 222</td></tr>
+  <tr><td><code>dualgtref</code></td><td class="num">&minus;0.083 [&minus;0.122, &minus;0.043]</td><td class="num">&minus;0.035 [&minus;0.047, &minus;0.016]</td><td class="num">4e-9</td><td class="num">&minus;0.060</td><td class="num">135 / 225</td></tr>
+  <tr><td><code>shipped</code></td><td class="num">&minus;0.102 [&minus;0.135, &minus;0.070]</td><td class="num">&minus;0.040 [&minus;0.053, &minus;0.024]</td><td class="num">1e-7</td><td class="num">&minus;0.063</td><td class="num">142 / 234</td></tr>
+</table>
+<p>11개 중 9개가 기준 arm과 유의하게 다르고, 절사평균이 평균과 같은 부호&middot;비슷한 크기라 소수 클립이 만든 차이가 아니다. 기준 arm 자신이 12개 중 세 번째로 나쁜 arm이라 대부분이 음수로 나온다.</p>
+<figure>
+  <img src="PLOT::sa::vs_ref.png" alt="기준 arm 대비 차이">
+  <figcaption>막대는 페어드 평균과 95% CI, 점은 중앙값. 파선은 24% 프루닝 자체의 대가(&plusmn;0.052). 시드만 바꾼 차이가 프루닝의 대가와 같은 크기이거나 더 크다.</figcaption>
+</figure>
+
+<h3>3.3 같은 추정량, 같은 시드, 같은 클립의 네 번 실행</h3>
+<table>
+  <tr><th>대조</th><th class="num">평균 [95% CI]</th><th class="num">중앙값</th><th class="num">p</th></tr>
+  <tr><td><code>dual_ada</code> &minus; <code>dualgtref</code></td><td class="num">+0.0005 [&minus;0.018, +0.020]</td><td class="num">&minus;0.0000</td><td class="num">1.0</td></tr>
+  <tr><td><code>shipped</code> &minus; <code>dual_ada</code></td><td class="num">&minus;0.019 [&minus;0.053, +0.010]</td><td class="num">&minus;0.001</td><td class="num">0.68</td></tr>
+  <tr><td><code>shipped</code> &minus; <code>dualgtref</code></td><td class="num">&minus;0.019 [&minus;0.051, +0.008]</td><td class="num">&minus;0.001</td><td class="num">0.55</td></tr>
+  <tr><td><code>dual_ada</code> &minus; <code>ref</code></td><td class="num"><b>&minus;0.083</b> [&minus;0.124, &minus;0.040]</td><td class="num">&minus;0.032</td><td class="num">2e-9</td></tr>
+  <tr><td><code>dualgtref</code> &minus; <code>ref</code></td><td class="num"><b>&minus;0.083</b> [&minus;0.121, &minus;0.044]</td><td class="num">&minus;0.035</td><td class="num">4e-9</td></tr>
+  <tr><td><code>shipped</code> &minus; <code>ref</code></td><td class="num"><b>&minus;0.102</b> [&minus;0.136, &minus;0.070]</td><td class="num">&minus;0.040</td><td class="num">1e-7</td></tr>
+</table>
+<p><code>ref</code>와 <code>dual_ada</code>의 유지집합 차이는 Q head 2개(0번 층 1개, 9번 층 1개)와 MLP 채널 316개(전체의 0.12%)다. 0번 층에서 <code>dual_ada</code>&middot;<code>shipped</code>는 head 19를 지우고 7을 남기는데, <code>ref</code>는 7을 지우고 19를 남긴다.</p>
+
+<h3>3.4 CoC 시드 그룹 대 노이즈 시드 그룹</h3>
+<table>
+  <tr><th>그룹</th><th>arm 평균</th><th class="num">arm 간 SD</th><th class="num">범위</th><th class="num">그룹 내 유지집합 겹침 Q / MLP</th><th class="num">그룹 &minus; ref (평균 [CI])</th></tr>
+  <tr><td>CoC (c1&ndash;c4)</td><td>1.012 / 0.972 / 1.139 / 0.972</td><td class="num">0.079</td><td class="num">0.167</td><td class="num">93.7 / 91.7%</td><td class="num">&minus;0.028 [&minus;0.060, +0.006]</td></tr>
+  <tr><td>노이즈 (n1&ndash;n4)</td><td>1.670 / 1.010 / 0.975 / 0.967</td><td class="num">0.344</td><td class="num">0.703</td><td class="num">95.5 / 94.0%</td><td class="num">+0.104 [+0.070, +0.139]</td></tr>
+  <tr><td>노이즈, n1 제외</td><td>1.010 / 0.975 / 0.967</td><td class="num">0.023</td><td class="num">0.043</td><td class="num">&mdash;</td><td class="num">&minus;0.068 [&minus;0.109, &minus;0.027]</td></tr>
+</table>
+<p>CoC &minus; 노이즈(클립별 그룹 평균의 페어드 차이): 4 arm 전체로는 &minus;0.132 [&minus;0.164, &minus;0.100], n1을 빼면 <b>+0.040</b> [+0.011, +0.071]로 부호가 뒤집힌다. 참조 척도: 서로소 100클립 추출의 arm 간 SD는 그리디 규칙 0.363, <code>se</code> 규칙 0.083.</p>
+
+<h3>3.5 주행 상황별 (무압축 대비 평균 차이)</h3>
+<table>
+  <tr><th>arm</th><th class="num">cruise (278)</th><th class="num">decel_stop (65)</th><th class="num">accel (75)</th><th class="num">turn (82)</th></tr>
+  <tr><td><code>shipped</code></td><td class="num">+0.054</td><td class="num">+0.154</td><td class="num">+0.160</td><td class="num">+0.206</td></tr>
+  <tr><td><code>dual_ada</code></td><td class="num">+0.086</td><td class="num">+0.220</td><td class="num">+0.116</td><td class="num">+0.202</td></tr>
+  <tr><td><code>dualgtref</code></td><td class="num">+0.099</td><td class="num">+0.164</td><td class="num">+0.121</td><td class="num">+0.195</td></tr>
+  <tr><td><code>ref</code></td><td class="num"><b>+0.240</b></td><td class="num">+0.159</td><td class="num">+0.126</td><td class="num">+0.226</td></tr>
+  <tr><td><code>c1</code></td><td class="num">+0.157</td><td class="num">+0.185</td><td class="num">+0.141</td><td class="num">+0.234</td></tr>
+  <tr><td><code>c2</code></td><td class="num">+0.080</td><td class="num">+0.189</td><td class="num">+0.140</td><td class="num">+0.243</td></tr>
+  <tr><td><code>c3</code></td><td class="num"><b>+0.329</b></td><td class="num">+0.298</td><td class="num">+0.224</td><td class="num">+0.256</td></tr>
+  <tr><td><code>c4</code></td><td class="num">+0.105</td><td class="num">+0.198</td><td class="num">+0.133</td><td class="num">+0.161</td></tr>
+  <tr><td><code>n1</code></td><td class="num"><b>+1.206</b></td><td class="num">+0.361</td><td class="num">+0.235</td><td class="num">+0.462</td></tr>
+  <tr><td><code>n2</code></td><td class="num">+0.114</td><td class="num">+0.174</td><td class="num">+0.182</td><td class="num">+0.333</td></tr>
+  <tr><td><code>n3</code></td><td class="num">+0.078</td><td class="num">+0.187</td><td class="num">+0.155</td><td class="num">+0.258</td></tr>
+  <tr><td><code>n4</code></td><td class="num">+0.100</td><td class="num">+0.055</td><td class="num">+0.145</td><td class="num">+0.250</td></tr>
+</table>
+<p>cruise 열의 범위가 +0.054~+1.206으로 가장 넓다. 2026-09-11의 추출 분석에서 나쁜 추출 c&middot;d&middot;e의 cruise 손상이 +0.65 / +1.38 / +1.27이었고 나머지 버킷은 +0.23~0.40이었다.</p>
+
+<h3>3.6 어떤 유닛이 갈랐는가</h3>
+<p>유지 여부가 arm마다 갈리는 Q head 241개 각각을 16개 arm(위 11개 + nt 블록 5개)의 성능과 대조했다. 가장 강한 것은 14번 층 head 22(유지한 3 arm 평균 1.613, 지운 13 arm 1.059; r=+0.77, p=0.0006)이고 Bonferroni 임계(0.0002)를 넘는 것은 없다. 단일 head로 붕괴를 설명하지 못한다.</p>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>"클립이 같으면 성능도 같다"는 가설은 기각된다.</b> 같은 100클립에서 시드만 바꾼 차이가 24% 프루닝 자체의 대가(+0.052)와 같거나 크고, 한 번은 가장 나쁜 캘리브레이션 추출과 같은 수준까지 간다. 재측정이 무해하다는 기존 정리(<code>dual_ada</code>와 <code>dualgtref</code>가 출하본과 구별 불가)는 그 두 번이 우연히 같은 쪽에 떨어진 결과였다.</li>
+  <li><b>추출 분산의 상당 부분은 클립의 내용이 아니라 선택의 불안정성일 수 있다.</b> 나쁜 추출의 서명(cruise에 몰린 붕괴, CoC 퇴화율 불변, 유지집합 겹침으로 예측 불가)이 클립을 하나도 바꾸지 않고 FM 노이즈 시드만 바꿔도 그대로 재현된다. 프루닝된 모델이 "거의 다 괜찮다가 드물게 cruise가 무너지는" 절벽을 갖고 있고, 선택이 그 절벽을 넘는지는 중요도의 작은 섭동으로 정해진다고 보면 지금까지의 관찰 &mdash; 겹침이 성능을 예측하지 못함, 반쪽 추출 64개가 50배 벌어짐, 개별 클립 기여 0%, 가법성 부재 &mdash; 이 한 그림에 들어온다.</li>
+  <li><b>다만 클립의 효과가 없다고 말할 근거는 아니다.</b> 시드 arm에서 1.3을 넘는 붕괴는 12개 중 1개, 서로소 추출에서는 6개 중 3개다(Fisher p&asymp;0.08). 반대로 <code>se</code> 규칙이 무작위보다 0.153 좋다는 결과는 다시 읽어야 한다: 규칙당 3 arm씩의 차이인데, 붕괴를 포함한 시드 잡음(arm 간 SD 0.20)이면 3 대 3 차이의 표준오차가 약 0.16이라 1&sigma; 수준이고, 붕괴를 뺀 잡음(SD 0.055)이면 약 0.045라 3&sigma;를 넘는다. 어느 쪽인지는 그 9 arm에 붕괴가 섞였는지에 달려 있다. 추출과 시드가 둘 다 작용한다고 보는 것이 맞고, 그 비율은 미정이다.</li>
+  <li><b>CoC 시드가 더 위험한지 노이즈 시드가 더 위험한지는 답할 수 없다.</b> 요청의 원래 질문이지만, 결과를 지배하는 것이 그룹 평균의 이동이 아니라 드문 붕괴(8개 중 1&ndash;2개)라서 그룹당 4 arm으로는 빈도를 비교할 수 없다. 말할 수 있는 것은 두 난수원 모두 성능을 프루닝 대가만큼 움직이고, 둘 다 붕괴를 낼 수 있다는 것까지다.</li>
+  <li><b>이 레포의 arm 간 비교를 읽는 법이 달라진다.</b> 같은 <code>calib_100</code> 위에서 중요도를 새로 잰 두 arm의 차이가 0.05&ndash;0.10 m 이하라면 시드 잡음과 구별되지 않는다. 기준 비교는 대부분 중요도 파일 하나(<code>importance_v2</code>)를 공유해서 이 문제를 피했지만, 중요도를 arm마다 다시 잰 비교(추출 규칙, 캘리브레이션 크기, self-anchored target 등)는 이 바닥 위에서 다시 읽어야 한다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>그룹당 4 arm이다. 붕괴의 빈도(12개 중 1&ndash;2개)는 넓은 구간을 가진 추정이다.</li>
+    <li>test500 하나에서만 쟀다. 추출 분석에서는 arm의 서열이 val500에서 그대로 재현됐으나, 여기서는 확인하지 않았다.</li>
+    <li>개루프만 쟀다.</li>
+    <li>실행 간 비결정성(<code>ref</code> 대 <code>dual_ada</code>)의 원인은 backward의 비결정적 커널로 추정되며 직접 확인하지 않았다. <code>run_importance</code>는 결정론 플래그를 쓰지 않는다.</li>
+    <li>붕괴를 일으키는 유닛은 찾지 못했다.</li>
+  </ul>
+</div>
+<div class="callout opinion">
+  <strong>다음 단계 제안</strong>
+  <ul>
+    <li><b>시드 평균으로 안정화되는지.</b> 이미 있는 9개 중요도 파일을 평균해 arm 하나를 만들면(GPU 없이 산술, 빌드 30초 + 평가 약 70분) "여러 시드의 평균이 붕괴를 피하는가"를 바로 볼 수 있다. FM 노이즈를 K번 뽑는 기존 arm(<code>gtk</code>)은 효과가 없었으나 그것은 abs 안쪽의 평균이었고, 이것은 abs 바깥의 평균이다.</li>
+    <li><b>붕괴 빈도 추정.</b> 노이즈 시드 arm을 8&ndash;12개 더(arm당 80분) 돌리면 "8개 중 1개"가 얼마나 흔한지와 CoC 대 노이즈 비교가 구간을 얻는다.</li>
+    <li><b>val500 재현.</b> 12 arm의 서열이 두 번째 세트에서 유지되는지(arm당 70분).</li>
+  </ul>
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>bash experiments/evaluation/launch_seed_arms.sh 4 ref c3 n3     # 카드 하나에 arm을 순차로
+python experiments/evaluation/analyze_seed_arms.py</code></pre>
+<p class="small">중요도: <code>outputs/importance_seed_{ref,c1..c4,n1..n4}/</code>, 선택: <code>outputs/slim_dual_seed_*/slim_meta.json</code>, 평가: <code>outputs/dual_seed_*_test/</code>. 집계: <code>outputs/seed_arms/{metrics.json, summary.txt, extra.json, plots/}</code>. 표의 수치는 <code>summary.txt</code>와 보조 스크립트 출력에서 옮겼다.</p>
+
+</div>
+</body>
+</html>
