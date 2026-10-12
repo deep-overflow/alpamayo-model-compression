@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-12</div>
+  <h1>CoC를 바꾸면 중요도가 바뀌는가 &mdash; <code>I_CoC</code>는 문장을 따라가고, <code>I_traj</code>는 FM 노이즈에 묻히며, 세트의 선택은 2&ndash;6% 움직인다</h1>
+  <div class="meta">
+    CoC 간 끝점 RMS &gt; 1 m인 62클립 + 무작위 대조 62클립 &middot; 클립당 CoC 6개 + FM 노이즈 재시드 3개 = 9조건, 1,116회 측정 &middot;
+    출하 추정량(<code>run_importance.process_clip</code>, fm/gt, 10 step) &middot; RTX 5880 Ada &times;4 &middot; <code>outputs/coc_importance/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b><code>I_CoC</code>는 문장이 바뀌면 크게 바뀐다.</b> 다른 CoC로 재면 C0 대비 층내 순위 상관이 0.47(중앙값)로 떨어진다. 이는 궤적이 갈리는 클립만의 일이 아니다 &mdash; 대조군에서도 문장이 다른 경우만 보면 0.38&ndash;0.47로 같다. 노이즈만 바꾼 바닥은 0.999다.</li>
+    <li><b><code>I_traj</code>에서는 CoC 효과가 FM 노이즈 바닥보다 작다.</b> 62클립에서 CoC를 바꾸면 0.78, FM 노이즈 시드만 바꿔도 0.69&ndash;0.72다. 69&ndash;71%의 클립에서 노이즈 재시드가 CoC 교체보다 지도를 더 많이 바꾼다. 대조군에서는 CoC가 거의 무관하다(0.98).</li>
+    <li><b>세트의 실제 선택은 2&ndash;6% 움직인다.</b> 세트당 6&ndash;13개인 해당 클립의 CoC만 바꿔 끼우면 dual 유지집합이 Q head 95.3&ndash;97.8%, MLP 94.2&ndash;97.8% 겹친다. 같은 클립의 FM 노이즈만 바꾼 바닥(97.9&ndash;99.5% / 97.8&ndash;98.9%)보다 2&ndash;4배 크고, 무해함이 실측된 GPU 아키텍처 교체(97.2% / 97.3%)를 여섯 세트 중 넷에서 넘으며, 새 100클립 추출(91.3% / 85.3%)에는 한참 못 미친다.</li>
+    <li><b>이 움직임은 전부 그 62클립에서 온다.</b> 대조 클립까지 함께 바꿔도 겹침은 그대로다(calib_100: 95.56% &rarr; 95.58%).</li>
+    <li><b>성능에 대한 결론은 아니다.</b> 이 레포에서 유지집합 겹침은 성능을 예측하지 못했다. 선택이 움직인다는 것까지가 측정된 사실이고, 그것이 minADE를 움직이는지는 arm을 만들어 재야 안다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>직전 측정(<code>2026-10-11_calibration-multimodality.html</code>)은 CoC를 다시 뽑아도 궤적이 거의 안 움직이고(중앙값 0.06&ndash;0.15 m), 움직이는 클립은 600개 중 62개(CoC 간 끝점 RMS &gt; 1 m)임을 보였다. 그 측정은 모델의 <em>출력</em>만 봤다. multimodality가 프루닝에 닿는 경로는 중요도다: <code>run_importance</code>는 클립당 CoC 하나만 샘플링해 <code>I_CoC</code>(그 문장의 NLL)와 <code>I_traj</code>(그 문장의 캐시 위에서의 FM 손실)를 잰다. 가설: 그 62클립에서는 어떤 CoC가 뽑혔느냐에 따라 중요도가 달라지고, 그것이 세트의 선택을 바꾼다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>클립</td><td><b>high</b>: CoC 간 끝점 RMS &gt; 1 m인 62클립(중앙값 1.66 m, 서로 다른 문장 평균 4.6개; 세트별 calib_100 12 / a 13 / b 6 / c 12 / d 10 / e 9). <b>control</b>: 나머지 538클립에서 무작위 62개(중앙값 0.05 m, 2.7개)</td></tr>
+  <tr><td>조건 C0&ndash;C5</td><td>CoC j = <code>clip_seed + j&middot;100003</code>으로 rollout, FM 노이즈 시드는 <code>clip_seed</code>로 고정. C0이 출하 추정량과 같다</td></tr>
+  <tr><td>조건 N1&ndash;N3</td><td>CoC 0 고정, FM 노이즈 시드만 <code>clip_seed + m</code>. <code>I_traj</code>에서 CoC 효과가 넘어야 할 바닥. <code>I_CoC</code>는 FM 노이즈를 쓰지 않으므로 여기서는 backward의 실행 간 바닥이 된다</td></tr>
+  <tr><td>추정량</td><td><code>run_importance.process_clip</code>을 그대로 호출. rollout 시드와 노이즈 시드를 분리하는 <code>roll_seed</code> 인자만 추가(기본값에서는 기존과 동일)</td></tr>
+  <tr><td>선택</td><td>dual = <code>max(rank I_traj, rank I_CoC)</code>, 층당 Q 13/32 &middot; MLP 4898/12288 제거</td></tr>
+  <tr><td>세트 수준 치환</td><td>세트 중요도는 100클립의 평균이므로 한 클립의 조건을 바꾸는 것은 정확히 <code>I_set' = I_set + (I_clip[cond] &minus; I_clip[C0]) / 100</code>. 각 클립이 무작위 대안 CoC(또는 무작위 노이즈 재시드)를 고르는 200회 배정의 평균</td></tr>
+  <tr><td>검증</td><td>재생성한 CoC 문장이 직전 측정의 저장본과 <b>744/744 일치</b>; <code>importance_v2</code>에서 만든 기준 선택이 <code>slim_dual_u40_v2</code>의 유지 인덱스를 <b>유닛 단위로 재현</b></td></tr>
+  <tr><td>하드웨어</td><td>RTX 5880 Ada 4장, 클립당 약 57초(9조건), 피크 40.5 GB, 4샤드 각 30분</td></tr>
+</table>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 클립 수준: C0의 중요도 지도와의 일치 (층내 Spearman, 클립별 평균의 그룹 중앙값)</h3>
+<table>
+  <tr><th>배열</th><th>그룹</th><th class="num">다른 CoC</th><th class="num">그중 문장이 다른 것만</th><th class="num">노이즈만 바꿈</th><th class="num">p (CoC vs 노이즈)</th><th class="num">CoC &lt; 노이즈인 클립</th></tr>
+  <tr><td rowspan="2"><code>I_CoC</code> Q head</td><td>high</td><td class="num"><b>0.477</b></td><td class="num">0.390</td><td class="num">0.9993</td><td class="num">8e-12</td><td class="num">100%</td></tr>
+  <tr><td>control</td><td class="num">0.797</td><td class="num">0.473</td><td class="num">0.9993</td><td class="num">3e-10</td><td class="num">85%</td></tr>
+  <tr><td rowspan="2"><code>I_CoC</code> MLP</td><td>high</td><td class="num"><b>0.465</b></td><td class="num">0.358</td><td class="num">0.9997</td><td class="num">8e-12</td><td class="num">100%</td></tr>
+  <tr><td>control</td><td class="num">0.794</td><td class="num">0.384</td><td class="num">0.9997</td><td class="num">7e-10</td><td class="num">82%</td></tr>
+  <tr><td rowspan="2"><code>I_traj</code> Q head</td><td>high</td><td class="num">0.783</td><td class="num">0.728</td><td class="num"><b>0.721</b></td><td class="num">0.013</td><td class="num">31%</td></tr>
+  <tr><td>control</td><td class="num">0.979</td><td class="num">0.931</td><td class="num">0.770</td><td class="num">5e-11</td><td class="num">5%</td></tr>
+  <tr><td rowspan="2"><code>I_traj</code> MLP</td><td>high</td><td class="num">0.781</td><td class="num">0.719</td><td class="num"><b>0.686</b></td><td class="num">0.010</td><td class="num">29%</td></tr>
+  <tr><td>control</td><td class="num">0.981</td><td class="num">0.941</td><td class="num">0.751</td><td class="num">6e-11</td><td class="num">3%</td></tr>
+</table>
+<p>대안 CoC 중 C0과 문장이 실제로 다른 비율은 high 83%, control 44%다. high와 control의 차이는 여섯 지표 모두 p &le; 1e-8이다.</p>
+<figure>
+  <img src="PLOT::ci::clip_rho.png" alt="클립별 C0 대비 층내 순위 상관">
+  <figcaption>상자는 클립별 평균의 분포. <code>I_CoC</code>(왼쪽 둘)는 CoC를 바꾸면 무너지고 노이즈 바닥은 1에 붙어 있다. <code>I_traj</code>(오른쪽 둘)는 노이즈 바닥 자체가 0.7 근처라 high 그룹의 CoC 효과가 그 안에 들어간다.</figcaption>
+</figure>
+
+<h3>3.2 클립 수준: 한 클립만으로 고른 dual 유지집합의 겹침</h3>
+<table>
+  <tr><th>축</th><th>그룹</th><th class="num">다른 CoC</th><th class="num">문장이 다른 것만</th><th class="num">노이즈만 바꿈</th><th class="num">p</th></tr>
+  <tr><td rowspan="2">Q head</td><td>high</td><td class="num"><b>81.2%</b></td><td class="num">79.2%</td><td class="num">90.4%</td><td class="num">3e-10</td></tr>
+  <tr><td>control</td><td class="num">93.5%</td><td class="num">83.0%</td><td class="num">91.9%</td><td class="num">0.24</td></tr>
+  <tr><td rowspan="2">MLP</td><td>high</td><td class="num"><b>81.2%</b></td><td class="num">78.5%</td><td class="num">91.0%</td><td class="num">2e-10</td></tr>
+  <tr><td>control</td><td class="num">93.7%</td><td class="num">82.3%</td><td class="num">92.4%</td><td class="num">0.58</td></tr>
+</table>
+<p>600클립 측정의 CoC 간 끝점 RMS와의 관계(124클립, Spearman): <code>I_traj</code> 일치도 &minus;0.85 / &minus;0.84, <code>I_CoC</code> 일치도 &minus;0.64 / &minus;0.64, dual 겹침 &minus;0.72 / &minus;0.72 (전부 p &lt; 1e-14). CoC가 궤적을 많이 움직이는 클립일수록 중요도도 많이 바뀐다.</p>
+<figure>
+  <img src="PLOT::ci::rho_vs_between.png" alt="CoC 간 끝점 RMS 대 중요도 일치도">
+  <figcaption>클립 하나가 점 하나. 가로축은 로그 스케일의 CoC 간 끝점 RMS.</figcaption>
+</figure>
+
+<h3>3.3 세트 수준: 저장된 선택과의 유지집합 겹침 (200회 배정 평균 [최소])</h3>
+<table>
+  <tr><th>세트</th><th>바꾼 클립</th><th class="num">CoC 교체, Q</th><th class="num">노이즈 교체, Q</th><th class="num">CoC 교체, MLP</th><th class="num">노이즈 교체, MLP</th><th class="num">6-CoC 평균, Q / MLP</th></tr>
+  <tr><td rowspan="2">calib_100</td><td>high 12</td><td class="num"><b>95.56%</b> [94.59]</td><td class="num">98.63%</td><td class="num"><b>95.29%</b> [94.81]</td><td class="num">98.70%</td><td class="num">96.20 / 96.61</td></tr>
+  <tr><td>전체 25</td><td class="num">95.58% [94.44]</td><td class="num">98.05%</td><td class="num">95.14% [94.58]</td><td class="num">98.12%</td><td class="num">96.49 / 96.51</td></tr>
+  <tr><td rowspan="2">a</td><td>high 13</td><td class="num"><b>95.28%</b> [94.15]</td><td class="num">97.90%</td><td class="num"><b>94.24%</b> [93.38]</td><td class="num">97.78%</td><td class="num">97.08 / 96.05</td></tr>
+  <tr><td>전체 19</td><td class="num">95.28% [93.86]</td><td class="num">96.96%</td><td class="num">94.18% [93.04]</td><td class="num">96.43%</td><td class="num">96.78 / 95.95</td></tr>
+  <tr><td rowspan="2">b</td><td>high 6</td><td class="num">97.80% [96.49]</td><td class="num">99.49%</td><td class="num">97.82% [96.76]</td><td class="num">98.93%</td><td class="num">98.68 / 98.66</td></tr>
+  <tr><td>전체 15</td><td class="num">97.60% [96.35]</td><td class="num">98.07%</td><td class="num">97.45% [96.43]</td><td class="num">97.29%</td><td class="num">98.68 / 98.35</td></tr>
+  <tr><td rowspan="2">c</td><td>high 12</td><td class="num">96.58% [95.32]</td><td class="num">98.51%</td><td class="num"><b>95.03%</b> [93.06]</td><td class="num">98.04%</td><td class="num">97.81 / 97.12</td></tr>
+  <tr><td>전체 24</td><td class="num">96.30% [95.18]</td><td class="num">97.68%</td><td class="num">94.74% [93.00]</td><td class="num">97.39%</td><td class="num">97.22 / 96.93</td></tr>
+  <tr><td rowspan="2">d</td><td>high 10</td><td class="num">97.10% [95.91]</td><td class="num">98.54%</td><td class="num">96.65% [95.72]</td><td class="num">98.29%</td><td class="num">97.81 / 97.76</td></tr>
+  <tr><td>전체 24</td><td class="num">96.55% [95.18]</td><td class="num">98.37%</td><td class="num">95.80% [95.05]</td><td class="num">97.38%</td><td class="num">97.95 / 97.15</td></tr>
+  <tr><td rowspan="2">e</td><td>high 9</td><td class="num">97.62% [96.35]</td><td class="num">99.10%</td><td class="num">97.42% [96.26]</td><td class="num">98.76%</td><td class="num">98.10 / 98.43</td></tr>
+  <tr><td>전체 17</td><td class="num">97.59% [96.64]</td><td class="num">98.93%</td><td class="num">97.34% [96.18]</td><td class="num">98.66%</td><td class="num">98.10 / 98.37</td></tr>
+  <tr><td colspan="2">참조: GPU 아키텍처 교체 (같은 클립, 성능 +0.0012 n.s.)</td><td class="num" colspan="2">97.22%</td><td class="num" colspan="2">97.29%</td><td class="num">&mdash;</td></tr>
+  <tr><td colspan="2">참조: 서로소 100클립 두 추출</td><td class="num" colspan="2">91.34%</td><td class="num" colspan="2">85.30%</td><td class="num">&mdash;</td></tr>
+</table>
+<p>"6-CoC 평균"은 측정한 클립을 C0 하나가 아니라 6개 CoC의 평균으로 채점했을 때의 선택이다.</p>
+<figure>
+  <img src="PLOT::ci::set_churn.png" alt="세트별 유지집합 이동">
+  <figcaption>유지집합 중 바뀌는 몫(1 &minus; 겹침). 분홍은 CoC 교체, 회색은 FM 노이즈 교체(둘 다 측정한 전체 클립), 점은 high 클립만 바꾼 경우. 파선은 무해함이 실측된 GPU 아키텍처 교체, 점선은 새 100클립 추출. 분홍 막대와 그 위의 점이 거의 같은 높이라는 것이 "움직임은 high 클립에서 온다"이다.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>가설의 앞 절반은 맞다: CoC가 궤적을 가르는 클립에서는 중요도도 갈린다.</b> 그 클립 하나만으로 고른 유지집합은 CoC에 따라 19% 달라지고(노이즈 바닥 9&ndash;10%), 달라지는 정도는 CoC가 궤적을 움직이는 크기와 &rho;=&minus;0.72로 따라간다.</li>
+  <li><b>그러나 두 목적함수는 전혀 다르게 반응한다.</b> <code>I_CoC</code>는 궤적과 무관하게 <em>문장</em>이 바뀌면 바뀐다 &mdash; 대조군에서도 문장이 다른 경우의 상관은 0.38&ndash;0.47로 high 그룹과 같다. 반면 <code>I_traj</code>는 CoC보다 FM 노이즈 시드에 더 민감하다. <code>I_traj</code>의 단일 클립 추정이 이미 노이즈 바닥 0.69&ndash;0.77 위에 있어서 CoC가 더할 것이 적다.</li>
+  <li><b>세트 수준에서 CoC는 선택을 2&ndash;6% 움직이는 실재하는 요인이지만, 추출 분산의 주된 설명은 아니다.</b> 100클립 중 10개 남짓의 CoC를 바꾼 효과가 무해 기준(97.2%)을 넘는 세트가 넷 있고, 가장 큰 a의 MLP가 94.2%다. 새 추출의 85&ndash;91%와는 거리가 멀다. 그리고 가장 나쁜 arm을 만든 d&middot;e는 CoC 교체에 덜 민감한 쪽이고(96.7&ndash;97.6%), 가장 좋은 arm을 만든 calib_100과 a가 가장 민감하다 &mdash; CoC 민감도가 추출의 좋고 나쁨을 가르는 방향이 아니다.</li>
+  <li><b>부수 관찰: FM 노이즈 시드 자체가 선택 잡음의 원천이다.</b> 측정한 15&ndash;25클립의 노이즈만 재시드해도 선택이 1&ndash;4% 움직인다. 100클립 전부를 재시드하면 더 클 것이다. 단, <code>dualgtref</code>(같은 기준 재측정)가 세 세트에서 출하본과 성능이 구별되지 않았으므로 이 크기의 이동은 무해할 가능성이 높다.</li>
+  <li><b>여기서 성능 결론을 내리면 안 된다.</b> 94.0% 겹치고 0.19 m를 잃은 arm(<code>dualsafe</code>)과 92.5% 겹치고 공짜였던 arm(<code>maxstep11</code>)이 이 레포에 함께 있다. 95% 겹침이 안전한지는 재 봐야 안다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>세트 수준 치환은 측정한 클립(세트당 15&ndash;25개)만 바꾼다. 나머지 75&ndash;85개는 C0 그대로다. 다만 대조 클립을 더해도 겹침이 변하지 않았으므로 미측정 클립의 기여는 작을 것으로 본다(검증하지 않음).</li>
+    <li>기준 중요도 <code>importance_v2</code>는 Blackwell, 이번 측정은 Ada다. 치환은 Ada끼리의 차이(<code>I[cond] &minus; I[C0]</code>)만 더하므로 아키텍처가 섞이지 않지만, 클립별 C0이 원 실행의 값과 비트 동일하지는 않다.</li>
+    <li>CoC 6개, 노이즈 3개. 노이즈 바닥은 3개 재시드의 평균이라 CoC 쪽(5개)과 표본 수가 다르다.</li>
+    <li>성능은 재지 않았다.</li>
+  </ul>
+</div>
+<div class="callout opinion">
+  <strong>다음 단계 제안</strong>
+  성능으로 닫으려면 arm 하나면 된다: calib_100에서 high 12클립을 6-CoC 평균으로 채점한 중요도로 <code>dual_u40_v2</code>를 다시 빌드(선택 96.2% / 96.6% 겹침)하고 test500에서 출하본과 페어드 비교(빌드 30초 + 평가 약 70분, Ada 한 장). 차이가 없으면 CoC multimodality는 선택을 움직이되 성능에는 닿지 않는 것으로 정리되고, 있으면 클립당 CoC를 여러 번 평균하는 것이 값싼 개선이 된다.
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>python experiments/evaluation/select_coc_clips.py            # 62 high + 62 control
+bash experiments/head_analysis/run_retry_host.sh 5 experiments/evaluation/run_coc_importance.py \
+    --shard 0 --n-shards 4 --gpu 4                            # x4 shards
+python experiments/evaluation/analyze_coc_importance.py</code></pre>
+<p class="small">원자료: <code>outputs/coc_importance/imp_s*of4.npz</code> (클립 &times; 9조건 &times; (36, U), 3.7 GB), <code>records_s*of4.json</code>, <code>clips.json</code>. 집계: <code>metrics.json</code>, <code>summary.txt</code>, <code>plots/</code>. 표의 수치는 <code>summary.txt</code>에서 옮겼다.</p>
+
+</div>
+</body>
+</html>

@@ -59,17 +59,21 @@ def traj_weight(kind, n_tok, device):
     return (t < 19).float()  # (64,) 1 for the first 1.9 s, else 0
 
 
-def process_clip(model, processor, data, args, seed, acc):
+def process_clip(model, processor, data, args, seed, acc, roll_seed=None):
     inputs = lib.build_inputs(model, processor, data, "cuda")
     prompt_len = inputs["input_ids"].shape[1]
 
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    # roll_seed decouples the CoC sample from the flow-matching noise, which `seed` alone
+    # ties together; None keeps the shipped behaviour bit-for-bit
+    roll_seed = seed if roll_seed is None else roll_seed
+    torch.manual_seed(roll_seed)
+    torch.cuda.manual_seed_all(roll_seed)
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         roll = lib.run_rollout(model, inputs, max_generation_length=args.max_gen)
     eos_pos = roll["eos_pos"]
     coc_start, coc_end = prompt_len, eos_pos + 1
     seq_tf = roll["sequences"][:, :coc_end]  # (1, T) prompt + generated CoC
+    coc_ids = seq_tf[0, coc_start:coc_end].tolist()
     del roll
 
     x1 = lib.gt_actions(model, data, "cuda").to(torch.float32)  # (1, 64, 2)
@@ -175,7 +179,7 @@ def process_clip(model, processor, data, args, seed, acc):
     expert_gates.remove()
     del cache, cache_t, leaves, grads, ts, gs
     rec = {"coc_len": coc_end - coc_start, "prompt_len": prompt_len,
-           "fm_loss": fm_loss, "peak_gb": peak}
+           "fm_loss": fm_loss, "peak_gb": peak, "coc_ids": coc_ids}
     if args.traj_target == "bestn":
         rec["bestn"] = bestn
     return rec
