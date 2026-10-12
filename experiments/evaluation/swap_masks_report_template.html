@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-12</div>
+  <h1>붕괴의 위치 &mdash; 시드 잡음도, 나쁜 캘리브레이션 추출도 0번 층의 Q head 선택에서 갈린다</h1>
+  <div class="meta">
+    <code>slim_meta.json</code>의 유지 인덱스를 손으로 접합한 변형 32개 &middot; test500의 cruise 120클립(민감도 지도는 60클립), minADE@6, 기존 arm과 같은 경로&middot;시드로 페어드 &middot;
+    RTX 5880 Ada &times;4 &middot; <code>outputs/swap_masks/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>FM 노이즈 시드 하나로 생긴 붕괴(<code>n1</code>, cruise 2.050)는 0번 층 head 하나를 되돌리면 사라진다</b>(0.978, 정상 arm 0.944와 p=0.33). 나머지 23개 Q head와 9,220개 MLP 채널 차이는 무관하다.</li>
+    <li><b>시드를 안 바꾼 재실행의 +0.083도 0번 층 head 하나(7 대 19)가 전부다.</b> 되돌리면 1.130 &rarr; 0.931, 정상 arm에 넣으면 0.955 &rarr; 1.105.</li>
+    <li><b>다른 클립을 뽑아 생긴 붕괴도 같은 곳에 있다.</b> 블록 c&middot;d&middot;e의 마스크에서 0번 층 head 19개만 출하본 것으로 바꾸면 격차의 97% / 95% / 91%가 사라진다(d: 2.254 &rarr; 0.979). 36개 층 중 한 층, 684개 유지 head 중 19개의 문제다.</li>
+    <li><b>단일 head로는 설명되지 않는 조합 효과다.</b> 출하본 마스크에서 0번 층 head를 하나씩 지우면 치명적인 것은 head 30뿐이고(+0.318), head 7은 혼자서는 +0.089(n.s.)다. 그런데 블록 d는 head 30을 유지하고도 +1.34 무너진다 &mdash; 여러 개를 함께 지울 때만 나오는 손상이다.</li>
+    <li><b>기준은 이 head들을 알아보지 못한다.</b> 지웠을 때의 손상과 dual 점수의 상관은 &rho;=&minus;0.30(n.s.)이고, 0번 층에서 점수 1위인 head 0은 지워도 오히려 약간 좋아진다(&minus;0.064). 12개 head가 점수가 비슷한 띠에 몰려 있고 컷이 그 가운데를 지나서, 시드나 클립의 작은 차이가 어느 head를 지울지를 바꾼다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>같은 <code>calib_100</code>에서 중요도 측정의 시드만 바꿔도 test500이 0.950&ndash;1.670으로 퍼졌다(<code>2026-10-12_importance-seed-arms.html</code>). 유지집합 겹침으로는 붕괴한 arm과 정상 arm이 구별되지 않았으므로, 마스크 차이를 직접 쪼개서 원인 유닛을 찾는다. 첫 단계는 이미 있던 두 후보의 단일 교체 검정이다: <code>n1</code>은 12개 arm 중 유일하게 0번 층 head 30을 지웠고, <code>ref</code>와 <code>dual_ada</code>는 Q head가 두 곳만 달랐다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>방법</td><td><code>slim_meta.json</code>이 모델의 완전한 레시피이므로(<code>load_slim</code>이 그것만으로 재구성), 두 arm의 유지 인덱스를 층&middot;축 단위로 접합한 파일을 만들어 그대로 평가한다. 모든 변형이 층당 Q 19개 &middot; MLP 7390개로 예산 동일</td></tr>
+  <tr><td>변형 A (8개)</td><td>쌍 (<code>n1</code>, <code>n4</code>)와 (<code>ref</code>, <code>dual_ada</code>) 각각: 0번 층 Q head만 교환한 두 방향, Q 전체 / MLP 전체를 교환한 둘</td></tr>
+  <tr><td>변형 B (5개)</td><td>블록 a&ndash;e의 마스크에서 0번 층 Q head만 출하본 것으로 교체</td></tr>
+  <tr><td>변형 C (19개)</td><td>출하본 마스크에서 0번 층 유지 head를 하나씩 지우고 그 자리에 head 20을 살림</td></tr>
+  <tr><td>평가</td><td><code>run_baseline.py</code>, 기존 arm과 같은 시드. test500의 cruise 278클립 중 매니페스트 순서 앞 120개(C는 앞 60개) &mdash; 어떤 arm의 결과도 보지 않은 규칙. 원본 arm과 무압축의 저장된 클립별 결과와 페어드</td></tr>
+  <tr><td>검증</td><td><code>n1</code> 원본을 같은 부분집합에서 다시 돌려 저장값과 <b>120/120 비트 동일</b>. 32개 실행 모두 종료 코드 0</td></tr>
+  <tr><td>비용</td><td>변형당 약 17분(120클립) / 9분(60클립), 총 약 5.5 GPU-시간</td></tr>
+</table>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 <code>n1</code> 붕괴 &mdash; 정상 arm <code>n4</code>와의 접합 (120 cruise 클립, 무압축 0.866)</h3>
+<table>
+  <tr><th>모델</th><th class="num">minADE@6</th><th class="num">&minus; n1 [95% CI]</th><th class="num">&minus; n4 [95% CI]</th><th class="num">격차 중 남은 몫</th></tr>
+  <tr><td><code>n4</code> (정상)</td><td class="num">0.944</td><td class="num">&minus;1.106</td><td class="num">&mdash;</td><td class="num">0</td></tr>
+  <tr><td><code>n1</code> (붕괴)</td><td class="num"><b>2.050</b></td><td class="num">&mdash;</td><td class="num">+1.106 [+0.850, +1.383]</td><td class="num">1</td></tr>
+  <tr><td><code>n1</code> + <code>n4</code>의 0번 층 head (30 유지, 20 제거)</td><td class="num"><b>0.978</b></td><td class="num">&minus;1.072 [&minus;1.349, &minus;0.823]</td><td class="num">+0.034 [&minus;0.032, +0.104]</td><td class="num"><b>0.03</b></td></tr>
+  <tr><td><code>n4</code> + <code>n1</code>의 0번 층 head (30 제거, 20 유지)</td><td class="num">1.399</td><td class="num">&minus;0.651 [&minus;0.823, &minus;0.480]</td><td class="num">+0.456 [+0.303, +0.620]</td><td class="num">0.41</td></tr>
+  <tr><td><code>n1</code>의 MLP + <code>n4</code>의 Q head 전체</td><td class="num">0.947</td><td class="num">&minus;1.103</td><td class="num">+0.003 [&minus;0.049, +0.055]</td><td class="num">0.00</td></tr>
+  <tr><td><code>n1</code>의 Q head + <code>n4</code>의 MLP 전체</td><td class="num">1.964</td><td class="num">&minus;0.086</td><td class="num">+1.020 [+0.765, +1.303]</td><td class="num">0.92</td></tr>
+</table>
+
+<h3>3.2 재실행의 +0.083 &mdash; <code>ref</code> 대 <code>dual_ada</code></h3>
+<table>
+  <tr><th>모델</th><th class="num">minADE@6</th><th class="num">&minus; ref [95% CI]</th><th class="num">&minus; dual_ada [95% CI]</th><th class="num">격차 중 남은 몫</th></tr>
+  <tr><td><code>dual_ada</code></td><td class="num">0.955</td><td class="num">&minus;0.175</td><td class="num">&mdash;</td><td class="num">0</td></tr>
+  <tr><td><code>ref</code></td><td class="num"><b>1.130</b></td><td class="num">&mdash;</td><td class="num">+0.175 [+0.082, +0.265]</td><td class="num">1</td></tr>
+  <tr><td><code>ref</code> + <code>dual_ada</code>의 0번 층 head (7 유지, 19 제거)</td><td class="num"><b>0.931</b></td><td class="num">&minus;0.199 [&minus;0.278, &minus;0.130]</td><td class="num">&minus;0.024 [&minus;0.081, +0.007]</td><td class="num">&minus;0.14</td></tr>
+  <tr><td><code>dual_ada</code> + <code>ref</code>의 0번 층 head (7 제거, 19 유지)</td><td class="num">1.105</td><td class="num">&minus;0.025 [&minus;0.047, &minus;0.010]</td><td class="num">+0.150 [+0.044, +0.243]</td><td class="num">0.86</td></tr>
+  <tr><td><code>ref</code>의 MLP + <code>dual_ada</code>의 Q head (두 곳)</td><td class="num">0.942</td><td class="num">&minus;0.188</td><td class="num">&minus;0.013 [&minus;0.088, +0.036]</td><td class="num">&minus;0.08</td></tr>
+  <tr><td><code>ref</code>의 Q head + <code>dual_ada</code>의 MLP (316채널)</td><td class="num">1.125</td><td class="num">&minus;0.005 [&minus;0.027, +0.007]</td><td class="num">+0.170 [+0.059, +0.268]</td><td class="num">0.97</td></tr>
+</table>
+
+<h3>3.3 다른 클립으로 붕괴한 추출 &mdash; 블록 a&ndash;e에서 0번 층 head만 출하본 것으로 교체 (120 cruise 클립, 출하본 0.918)</h3>
+<table>
+  <tr><th>블록</th><th class="num">test500 전체</th><th class="num">cruise, 원래</th><th class="num">cruise, 0번 층 교체</th><th class="num">교체 &minus; 원래 [95% CI]</th><th class="num">교체 &minus; 출하본 [95% CI]</th><th class="num">격차 중 사라진 몫</th></tr>
+  <tr><td>a</td><td class="num">1.022</td><td class="num">1.014</td><td class="num">1.024</td><td class="num">+0.010 [&minus;0.060, +0.098]</td><td class="num">+0.106 [+0.021, +0.211]</td><td class="num">&mdash;</td></tr>
+  <tr><td>b</td><td class="num">1.060</td><td class="num">1.099</td><td class="num">1.004</td><td class="num">&minus;0.095 [&minus;0.149, &minus;0.044]</td><td class="num">+0.085 [&minus;0.003, +0.185]</td><td class="num">53%</td></tr>
+  <tr><td>c</td><td class="num">1.348</td><td class="num">1.514</td><td class="num"><b>0.935</b></td><td class="num">&minus;0.580 [&minus;0.732, &minus;0.441]</td><td class="num">+0.016 [&minus;0.055, +0.085]</td><td class="num"><b>97%</b></td></tr>
+  <tr><td>d</td><td class="num">1.774</td><td class="num">2.254</td><td class="num"><b>0.979</b></td><td class="num">&minus;1.275 [&minus;1.594, &minus;0.980]</td><td class="num">+0.061 [&minus;0.022, +0.165]</td><td class="num"><b>95%</b></td></tr>
+  <tr><td>e</td><td class="num">1.718</td><td class="num">2.120</td><td class="num"><b>1.021</b></td><td class="num">&minus;1.099 [&minus;1.406, &minus;0.810]</td><td class="num">+0.102 [&minus;0.015, +0.245]</td><td class="num"><b>91%</b></td></tr>
+</table>
+<p>교체 후 다섯 블록의 cruise 값은 0.935&ndash;1.024로 모인다(교체 전 1.014&ndash;2.254). 0번 층에서 각 블록이 지운 head(공통 8개 5, 11, 12, 13, 14, 23, 27, 31 제외): a = 4, 7, 18, 19, 26 / b = 4, 7, 9, 15, 19 / c = 4, 7, 9, 18, 26 / d = 4, 7, 10, 19, 26 / e = 7, 9, 18, 19, 24. 출하본은 9, 15, 19, 20, 29다. 다섯 블록 모두 head 7을 지웠고 head 30은 유지했다.</p>
+
+<h3>3.4 0번 층 민감도 지도 &mdash; 출하본 마스크에서 head 하나씩 제거 (60 cruise 클립, 출하본 0.993)</h3>
+<table>
+  <tr><th>지운 head</th><th class="num">minADE@6</th><th class="num">&minus; 출하본 [95% CI]</th><th class="num">중앙값</th><th class="num">p</th><th class="num">I_traj 순위</th><th class="num">I_CoC 순위</th></tr>
+  <tr><td><b>30</b></td><td class="num"><b>1.311</b></td><td class="num"><b>+0.318</b> [+0.193, +0.464]</td><td class="num">+0.167</td><td class="num">6e-6</td><td class="num">0.65</td><td class="num">0.26</td></tr>
+  <tr><td>17</td><td class="num">1.121</td><td class="num">+0.127 [&minus;0.046, +0.312]</td><td class="num">&minus;0.004</td><td class="num">0.58</td><td class="num">0.90</td><td class="num">1.00</td></tr>
+  <tr><td>24</td><td class="num">1.084</td><td class="num">+0.091 [+0.003, +0.221]</td><td class="num">+0.000</td><td class="num">0.30</td><td class="num">0.26</td><td class="num">0.65</td></tr>
+  <tr><td>7</td><td class="num">1.083</td><td class="num">+0.089 [&minus;0.009, +0.231]</td><td class="num">&minus;0.003</td><td class="num">0.93</td><td class="num">0.52</td><td class="num">0.23</td></tr>
+  <tr><td>22</td><td class="num">1.054</td><td class="num">+0.061 [&minus;0.029, +0.174]</td><td class="num">+0.009</td><td class="num">0.67</td><td class="num">0.94</td><td class="num">0.77</td></tr>
+  <tr><td>4</td><td class="num">1.054</td><td class="num">+0.061 [&minus;0.005, +0.162]</td><td class="num">&minus;0.000</td><td class="num">0.99</td><td class="num">0.61</td><td class="num">0.29</td></tr>
+  <tr><td>18</td><td class="num">1.035</td><td class="num">+0.042 [&minus;0.041, +0.148]</td><td class="num">+0.002</td><td class="num">0.55</td><td class="num">0.55</td><td class="num">0.39</td></tr>
+  <tr><td>6, 8, 28, 1, 21</td><td class="num">0.994&ndash;1.019</td><td class="num">+0.001 ~ +0.026 (전부 CI 0 포함)</td><td class="num">&mdash;</td><td class="num">&ge;0.33</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+  <tr><td>10, 2, 25, 3, 16</td><td class="num">0.947&ndash;0.987</td><td class="num">&minus;0.006 ~ &minus;0.046 (전부 CI 0 포함)</td><td class="num">&mdash;</td><td class="num">&ge;0.07</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+  <tr><td>26</td><td class="num">0.951</td><td class="num">&minus;0.042 [&minus;0.094, &minus;0.002]</td><td class="num">&minus;0.008</td><td class="num">0.21</td><td class="num">0.29</td><td class="num">0.55</td></tr>
+  <tr><td>0</td><td class="num">0.929</td><td class="num">&minus;0.064 [&minus;0.127, &minus;0.011]</td><td class="num">&minus;0.014</td><td class="num">0.018</td><td class="num">1.00</td><td class="num">0.97</td></tr>
+</table>
+<p>손상과 순위의 상관(19개 head): I_traj &minus;0.28(p=0.24), I_CoC &minus;0.37(p=0.12), dual &minus;0.30(p=0.21). 평균과 중앙값이 함께 움직이는 것은 head 30뿐이고, 17&middot;24&middot;7&middot;4는 평균만 오르고 중앙값이 0이라 소수 클립의 큰 오차다.</p>
+<figure>
+  <img src="PLOT::sm::l0_map.png" alt="0번 층 단일 head 민감도">
+  <figcaption>왼쪽: 출하본 마스크에서 0번 층 head 하나를 지웠을 때의 cruise 오차 변화(95% CI). 오른쪽: 같은 head를 기준이 본 순위(가로 I_traj, 세로 I_CoC) 위에 손상을 색으로. 손상이 큰 head 30이 순위 평면의 가운데(0.65, 0.26)에 있다.</figcaption>
+</figure>
+
+<h3>3.5 선택이 0번 층에서 흔들리는 이유 (16개 중요도 실행의 dual 점수)</h3>
+<ul>
+  <li>0번 층 32개 head 중 8개는 16개 실행 모두에서 지워지고, 12개(4, 7, 9, 10, 15, 18, 19, 20, 24, 26, 29, 30)가 실행에 따라 지워지기도 남기도 한다. 이 12개의 dual 점수는 0.29&ndash;0.77에 몰려 있고 컷(13번째)이 그 안을 지난다.</li>
+  <li>출하본&middot;<code>dual_ada</code>&middot;<code>ref</code>&middot;<code>n4</code>&middot;블록 e는 컷 경계의 두 head가 점수 동률(간격 0.000)이다. 순위 기반 점수는 32개 head에서 1/31 단위로만 움직이므로 동률이 흔하고, 그때는 인덱스 순서가 정한다.</li>
+  <li>head 7과 30은 I_CoC 순위가 낮아(0.10&ndash;0.23, 0.19&ndash;0.48) I_traj 순위로만 살아남는데, 그 순위가 실행마다 움직인다(head 7: 0.39&ndash;0.68, head 30: 0.48&ndash;0.77).</li>
+</ul>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>"캘리브레이션 추출 분산"의 대부분은 0번 층 head 선택의 문제다.</b> 블록 c&middot;d&middot;e의 cruise 붕괴가 그 한 층의 19개 head를 바꾸는 것만으로 91&ndash;97% 사라지고, 다섯 블록이 0.94&ndash;1.02로 모인다. 시드 잡음과 추출 차이가 서로 다른 현상이 아니라 같은 취약점을 건드리는 두 경로였다. 이것으로 지금까지의 관찰이 설명된다: 유지집합 겹침이 성능을 예측하지 못한 것(684개 중 한두 개가 정함), 개별 클립 기여가 0%이고 가법성이 없는 것(클립은 순위를 한 칸 미는 식으로만 작용), n=2,000으로 선택이 수렴해도 성능이 나빴던 것(수렴한 답이 하필 나쁜 조합일 수 있음).</li>
+  <li><b>0번 층 head들은 서로를 대신하는 무리이고, 그중 여럿을 함께 잃으면 무너진다.</b> 하나씩 지우면 head 30만 확실히 해롭고 나머지는 +0.04~+0.09(n.s.)인데, 블록 d는 4&middot;7&middot;10&middot;26을 함께 지우고 +1.34다. 단일 손상의 합(+0.1 남짓)의 열 배다. <code>n1</code>에서 head 30 교체가 정상 arm에 넣으면 41%만 재현되는 것도 같은 이야기다. 2026-09-21의 "균일 비율 프루닝이 0&ndash;1번 층의 살아남은 head에 4&ndash;8배 부하를 몬다"는 관찰과 맞는다.</li>
+  <li><b>기준이 이 층에서는 작동하지 않는다.</b> 손상과 점수의 상관이 없고 부호는 반대이며, 점수 1위 head를 지워도 손해가 없다. 0번 층 head의 1차 Taylor 점수는 그 head가 얼마나 대체 가능한지를 담지 못한다. 그 위에 순위 정규화의 동률과 I_traj 단일 지지가 겹쳐 선택이 주사위가 된다.</li>
+  <li><b>처방은 선택을 안정화하는 것보다 0번 층을 컷에서 빼는 쪽이 유력하다.</b> 0번 층 Q head 13개는 제거 파라미터의 0.5%(1,360만 / 26.6억)다. 그 층을 그대로 두거나 지우는 수를 줄이면 예산은 거의 그대로이고 취약점이 없어진다. 시드 평균이나 클립을 늘리는 방식은 12개 head가 실제로 점수가 비슷하기 때문에 근본 해결이 아닐 가능성이 높다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>cruise 부분집합(120 / 60클립)에서만 쟀다. test500 전체와 다른 버킷에서의 크기는 재지 않았다. 붕괴가 cruise에 몰려 있었으므로 방향은 같을 것으로 보지만 확인이 필요하다.</li>
+    <li>민감도 지도는 출하본 마스크 하나에서, 대체 head를 20으로 고정하고 잰 것이다. 60클립이라 +0.1 이하의 효과는 분해하지 못한다(head 7은 120클립 접합 실험에서는 +0.150으로 유의했다).</li>
+    <li>어떤 head 조합이 치명적인지는 아직 모른다. 쌍 단위 지도가 필요하다.</li>
+    <li>1번 층 이후에 같은 취약점이 있는지는 보지 않았다. 블록 b는 0번 층 교체로 격차의 53%만 사라졌다.</li>
+    <li>개루프만 쟀다.</li>
+  </ul>
+</div>
+<div class="callout opinion">
+  <strong>다음 단계 제안</strong>
+  <ul>
+    <li><b>0번 층 면제 arm (가장 권함).</b> 붕괴한 arm들(<code>n1</code>, <code>c3</code>, <code>ref</code>, 블록 c&middot;d&middot;e)과 출하본에서 0번 층 Q head 32개를 전부 살린 변형을 test500 전체로 평가한다(arm당 70분). 전부 0.95 근처로 모이면 추출&middot;시드 분산이 한 줄짜리 규칙으로 해결된다. 예산 차이는 0.5%이고, 맞추려면 다른 35개 층에서 MLP 채널 약 32개씩 더 지우면 된다.</li>
+    <li><b>쌍 지도.</b> 0번 층의 흔들리는 12개 head에서 두 개씩 지운 66개 변형(60클립, 약 2.5시간)으로 어떤 조합이 무너지는지 본다.</li>
+    <li><b>폐루프 재해석.</b> 2,000클립 arm(<code>dual_st2000</code>)이 폐루프에서 &minus;0.112였던 것이 같은 원인인지, 그 마스크의 0번 층을 보면 GPU 없이 가늠할 수 있다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>python experiments/evaluation/make_swap_masks.py            # 접합 변형 8개 + test_cruise120
+python experiments/evaluation/make_l0_masks.py              # 블록 5개 + 단일 head 19개 + test_cruise60
+bash experiments/evaluation/launch_swap_masks.sh 4 n1_L0n4=outputs/slim_swap_n1_L0n4
+MANIFEST=test_cruise60 bash experiments/evaluation/launch_swap_masks.sh 4 ship_L0drop30=outputs/slim_swap_ship_L0drop30
+python experiments/evaluation/analyze_swap_masks.py
+python experiments/evaluation/analyze_l0_masks.py</code></pre>
+<p class="small">변형: <code>outputs/slim_swap_*/slim_meta.json</code>, 평가: <code>outputs/swap_*_cruise{120,60}/</code>, 집계: <code>outputs/swap_masks/{summary.txt, summary_l0.txt, metrics.json, metrics_l0.json, plots/}</code>.</p>
+
+</div>
+</body>
+</html>
