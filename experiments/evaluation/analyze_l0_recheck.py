@@ -20,11 +20,23 @@ Usage:
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parents[2]
 O = REPO / "outputs"
+BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
+C1, C3 = "#2a78d6", "#e87ba4"
+plt.rcParams.update({
+    "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
+    "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10,
+    "axes.titlesize": 11, "axes.spines.top": False, "axes.spines.right": False,
+})
 BOOT, K = 20000, 6
 # name -> (own evaluation, set)
 ARMS = {"self": ("dualself_u40_v2_ps_test", "test"), "bestn6": ("dualbestn6_u40_v2_ps_test", "test"),
@@ -137,6 +149,29 @@ def main():
 
     (out / "metrics_recheck.json").write_text(json.dumps(metrics, indent=2))
     (out / "summary_recheck.txt").write_text("\n".join(lines) + "\n")
+
+    names = [n for n in ARMS if n in ex]
+    if names:
+        (out / "plots").mkdir(parents=True, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(10.5, 4.3))
+        xs = np.arange(len(names))
+        ax.bar(xs - 0.2, [own[n].mean() for n in names], width=0.38, color=C3, label="as built")
+        ax.bar(xs + 0.2, [ex[n].mean() for n in names], width=0.38, color=C1,
+               label="layer-0 heads all kept")
+        # each arm's own reference: the shipped arm and the unpruned model on ITS set
+        for x, n in zip(xs, names):
+            c = ctx[ARMS[n][1]]
+            ax.plot([x - 0.42, x + 0.42], [c["ship"].mean()] * 2, color=MUTED, lw=1.1, ls=":")
+            ax.plot([x - 0.42, x + 0.42], [c["b"].mean()] * 2, color=INK, lw=1.0, ls="--")
+        ax.plot([], [], color=MUTED, lw=1.1, ls=":", label="shipped, same set")
+        ax.plot([], [], color=INK, lw=1.0, ls="--", label="unpruned, same set")
+        ax.set_xticks(xs, [n if ARMS[n][1] == "test" else f"{n}\n(val500)" for n in names])
+        ax.set_ylabel("minADE@6, mean")
+        ax.set_ylim(bottom=0.7)
+        ax.legend(frameon=False, fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out / "plots" / "l0_recheck.png", dpi=150)
+        plt.close(fig)
 
 
 if __name__ == "__main__":
