@@ -158,6 +158,81 @@ def main():
     metrics["largest_pair"] = {worst[0]: d}
     say(f"largest pair {worst[0]}: {f(d)} p={d['p']:.1e}")
 
+    # ---- budget-matched variants: layer 0 kept in full, 1,109 more MLP channels cut ----
+    mx, mraw = {}, {}
+    for n in names:
+        rows = load_run(f"swap_{n}_L0fullM_500")
+        if all(c in rows for c in ids):
+            mx[n], mraw[n] = vec(rows), rows
+    if mx:
+        say("\n== budget-matched (layer 0 kept, 1,109 more MLP channels cut; 4,096 params "
+            "from the source arm's budget)")
+        say(f"{'arm':6s}{'own':>8s}{'exempt':>8s}{'matched':>9s}{'med':>8s}{'degen':>7s}   "
+            f"matched - exempt [95% CI]        p        matched - own [95% CI]           "
+            f"matched - shipped [95% CI]")
+        metrics["matched"] = {}
+        for n in list(mx):
+            d1, d2, d3 = ci(mx[n] - ex[n]), ci(mx[n] - own[n]), ci(mx[n] - ship)
+            deg = float(np.mean([mraw[n][c]["coc_degenerate"] for c in ids]))
+            metrics["matched"][n] = {"mean": float(mx[n].mean()),
+                                     "median": float(np.median(mx[n])), "degen": deg,
+                                     "matched_minus_exempt": d1, "matched_minus_own": d2,
+                                     "matched_minus_shipped": d3,
+                                     "matched_minus_unpruned": ci(mx[n] - b),
+                                     "minfde": float(vec(mraw[n], "fde_rollout_k").mean())}
+            say(f"{n:6s}{own[n].mean():8.4f}{ex[n].mean():8.4f}{mx[n].mean():9.4f}"
+                f"{np.median(mx[n]):8.4f}{deg:7.3f}   {f(d1)} {d1['p']:.1e}   {f(d2)}   {f(d3)}")
+        mn = list(mx)
+        m = [float(mx[n].mean()) for n in mn]
+        md = [float(np.median(mx[n])) for n in mn]
+        metrics["spread_matched"] = {"sd_means": float(np.std(m, ddof=1)),
+                                     "range_means": [min(m), max(m)],
+                                     "sd_medians": float(np.std(md, ddof=1))}
+        say(f"matched across {len(mn)} arms: means {min(m):.4f}-{max(m):.4f}, "
+            f"SD {np.std(m, ddof=1):.4f}; SD of medians {np.std(md, ddof=1):.4f}")
+        # what the 1,109 channels cost, pooled: per-clip mean over arms of (matched - exempt)
+        pooled = np.mean([mx[n] - ex[n] for n in mn], axis=0)
+        s = ci(pooled)
+        metrics["matched_minus_exempt_pooled"] = s
+        say(f"cost of the 1,109 channels, per-clip mean over arms: {f(s)} "
+            f"median {s['median']:+.4f} p={s['p']:.1e}")
+        say("\nby bucket, matched: mean minADE@6 minus unpruned  (and matched - shipped [95% CI])")
+        metrics["by_bucket_matched"] = {}
+        for n in mn:
+            cells, row = [], {}
+            for bkt in BUCKETS:
+                sel = bucket == bkt
+                d = ci((mx[n] - ship)[sel])
+                row[bkt] = {"vs_unpruned": float((mx[n] - b)[sel].mean()), "vs_shipped": d}
+                cells.append(f"{(mx[n] - b)[sel].mean():+.3f} ({d['mean']:+.3f}"
+                             f"{'*' if d['ci'][0] > 0 or d['ci'][1] < 0 else ' '})")
+            metrics["by_bucket_matched"][n] = row
+            say(f"{n:6s}" + "".join(f"{c:>20s}" for c in cells))
+        say(f"{'shipped':6s}" + "".join(
+            f"{(ship - b)[bucket == bkt].mean():+20.3f}" for bkt in BUCKETS))
+        # the stop bucket of the shipped arm, flagged in the unmatched batch
+        for lab, src in (("exempt", ex), ("matched", mx)):
+            if "ship" in src:
+                d = ci((src["ship"] - ship)[bucket == "decel_stop"])
+                metrics[f"ship_stop_{lab}"] = d
+                say(f"shipped arm, decel_stop, {lab} - as built: {f(d)} p={d['p']:.2g}")
+
+        fig, ax = plt.subplots(figsize=(10, 4.4))
+        xs = np.arange(len(mn))
+        ax.bar(xs - 0.27, [own[n].mean() for n in mn], width=0.26, color=C3, label="as built")
+        ax.bar(xs, [ex[n].mean() for n in mn], width=0.26, color=C1,
+               label="layer 0 kept (0.51% less removed)")
+        ax.bar(xs + 0.27, [mx[n].mean() for n in mn], width=0.26, color=C4,
+               label="layer 0 kept, budget matched")
+        ax.axhline(b.mean(), color=INK, lw=0.9, ls="--", label="unpruned")
+        ax.axhline(ship.mean(), color=MUTED, lw=0.9, ls=":", label="shipped")
+        ax.set_xticks(xs, mn)
+        ax.set_ylabel("test500 minADE@6, mean")
+        ax.legend(frameon=False, fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out / "plots" / "l0_exempt_matched.png", dpi=150)
+        plt.close(fig)
+
     (out / "metrics_exempt.json").write_text(json.dumps(metrics, indent=2))
     (out / "summary_exempt.txt").write_text("\n".join(lines) + "\n")
 
