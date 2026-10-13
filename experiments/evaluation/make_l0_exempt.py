@@ -33,6 +33,13 @@ SRC = {"ship": ("slim_dual_u40_v2", "importance_v2"),
        "c3": ("slim_dual_seed_c3", "importance_seed_c3"),
        "n1": ("slim_dual_seed_n1", "importance_seed_n1"),
        **{f"nt{x}": (f"slim_dual_nt_{x}", f"importance_nt500_{x}") for x in "bcde"}}
+# earlier conclusions the layer-0 census (analyze_l0_census.py) flagged for re-measurement.
+# Unmatched variant only: one factor, and it needs no importance file -- dualsafe's score is
+# composed at build time, so there is nothing to pick 1,109 "next" channels from.
+RECHECK = {"self": "slim_dualself_u40_v2", "bestn6": "slim_dualbestn6_u40_v2",
+           "st2000": "slim_dual_u40_st2000", "safe": "slim_dualsafe_u40_v2",
+           **{f"rd{x}": f"slim_dual_rd_{x}" for x in "abc"},
+           **{f"se{x}": f"slim_dual_se_{x}" for x in "abc"}}
 N_MLP, DROP_MLP, EXTRA = 12288, 4898, 1109
 HEAD_PARAMS, CH_PARAMS = 2 * 128 * 4096, 3 * 4096
 
@@ -74,6 +81,17 @@ def main():
         (dd / "slim_meta.json").write_text(json.dumps(m))
         print(f"{name:5s} <- {d:22s} restored layer-0 heads {dropped}; matched variant drops "
               f"{EXTRA} more channels, removed {m['params']['removed']:,} ({short:+,} short)")
+
+    for name, d in RECHECK.items():
+        m = json.loads((out / d / "slim_meta.json").read_text())
+        dropped = sorted(set(range(32)) - set(m["vlm"][0]["q"]))
+        assert all(len(l["q"]) == 19 and len(l["mlp"]) == N_MLP - DROP_MLP for l in m["vlm"]), name
+        m["vlm"][0]["q"] = list(range(32))
+        m["config"] = f"swap_{name}_L0full"
+        dd = out / f"slim_swap_{name}_L0full"
+        dd.mkdir(exist_ok=True)
+        (dd / "slim_meta.json").write_text(json.dumps(m))
+        print(f"{name:7s} <- {d:26s} restored layer-0 heads {dropped}")
 
 
 if __name__ == "__main__":

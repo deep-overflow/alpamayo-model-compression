@@ -5,10 +5,11 @@
 # Usage: bash experiments/evaluation/launch_swap_masks.sh <gpu> <name=model_dir> [...]
 #   e.g. launch_swap_masks.sh 4 n1_L0n4=outputs/slim_swap_n1_L0n4
 # SET picks the evaluation set:
-#   test    (default) official-test clips; MANIFEST (default test_cruise120) picks the
-#           subset, test_500 the whole set          -> outputs/swap_<name>_<manifest sans test_>
-#   indist  val500                                  -> outputs/swap_<name>_val500
-#   ood     OOD-val 262, own rollout only (--no-tf) -> outputs/swap_<name>_oodval
+#   test     (default) official-test clips; MANIFEST (default test_cruise120) picks the
+#            subset, test_500 the whole set          -> outputs/swap_<name>_<manifest sans test_>
+#   test500  shorthand for SET=test MANIFEST=test_500 -> outputs/swap_<name>_500
+#   indist   val500                                  -> outputs/swap_<name>_val500
+#   ood      OOD-val 262, own rollout only (--no-tf) -> outputs/swap_<name>_oodval
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 export ALPAMAYO_REPO=$REPO
@@ -24,6 +25,7 @@ for spec in "$@"; do
   model=${spec#*=}
   case $SET in
   test) ev=swap_${name}_${MANIFEST#test_}; setargs=(--set test --manifest "$MANIFEST") ;;
+  test500) ev=swap_${name}_500; setargs=(--set test --manifest test_500) ;;
   indist) ev=swap_${name}_val500; setargs=(--set indist) ;;
   ood) ev=swap_${name}_oodval; setargs=(--set ood --manifest ood_val --no-tf) ;;
   *) echo "unknown SET $SET" >&2; exit 1 ;;
