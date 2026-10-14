@@ -207,7 +207,7 @@
 <div class="callout opinion">
   <strong>다음 단계 제안</strong>
   <ul>
-    <li><b>레시피에 반영.</b> <code>make_slim.py</code>에 0번 층 Q 면제를 설정 이름으로 넣고(예: <code>dual_u40_l0keep_v2</code>, 채널 수는 <code>_qcut</code>처럼 예산에서 유도), 출하본을 그 설정으로 다시 빌드한다.</li>
+    <li><b>레시피에 반영.</b> 완료(2026-10-14). <code>make_slim.py --config dual_u40_l0keep_v2 --importance importance_v2</code>가 이 리포트의 &ldquo;면제 + 예산 맞춤&rdquo; 출하본(<code>slim_swap_ship_L0fullM</code>)을 VLM&middot;expert&middot;KV 모두 유닛 단위로 재현한다(<code>outputs/slim_dual_u40_l0keep_v2</code>, 제거 2,657,447,936 파라미터). <code>importance_seed_n1</code>로 빌드해도 해당 변형과 같고, 기존 <code>dual_u40_v2</code>는 변하지 않는다. 접미사 <code>_l0keep</code>은 <code>&lt;crit&gt;_u&lt;N&gt;[_qcut&lt;K&gt;]_l0keep_v2</code> 형태로 이 계열 전체에 쓸 수 있다.</li>
     <li><b>재현.</b> 완료(3.5절). 기존 결론의 재측정은 <code>2026-10-13_layer0-recheck.html</code>.</li>
     <li><b>폐루프.</b> alpasim 인계 제동 인공물 때문에 새 폐루프 arm은 보류 중이지만, 이 arm은 0번 층만 다르므로 출하본과의 페어드 비교는 인공물의 영향을 같이 받는다. 보류를 풀지 판단이 필요하다.</li>
     <li><b>기존 결론 재검토.</b> 추출 규칙 9 arm, 2,000클립 arm, 반쪽 추출 64 arm의 0번 층 유지 head를 표로 만들어(GPU 불필요) 어떤 결론이 이 교란에 걸려 있는지 가린다.</li>

@@ -151,8 +151,8 @@
 
 <h2><span class="num">5</span>권고</h2>
 <ol>
-  <li><b>레시피에 0번 층 Q 면제를 넣는다.</b> <code>make_slim.py</code>에 설정으로 추가하고(채널 수는 예산에서 유도), 이후의 dual 계열 arm은 그 설정으로 만든다. 출하본은 이미 무해한 조합을 지운 상태라 성능이 바뀌지 않지만, 재현성과 캘리브레이션 둔감성을 얻는다.</li>
-  <li><b>캘리브레이션 관련 문서를 정정한다.</b> 위 3절의 서술들에 정정 박스를 단다. 논문에서 캘리브레이션 민감도를 다룬다면 서술이 달라져야 한다.</li>
+  <li><b>레시피에 0번 층 Q 면제를 넣는다.</b> 완료(2026-10-14): <code>make_slim.py --config dual_u40_l0keep_v2</code>(일반형 <code>&lt;crit&gt;_u&lt;N&gt;_l0keep_v2</code>, 채널 수는 예산에서 유도). <code>importance_v2</code>로 빌드하면 평가한 &ldquo;면제 + 예산 맞춤&rdquo; 출하본을 유닛 단위로 재현한다. 이후의 dual 계열 arm은 그 설정으로 만든다. 출하본은 이미 무해한 조합을 지운 상태라 성능이 바뀌지 않지만, 재현성과 캘리브레이션 둔감성을 얻는다.</li>
+  <li><b>캘리브레이션 관련 문서를 정정한다.</b> 완료(2026-10-14): 여섯 리포트(추출 분산, 캘리브레이션 크기 개루프&middot;폐루프, <code>dualsafe</code>, self-anchored target, 추출 규칙)와 <code>CLAUDE.md</code>에 정정을 달았다. 논문에서 캘리브레이션 민감도를 다룬다면 서술이 달라져야 한다.</li>
   <li><b>폐루프에서 확인한다.</b> 출하본, 면제 출하본, 2,000클립 arm의 면제 변형. 인계 제동 인공물로 새 폐루프 arm이 보류 중이라 판단이 필요하다.</li>
   <li><b>남은 잔차와 기전을 본다.</b> 1번 층의 같은 접합 실험, 0번 층 쌍 지도.</li>
 </ol>
@@ -160,7 +160,8 @@
 <h2><span class="num">6</span>산출물</h2>
 <table>
   <tr><th>종류</th><th>위치</th></tr>
-  <tr><td>세부 리포트</td><td><code>outputs/coc_multimode/</code>, <code>outputs/calib_difficulty/</code>, <code>outputs/coc_importance/</code>, <code>outputs/seed_arms/</code>, <code>outputs/swap_masks/</code>(4개), 그리고 기존 실험 정리 <code>outputs/calibration_summary/2026-10-11_calibration-summary.html</code></td></tr>
+  <tr><td>세부 리포트</td><td><code>reports/evaluation/2026-10-1{1,2,3}_*.html</code> 9개(이 문서 포함). 같은 파일이 <code>outputs/coc_multimode/</code>, <code>outputs/calib_difficulty/</code>, <code>outputs/coc_importance/</code>, <code>outputs/seed_arms/</code>, <code>outputs/swap_masks/</code>, <code>outputs/calibration_summary/</code>에도 있다. 이번 세션 이전 실험의 정리는 <code>outputs/calibration_summary/2026-10-11_calibration-summary.html</code>(그 해석 일부는 이 문서로 대체됨)</td></tr>
+  <tr><td>레시피</td><td><code>make_slim.py --config dual_u40_l0keep_v2</code> &rarr; <code>outputs/slim_dual_u40_l0keep_v2/</code></td></tr>
   <tr><td>코드</td><td>브랜치 <code>worktree-calib-coc-multimode</code> (draft PR #84), <code>experiments/evaluation/</code>: <code>run_coc_multimode.py</code>, <code>run_coc_importance.py</code>, <code>launch_seed_arms.sh</code>, <code>make_swap_masks.py</code>, <code>make_l0_masks.py</code>, <code>make_l0_exempt.py</code>, <code>launch_swap_masks.sh</code>, 각 <code>analyze_*.py</code>; <code>run_importance.py</code>에 <code>--roll-offset</code> / <code>--noise-offset</code> / <code>--no-perclip</code></td></tr>
   <tr><td>유지집합</td><td><code>outputs/slim_swap_*/slim_meta.json</code> (접합&middot;면제 변형 58개), <code>outputs/slim_dual_seed_*/</code> (시드 arm 9개)</td></tr>
   <tr><td>평가</td><td><code>outputs/swap_*_{cruise120,cruise60,500,val500,oodval}/</code>, <code>outputs/dual_seed_*_test/</code></td></tr>

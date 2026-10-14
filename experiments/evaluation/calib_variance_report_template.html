@@ -68,6 +68,14 @@
      개루프 test500, rollout-only, minADE@6, 페어드 중앙값 · Ada</p>
 </header>
 
+<!-- layer0-correction-2026-10-13 -->
+<div style="border:1px solid #B3261E;border-left:5px solid #B3261E;background:#FFF8F6;color:#29261B;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 8px 8px 0;font-size:0.95rem;line-height:1.65">
+<strong style="display:block;margin-bottom:0.5rem;color:#B3261E">2026-10-13 정정 &mdash; 추출 간 산포의 원인은 클립의 내용이 아니라 0번 층 Q head 선택이었다</strong>
+<p style="margin:0 0 0.6rem">여섯 추출의 test500 minADE@6이 0.950&ndash;1.774로 퍼진 것(SD 0.363)은 각 추출의 dual 선택이 <b>0번 층에서 Q head 32개 중 어느 13개를 지웠는가</b>로 결정되고 있었다. 블록 b&ndash;e의 유지집합에서 0번 층 Q head를 전부 살리고 그만큼을 MLP 채널 1,109개로 되갚으면(나머지 불변) test500이 1.060 / 1.348 / 1.774 / 1.718 &rarr; 0.956 / 0.989 / 0.955 / 0.957, val500이 0.973 / 1.309 / 1.744 / 1.722 &rarr; 0.883 / 0.930 / 0.907 / 0.915가 되고, 출하본(0.950 / 0.890)과 구별되지 않는다. <code>calib_100</code>이 여섯 중 1위였던 것은 0번 층에서 head 4를 지키는 유일한 캘리브레이션 세트였기 때문이다(다른 클립으로 잰 dual arm 31개 중 28개가 지움).</p>
+<p style="margin:0 0 0.6rem">따라서 이 리포트의 해석 중 &ldquo;캘리브레이션 세트를 검사해서 미리 걸러낼 수 없다&rdquo;와 &ldquo;고르지 말고 늘려라&rdquo;는 유지되지 않는다. 0번 층에서 지워진 head만으로 dual 계열 50 arm의 성적이 예측되고(&rho;=+0.55), 처방은 클립을 늘리는 것이 아니라 0번 층을 컷에서 빼는 것이다(<code>make_slim.py</code>의 <code>_l0keep</code>). 측정값 자체(여섯 추출의 수치, 두 세트에서의 순위 일치)는 유효하다. 블록 a, 누적 사다리(200/300/500), 하드풀은 면제 조건에서 재측정하지 않았다.</p>
+<p style="margin:0;font-size:0.88rem;color:#6B6555">근거: <a href="2026-10-13_layer0-exemption.html">2026-10-13_layer0-exemption.html</a>, <a href="2026-10-13_layer0-census.html">2026-10-13_layer0-census.html</a>. 전체 요약: <a href="2026-10-13_calibration-variance-is-layer0.html">2026-10-13_calibration-variance-is-layer0.html</a>. 원문은 아래에 그대로 둔다.</p>
+</div>
+
 <p class="lede">
 2026-08-19 보고서는 캘리브레이션 100클립을 바꾸기만 해도 minADE가 +0.0941 나빠진다고 보고했고,
 그 근거는 대조군 <strong>하나</strong>였다. 서로소 블록 다섯 개를 더 뽑아 재보니 그 값은 구간의

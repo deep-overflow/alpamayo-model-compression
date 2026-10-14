@@ -115,6 +115,14 @@
   </div>
 </header>
 
+<!-- layer0-correction-2026-10-13 -->
+<div style="border:1px solid #B3261E;border-left:5px solid #B3261E;background:#FFF8F6;color:#29261B;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 8px 8px 0;font-size:0.95rem;line-height:1.65">
+<strong style="display:block;margin-bottom:0.5rem;color:#B3261E">2026-10-13 정정 &mdash; 두 2,000클립 arm의 손해는 0번 층 Q head 선택에서 왔을 가능성이 높다 (폐루프는 재측정하지 않음)</strong>
+<p style="margin:0 0 0.6rem">이 리포트의 두 2,000클립 arm(<code>slim_dual_st2000</code>, <code>slim_dual_st2000b</code>)은 0번 층에서 같은 Q head 조합(출하본이 유지하는 head 4&middot;7&middot;26)을 지웠다. 같은 선택의 개루프 손해는 0번 층 Q head 32개를 전부 살리면 사라진다(test500 minADE@6 <b>1.2015 &rarr; 0.9478</b>, 출하본 0.9498). 즉 결론 2의 &ldquo;수렴한 선택의 성질&rdquo;은 &ldquo;dual 기준을 모집단에 가깝게 추정하면 0번 층에서 그 조합을 지우는 쪽으로 수렴한다&rdquo;는 뜻이었고, 결론 3과 6절의 (A)는 &ldquo;<code>calib_100</code>이 0번 층에서 head 4를 지키는 유일한 캘리브레이션 세트&rdquo;로 특정된다.</p>
+<p style="margin:0 0 0.6rem">단, <b>폐루프 점수(&minus;0.112 / &minus;0.115)는 면제 조건에서 재측정하지 않았다.</b> 개루프에서 원인이 같았으므로 폐루프에서도 같을 가능성이 높지만 확인된 것은 아니다. &ldquo;출하본의 +0.079는 기준을 잘 추정한 결과가 아니다&rdquo;는 &ldquo;기준이 0번 층에서는 작동하지 않고, 출하본은 그 층에서 무해한 조합을 지운 경우였다&rdquo;로 읽어야 한다.</p>
+<p style="margin:0;font-size:0.88rem;color:#6B6555">근거: <a href="2026-10-13_layer0-recheck.html">2026-10-13_layer0-recheck.html</a>, <a href="2026-10-13_layer0-census.html">2026-10-13_layer0-census.html</a>. 전체 요약: <a href="2026-10-13_calibration-variance-is-layer0.html">2026-10-13_calibration-variance-is-layer0.html</a>. 원문은 아래에 그대로 둔다.</p>
+</div>
+
 <h2><span class="num">1.</span>요약</h2>
 
 <p>출하된 <code>dual_u40_v2</code>는 100클립(<code>calib_100</code>)에서 잰 중요도로 고른 것이다.
