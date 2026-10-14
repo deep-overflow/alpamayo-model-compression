@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, spearmanr, wilcoxon
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -134,6 +134,62 @@ def main():
                           "spearman": float(spearmanr(alone, marg)[0]),
                           "D_A": med[key][m], "alone": alone.tolist(), "marginal": marg.tolist()}
 
+    # ---- main-run gates M1-M5 (plans/2026-10-13_interval-landscape-pilot.md, "Main run")
+    def ci_has_zero(x):
+        lo, hi = stats(x, rng, args.n_boot)["mean_ci"]
+        return lo <= 0.0 <= hi
+
+    m1_rows = {}
+    for s in range(2, 35):
+        k = one(s, 34)
+        if k in raw:
+            ok = (abs(med[k]["rFM"]) < 0.05 and abs(med[k]["dADE"]) < TOL_ADE and ci_has_zero(raw[k]["dADE"]))
+            m1_rows[s] = {"rFM": med[k]["rFM"], "dADE": med[k]["dADE"], "dNLL": med[k]["dNLL"], "ok": bool(ok)}
+    passing = [s for s, r in m1_rows.items() if r["ok"]]
+    s_star = min(passing) if passing else None
+    m1 = {"s_star": s_star, "passing_starts": passing, "rows": m1_rows, "pass": s_star in (25, 26, 27)}
+
+    mid, lat = med[one(8, 16)], med[one(26, 34)]
+    m2 = {"mid": {"interval": [8, 16], **mid}, "late": {"interval": [26, 34], **lat},
+          "pass": bool(mid["dADE"] > 1.0 and mid["dNLL"] < 0.2 and abs(lat["dADE"]) < TOL_ADE and lat["dNLL"] > 2.0)}
+
+    def excess(a, b):
+        """Per clip: dADE of the whole interval minus the sum over its single layers. (n,)"""
+        return raw[one(a, b)]["dADE"] - sum(raw[one(li, li)]["dADE"] for li in range(a, b + 1))
+
+    ex_mid, ex_late = excess(8, 16), excess(26, 34)
+    blocks = sum(med[one(s, s + 2)]["dADE"] for s in (8, 11, 14))
+    m3 = {"excess_mid": stats(ex_mid, rng, args.n_boot),
+          "p_greater": float(wilcoxon(ex_mid, alternative="greater").pvalue),
+          "whole_median": mid["dADE"], "sum_3layer_blocks": blocks, "ratio_to_blocks": mid["dADE"] / blocks,
+          "sum_singles": float(sum(med[one(li, li)]["dADE"] for li in range(8, 17))),
+          "excess_late": stats(ex_late, rng, args.n_boot), "late_ci_has_zero": ci_has_zero(ex_late)}
+    m3["pass"] = bool(m3["excess_mid"]["median"] > 0 and m3["p_greater"] < 0.01
+                      and m3["ratio_to_blocks"] >= 2 and m3["late_ci_has_zero"])
+
+    late_b = [(23, 25), (26, 28), (29, 31), (32, 34), (23, 28), (29, 34)]
+    a13 = one(8, 13)
+    marg = np.mean([raw[f"{a13}+{one(*b)}"]["dADE"] - raw[a13]["dADE"] for b in late_b], 0)  # (n,)
+    m4 = {**stats(marg, rng, args.n_boot), "p_two_sided": float(wilcoxon(marg).pvalue)}
+    m4["pass"] = bool(abs(m4["median"]) <= 0.05)
+    m4["repair_reproduced"] = bool(m4["median"] < -0.05 and m4["p_two_sided"] < 0.01)
+
+    band = {"dADE": 0.05, "rFM": 0.05, "dNLL": 0.05}
+    m5 = {}
+    for key in h3:
+        m5[key] = {}
+        for m in METRICS:
+            alone, mg = pts[key][m]
+            use = np.abs(alone) >= band[m]
+            rel = float(np.abs(mg[use] - alone[use]).mean() / np.abs(alone[use]).mean()) if use.any() else None
+            m5[key][m] = {"n_B_used": int(use.sum()), "rel_mae": rel,
+                          "additive": None if rel is None else bool(rel < 0.25)}
+    m0 = {"layer35_pass": g0["layer35_pass"], "top5_single_dADE": top5,
+          "spearman_vs_stored_150clip": g0["spearman_vs_stored_150clip"],
+          "pass": bool(g0["layer35_pass"] and set(top5) == set(FLAGGED)
+                       and g0["spearman_vs_stored_150clip"] >= 0.8)}
+    main_gates = {"M0": m0, "M1": m1, "M2": m2, "M3": m3, "M4": m4, "M5": m5}
+
     out = REPO / "outputs" / args.out
     (out / "plots").mkdir(parents=True, exist_ok=True)
 
@@ -161,12 +217,14 @@ def main():
                 z[ends.index(b), starts.index(a)] = med[name][m]
         vmax = {"dADE": 1.0, "rFM": 1.0, "dNLL": 2.0}[m]
         im = ax.imshow(z, origin="lower", cmap=DAMAGE, vmin=0, vmax=vmax, aspect="auto")
-        for (ei, si), val in np.ndenumerate(z):
-            if not np.isnan(val):
-                ax.text(si, ei, f"{val:.2f}" if abs(val) < 10 else f"{val:.0f}", ha="center", va="center",
-                        fontsize=7.5, color="white" if val > 0.5 * vmax else "black")
-        ax.set_xticks(range(len(starts)), starts)
-        ax.set_yticks(range(len(ends)), ends)
+        if len(starts) <= 13:  # the stride-1 map is too dense to annotate
+            for (ei, si), val in np.ndenumerate(z):
+                if not np.isnan(val):
+                    ax.text(si, ei, f"{val:.2f}" if abs(val) < 10 else f"{val:.0f}", ha="center", va="center",
+                            fontsize=7.5, color="white" if val > 0.5 * vmax else "black")
+        step = 1 if len(starts) <= 13 else 3
+        ax.set_xticks(range(0, len(starts), step), starts[::step])
+        ax.set_yticks(range(0, len(ends), step), ends[::step])
         ax.set_xlabel("first layer bypassed")
         ax.set_ylabel("last layer bypassed")
         ax.set_title(f"{LABEL[m]} (colour clipped at {vmax:g})")
@@ -198,7 +256,7 @@ def main():
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
     for ax, m in zip(axes, METRICS):
         lo, hi = np.inf, -np.inf
-        for key, col in zip(pts, (C1, C3)):
+        for key, col in zip(pts, (C1, C3, "#eda100")):
             alone, marg = pts[key][m]
             ax.scatter(alone, marg, color=col, s=28,
                        label=f"A={key[1:].replace('_', '-')}  ρ={h3[key][m]['spearman']:+.2f}")
@@ -220,10 +278,10 @@ def main():
     (out / "metrics.json").write_text(json.dumps({
         "n_clips": n, "clip_ids": ids, "buckets": buckets,
         "dense": {k: {"median": float(np.median(v)), "mean": float(v.mean())} for k, v in dense.items()},
-        "gates": {"G0": g0, "H1": h1, "H2": h2, "H3": h3},
+        "gates": {"G0": g0, "H1": h1, "H2": h2, "H3": h3, **main_gates},
         "configs": {name: {**cfgs[name], **table[name]} for name in cfgs}}, indent=2))
 
-    lines = [f"interval-deletion landscape pilot: {n} clips, {len(cfgs)} configs, {cfg0['gpu']}",
+    lines = [f"interval-deletion landscape: {n} clips, {len(cfgs)} configs, {cfg0['gpu']}",
              (f"dense: minADE median {np.median(dense['ade']):.3f}  fm {np.median(dense['fm']):.4f}  "
              f"nll {np.median(dense['nll']):.4f}"), "",
              (f"G0 {'PASS' if g0['pass'] else 'FAIL'}: layer 35 max|rFM| {g0a['max_abs_rFM']:.2e} "
@@ -238,13 +296,38 @@ def main():
             s = h3[key][m]
             lines.append(f"  A={key:7s} {m:5s} D(A)={s['D_A']:+.4f}  MAE {s['mae']:.4f} (scale {s['scale']:.4f})  "
                          f"pearson {s['pearson']:+.3f}  spearman {s['spearman']:+.3f}")
+    def verdict(g):
+        return "PASS" if g["pass"] else "FAIL"
+
+    lines += ["", "main-run gates:",
+              (f"M0 {verdict(m0)}: layer 35 exact zero {m0['layer35_pass']}; top-5 {top5}; "
+               f"Spearman vs stored {m0['spearman_vs_stored_150clip']:+.3f}"),
+              f"M1 {verdict(m1)}: s* = {s_star}; starts passing {passing}",
+              (f"M2 {verdict(m2)}: [8,16] dADE {mid['dADE']:+.3f} dNLL {mid['dNLL']:+.3f} | "
+               f"[26,34] dADE {lat['dADE']:+.3f} dNLL {lat['dNLL']:+.3f}"),
+              (f"M3 {verdict(m3)}: [8,16] whole - sum of singles: median {m3['excess_mid']['median']:+.3f} "
+               f"mean {m3['excess_mid']['mean']:+.3f} p={m3['p_greater']:.2e}; whole/blocks "
+               f"{m3['ratio_to_blocks']:.2f} ({mid['dADE']:+.3f} / {blocks:+.3f}); [26,34] excess mean "
+               f"{m3['excess_late']['mean']:+.3f} CI {m3['excess_late']['mean_ci']}"),
+              (f"M4 {verdict(m4)}: late B after [8,13], pooled: median {m4['median']:+.3f} "
+               f"mean {m4['mean']:+.3f} p={m4['p_two_sided']:.3f}; repair reproduced: {m4['repair_reproduced']}"),
+              "M5 additivity by value (rel MAE over B's outside the noise band; additive < 0.25):"]
+    for key, by_metric in m5.items():
+        lines.append(f"  A={key:7s} " + "  ".join(
+            f"{m} {'n/a' if v['rel_mae'] is None else format(v['rel_mae'], '.2f')} (n={v['n_B_used']})"
+            for m, v in by_metric.items()))
+    for st in sorted(m1_rows):
+        r = m1_rows[st]
+        lines.append(f"  [{st},34] rFM {r['rFM']:+.3f} dADE {r['dADE']:+.3f} dNLL {r['dNLL']:+.3f} "
+                     f"{'ok' if r['ok'] else ''}")
+    n_head = len(lines)
     lines += ["", f"{'config':16s} {'group':7s} {'dADE med':>9s} {'mean':>8s} {'rFM med':>8s} {'dNLL med':>9s}"]
     for name in cfgs:
         t = table[name]
         lines.append(f"{name:16s} {cfgs[name]['group']:7s} {t['dADE']['median']:+9.4f} {t['dADE']['mean']:+8.3f} "
                      f"{t['rFM']['median']:+8.3f} {t['dNLL']['median']:+9.4f}")
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
-    print("\n".join(lines[:14]))
+    print("\n".join(lines[:n_head]))
     print("saved ->", out)
 
 
