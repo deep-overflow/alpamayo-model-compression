@@ -34,12 +34,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from analyze_gradient_anatomy import C1, C3, MUTED, plt
 from analyze_token_ablation import merge
+from matplotlib.colors import LinearSegmentedColormap
 
 REPO = Path(__file__).resolve().parents[2]
 METRICS = ("dADE", "rFM", "dNLL")
 LABEL = {"dADE": "ΔminADE (m)", "rFM": "FM loss, relative change", "dNLL": "ΔCoC NLL (nat)"}
 FLAGGED = [0, 1, 6, 15, 16]
 TOL_ADE = 0.05
+DAMAGE = LinearSegmentedColormap.from_list("damage", ["#F3F1E9", "#E9B79F", "#D97757", "#7A3521", "#2B130C"])
 
 
 def stats(x, rng, n_boot):
@@ -158,11 +160,11 @@ def main():
             if a in starts and b in ends:
                 z[ends.index(b), starts.index(a)] = med[name][m]
         vmax = {"dADE": 1.0, "rFM": 1.0, "dNLL": 2.0}[m]
-        im = ax.imshow(z, origin="lower", cmap="viridis_r", vmin=0, vmax=vmax, aspect="auto")
+        im = ax.imshow(z, origin="lower", cmap=DAMAGE, vmin=0, vmax=vmax, aspect="auto")
         for (ei, si), val in np.ndenumerate(z):
             if not np.isnan(val):
                 ax.text(si, ei, f"{val:.2f}" if abs(val) < 10 else f"{val:.0f}", ha="center", va="center",
-                        fontsize=6.5, color="white" if val > 0.5 * vmax else "black")
+                        fontsize=7.5, color="white" if val > 0.5 * vmax else "black")
         ax.set_xticks(range(len(starts)), starts)
         ax.set_yticks(range(len(ends)), ends)
         ax.set_xlabel("first layer bypassed")

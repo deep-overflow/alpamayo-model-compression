@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구간 삭제 지도 파일럿 — 목적함수별로 그리면 거울상이 된다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --card: #F3F1E9; --ink: #29261B; --muted: #6B6555; --rule: #DDD8CC;
+    --clay: #D97757; --clay-deep: #9A4A2E; --clay-soft: #F6E4DA;
+    --ok: #4F7A4C; --ok-soft: #E9F0E4; --warn-soft: #FBF0DC; --warn: #B7791F;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15.5px/1.75 -apple-system, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 22px 88px; }
+  .eyebrow { color: var(--clay-deep); font-size: 12.5px; font-weight: 600; letter-spacing: 0.09em;
+             text-transform: uppercase; margin-bottom: 10px; }
+  h1, h2, h3 { font-family: "Tiempos Headline", "Source Serif 4", "Noto Serif KR", Georgia, "Nanum Myeongjo", serif;
+               font-weight: 500; letter-spacing: -0.012em; }
+  h1 { font-size: 31px; line-height: 1.32; margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 13.5px; line-height: 1.65; margin-bottom: 30px; }
+  h2 { font-size: 22px; margin: 54px 0 14px; padding-top: 22px; border-top: 1px solid var(--rule); }
+  h2 .num { color: var(--clay); margin-right: 10px; font-variant-numeric: tabular-nums; }
+  h2 .tag { font: 600 11px/1 -apple-system, "Segoe UI", sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 9px;
+            margin-left: 10px; vertical-align: 3px; }
+  h3 { font-size: 17px; margin: 30px 0 8px; }
+  p { margin: 11px 0; }
+  ul { margin: 10px 0; padding-left: 21px; }
+  li { margin: 6px 0; }
+  code { background: #EFECE3; padding: 1px 5px; border-radius: 4px;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.03em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hi td { background: var(--clay-soft); }
+  .scroll { overflow-x: auto; }
+  .pass, .fail, .part { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px;
+                        padding: 1px 10px; white-space: nowrap; }
+  .pass { color: var(--ok); background: var(--ok-soft); }
+  .fail { color: var(--clay-deep); background: var(--clay-soft); }
+  .part { color: var(--warn); background: var(--warn-soft); }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); }
+  figcaption { color: var(--muted); font-size: 12.8px; line-height: 1.6; margin-top: 8px; }
+  .lede { background: var(--card); border-radius: 14px; padding: 20px 24px; margin: 8px 0 12px;
+          border-left: 4px solid var(--clay); }
+  .lede p:first-child { margin-top: 0; } .lede p:last-child, .lede ul:last-child { margin-bottom: 0; }
+  .lede .big { font-family: "Tiempos Headline", "Source Serif 4", "Noto Serif KR", Georgia, serif;
+               font-size: 19px; line-height: 1.55; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+  .stat { background: var(--card); border-radius: 12px; padding: 16px 18px; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-family: "Tiempos Headline", "Source Serif 4", Georgia, serif; font-size: 27px; line-height: 1.25;
+             font-variant-numeric: tabular-nums; margin: 3px 0 2px; }
+  .stat .d { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .note { background: var(--warn-soft); border-radius: 10px; padding: 13px 17px; margin: 18px 0; font-size: 14.5px; }
+  .note p { margin: 0; }
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  @media (max-width: 640px) { .wrap { padding: 32px 16px 60px; } h1 { font-size: 24px; }
+                              .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="eyebrow">Experiment · Pilot</div>
+<h1>구간 삭제 지도 파일럿 — 목적함수별로 그리면 거울상이 된다</h1>
+<div class="sub">
+  2026-10-13 · Alpamayo-1.5-10B (dense) · val500 앞 44클립 × 108구성 · RTX PRO 5000 Blackwell × 4, 샤드당 84분 ·
+  계획 <code>plans/2026-10-13_interval-landscape-pilot.md</code> ·
+  방법 출처: <em>Does the VGGT Family Need All Its Layers?</em> (arXiv 2609.36842)
+</div>
+
+<div class="lede">
+<p class="big">VGGT 논문의 분석 방식(모든 연속 구간을 지우고 손상을 지도로 그리기)을 Alpamayo VLM에 옮겨 봤다. 궤적 기준으로 지울 수 있는 영역은 논문과 반대로 <strong>후반(26–35층)</strong>이고, 바로 그 띠가 CoC에는 가장 치명적이다.</p>
+<ul>
+  <li>후반 9개 층 <code>[26,34]</code>를 통째로 bypass해도 minADE는 −0.004 m, FM loss는 −0.2%다. 같은 구간에서 CoC NLL은 +4.78 nat 오른다.</li>
+  <li>중간 12개 층 <code>[8,19]</code>는 그 반대다. minADE +2.84 m, CoC NLL +0.14 nat.</li>
+  <li>인접한 층을 이어서 지우면 궤적 손상이 합보다 훨씬 크다. <code>[8,16]</code>은 +1.41 m인데 단일 층 아홉 개의 합은 +0.27 m다.</li>
+  <li>사전 등록한 게이트 넷 가운데 둘이 통과했고, 하나는 실패, 하나는 일부 실패다.</li>
+</ul>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="k">후반 <code>[26,34]</code> · 궤적</div><div class="v">−0.004 m</div><div class="d">ΔminADE 중앙값. 평균 −0.027, CI [−0.142, +0.089]</div></div>
+  <div class="stat"><div class="k">후반 <code>[26,34]</code> · 추론</div><div class="v">+4.78 nat</div><div class="d">ΔCoC NLL 중앙값. dense는 0.107</div></div>
+  <div class="stat"><div class="k">인접 삭제 초가산</div><div class="v">5.3×</div><div class="d"><code>[8,16]</code> +1.41 m ÷ 단일 층 합 +0.27 m</div></div>
+</div>
+
+<h2><span class="num">1</span>목적</h2>
+
+<p>VGGT 논문은 layer를 구간 단위로 지워 "어디가 중복인가"를 지도로 보이고, 떨어진 두 구간의 손상이 더해지는지(가법성)를 검정한다. 이 파일럿은 그 두 분석이 우리 모델에서 쓸 만한지 확인한다. 한 가지를 바꿨다. 지도를 <strong>목적함수별로</strong>(궤적과 CoC) 따로 그린다. 2026-09-21 인과 검증이 22–34층을 언어 채널로 봤기 때문이다.</p>
+
+<p>실행 전에 네 가지를 등록했다.</p>
+
+<div class="scroll">
+<table>
+<tr><th>게이트</th><th>내용</th></tr>
+<tr><td>G0 무결성</td><td>35번 층 bypass는 FM loss와 minADE를 전 클립에서 정확히 0만큼 바꾼다(그 층의 출력은 expert가 읽는 cache에 닿지 않는다). 기존 150클립 단일 층 결과가 지목한 다섯 층(0, 1, 6, 15, 16) 중 넷 이상이 파일럿의 상위 다섯에 든다.</td></tr>
+<tr><td>H1 후반은 언어 채널</td><td><code>[23,34]</code>에서 FM loss 상대 변화 중앙값 5% 미만 <strong>그리고</strong> ΔCoC NLL 중앙값 +0.10 nat 초과.</td></tr>
+<tr><td>H2 지배 영역은 후반</td><td>ΔminADE 중앙값 0.05 m 미만인 최장 구간이, 17층 이후에서 시작하는 쪽이 16층 이전에서 끝나는 쪽보다 길다. 논문의 "초반이 지배적"과 반대 예측이다.</td></tr>
+<tr><td>H3 가법성</td><td><code>D(B|A) = D(A∪B) − D(A)</code>를 <code>D(B)</code>와 비교한다. 논문의 기준은 순위상관 0.97 이상. 예측: 짧은 A는 NLL에서 충족하고, 긴 A는 minADE에서 충족하지 못한다.</td></tr>
+</table>
+</div>
+
+<h2><span class="num">2</span>설정</h2>
+
+<div class="scroll">
+<table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>모델</td><td><code>nvidia/Alpamayo-1.5-10B</code>, dense. 프루닝하지 않은 모델에 마스크만 건다.</td></tr>
+<tr><td>층 삭제의 정의</td><td>kv-only bypass. 그 층의 Q head 32개와 MLP 채널 12,288개를 전부 마스크하고 k/v projection은 그대로 둔다. expert가 층별 cache를 읽으므로 cache 항목은 남아야 한다. <code>run_depth_ablation.py</code>와 같은 정의다.</td></tr>
+<tr><td>구성</td><td>108개 + dense. 단일 층 36, 구간 격자 56(경계 2, 5, …, 35, 36 · 길이 18 이하 · 0–1층 제외), 두 구간 쌍 16(A ∈ {<code>[8,10]</code>, <code>[8,13]</code>} × B 8종).</td></tr>
+<tr><td>데이터</td><td><code>indist_500</code>(= val500) 앞 44클립. cruise 28, turn 6, decel_stop 6, accel 4. 어떤 calibration 세트와도 겹치지 않는다.</td></tr>
+<tr><td>측정</td><td>클립마다 dense 모델이 CoC를 한 번 생성하고, 모든 구성을 그 텍스트에 teacher-forcing한다. 한 번의 forward에서 CoC NLL, GT 기준 10-step FM loss, minADE(K=8)를 얻는다. 시드는 클립에서 유도한다.</td></tr>
+<tr><td>러너</td><td><code>run_token_ablation.py --arm-masks</code>를 수정 없이 사용. 마스크는 <code>make_interval_masks.py</code>, 분석은 <code>analyze_interval_landscape.py</code>.</td></tr>
+<tr><td>하드웨어</td><td>RTX PRO 5000 Blackwell 4장(GPU 0–3), 4샤드, 클립당 약 460초, 샤드당 84분.</td></tr>
+<tr><td>dense 기준값</td><td>minADE 중앙값 0.480 m, FM loss 0.1767, CoC NLL 0.1074.</td></tr>
+</table>
+</div>
+
+<p>손상은 모두 같은 클립·같은 텍스트·같은 노이즈에서 dense와의 페어 차이다. minADE 차이는 꼬리가 무거워 중앙값을 읽고, 평균은 함께 적는다.</p>
+
+<h2><span class="num">3</span>결과 <span class="tag">사실</span></h2>
+
+<h3>게이트 판정</h3>
+
+<div class="scroll">
+<table>
+<tr><th>게이트</th><th>판정</th><th>측정값</th></tr>
+<tr><td>G0 무결성</td><td><span class="pass">통과</span></td><td>35번 층: ΔFM, ΔminADE 모두 44클립에서 정확히 0. 단일 층 ΔminADE 상위 다섯은 1, 0, 15, 16, 6으로 5/5 일치. 기존 150클립 결과와 순위상관 +0.758.</td></tr>
+<tr><td>H1 후반은 언어 채널</td><td><span class="fail">실패</span></td><td><code>[23,34]</code>: FM loss +7.3%(기준 5%), ΔNLL +7.33 nat, ΔminADE +0.092 m.</td></tr>
+<tr><td>H2 지배 영역은 후반</td><td><span class="pass">통과</span></td><td>16층 이전에서 끝나는 최장 구간 <code>[8,10]</code>(3층), 17층 이후에서 시작하는 최장 구간 <code>[26,35]</code>(10층).</td></tr>
+<tr><td>H3 가법성</td><td><span class="part">일부 실패</span></td><td>짧은 A의 NLL 순위상관 +0.929로 0.97 미달(예측 실패). 긴 A의 minADE 순위상관 +0.190(예측대로 미충족).</td></tr>
+</table>
+</div>
+
+<h3>구간 지도</h3>
+
+<figure>
+<img src="PLOT::ivl::landscape.png" alt="구간 삭제 지도: 세 지표의 (첫 층, 마지막 층) 히트맵">
+<figcaption>가로는 bypass한 첫 층, 세로는 마지막 층이다. 칸의 숫자는 44클립 중앙값이고, 색은 연할수록 무해하다. 왼쪽 둘(ΔminADE, FM loss)은 오른쪽 아래(후반)가 연하고, 오른쪽(ΔCoC NLL)은 왼쪽 아래(중간)가 연하다.</figcaption>
+</figure>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">층 수</th><th class="r">ΔminADE 중앙값 (m)</th><th class="r">평균 (m)</th><th class="r">FM loss 상대 변화</th><th class="r">ΔCoC NLL (nat)</th></tr>
+<tr><td><code>[8,10]</code></td><td class="r">3</td><td class="r">−0.004</td><td class="r">−0.045</td><td class="r">+1.1%</td><td class="r">+0.006</td></tr>
+<tr><td><code>[8,13]</code></td><td class="r">6</td><td class="r">+0.358</td><td class="r">+0.412</td><td class="r">+28.0%</td><td class="r">+0.034</td></tr>
+<tr><td><code>[8,16]</code></td><td class="r">9</td><td class="r">+1.410</td><td class="r">+2.649</td><td class="r">+86.1%</td><td class="r">+0.066</td></tr>
+<tr class="hi"><td><code>[8,19]</code></td><td class="r">12</td><td class="r">+2.842</td><td class="r">+5.770</td><td class="r">+123.0%</td><td class="r">+0.140</td></tr>
+<tr><td><code>[17,25]</code></td><td class="r">9</td><td class="r">+0.353</td><td class="r">+0.552</td><td class="r">+36.9%</td><td class="r">+0.135</td></tr>
+<tr><td><code>[20,34]</code></td><td class="r">15</td><td class="r">+0.217</td><td class="r">+0.527</td><td class="r">+20.9%</td><td class="r">+8.135</td></tr>
+<tr><td><code>[23,34]</code></td><td class="r">12</td><td class="r">+0.092</td><td class="r">+0.157</td><td class="r">+7.3%</td><td class="r">+7.332</td></tr>
+<tr class="hi"><td><code>[26,34]</code></td><td class="r">9</td><td class="r">−0.004</td><td class="r">−0.027</td><td class="r">−0.2%</td><td class="r">+4.780</td></tr>
+<tr><td><code>[26,35]</code></td><td class="r">10</td><td class="r">−0.004</td><td class="r">−0.027</td><td class="r">−0.2%</td><td class="r">+13.612</td></tr>
+<tr><td><code>[32,34]</code></td><td class="r">3</td><td class="r">−0.016</td><td class="r">−0.027</td><td class="r">−0.7%</td><td class="r">+1.321</td></tr>
+</table>
+</div>
+
+<p><code>[26,34]</code>의 ΔminADE 평균은 부트스트랩 95% CI가 [−0.142, +0.089]로 0을 포함한다. <code>[8,16]</code>은 [+1.753, +3.635], <code>[8,19]</code>는 [+3.758, +8.234]다.</p>
+
+<h3>단일 층</h3>
+
+<figure>
+<img src="PLOT::ivl::single_layer.png" alt="단일 층 bypass의 세 지표">
+<figcaption>층 하나만 bypass했을 때의 중앙값. 분홍 막대는 기존 150클립 결과가 지목한 다섯 층이다. 세로축은 symlog다.</figcaption>
+</figure>
+
+<ul>
+  <li>0번, 1번 층은 치명적이다. ΔminADE +1.30 m, +27.63 m이고 CoC NLL도 +7.4, +7.7 nat 오른다.</li>
+  <li>15번, 16번 층은 +0.127 m, +0.121 m다. 6번 층은 +0.049 m다.</li>
+  <li>0, 1, 15, 16번을 뺀 32개 층은 ΔminADE 중앙값이 모두 0.05 m 미만이다.</li>
+  <li>CoC NLL은 32–35번 층에서만 단일 층으로 눈에 띄게 오른다(+0.023, +0.007, +0.064, +0.829).</li>
+</ul>
+
+<h3>길이를 고정하고 위치를 옮기면</h3>
+
+<figure>
+<img src="PLOT::ivl::length_slices.png" alt="구간 길이별 손상 대 시작 층">
+<figcaption>길이 3, 6, 9, 12층 구간을 시작 층에 따라 그렸다. 논문의 "대각선 slice"에 해당한다. 궤적 지표는 시작 층이 뒤로 갈수록 내려가고 CoC NLL은 올라간다.</figcaption>
+</figure>
+
+<h3>인접 삭제의 초가산성</h3>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">통째로 (m)</th><th class="r">3층 블록 합 (m)</th><th class="r">단일 층 합 (m)</th></tr>
+<tr><td><code>[8,13]</code></td><td class="r">+0.358</td><td class="r">+0.178</td><td class="r">−0.015</td></tr>
+<tr class="hi"><td><code>[8,16]</code></td><td class="r">+1.410</td><td class="r">+0.509</td><td class="r">+0.267</td></tr>
+<tr><td><code>[17,25]</code></td><td class="r">+0.353</td><td class="r">+0.110</td><td class="r">+0.003</td></tr>
+<tr><td><code>[26,34]</code></td><td class="r">−0.004</td><td class="r">−0.020</td><td class="r">−0.032</td></tr>
+</table>
+</div>
+
+<p>ΔminADE 중앙값 기준이다. 궤적에 무해한 후반 띠에서는 세 값이 모두 0 근처로 일치하고, 그 앞에서는 통째로 지운 손상이 3층 블록 합의 2.0–3.2배다.</p>
+
+<h3>떨어진 두 구간의 가법성</h3>
+
+<figure>
+<img src="PLOT::ivl::additivity.png" alt="가법성 산점도: D(B) 대 D(B|A)">
+<figcaption>가로는 B만 지웠을 때의 손상, 세로는 A를 먼저 지운 뒤 B를 더 지웠을 때의 추가 손상이다. 대각선 위에 있으면 가법적이다. 파랑은 A = <code>[8,10]</code>, 분홍은 A = <code>[8,13]</code>.</figcaption>
+</figure>
+
+<div class="scroll">
+<table>
+<tr><th>A</th><th>지표</th><th class="r">D(A)</th><th class="r">MAE</th><th class="r">B의 평균 크기</th><th class="r">Pearson</th><th class="r">Spearman</th></tr>
+<tr><td rowspan="3"><code>[8,10]</code></td><td>ΔminADE</td><td class="r">−0.004</td><td class="r">0.009</td><td class="r">0.023</td><td class="r">+0.990</td><td class="r">+0.929</td></tr>
+<tr><td>FM loss</td><td class="r">+0.011</td><td class="r">0.008</td><td class="r">0.033</td><td class="r">+0.996</td><td class="r">+0.905</td></tr>
+<tr><td>ΔCoC NLL</td><td class="r">+0.006</td><td class="r">0.041</td><td class="r">0.525</td><td class="r">+0.999</td><td class="r">+0.929</td></tr>
+<tr><td rowspan="3"><code>[8,13]</code></td><td>ΔminADE</td><td class="r">+0.358</td><td class="r">0.021</td><td class="r">0.023</td><td class="r">+0.877</td><td class="r">+0.190</td></tr>
+<tr><td>FM loss</td><td class="r">+0.280</td><td class="r">0.019</td><td class="r">0.033</td><td class="r">+0.986</td><td class="r">+0.857</td></tr>
+<tr><td>ΔCoC NLL</td><td class="r">+0.034</td><td class="r">0.222</td><td class="r">0.525</td><td class="r">+0.997</td><td class="r">+0.786</td></tr>
+</table>
+</div>
+
+<p>A = <code>[8,13]</code>을 지운 뒤 후반 B 여섯 개(<code>[23,25]</code> … <code>[29,34]</code>)가 minADE에 더하는 변화는 클립별로 묶어 중앙값 −0.027 m, 평균 −0.010 m이고 Wilcoxon p = 0.83이다.</p>
+
+<h2><span class="num">4</span>분석 <span class="tag">해석</span></h2>
+
+<h3>논문과 반대 모양이 나온 이유</h3>
+<p>VGGT 계열은 초반 층이 넓게 중복이었다. 우리 지도에서 궤적 기준의 넓은 무해 영역은 26층 이후다. 이것은 기존에 알던 구조와 맞는다. expert는 VLM의 층별 cache를 읽고, FM gradient의 주 포트가 cache 21–23층에서 닫힌다. 그 위 층의 출력은 expert에 닿을 길이 좁다. 반대로 CoC는 마지막 hidden state에서 읽히므로 후반 층이 전부 경로에 있다. 지도는 두 출력이 네트워크를 떠나는 위치를 그대로 그리고 있다.</p>
+
+<h3>H1이 실패한 방식</h3>
+<p>예측의 방향은 맞았고 경계가 틀렸다. 9월의 인과 검증은 22–34층에서 unit의 19–40%를 빼고 FM loss가 ±1% 안이라고 봤다. 층을 통째로 지우는 용량에서는 23–25층이 궤적에 조금 기여한다(<code>[23,34]</code> +7.3%, <code>[26,34]</code> −0.2%). 층 전체 용량에서 "궤적에 무해한 띠"는 26층부터라고 읽는 것이 맞다. 격자가 3층 간격이라 이 경계는 ±3층의 해상도다.</p>
+
+<h3>이중 해리에 가깝다</h3>
+<p>9월에는 후반 세트에서 한쪽 해리만 나왔다. 층 단위로 보면 반대쪽도 보인다. 중간 띠 <code>[8,19]</code>는 궤적을 +2.84 m 무너뜨리면서 CoC NLL은 +0.14 nat만 올린다. 다만 dense의 NLL이 0.107이라 +0.14는 상대적으로 130%다. "중간 띠는 궤적 전용"이라고 쓰기에는 이르고, 두 손상의 비가 띠에 따라 크게 뒤집힌다는 정도가 이 데이터가 지지하는 문장이다.</p>
+
+<h3>초가산성이 뜻하는 것</h3>
+<p>단일 층 지도만 보면 31개 층이 지울 수 있어 보인다. 실제로는 8–16층을 이어서 지우면 +1.41 m다. 층별 점수를 더해 예산을 짜는 방식은 trunk에서 손상을 크게 과소평가한다. 후반 띠에서만 조각의 합과 전체가 일치한다. 이는 Q축의 층 간 초가산성(1.7–2.5배)과 같은 방향의 결과다.</p>
+
+<h3>가법성 검정은 설계를 고쳐야 한다</h3>
+<p>B 여덟 개 가운데 여섯이 궤적 지표에서 0과 구분되지 않는다. 0 근처 값들의 순위는 잡음이라 순위상관이 낮게 나온다. 짧은 A에서는 MAE가 B의 평균 크기보다 작고 Pearson이 0.99 이상이므로, 값으로 보면 가법적이다. 긴 A에서는 minADE의 MAE(0.021)가 B의 크기(0.023)와 같아 판정할 수 없다. 논문의 0.97 기준을 그대로 쓰려면 손상이 0이 아닌 B(17–22층)를 더 넣어야 한다.</p>
+
+<h3>재현되지 않은 것</h3>
+<p>9월 결과 가운데 "후반을 솎으면 traj-only trunk의 손상이 복구된다"가 있었다. 여기서 <code>[8,13]</code>을 지운 뒤 후반을 더 지워도 minADE는 움직이지 않는다(p = 0.83). 조건이 다르다. 그때는 기준이 고른 unit 마스크였고 여기는 층 전체 bypass다. 반박이라기보다 그 효과가 이 조건으로는 옮겨오지 않는다는 기록이다.</p>
+
+<h3>이 파일럿이 말하지 못하는 것</h3>
+<ul>
+  <li>44클립이고 cruise가 64%다. 버킷별로는 읽을 수 없다.</li>
+  <li>CoC NLL은 dense 텍스트의 teacher-forcing이다. 자유 생성에서의 붕괴(빈 출력, soup)는 보지 못한다.</li>
+  <li>Blackwell에서 쟀다. Ada로 보고된 arm과 절대값을 비교할 수 없다. 구성 간 비교는 한 아키텍처 안이라 유효하다.</li>
+  <li>폐루프가 없다. head 수가 폐루프를 좌우한다는 기존 결과에 비추면, 층 bypass(그 층 head 32개 전부 제거)는 개루프보다 나쁠 수 있다.</li>
+  <li>dense 모델에서 쟀다. 이미 24% 프루닝된 출하 모델 위에서 같은 지도가 나오는지는 모른다.</li>
+</ul>
+
+<h3>다음 단계</h3>
+<ul>
+  <li><strong>본 실험.</strong> stride 1(구성 666개)과 150클립으로 키우면 약 115 GPU시간이다. Ada 카드가 필요하다. 경계(23 대 26)와 초가산 배율을 확정하는 것이 목적이다.</li>
+  <li><strong>출하 모델 위에서.</strong> <code>dual_u40_v2</code>에 같은 마스크를 얹어, 폭 프루닝과 층 bypass가 더해지는지 본다.</li>
+  <li><strong>가법성 재설계.</strong> B를 17–22층 쪽으로 옮기고 A를 세 길이로 늘린다.</li>
+  <li><strong>후반 띠의 용도.</strong> 26–34층은 궤적에 무해하지만 CoC를 잃는다. 추론을 보존하는 압축에서는 지울 수 없는 띠이고, CoC를 건너뛰는 모드에서는 9개 층(약 1.66B 파라미터)이 통째로 후보가 된다.</li>
+</ul>
+
+<div class="note"><p>이 리포트의 수치는 파일럿 한 번의 결과다. 게이트는 실행 전에 등록했지만 "이중 해리", "초가산 배율", "복구 미재현"은 등록하지 않고 데이터에서 본 것이다. 본 실험에서 게이트로 다시 등록해 확인해야 한다.</p></div>
+
+<footer>
+  산출물 <code>outputs/ivl_pilot_v1/</code> (<code>metrics.json</code>, <code>summary.txt</code> 108구성 전체 표, <code>plots/</code>) ·
+  샤드 <code>outputs/ivl_pilot_v1_s0…s3/</code> · 마스크 <code>outputs/ivl_masks_v1/</code><br>
+  코드 <code>experiments/head_analysis/make_interval_masks.py</code>, <code>analyze_interval_landscape.py</code>, 러너 <code>run_token_ablation.py --arm-masks</code> ·
+  브랜치 <code>worktree-interval-landscape-pilot</code><br>
+  빌드 <code>python experiments/head_analysis/build_report.py experiments/head_analysis/ivl_pilot_report_template.html reports/evaluation/2026-10-13_interval-landscape-pilot.html ivl=$PWD/outputs/ivl_pilot_v1/plots</code>
+</footer>
+
+</div>
+</body>
+</html>
