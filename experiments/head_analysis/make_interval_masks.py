@@ -13,6 +13,7 @@ run_token_ablation.py --arm-masks takes).
 
 Usage:
   python experiments/head_analysis/make_interval_masks.py --exp-id ivl_masks_v1
+  python experiments/head_analysis/make_interval_masks.py --exp-id ivl_masks_main --stride 1 --pairs main
 """
 
 import argparse
@@ -23,8 +24,15 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 L, N_HEADS, INTERMEDIATE = 36, 32, 12288
-PAIR_A = [(8, 10), (8, 13)]
-PAIR_B = [(17, 19), (20, 22), (23, 25), (26, 28), (29, 31), (32, 34), (23, 28), (29, 34)]
+# name -> (A intervals, B intervals); every A is paired with every B
+PAIRS = {
+    "pilot": ([(8, 10), (8, 13)],
+              [(17, 19), (20, 22), (23, 25), (26, 28), (29, 31), (32, 34), (23, 28), (29, 34)]),
+    # main run: three A's of increasing damage, and B's moved into 15-22 where B alone is not zero
+    "main": ([(8, 10), (11, 13), (8, 13)],
+             [(15, 17), (17, 19), (18, 20), (19, 21), (20, 22), (21, 23), (23, 25), (26, 28), (29, 31),
+              (32, 34), (17, 22), (20, 25), (23, 28), (29, 34)]),
+}
 
 
 def name_of(intervals):
@@ -37,6 +45,7 @@ def main():
     ap.add_argument("--start", type=int, default=2)
     ap.add_argument("--stride", type=int, default=3)
     ap.add_argument("--max-len", type=int, default=18)
+    ap.add_argument("--pairs", choices=sorted(PAIRS), default="pilot")
     args = ap.parse_args()
 
     cfgs = {}  # name -> (group, [(a, b), ...]) with inclusive layer indices
@@ -47,8 +56,9 @@ def main():
         for e in bounds[i + 1 :]:
             if e - s <= args.max_len:
                 cfgs.setdefault(name_of([(s, e - 1)]), ("grid", [(s, e - 1)]))
-    for a in PAIR_A:
-        for b in PAIR_B:
+    pair_a, pair_b = PAIRS[args.pairs]
+    for a in pair_a:
+        for b in pair_b:
             assert name_of([a]) in cfgs and name_of([b]) in cfgs, "pair members must be measured alone"
             assert a[1] + 1 < b[0], "pair intervals must be separated by a kept layer"
             cfgs[name_of([a, b])] = ("pair", [a, b])
@@ -66,7 +76,8 @@ def main():
         lines.append(f"{name}=outputs/{args.exp_id}/masks/{name}.npz")
     (out / "arm_masks.txt").write_text("\n".join(lines) + "\n")
     (out / "intervals.json").write_text(json.dumps({
-        "start": args.start, "stride": args.stride, "max_len": args.max_len, "bounds": bounds,
+        "start": args.start, "stride": args.stride, "max_len": args.max_len, "pairs": args.pairs,
+        "bounds": bounds,
         "configs": {n: {"group": g, "intervals": iv} for n, (g, iv) in cfgs.items()},
     }, indent=2))
     groups = [g for g, _ in cfgs.values()]

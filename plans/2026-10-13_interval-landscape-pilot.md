@@ -80,3 +80,50 @@ Not registered, seen in the data:
   +0.51 for its three 3-layer blocks and +0.27 for its nine single layers.
 - "Late bypass repairs a damaged trunk" is **not** supported here: after A = `[8, 13]`, the six
   late B's move minADE by -0.027 pooled (Wilcoxon p = 0.83).
+
+---
+
+# Main run (2026-10-14)
+
+The pilot scaled up: stride 1, 150 clips, Ada. What the pilot showed without having registered
+it is registered here before the run.
+
+## Setup
+
+- Masks `ivl_masks_main`: 503 configs + dense. Single 36; grid 425 = every interval starting at
+  layer >= 2 with length <= 18; pair 42 = A in {`[8,10]`, `[11,13]`, `[8,13]`} x 14 B's
+  (`[15,17]`, `[17,19]`, `[18,20]`, `[19,21]`, `[20,22]`, `[21,23]`, `[23,25]`, `[26,28]`,
+  `[29,31]`, `[32,34]`, `[17,22]`, `[20,25]`, `[23,28]`, `[29,34]`).
+- Clips: first 150 of `indist_500` -- the same 150 the stored single-layer run used.
+- Ada 4-7 only (the run is ~22 h on four cards; all configs on one architecture). 30 shards of 5
+  clips through `launch_interval_landscape.py`, because the runner does not resume.
+- Same runner, readouts, K = 8 and seed rule as the pilot. Pilot clips are not pooled in (they
+  were measured on Blackwell).
+
+## Gates
+
+- **M0 (sanity)**. Layer 35: `dFM == 0` and `dminADE == 0` on every clip. Single-layer median
+  `dminADE`: top five are layers 0, 1, 6, 15, 16 and Spearman against the stored run >= 0.8.
+- **M1 (boundary)**. Let s* be the smallest s for which `[s, 34]` has median relative `dFM`
+  under 5%, median `|dminADE|` under 0.05 m, and a bootstrap 95% CI of the mean `dminADE` that
+  includes 0. Prediction: s* in {25, 26, 27}. An s* at or below 23 revives the pilot's H1; an s*
+  above 29 says the pilot's `[26, 34]` was a small-sample null.
+- **M2 (double dissociation)**. At matched length 9: `[8, 16]` has median `dminADE` > 1.0 m and
+  median `dNLL` < 0.2 nat; `[26, 34]` has median `|dminADE|` < 0.05 m and median `dNLL` > 2 nat.
+  All four must hold.
+- **M3 (superadditivity)**. Per clip, `dminADE([8,16])` minus the sum of its nine single-layer
+  `dminADE`: positive, paired Wilcoxon p < 0.01, and the ratio of medians (whole / sum of the
+  three 3-layer blocks) at least 2. Control: the same difference for `[26, 34]` has a CI
+  including 0.
+- **M4 (no repair)**. After A = `[8, 13]`, the six late B's (`[23,25]` ... `[29,34]`) pooled per
+  clip: median marginal `dminADE` within +-0.05 m. A median below -0.05 m with p < 0.01 would
+  instead reproduce the September "late thinning repairs the trunk" result at layer dose.
+- **M5 (additivity, by value)**. For each A and metric, over the B's whose own median damage is
+  outside the noise band (|dminADE| >= 0.05 m, |rFM| >= 5%, dNLL >= 0.05 nat): MAE of
+  `D(B|A) - D(B)` relative to the mean |D(B)|. "Additive" = below 0.25. Prediction: `[8,10]`
+  additive on all three metrics; `[8,13]` not additive on `dminADE`. Spearman is reported, not
+  gated (the pilot showed it is ordering noise when most B's are zero).
+
+## Outcome
+
+(filled in after the run)
