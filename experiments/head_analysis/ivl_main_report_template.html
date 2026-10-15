@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>층 구간 삭제 지도 — 궤적과 추론은 서로 다른 층을 쓴다</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --card: #F3F1E9; --ink: #29261B; --muted: #6B6555; --rule: #DDD8CC;
+    --clay: #D97757; --clay-deep: #9A4A2E; --clay-soft: #F6E4DA;
+    --ok: #4F7A4C; --ok-soft: #E9F0E4; --warn-soft: #FBF0DC; --warn: #B7791F;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15.5px/1.75 -apple-system, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 22px 88px; }
+  .eyebrow { color: var(--clay-deep); font-size: 12.5px; font-weight: 600; letter-spacing: 0.09em;
+             text-transform: uppercase; margin-bottom: 10px; }
+  h1, h2, h3 { font-family: "Tiempos Headline", "Source Serif 4", "Noto Serif KR", Georgia, "Nanum Myeongjo", serif;
+               font-weight: 500; letter-spacing: -0.012em; }
+  h1 { font-size: 31px; line-height: 1.32; margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 13.5px; line-height: 1.65; margin-bottom: 30px; }
+  h2 { font-size: 22px; margin: 54px 0 14px; padding-top: 22px; border-top: 1px solid var(--rule); }
+  h2 .num { color: var(--clay); margin-right: 10px; font-variant-numeric: tabular-nums; }
+  h2 .tag { font: 600 11px/1 -apple-system, "Segoe UI", sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 9px;
+            margin-left: 10px; vertical-align: 3px; }
+  h3 { font-size: 17px; margin: 30px 0 8px; }
+  p { margin: 11px 0; }
+  ul { margin: 10px 0; padding-left: 21px; }
+  li { margin: 6px 0; }
+  code { background: #EFECE3; padding: 1px 5px; border-radius: 4px;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.03em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hi td { background: var(--clay-soft); }
+  .scroll { overflow-x: auto; }
+  .pass, .fail, .part { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px;
+                        padding: 1px 10px; white-space: nowrap; }
+  .pass { color: var(--ok); background: var(--ok-soft); }
+  .fail { color: var(--clay-deep); background: var(--clay-soft); }
+  .part { color: var(--warn); background: var(--warn-soft); }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); }
+  figcaption { color: var(--muted); font-size: 12.8px; line-height: 1.6; margin-top: 8px; }
+  .lede { background: var(--card); border-radius: 14px; padding: 20px 24px; margin: 8px 0 12px;
+          border-left: 4px solid var(--clay); }
+  .lede p:first-child { margin-top: 0; } .lede p:last-child, .lede ul:last-child { margin-bottom: 0; }
+  .lede .big { font-family: "Tiempos Headline", "Source Serif 4", "Noto Serif KR", Georgia, serif;
+               font-size: 19px; line-height: 1.55; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+  .stat { background: var(--card); border-radius: 12px; padding: 16px 18px; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-family: "Tiempos Headline", "Source Serif 4", Georgia, serif; font-size: 27px; line-height: 1.25;
+             font-variant-numeric: tabular-nums; margin: 3px 0 2px; }
+  .stat .d { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .note { background: var(--warn-soft); border-radius: 10px; padding: 13px 17px; margin: 18px 0; font-size: 14.5px; }
+  .note p { margin: 0; }
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  @media (max-width: 640px) { .wrap { padding: 32px 16px 60px; } h1 { font-size: 24px; }
+                              .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="eyebrow">Experiment · Main run</div>
+<h1>층 구간 삭제 지도 — 궤적과 추론은 서로 다른 층을 쓴다</h1>
+<div class="sub">
+  2026-10-14 – 15 · Alpamayo-1.5-10B (dense) · val500 앞 150클립 × 503구성 · RTX 5880 Ada × 4, 30샤드, 약 23.5시간 ·
+  계획과 사전 등록 게이트 <code>plans/2026-10-13_interval-landscape-pilot.md</code> (실행 전 푸시, <code>283fc84</code>) ·
+  앞선 파일럿 <code>2026-10-13_interval-landscape-pilot.html</code> ·
+  방법 출처: <em>Does the VGGT Family Need All Its Layers?</em> (arXiv 2609.36842)
+</div>
+
+<div class="lede">
+<p class="big">VLM의 연속된 층 구간을 하나씩 통째로 지우고 궤적과 CoC가 얼마나 망가지는지를 따로 지도로 그렸다. 두 지도는 거의 겹치지 않는다. 궤적은 24층 이후 12개 층이 없어도 버티고, CoC는 중간 띠의 7개 층이 없어도 버틴다. 두 기준이 함께 허용하는 구간은 최장 4개 층이다.</p>
+<ul>
+  <li>사전 등록한 게이트 여섯 개(M0–M5)가 모두 예측대로 나왔다.</li>
+  <li>궤적에 무해한 후반 띠는 25층부터다(<code>[25,34]</code>: ΔminADE +0.029 m, 평균 CI가 0 포함). 같은 띠를 지우면 CoC NLL이 +5.99 nat 오른다.</li>
+  <li>인접한 층을 이어서 지우면 궤적 손상이 크게 초가산적이다. <code>[8,16]</code>은 +1.74 m로, 3층 블록 셋의 합(+0.48 m)의 3.6배, 단일 층 아홉의 합(+0.29 m)의 5.9배다.</li>
+  <li>떨어진 두 구간은 대체로 더해진다. 비가법성은 두 구간이 가까울 때만 나타난다.</li>
+</ul>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="k">궤적이 버티는 최장 구간</div><div class="v">12층</div><div class="d"><code>[24,35]</code> · ΔminADE 중앙값 +0.042 m. 같은 구간의 CoC NLL은 +13.1 nat</div></div>
+  <div class="stat"><div class="k">CoC가 버티는 최장 구간</div><div class="v">7층</div><div class="d"><code>[13,19]</code>, <code>[10,16]</code>, <code>[8,14]</code> · 모두 궤적에는 치명적</div></div>
+  <div class="stat"><div class="k">둘 다 버티는 최장 구간</div><div class="v">4층</div><div class="d"><code>[21,24]</code> … <code>[28,31]</code> 사이의 4층 창들</div></div>
+</div>
+
+<h2><span class="num">1</span>목적</h2>
+
+<p>VGGT 논문은 모든 연속 층 구간을 지워 손상을 <code>(첫 층, 마지막 층)</code> 지도로 그리고, 떨어진 두 구간의 손상이 더해지는지를 검정한다. 44클립 파일럿에서 이 방식을 Alpamayo VLM에 옮기자, 지도를 목적함수별로 나누면 두 지도가 거울상이 된다는 결과가 나왔다. 파일럿은 표본이 작고 격자가 3층 간격이었으며, 그 결과의 상당 부분은 사전에 등록하지 않은 채 데이터에서 본 것이었다.</p>
+
+<p>본 실험은 그 관찰들을 게이트로 등록한 뒤, 1층 간격 격자와 150클립으로 확인한다. 게이트는 실행 전에 원격에 푸시했다.</p>
+
+<div class="scroll">
+<table>
+<tr><th>게이트</th><th>등록한 기준과 예측</th></tr>
+<tr><td>M0 무결성</td><td>35번 층 bypass가 FM loss와 minADE를 전 클립에서 정확히 0만큼 바꾼다. 단일 층 ΔminADE 상위 다섯이 0, 1, 6, 15, 16이고, 기존 150클립 단일 층 실행과의 순위상관이 0.8 이상이다.</td></tr>
+<tr><td>M1 경계</td><td><code>[s,34]</code>가 궤적에 무해한(FM 상대 변화 5% 미만, |ΔminADE| 0.05 m 미만, 평균의 CI가 0 포함) 가장 작은 s를 s*라 한다. 예측: s* ∈ {25, 26, 27}.</td></tr>
+<tr><td>M2 이중 해리</td><td>같은 길이 9에서 <code>[8,16]</code>은 ΔminADE &gt; 1.0 m이고 ΔNLL &lt; 0.2 nat, <code>[26,34]</code>는 |ΔminADE| &lt; 0.05 m이고 ΔNLL &gt; 2 nat. 넷 다 성립해야 한다.</td></tr>
+<tr><td>M3 초가산성</td><td>클립마다 <code>[8,16]</code>의 ΔminADE에서 단일 층 아홉의 합을 뺀 값이 양수이고 Wilcoxon p &lt; 0.01, 통째로 지운 값이 3층 블록 합의 2배 이상. 대조로 <code>[26,34]</code>의 같은 차이는 CI가 0을 포함.</td></tr>
+<tr><td>M4 복구 없음</td><td>A = <code>[8,13]</code>을 지운 뒤 후반 B 여섯 개가 더하는 minADE 변화의 클립별 평균이 중앙값 ±0.05 m 안. 9월의 "후반을 솎으면 trunk가 복구된다"가 층 단위로 재현되면 이 게이트가 실패한다.</td></tr>
+<tr><td>M5 가법성</td><td>노이즈 밴드 밖의 B만으로 <code>D(B|A)</code>와 <code>D(B)</code>의 상대 MAE를 구하고, 0.25 미만이면 가법적이라 한다. 예측: <code>[8,10]</code>은 세 지표 모두 가법적, <code>[8,13]</code>은 minADE에서 비가법적.</td></tr>
+</table>
+</div>
+
+<h2><span class="num">2</span>설정</h2>
+
+<div class="scroll">
+<table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>모델</td><td><code>nvidia/Alpamayo-1.5-10B</code>, dense. 프루닝하지 않은 모델에 마스크만 건다.</td></tr>
+<tr><td>층 삭제의 정의</td><td>kv-only bypass. 그 층의 Q head 32개와 MLP 채널 12,288개를 전부 마스크하고 k/v projection은 남긴다. expert가 VLM의 층별 cache를 읽으므로 cache 항목은 유지돼야 한다. 층 하나가 약 184M 파라미터다.</td></tr>
+<tr><td>구성 503개 + dense</td><td>단일 층 36개. 격자 425개(2층 이후에서 시작하고 길이 18 이하인 모든 연속 구간). 쌍 42개(A ∈ {<code>[8,10]</code>, <code>[11,13]</code>, <code>[8,13]</code>} × B 14개, B는 15–34층에 걸쳐 배치). 0–1층으로 시작하는 구간은 단일 층만으로 이미 치명적이라 격자에서 뺐다.</td></tr>
+<tr><td>데이터</td><td><code>indist_500</code>(= val500) 앞 150클립. 기존 단일 층 실행과 같은 클립이다. cruise 83, turn 24, decel_stop 22, accel 21.</td></tr>
+<tr><td>측정</td><td>클립마다 dense 모델이 CoC를 한 번 생성하고, 모든 구성을 그 텍스트에 teacher-forcing한다. 한 번의 forward에서 CoC NLL, GT 기준 10-step FM loss, minADE(K=8)를 얻는다. 시드는 클립에서 유도한다. 손상은 같은 클립·텍스트·노이즈의 dense와의 페어 차이다.</td></tr>
+<tr><td>실행</td><td>RTX 5880 Ada 4장(GPU 4–7). 러너에 재개 기능이 없어 5클립짜리 30샤드를 큐로 돌렸다(<code>launch_interval_landscape.py</code>). 클립당 약 2,037초, 실패 0건.</td></tr>
+<tr><td>dense 기준값</td><td>minADE 중앙값 0.435 m(평균 0.774), FM loss 0.185, CoC NLL 0.128 nat.</td></tr>
+</table>
+</div>
+
+<p>minADE 차이는 꼬리가 무거워 중앙값을 읽고, 평균과 부트스트랩 95% CI(2,000회)를 함께 적는다.</p>
+
+<h2><span class="num">3</span>결과 <span class="tag">사실</span></h2>
+
+<h3>게이트 판정</h3>
+
+<div class="scroll">
+<table>
+<tr><th>게이트</th><th>판정</th><th>측정값</th></tr>
+<tr><td>M0 무결성</td><td><span class="pass">통과</span></td><td>35번 층: ΔFM, ΔminADE 모두 150클립에서 정확히 0. 단일 층 상위 다섯 1, 0, 15, 16, 6. 기존 실행과 순위상관 +1.000(중앙값 차이 최대 2×10⁻⁶).</td></tr>
+<tr><td>M1 경계</td><td><span class="pass">통과</span></td><td>s* = 25. 25부터 34까지 모든 시작점이 기준을 통과하고, 24 이하는 하나도 통과하지 못한다.</td></tr>
+<tr><td>M2 이중 해리</td><td><span class="pass">통과</span></td><td><code>[8,16]</code>: ΔminADE +1.743 m, ΔNLL +0.081 nat. <code>[26,34]</code>: ΔminADE +0.022 m, ΔNLL +4.892 nat.</td></tr>
+<tr><td>M3 초가산성</td><td><span class="pass">통과</span></td><td>통째로 − 단일 층 합: 중앙값 +1.347 m, 평균 +1.776 m, p = 2.4×10⁻¹⁶. 통째로 ÷ 3층 블록 합 = 3.59(+1.743 / +0.485). 대조 <code>[26,34]</code>: 평균 +0.035, CI [−0.027, +0.101].</td></tr>
+<tr><td>M4 복구 없음</td><td><span class="pass">통과</span></td><td>후반 B 여섯 개의 추가 변화: 중앙값 +0.022 m, 평균 +0.033 m(CI [−0.019, +0.087]), p = 0.25.</td></tr>
+<tr><td>M5 가법성</td><td><span class="pass">예측대로</span></td><td><code>[8,10]</code>: 상대 MAE 0.10 / 0.09 / 0.08(minADE / FM / NLL), 모두 가법적. <code>[8,13]</code>: minADE 1.19로 비가법적(FM 0.23, NLL 0.41). <code>[11,13]</code>: 0.61 / 0.13 / 0.13.</td></tr>
+</table>
+</div>
+
+<h3>구간 지도</h3>
+
+<figure>
+<img src="PLOT::main::landscape.png" alt="세 지표의 구간 삭제 지도">
+<figcaption>가로는 bypass한 첫 층, 세로는 마지막 층이다. 칸 하나가 구간 하나이고 색은 150클립 중앙값이다(연할수록 무해). 궤적 지표(왼쪽 둘)는 17층 이후에서 시작하는 구간이 연하고, CoC NLL(오른쪽)은 6–23층 안에 머무는 구간이 연하다.</figcaption>
+</figure>
+
+<figure>
+<img src="PLOT::main::tolerated.png" alt="두 기준이 허용하는 구간" style="max-width: 600px; display: block; margin: 0 auto;">
+<figcaption>각 구간을 어느 기준이 견디는지. 주황은 궤적만(ΔminADE &lt; 0.05 m), 파랑은 CoC만(ΔNLL &lt; 0.05 nat), 초록은 둘 다. 주황은 24층 이후, 파랑은 중간 띠에 몰려 있고, 둘 다 견디는 구간은 대각선 근처의 짧은 구간뿐이다.</figcaption>
+</figure>
+
+<div class="scroll">
+<table>
+<tr><th>허용 기준</th><th class="r">최장 길이</th><th>구간</th></tr>
+<tr><td>궤적 (ΔminADE &lt; 0.05 m)</td><td class="r">12층</td><td><code>[24,35]</code>. 다음은 <code>[25,35]</code>, <code>[24,34]</code>(11층). 16층 이전에서 끝나는 최장은 <code>[7,10]</code>(4층)</td></tr>
+<tr><td>CoC (ΔNLL &lt; 0.05 nat)</td><td class="r">7층</td><td><code>[13,19]</code>, <code>[10,16]</code>, <code>[8,14]</code>. 17층 이후에서 시작하는 최장은 <code>[18,23]</code>(6층)</td></tr>
+<tr><td>둘 다</td><td class="r">4층</td><td><code>[21,24]</code>부터 <code>[28,31]</code>까지의 4층 창 8개</td></tr>
+</table>
+</div>
+
+<h3>후반 띠의 경계</h3>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">층 수</th><th class="r">ΔminADE 중앙값 (m)</th><th class="r">평균 [95% CI]</th><th class="r">FM 상대 변화</th><th class="r">ΔCoC NLL (nat)</th></tr>
+<tr><td><code>[20,34]</code></td><td class="r">15</td><td class="r">+0.224</td><td class="r">+0.691 [+0.434, +0.967]</td><td class="r">+20.0%</td><td class="r">+8.34</td></tr>
+<tr><td><code>[22,34]</code></td><td class="r">13</td><td class="r">+0.083</td><td class="r">—</td><td class="r">+7.7%</td><td class="r">+7.59</td></tr>
+<tr><td><code>[23,34]</code></td><td class="r">12</td><td class="r">+0.128</td><td class="r">+0.174 [+0.080, +0.269]</td><td class="r">+6.3%</td><td class="r">+7.33</td></tr>
+<tr><td><code>[24,34]</code></td><td class="r">11</td><td class="r">+0.042</td><td class="r">+0.163 [+0.029, +0.352]</td><td class="r">+5.3%</td><td class="r">+6.80</td></tr>
+<tr class="hi"><td><code>[25,34]</code></td><td class="r">10</td><td class="r">+0.029</td><td class="r">+0.062 [−0.013, +0.149]</td><td class="r">+2.1%</td><td class="r">+5.99</td></tr>
+<tr><td><code>[26,34]</code></td><td class="r">9</td><td class="r">+0.022</td><td class="r">+0.011 [−0.043, +0.062]</td><td class="r">+0.7%</td><td class="r">+4.89</td></tr>
+<tr><td><code>[29,34]</code></td><td class="r">6</td><td class="r">+0.005</td><td class="r">—</td><td class="r">+0.1%</td><td class="r">+2.97</td></tr>
+<tr><td><code>[32,34]</code></td><td class="r">3</td><td class="r">−0.001</td><td class="r">—</td><td class="r">+0.1%</td><td class="r">+1.37</td></tr>
+<tr><td><code>[34,34]</code></td><td class="r">1</td><td class="r">+0.001</td><td class="r">—</td><td class="r">−0.0%</td><td class="r">+0.06</td></tr>
+</table>
+</div>
+
+<p>시작점을 25에서 34로 옮기는 동안 궤적 지표는 0 근처에 머물고, CoC NLL은 층 하나를 뺄 때마다 단조롭게 줄어든다(+5.99 → +0.06). 35번 층을 더하면 NLL이 크게 뛴다: <code>[26,35]</code> +13.92, <code>[24,35]</code> +13.13.</p>
+
+<h3>같은 길이에서의 이중 해리</h3>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">ΔminADE 중앙값 (m)</th><th class="r">평균 [95% CI]</th><th class="r">악화 비율</th><th class="r">FM 상대 변화</th><th class="r">ΔCoC NLL (nat)</th></tr>
+<tr><td><code>[8,10]</code></td><td class="r">+0.018</td><td class="r">+0.003 [−0.060, +0.062]</td><td class="r">59%</td><td class="r">+2.1%</td><td class="r">+0.003</td></tr>
+<tr><td><code>[8,13]</code></td><td class="r">+0.388</td><td class="r">+0.458 [+0.312, +0.619]</td><td class="r">79%</td><td class="r">+33.5%</td><td class="r">+0.030</td></tr>
+<tr class="hi"><td><code>[8,16]</code></td><td class="r">+1.743</td><td class="r">+2.790 [+2.251, +3.396]</td><td class="r">91%</td><td class="r">+96.2%</td><td class="r">+0.081</td></tr>
+<tr><td><code>[8,19]</code></td><td class="r">+2.655</td><td class="r">+5.351 [+4.276, +6.504]</td><td class="r">94%</td><td class="r">+128%</td><td class="r">+0.170</td></tr>
+<tr><td><code>[17,25]</code></td><td class="r">+0.318</td><td class="r">+0.829 [+0.576, +1.101]</td><td class="r">76%</td><td class="r">+34.9%</td><td class="r">+0.126</td></tr>
+<tr class="hi"><td><code>[26,34]</code></td><td class="r">+0.022</td><td class="r">+0.011 [−0.043, +0.062]</td><td class="r">59%</td><td class="r">+0.7%</td><td class="r">+4.892</td></tr>
+</table>
+</div>
+
+<p>버킷별로 나눠도 방향은 같다(중앙값 ΔminADE / ΔNLL).</p>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">cruise (83)</th><th class="r">turn (24)</th><th class="r">decel_stop (22)</th><th class="r">accel (21)</th></tr>
+<tr><td><code>[8,16]</code></td><td class="r">+1.189 / +0.07</td><td class="r">+2.129 / +0.15</td><td class="r">+1.736 / +0.09</td><td class="r">+2.033 / +0.08</td></tr>
+<tr><td><code>[17,25]</code></td><td class="r">+0.158 / +0.11</td><td class="r">+1.392 / +0.22</td><td class="r">+0.782 / +0.12</td><td class="r">+0.657 / +0.19</td></tr>
+<tr><td><code>[26,34]</code></td><td class="r">+0.013 / +4.86</td><td class="r">+0.054 / +5.26</td><td class="r">+0.003 / +4.90</td><td class="r">+0.032 / +4.73</td></tr>
+</table>
+</div>
+
+<h3>인접 삭제의 초가산성</h3>
+
+<figure>
+<img src="PLOT::main::length_slices.png" alt="길이별 손상 대 시작 층">
+<figcaption>길이 3, 6, 9, 12층 구간의 손상을 시작 층에 따라 그렸다. 궤적 지표는 길이가 늘수록 앞쪽에서 급격히 커지고, 17층 이후로 시작점이 옮겨가면 길이와 무관하게 0으로 수렴한다.</figcaption>
+</figure>
+
+<div class="scroll">
+<table>
+<tr><th>구간</th><th class="r">통째로 (m)</th><th class="r">3층 블록 합 (m)</th><th class="r">단일 층 합 (m)</th><th class="r">통째로 ÷ 블록 합</th></tr>
+<tr class="hi"><td><code>[8,16]</code></td><td class="r">+1.743</td><td class="r">+0.485</td><td class="r">+0.294</td><td class="r">3.6</td></tr>
+<tr><td><code>[26,34]</code></td><td class="r">+0.022</td><td class="r">—</td><td class="r">—</td><td class="r">클립별 초과분 평균 +0.035, CI가 0 포함</td></tr>
+</table>
+</div>
+
+<h3>떨어진 두 구간의 가법성</h3>
+
+<figure>
+<img src="PLOT::main::additivity.png" alt="가법성 산점도">
+<figcaption>가로는 B만 지웠을 때의 손상, 세로는 A를 먼저 지운 뒤 B를 더 지웠을 때의 추가 손상이다. 대각선 위면 가법적이다. 대각선에서 크게 벗어난 점들은 모두 A 바로 뒤의 B(<code>[15,17]</code>, <code>[17,22]</code>)다.</figcaption>
+</figure>
+
+<p>A = <code>[8,13]</code> 뒤 ΔminADE 중앙값. 가까운 B일수록 추가 손상이 단독 손상보다 크고, 후반 B는 단독 손상과 같다.</p>
+
+<div class="scroll">
+<table>
+<tr><th>B</th><th class="r">A와의 간격</th><th class="r">B 단독 (m)</th><th class="r">A 뒤 추가 (m)</th></tr>
+<tr><td><code>[15,17]</code></td><td class="r">1층</td><td class="r">+0.409</td><td class="r">+0.867</td></tr>
+<tr><td><code>[17,22]</code></td><td class="r">3층</td><td class="r">+0.204</td><td class="r">+0.609</td></tr>
+<tr><td><code>[17,19]</code></td><td class="r">3층</td><td class="r">+0.094</td><td class="r">+0.188</td></tr>
+<tr><td><code>[18,20]</code></td><td class="r">4층</td><td class="r">+0.038</td><td class="r">+0.190</td></tr>
+<tr><td><code>[20,25]</code></td><td class="r">6층</td><td class="r">+0.090</td><td class="r">+0.044</td></tr>
+<tr><td><code>[26,28]</code></td><td class="r">12층</td><td class="r">+0.002</td><td class="r">−0.005</td></tr>
+<tr><td><code>[32,34]</code></td><td class="r">18층</td><td class="r">−0.001</td><td class="r">−0.027</td></tr>
+</table>
+</div>
+
+<p>논문의 순위상관 기준(0.97)으로는 <code>[8,10]</code>이 FM에서 +0.996, NLL에서 +0.974로 충족하고 minADE에서 +0.938로 미달한다. 파일럿에서 B 대부분이 0이라 낮았던 순위상관은 B를 15–22층 쪽으로 옮기자 올라왔다.</p>
+
+<h3>단일 층과 재현성</h3>
+
+<figure>
+<img src="PLOT::main::single_layer.png" alt="단일 층 bypass">
+<figcaption>층 하나만 bypass했을 때의 중앙값. 분홍은 9월 실행이 지목한 다섯 층. 세로축은 symlog.</figcaption>
+</figure>
+
+<ul>
+  <li>단일 층 36개의 중앙값이 9월의 150클립 실행(<code>run_depth_ablation.py</code>, 같은 클립·같은 Ada)과 최대 2×10⁻⁶ 차이로 일치한다. 서로 다른 러너인데 같은 수가 나왔다.</li>
+  <li>파일럿(Blackwell, 44클립)과 본 실험(Ada) 가운데 같은 44클립·같은 108구성을 비교하면 구성별 중앙값의 Pearson이 ΔminADE 0.9999, ΔNLL 1.0000, FM 1.0000이다. 클립 단위 dense minADE는 44개 중 같은 것이 하나도 없다(차이 중앙값 0.0075 m). 아키텍처를 바꾸면 클립 값은 흔들리지만 집계 지도는 유지된다는 기존 결과와 같다.</li>
+</ul>
+
+<h3>파일럿과 달라진 수치</h3>
+
+<div class="scroll">
+<table>
+<tr><th>항목</th><th>파일럿 (Blackwell, 44클립, 3층 격자)</th><th>본 실험 (Ada, 150클립, 1층 격자)</th></tr>
+<tr><td>궤적에 무해한 후반 띠의 시작</td><td>26층</td><td>25층</td></tr>
+<tr><td>궤적 허용 최장 구간</td><td><code>[26,35]</code> 10층</td><td><code>[24,35]</code> 12층</td></tr>
+<tr><td>16층 이전의 궤적 허용 최장</td><td><code>[8,10]</code> 3층</td><td><code>[7,10]</code> 4층</td></tr>
+<tr><td><code>[8,16]</code> ΔminADE</td><td>+1.410 m</td><td>+1.743 m</td></tr>
+<tr><td>통째로 ÷ 3층 블록 합</td><td>2.8</td><td>3.6</td></tr>
+<tr><td>A = <code>[8,13]</code> 뒤 후반 B</td><td>−0.027 m (p = 0.83)</td><td>+0.022 m (p = 0.25)</td></tr>
+</table>
+</div>
+
+<h2><span class="num">4</span>분석 <span class="tag">해석</span></h2>
+
+<h3>두 출력은 서로 다른 층을 지나간다</h3>
+<p>궤적에 무해한 영역은 후반 25–35층이고, CoC에 무해한 영역은 중간 6–23층이다. 이것은 두 출력이 네트워크를 떠나는 위치와 맞는다. expert는 VLM의 층별 KV cache를 읽고, 9월 분석에서 FM gradient의 주 입력 지점은 cache 21–23층이었다. 그 위 층이 쓴 출력은 expert에 거의 닿지 않는다. CoC는 마지막 hidden state에서 LM head로 읽히므로 후반 층이 전부 경로 위에 있다. 중간 띠가 CoC에 덜 중요한 이유는 이 실험으로 확인되지 않았다. 마지막 hidden state까지 가는 동안 후반 층이 중간 띠의 빈자리를 메울 수 있다는 것이 한 가지 추측이다.</p>
+
+<h3>VGGT 논문과 반대인 이유</h3>
+<p>Alpamayo에서 "어디가 중복인가"는 네트워크의 고정된 성질이 아니라 <strong>어느 출력을 기준으로 재느냐</strong>에 달려 있다. 궤적 기준으로는 후반이, CoC 기준으로는 중간이 중복이다. 논문은 일곱 지표에서 지도가 같다고 보고했지만, 그 지표들은 모두 같은 aggregator 위의 기하 헤드에서 나왔다. 우리 경우는 두 출력이 서로 다른 층에서 읽힌다는 점이 다르다. VGGT 쪽에서 초반이 중복인 이유는 이 실험으로 알 수 없다.</p>
+
+<h3>층 단위로는 이중 해리다</h3>
+<p>9월의 unit 마스크 실험에서는 후반 층 쪽 한 방향만 해리가 나왔다. 층 전체를 지우면 반대 방향도 나온다. 다만 중간 띠도 CoC에 완전히 무해한 것은 아니다. <code>[8,19]</code>의 +0.17 nat는 dense NLL(0.128)의 130%다. "중간 띠는 궤적 전용"보다는 "두 손상의 비가 깊이에 따라 수백 배 뒤집힌다"가 데이터에 맞는 문장이다.</p>
+
+<h3>층별 점수를 더해 예산을 짜면 안 되는 이유</h3>
+<p>단일 층 지도만 보면 36층 중 31층이 각각 무해해 보인다. 8–16층을 함께 지우면 +1.74 m이고, 그 손상의 83%는 단일 층 합으로 설명되지 않는다. 비가법성은 가까운 층 사이에서만 크다. A에서 4층 이내의 B는 추가 손상이 단독의 2–5배이고, 6층 이상 떨어지면 단독 이하로 내려간다. 층 단위 예산은 "떨어진 블록들의 합"으로는 추정할 수 있지만, 이어진 구간은 직접 재야 한다. 이는 VGGT 논문의 "가법성은 중복 영역 안에서만 성립한다"는 단서와도 같은 방향이다.</p>
+
+<h3>압축에 주는 함의</h3>
+<ul>
+  <li><strong>추론을 보존하는 압축</strong>(이 프로젝트의 주 목표)에서 후반 띠는 지울 수 없다. 층 하나만 빼도 CoC NLL이 오른다(34번 +0.06, 35번 +0.81). 이 축으로 층을 지울 수 있는 곳은 둘 다 허용하는 최장 4층 창(21–31층 사이)뿐이다.</li>
+  <li><strong>CoC를 건너뛰는 모드</strong>에서는 <code>[25,34]</code>의 10개 층(약 1.84B 파라미터)이 통째로 후보가 된다. 이 측정은 teacher-forced 지표라, 그 모드의 실제 주행은 별도로 재야 한다.</li>
+  <li>중간 띠(6–23층)는 궤적의 핵심이다. 폭 프루닝이 이 띠에서 head를 많이 잃으면 궤적이 무너질 수 있다는 기존 결과(head 수가 폐루프를 좌우)와 같은 방향이다.</li>
+</ul>
+
+<h3>9월 결과와의 관계</h3>
+<p>"후반을 솎으면 traj-only trunk 손상이 복구된다"는 이번에도 층 단위로는 재현되지 않았다(+0.022 m, p = 0.25). 9월에는 기준이 고른 unit 마스크였고 여기는 층 전체 bypass다. 그 효과는 unit 마스크 조건에만 있는 것으로 둔다.</p>
+
+<h3>한계</h3>
+<ul>
+  <li>CoC NLL은 dense 텍스트의 teacher-forcing이다. 자유 생성의 붕괴(빈 출력, soup)는 보지 못한다. 중간 띠 bypass가 자유 생성에서도 무해한지는 모른다.</li>
+  <li>minADE는 dense 모델의 CoC를 cache에 넣은 상태에서 쟀다. 실제 배포에서는 bypass된 모델이 스스로 CoC를 쓰므로, CoC가 망가지는 구간에서는 궤적도 더 나빠질 수 있다.</li>
+  <li>개루프 150클립이고 cruise가 55%다. 폐루프는 없다.</li>
+  <li>dense 모델에서 쟀다. 이미 24% 프루닝된 출하 모델 위에서 같은 지도가 나오는지는 모른다.</li>
+  <li>구간은 길이 18 이하, 쌍은 42개다. 세 구간 이상의 조합은 재지 않았다.</li>
+</ul>
+
+<h3>다음 단계</h3>
+<ul>
+  <li><strong>자유 생성 확인.</strong> 중간 띠 7층 구간(<code>[10,16]</code> 등)과 후반 띠(<code>[25,34]</code>)를 실제 rollout으로 돌려 CoC 퇴화율과 minADE를 잰다. teacher-forced 지도가 자유 생성에서도 유지되는지가 이 결과의 첫 번째 위험이다.</li>
+  <li><strong>출하 모델 위에서.</strong> <code>dual_u40_v2</code>에 같은 마스크를 얹어, 폭 프루닝과 층 bypass가 더해지는지 본다.</li>
+  <li><strong>논문 반영.</strong> 허용 영역 그림은 "궤적과 추론이 서로 다른 층을 쓴다 → 단일 기준으로는 한쪽을 잃는다"는 dual 기준의 근거를 층 단위로 보여 준다.</li>
+</ul>
+
+<footer>
+  산출물 <code>outputs/ivl_main_v1/</code> (<code>metrics.json</code>: 503구성 전체 통계와 게이트, <code>summary.txt</code>, <code>plots/</code>) ·
+  샤드 <code>outputs/ivl_main_v1_s0…s29/</code> · 마스크 <code>outputs/ivl_masks_main/</code><br>
+  코드 <code>experiments/head_analysis/make_interval_masks.py --stride 1 --pairs main</code>, <code>launch_interval_landscape.py</code>,
+  <code>analyze_interval_landscape.py</code>, 러너 <code>run_token_ablation.py --arm-masks</code> · 브랜치 <code>worktree-interval-landscape-pilot</code><br>
+  빌드 <code>python experiments/head_analysis/build_report.py experiments/head_analysis/ivl_main_report_template.html reports/evaluation/2026-10-15_interval-landscape.html main=$PWD/outputs/ivl_main_v1/plots</code>
+</footer>
+
+</div>
+</body>
+</html>
