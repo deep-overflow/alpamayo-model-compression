@@ -126,4 +126,21 @@ it is registered here before the run.
 
 ## Outcome
 
-(filled in after the run)
+Run 2026-10-14 02:29 – 2026-10-15 01:56 UTC, 150 clips x 503 configs, Ada 4-7, 30/30 shards, no
+failure. `outputs/ivl_main_v1/`, report `reports/evaluation/2026-10-15_interval-landscape.html`.
+All six gates came out as predicted.
+
+- **M0 PASS.** Layer 35 exact zero on all 150 clips; top five 1, 0, 15, 16, 6; single-layer
+  medians equal the stored run's to 2e-6 (Spearman +1.000).
+- **M1 PASS.** s* = 25; every start from 25 to 34 passes, none at or below 24.
+- **M2 PASS.** `[8,16]` +1.743 m / +0.081 nat; `[26,34]` +0.022 m / +4.892 nat.
+- **M3 PASS.** `[8,16]` minus its singles: median +1.347 m, p = 2.4e-16; whole / 3-layer blocks
+  3.59; `[26,34]` excess CI [-0.027, +0.101].
+- **M4 PASS.** Late B after `[8,13]`: +0.022 m, p = 0.25. No repair at layer dose.
+- **M5 as predicted.** `[8,10]` rel MAE 0.10 / 0.09 / 0.08; `[8,13]` 1.19 on minADE. The
+  non-additivity is local: B within 4 layers of A adds 2-5x its own damage, B 6+ layers away adds
+  no more than alone.
+
+Seen, not registered: the objective-tolerated regions barely overlap -- trajectory tolerates up to
+12 layers (`[24,35]`), CoC up to 7 (`[13,19]`, mid band), both together at most 4. Pilot (Blackwell)
+and main (Ada) agree on per-config medians at Pearson 0.9999 over the shared 44 clips.

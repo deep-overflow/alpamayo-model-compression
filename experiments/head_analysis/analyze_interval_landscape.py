@@ -234,6 +234,31 @@ def main():
     fig.savefig(out / "plots" / "landscape.png", dpi=150)
     plt.close(fig)
 
+    # ---- plot 2b: which objective tolerates each interval (median below the noise band)
+    from matplotlib.colors import ListedColormap
+    from matplotlib.patches import Patch
+    cats = np.full((len(ends), len(starts)), np.nan)  # (end, start): 0 neither, 1 traj, 2 nll, 3 both
+    for name, (a, b) in solo.items():
+        if a in starts and b in ends:
+            t, c = med[name]["dADE"] < TOL_ADE, med[name]["dNLL"] < 0.05
+            cats[ends.index(b), starts.index(a)] = int(t) + 2 * int(c)
+    cols = ["#E4DFD3", "#D97757", C1, "#4F7A4C"]
+    fig, ax = plt.subplots(figsize=(6.6, 5.8))
+    ax.imshow(cats, origin="lower", cmap=ListedColormap(cols), vmin=-0.5, vmax=3.5, aspect="auto")
+    step = 1 if len(starts) <= 13 else 3
+    ax.set_xticks(range(0, len(starts), step), starts[::step])
+    ax.set_yticks(range(0, len(ends), step), ends[::step])
+    ax.set_xlabel("first layer bypassed")
+    ax.set_ylabel("last layer bypassed")
+    ax.legend(handles=[Patch(color=cols[1], label=f"trajectory only (ΔminADE < {TOL_ADE} m)"),
+                       Patch(color=cols[2], label="CoC only (ΔNLL < 0.05 nat)"),
+                       Patch(color=cols[3], label="both"), Patch(color=cols[0], label="neither")],
+              frameon=False, fontsize=8.5, loc="upper left")
+    ax.set_title(f"which objective tolerates the interval (median, {n} clips)")
+    fig.tight_layout()
+    fig.savefig(out / "plots" / "tolerated.png", dpi=150)
+    plt.close(fig)
+
     # ---- plot 3: fixed-length slices
     fig, axes = plt.subplots(1, 3, figsize=(17, 4.4))
     for ax, m in zip(axes, METRICS):
