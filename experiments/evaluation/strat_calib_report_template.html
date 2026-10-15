@@ -62,6 +62,14 @@
   </div>
 </header>
 
+<!-- layer0-correction-2026-10-13 -->
+<div style="border:1px solid #B3261E;border-left:5px solid #B3261E;background:#FFF8F6;color:#29261B;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 8px 8px 0;font-size:0.95rem;line-height:1.65">
+<strong style="display:block;margin-bottom:0.5rem;color:#B3261E">2026-10-13 정정 &mdash; se &minus; rd 효과의 82%는 0번 층 Q head 선택의 결과였다</strong>
+<p style="margin:0 0 0.6rem">여섯 arm(<code>rd</code> 3, <code>se</code> 3)의 유지집합에서 0번 층 Q head 32개를 전부 살리면(나머지 불변) test500 minADE@6이 <code>rd</code> 1.379 / 1.180 / 1.025 &rarr; 0.989 / 0.966 / 0.967, <code>se</code> 1.008 / 1.136 / 0.981 &rarr; 0.946 / 0.962 / 0.930이 된다. <code>se &minus; rd</code>는 <b>&minus;0.153 [&minus;0.190, &minus;0.117]에서 &minus;0.027 [&minus;0.048, &minus;0.009]</b>로 줄고, 규칙 안 arm 평균의 표준편차는 0.177 / 0.083에서 0.013 / 0.016이 된다. <code>rd</code>의 나쁜 두 arm은 0번 층에서 head 24 또는 30을 지운 arm이었다.</p>
+<p style="margin:0 0 0.6rem">따라서 &ldquo;<code>se</code>가 네 버킷 전부에서 유의하게 좋고 산포가 절반&rdquo;이라는 근거와 표준 추출을 <code>se</code>로 바꾸자는 권고는 유지되지 않는다. 남은 &minus;0.027은 클립 단위 CI가 0을 배제하지만 규칙당 arm이 3개라 arm 수준으로는 약 2&sigma;다 &mdash; 조성 통제의 작은 효과가 남을 수 있다는 정도로 읽어야 한다. <code>su</code>는 면제 조건에서 재측정하지 않았다. <code>nt</code> 블록 b&ndash;e는 재측정했다(1.060&ndash;1.774 &rarr; 0.945&ndash;0.990).</p>
+<p style="margin:0;font-size:0.88rem;color:#6B6555">근거: <a href="2026-10-13_layer0-recheck.html">2026-10-13_layer0-recheck.html</a>, <a href="2026-10-13_layer0-exemption.html">2026-10-13_layer0-exemption.html</a>. 전체 요약: <a href="2026-10-13_calibration-variance-is-layer0.html">2026-10-13_calibration-variance-is-layer0.html</a>. 원문은 아래에 그대로 둔다.</p>
+</div>
+
 <h2><span class="num">0</span>요약</h2>
 
 <div class="callout">

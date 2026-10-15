@@ -76,6 +76,14 @@
   </div>
 </header>
 
+<!-- layer0-correction-2026-10-13 -->
+<div style="border:1px solid #B3261E;border-left:5px solid #B3261E;background:#FFF8F6;color:#29261B;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 8px 8px 0;font-size:0.95rem;line-height:1.65">
+<strong style="display:block;margin-bottom:0.5rem;color:#B3261E">2026-10-13 정정 &mdash; self-anchored target의 기각은 대부분 0번 층 Q head 선택의 결과였다</strong>
+<p style="margin:0 0 0.6rem">기각된 두 arm(<code>dualself</code>, <code>dualbestn6</code>)은 둘 다 0번 층에서 head 30을 지웠다. head 30은 출하본에서 혼자 지워도 cruise에서 +0.318을 잃는 head이고, 타깃을 GT로 둔 같은 계열 arm(<code>gtk3/5/10</code>)은 유지했다. 0번 층 Q head 32개를 전부 살리면 test500 minADE@6이 <b>1.3182 / 1.2569 &rarr; 0.9863 / 0.9924</b>가 되고(출하본 0.9498), 출하본과의 격차 +0.368 / +0.307 중 90% / 86%가 사라진다. 남은 차이는 같은 면제를 적용한 출하본 대비 +0.042 [+0.003, +0.085], 같은 클립의 GT 앵커 두 arm 대비 +0.037 [&minus;0.004, +0.081]로 경계선이다.</p>
+<p style="margin:0 0 0.6rem">따라서 &ldquo;타깃을 모델 쪽으로 옮기면 세 세트 확정 기각&rdquo;과 그 설명(&ldquo;타깃은 전형적이어야 한다&rdquo;, &ldquo;best-of-n은 순서통계량이라 어느 분포의 전형도 아니다&rdquo;)은 유지되지 않는다. 작은 불이익(+0.04 이하)이 실재하는지는 arm을 더 만들어야 가릴 수 있다. 부수 검증(&ldquo;중요도 측정은 한 번이면 되고 <code>run_importance</code>의 비결정성은 무해하다&rdquo;)도 0번 층을 자르는 한 성립하지 않는다 &mdash; 같은 추정량을 다시 실행한 arm이 0번 층 head 하나 차이로 +0.083 벌어졌다. val500&middot;OOD-val은 면제 조건에서 재측정하지 않았다.</p>
+<p style="margin:0;font-size:0.88rem;color:#6B6555">근거: <a href="2026-10-13_layer0-recheck.html">2026-10-13_layer0-recheck.html</a>, <a href="2026-10-13_layer0-census.html">2026-10-13_layer0-census.html</a>, <a href="2026-10-12_importance-seed-arms.html">2026-10-12_importance-seed-arms.html</a>. 전체 요약: <a href="2026-10-13_calibration-variance-is-layer0.html">2026-10-13_calibration-variance-is-layer0.html</a>. 원문은 아래에 그대로 둔다.</p>
+</div>
+
 <p class="lede">
 <code>dual = max(rank I_traj, rank I_CoC)</code>의 두 half는 앵커가 비대칭이다. <code>I_CoC</code>는
 <strong>모델 자신의 rollout</strong>을 채점하는데 <code>I_traj</code>는 <strong>GT 궤적</strong>을

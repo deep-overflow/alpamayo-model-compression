@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-13</div>
+  <h1>기존 결론의 재측정 &mdash; 0번 층을 지우지 않으면 기각 사유의 78% 이상이 사라진다</h1>
+  <div class="meta">
+    0번 층 전수 조사가 지목한 10개 arm(self-anchored target 2, n=2,000 1, 추출 규칙 6, 클립 가중 1)에 0번 층 Q head 면제를 적용해 재평가 &middot;
+    test500(9개) / val500(1개), minADE@6, 원본&middot;출하본&middot;무압축과 페어드 &middot; RTX 5880 Ada &middot; <code>outputs/swap_masks/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>열 arm 모두 0번 층 Q head를 살리면 출하본 근처로 돌아온다.</b> test500의 아홉 arm이 0.981&ndash;1.379에서 0.930&ndash;0.992로, val500의 <code>dualsafe</code>가 1.355에서 0.920으로 내려온다. 출하본과의 격차 중 사라진 몫은 열 arm 모두 78% 이상이다(여덟 arm이 86&ndash;106%, <code>rd_c</code> 78%, <code>se_c</code>는 출하본보다 좋아져 162%).</li>
+    <li><b>캘리브레이션 크기: 결론이 뒤집힌다.</b> 2,000클립 arm은 1.202 &rarr; 0.948로, 출하본(0.950)과 구별되지 않는다(&minus;0.002 [&minus;0.041, +0.039]). "클립을 늘리면 나빠진다"는 0번 층에서 head 4&middot;7&middot;26을 지운 결과였다.</li>
+    <li><b>클립 가중(<code>dualsafe</code>): 기각 사유가 사라진다.</b> 출하본 대비 +0.465 &rarr; +0.029 [&minus;0.011, +0.068].</li>
+    <li><b>self-anchored target: 기각의 대부분은 0번 층이었고, 작은 차이가 남는지는 경계선이다.</b> 두 arm이 1.318 / 1.257 &rarr; 0.986 / 0.992. 남은 차이는 면제한 출하본 대비 +0.042 [+0.003, +0.085], 같은 클립의 GT 앵커 두 arm 대비 +0.037 [&minus;0.004, +0.081]다.</li>
+    <li><b>추출 규칙: 효과의 82%가 사라지고 작은 차이가 남는다.</b> <code>se</code> &minus; <code>rd</code>가 &minus;0.153 &rarr; &minus;0.027 [&minus;0.048, &minus;0.009]다. 규칙 안의 arm 간 표준편차는 0.177 / 0.083에서 0.013 / 0.016으로 줄었다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>0번 층 전수 조사(<code>2026-10-13_layer0-census.html</code>)는 중요도를 arm마다 따로 재서 비교한 기존 실험들이 "0번 층에서 무엇을 지웠는가"라는 요인을 공유했을 가능성을 지목했다. 그것은 arm 간 상관이었으므로, 지목된 arm에 0번 층 면제를 적용해 직접 다시 잰다. 읽는 법은 실행 전에 정했다: 면제한 뒤에도 그 결론이 기대던 대조가 남으면 결론은 유지되고, 대조가 사라지면 0번 층 선택의 우연이었던 것이다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>변형</td><td>각 arm의 <code>slim_meta.json</code>에서 0번 층 Q head 32개를 전부 유지, 그 외 불변(<code>make_l0_exempt.py</code>의 <code>RECHECK</code>). 제거 파라미터가 0.51% 적다. 예산 맞춤은 하지 않았다 &mdash; 세 세트에서 그 대가가 +0.004 / &minus;0.001 / +0.002로 측정되지 않았고, <code>dualsafe</code>는 추가 채널을 고를 점수 파일이 없다</td></tr>
+  <tr><td>arm</td><td><code>dualself</code>, <code>dualbestn6</code>(self-anchored target), <code>dual_u40_st2000</code>(n=2,000), <code>dual_rd_a..c</code>(무작위 추출), <code>dual_se_a..c</code>(평가셋 조성 층화), <code>dualsafe</code>(여유거리 가중)</td></tr>
+  <tr><td>평가</td><td>아홉 arm은 test500, <code>dualsafe</code>는 원본 평가가 val500에만 있어 val500. <code>run_baseline.py</code>, 원본과 같은 시드, Ada. 열 arm 모두 원본 평가 500클립이 저장돼 있어 클립 단위 페어드</td></tr>
+  <tr><td>기준점</td><td>출하본(<code>dual_u40_v2</code>) 원본, 그리고 같은 면제를 적용한 출하본(test500 0.948, val500 0.883)</td></tr>
+  <tr><td>실행</td><td>10개 모두 재시도 없이 종료 코드 0</td></tr>
+</table>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 arm별 전후</h3>
+<table>
+  <tr><th>arm</th><th>세트</th><th class="num">그대로</th><th class="num">0번 층 면제</th><th class="num">출하본</th><th class="num">그대로 &minus; 출하본 [95% CI]</th><th class="num">면제 &minus; 출하본 [95% CI]</th><th class="num">사라진 몫</th><th class="num">cruise 손상: 전 &rarr; 후</th></tr>
+  <tr><td><code>dualself</code></td><td>test500</td><td class="num">1.3182</td><td class="num"><b>0.9863</b></td><td class="num">0.9498</td><td class="num">+0.368 [+0.265, +0.483]</td><td class="num">+0.037 [&minus;0.010, +0.091]</td><td class="num">90%</td><td class="num">+0.491 &rarr; +0.026</td></tr>
+  <tr><td><code>dualbestn6</code></td><td>test500</td><td class="num">1.2569</td><td class="num"><b>0.9924</b></td><td class="num">0.9498</td><td class="num">+0.307 [+0.245, +0.373]</td><td class="num">+0.043 [&minus;0.000, +0.091]</td><td class="num">86%</td><td class="num">+0.513 &rarr; +0.060</td></tr>
+  <tr><td><code>dual_u40_st2000</code></td><td>test500</td><td class="num">1.2015</td><td class="num"><b>0.9478</b></td><td class="num">0.9498</td><td class="num">+0.252 [+0.193, +0.312]</td><td class="num">&minus;0.002 [&minus;0.041, +0.039]</td><td class="num">101%</td><td class="num">+0.482 &rarr; +0.055</td></tr>
+  <tr><td><code>rd_a</code></td><td>test500</td><td class="num">1.3786</td><td class="num"><b>0.9891</b></td><td class="num">0.9498</td><td class="num">+0.429 [+0.352, +0.511]</td><td class="num">+0.039 [+0.001, +0.082]</td><td class="num">91%</td><td class="num">+0.701 &rarr; +0.063</td></tr>
+  <tr><td><code>rd_b</code></td><td>test500</td><td class="num">1.1800</td><td class="num"><b>0.9655</b></td><td class="num">0.9498</td><td class="num">+0.230 [+0.150, +0.318]</td><td class="num">+0.016 [&minus;0.023, +0.057]</td><td class="num">93%</td><td class="num">+0.291 &rarr; +0.085</td></tr>
+  <tr><td><code>rd_c</code></td><td>test500</td><td class="num">1.0250</td><td class="num"><b>0.9667</b></td><td class="num">0.9498</td><td class="num">+0.075 [+0.034, +0.118]</td><td class="num">+0.017 [&minus;0.022, +0.058]</td><td class="num">78%</td><td class="num">+0.152 &rarr; +0.065</td></tr>
+  <tr><td><code>se_a</code></td><td>test500</td><td class="num">1.0083</td><td class="num"><b>0.9464</b></td><td class="num">0.9498</td><td class="num">+0.059 [+0.017, +0.101]</td><td class="num">&minus;0.003 [&minus;0.039, +0.032]</td><td class="num">106%</td><td class="num">+0.157 &rarr; +0.043</td></tr>
+  <tr><td><code>se_b</code></td><td>test500</td><td class="num">1.1364</td><td class="num"><b>0.9622</b></td><td class="num">0.9498</td><td class="num">+0.187 [+0.134, +0.243]</td><td class="num">+0.012 [&minus;0.023, +0.049]</td><td class="num">93%</td><td class="num">+0.331 &rarr; +0.076</td></tr>
+  <tr><td><code>se_c</code></td><td>test500</td><td class="num">0.9809</td><td class="num"><b>0.9304</b></td><td class="num">0.9498</td><td class="num">+0.031 [&minus;0.010, +0.075]</td><td class="num">&minus;0.019 [&minus;0.055, +0.017]</td><td class="num">162%</td><td class="num">+0.115 &rarr; +0.052</td></tr>
+  <tr><td><code>dualsafe</code></td><td>val500</td><td class="num">1.3553</td><td class="num"><b>0.9198</b></td><td class="num">0.8904</td><td class="num">+0.465 [+0.381, +0.553]</td><td class="num">+0.029 [&minus;0.011, +0.068]</td><td class="num">94%</td><td class="num">+0.787 &rarr; +0.091</td></tr>
+</table>
+<p>"사라진 몫"은 (그대로 &minus; 출하본) 중 면제로 없어진 비율이다. 면제 &minus; 그대로의 차이는 열 arm 모두 95% CI가 0을 배제한다(&minus;0.051 ~ &minus;0.436). cruise 손상은 무압축 대비 평균 차이다.</p>
+<figure>
+  <img src="PLOT::sm::l0_recheck.png" alt="10개 arm의 전후">
+  <figcaption>분홍은 원본, 파랑은 0번 층 Q head를 전부 살린 변형. 점선은 같은 세트의 출하본, 파선은 무압축.</figcaption>
+</figure>
+
+<h3>3.2 같은 면제를 적용한 출하본과의 비교</h3>
+<table>
+  <tr><th>arm</th><th class="num">면제 arm &minus; 면제 출하본, 평균 [95% CI]</th><th class="num">중앙값</th><th class="num">p</th></tr>
+  <tr><td><code>dualself</code></td><td class="num">+0.039 [&minus;0.008, +0.092]</td><td class="num">+0.004</td><td class="num">0.45</td></tr>
+  <tr><td><code>dualbestn6</code></td><td class="num">+0.045 [+0.003, +0.089]</td><td class="num">+0.011</td><td class="num">0.048</td></tr>
+  <tr><td><code>dual_u40_st2000</code></td><td class="num">+0.000 [&minus;0.035, +0.035]</td><td class="num">+0.018</td><td class="num">0.19</td></tr>
+  <tr><td><code>rd_a</code></td><td class="num">+0.042 [+0.006, +0.077]</td><td class="num">+0.017</td><td class="num">0.008</td></tr>
+  <tr><td><code>rd_b</code></td><td class="num">+0.018 [&minus;0.020, +0.056]</td><td class="num">+0.010</td><td class="num">0.24</td></tr>
+  <tr><td><code>rd_c</code></td><td class="num">+0.019 [&minus;0.022, +0.057]</td><td class="num">+0.013</td><td class="num">0.068</td></tr>
+  <tr><td><code>se_a</code></td><td class="num">&minus;0.001 [&minus;0.038, +0.034]</td><td class="num">+0.010</td><td class="num">0.42</td></tr>
+  <tr><td><code>se_b</code></td><td class="num">+0.015 [&minus;0.028, +0.054]</td><td class="num">+0.013</td><td class="num">0.16</td></tr>
+  <tr><td><code>se_c</code></td><td class="num">&minus;0.017 [&minus;0.055, +0.019]</td><td class="num">+0.000</td><td class="num">0.74</td></tr>
+  <tr><td><code>dualsafe</code> (val500)</td><td class="num">+0.037 [+0.004, +0.071]</td><td class="num">+0.004</td><td class="num">0.15</td></tr>
+</table>
+
+<h3>3.3 결론별 대조</h3>
+<table>
+  <tr><th>결론</th><th>대조</th><th class="num">그대로</th><th class="num">0번 층 면제</th></tr>
+  <tr><td>self-anchored target이 나쁘다</td><td>(<code>self</code>, <code>bestn6</code> 평균) &minus; 출하본</td><td class="num">+0.338 [+0.270, +0.413]</td><td class="num">+0.042 [+0.003, +0.085]</td></tr>
+  <tr><td></td><td>같은 대조, 기준을 같은 클립의 GT 앵커 두 arm(<code>shipped</code>, <code>ref</code>)으로</td><td class="num">&mdash;</td><td class="num">+0.037 [&minus;0.004, +0.081]</td></tr>
+  <tr><td>n=2,000이 n=100보다 나쁘다</td><td><code>st2000</code> &minus; 출하본</td><td class="num">+0.252 [+0.193, +0.314]</td><td class="num">+0.000 [&minus;0.034, +0.035]</td></tr>
+  <tr><td>무작위 추출이 나쁘다</td><td>(<code>rd</code> 3개 평균) &minus; 출하본</td><td class="num">+0.245 [+0.193, +0.298]</td><td class="num">+0.026 [&minus;0.006, +0.058]</td></tr>
+  <tr><td>층화 추출이 무작위보다 좋다</td><td>(<code>se</code> 3개 평균) &minus; (<code>rd</code> 3개 평균)</td><td class="num">&minus;0.153 [&minus;0.190, &minus;0.117]</td><td class="num">&minus;0.027 [&minus;0.048, &minus;0.009]</td></tr>
+  <tr><td></td><td>규칙 안 arm 평균의 표준편차 (<code>rd</code> / <code>se</code>)</td><td class="num">0.177 / 0.083</td><td class="num">0.013 / 0.016</td></tr>
+  <tr><td>클립 가중이 나쁘다 (val500)</td><td><code>dualsafe</code> &minus; 출하본</td><td class="num">+0.465 [+0.381, +0.553]</td><td class="num">+0.029 [&minus;0.011, +0.068]</td></tr>
+</table>
+<p>면제 열의 기준점은 같은 면제를 적용한 출하본이다(<code>dualsafe</code> 행만 원본 출하본; 면제 출하본 기준으로는 +0.037 [+0.004, +0.071]). 추출 규칙의 arm 평균: 그대로 <code>rd</code> 1.379 / 1.180 / 1.025, <code>se</code> 1.008 / 1.136 / 0.981; 면제 후 <code>rd</code> 0.989 / 0.966 / 0.967, <code>se</code> 0.946 / 0.962 / 0.930.</p>
+
+<h3>3.4 지금까지 면제를 적용한 17개 arm 전체 (test500)</h3>
+<table>
+  <tr><th></th><th class="num">그대로</th><th class="num">0번 층 면제</th></tr>
+  <tr><td>arm 평균의 범위</td><td class="num">0.950 &ndash; 1.774</td><td class="num">0.930 &ndash; 0.992</td></tr>
+  <tr><td>arm 평균의 표준편차</td><td class="num">0.260</td><td class="num">0.018</td></tr>
+  <tr><td>1.05를 넘는 arm</td><td class="num">13 / 17</td><td class="num">0 / 17</td></tr>
+  <tr><td>cruise 손상 (무압축 대비)</td><td class="num">+0.054 ~ +1.393</td><td class="num">+0.026 ~ +0.093</td></tr>
+</table>
+<p>17개는 출하본, 시드 arm 3, 블록 b&ndash;e, 그리고 이 리포트의 test500 아홉 arm이다. 출하본을 뺀 16개 중 13개가 면제한 출하본보다 높고, 16개의 클립별 평균과 면제 출하본의 차이는 +0.017 [&minus;0.010, +0.043](중앙값 +0.014)다.</p>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>캘리브레이션 크기와 클립 가중의 결론은 철회해야 한다.</b> "2,000클립으로 기준을 수렴시키면 나빠진다"와 "여유거리 가중은 프루닝 대가의 3.3배를 잃는다"는 둘 다 0번 층에서 무엇을 지웠는가의 결과였다. 면제하면 2,000클립 arm은 출하본과 같고, <code>dualsafe</code>는 +0.03 이내다. 따라서 "선택 안정성은 성능 안정성을 사 주지 않는다", "<code>calib_100</code>은 운 좋은 추출", "유효 표본을 줄이면 다른 추출을 뽑은 것과 같다"는 해석들도 0번 층이라는 한 가지 원인으로 대체된다. 폐루프에서 2,000클립 두 arm이 &minus;0.112였던 것도 같은 원인일 가능성이 높지만 폐루프에서는 재지 않았다.</li>
+  <li><b>self-anchored target의 기각은 근거를 잃었다.</b> 기각의 86&ndash;90%가 head 30이었다. 남은 +0.04는 기준점에 따라 CI가 0에 걸치거나 겨우 벗어나는 크기이고, 면제한 다른 arm들의 범위(0.930&ndash;0.992) 안의 위쪽 끝이다. "타깃은 전형적이어야 한다", "best-of-n은 순서통계량이라 나쁘다"는 설명은 관측을 설명하려고 만든 것이었으므로 함께 내려놓아야 한다. 작은 불이익이 실재하는지는 arm을 더 만들어야 가릴 수 있다.</li>
+  <li><b>추출 규칙은 "대부분 0번 층, 작은 효과는 남을 수 있음"이다.</b> <code>se</code> &minus; <code>rd</code>가 &minus;0.153에서 &minus;0.027로 줄었다. 남은 차이의 클립 단위 CI는 0을 배제하지만, 규칙당 arm이 3개이고 arm 평균의 표준편차가 0.013&ndash;0.016이라 arm 수준으로는 약 2&sigma;다. 표준 추출을 <code>se</code>로 바꾸자는 권고의 근거였던 "네 버킷 전부에서 유의하게 좋고 산포가 절반"은 더 이상 성립하지 않는다(산포는 둘 다 0.015 수준).</li>
+  <li><b>이 레포의 추출&middot;시드&middot;추정량 실험은 0번 층 면제 조건에서 다시 읽어야 하고, 대부분은 "차이 없음"으로 수렴할 것으로 본다.</b> 면제한 17개 arm이 0.930&ndash;0.992(표준편차 0.018)에 모인다. 클립 100개를 통째로 바꿔도, 2,000개로 늘려도, 타깃을 바꿔도, 클립에 가중을 줘도 이 범위다. 24% 프루닝의 대가(무압축 대비 평균 +0.108)에 비하면 dual 기준은 캘리브레이션에 훨씬 둔감하다는 뜻이고, 이것이 지금까지 알려진 것과 반대되는 가장 큰 결론이다.</li>
+  <li><b>남는 것은 출하본이 약간 좋다는 작은 잔차다.</b> 면제 후 16개 중 13개가 출하본보다 높다(+0.017, CI에 0 포함; 중앙값 +0.014). 한 arm을 기준으로 삼은 비교라 그 arm이 좋은 쪽 끝에 있는 것만으로도 생기는 크기이고, 1번 층 이후의 같은 종류 취약점일 가능성도 있다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>개루프만 쟀다. test500 한 세트(<code>dualsafe</code>는 val500)다.</li>
+    <li>예산이 0.51% 다르다. 같은 조건의 출하본(3.2절)을 기준점으로 함께 냈다.</li>
+    <li>재측정한 것은 지목된 10개뿐이다. 반쪽 추출 64개, 하드풀 블록, 캘리브레이션 출처(OOD&middot;val&middot;pooled), 반복 재캘리브레이션(<code>it3</code>), 그리고 다른 기준 계열은 재지 않았다.</li>
+    <li>추출 규칙은 규칙당 3 arm이다.</li>
+  </ul>
+</div>
+<div class="callout opinion">
+  <strong>다음 단계 제안</strong>
+  <ul>
+    <li><b>레시피 반영.</b> 완료(2026-10-14): <code>make_slim.py</code>의 <code>&lt;crit&gt;_u&lt;N&gt;_l0keep_v2</code>. 채널 수는 예산에서 유도하며, <code>dual_u40_l0keep_v2</code>가 평가한 &ldquo;면제 + 예산 맞춤&rdquo; 변형을 유닛 단위로 재현한다. 이후의 dual 계열 arm은 그 설정으로 만든다.</li>
+    <li><b>폐루프.</b> 출하본과 면제 출하본, 그리고 2,000클립 arm의 면제 변형을 alpasim에서 비교하면 폐루프 &minus;0.112가 같은 원인인지 닫힌다. 인계 제동 인공물 때문에 새 폐루프 arm은 보류 중이라 판단이 필요하다.</li>
+    <li><b>문서 정정.</b> 완료(2026-10-14): 추출 분산&middot;캘리브레이션 크기(개루프, 폐루프)&middot;<code>dualsafe</code>&middot;self-anchored target&middot;추출 규칙 여섯 리포트와 그 템플릿, <code>CLAUDE.md</code>의 해당 서술에 정정을 달았다. 원문은 그대로 두었다.</li>
+    <li><b>왜 0번 층인가.</b> 0번 층의 흔들리는 12개 head에서 두 개씩 지운 쌍 지도, 그리고 1번 층에 대한 같은 접합 실험.</li>
+  </ul>
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>python experiments/evaluation/make_l0_exempt.py
+SET=test500 bash experiments/evaluation/launch_swap_masks.sh 4 st2000_L0full=outputs/slim_swap_st2000_L0full
+SET=indist  bash experiments/evaluation/launch_swap_masks.sh 4 safe_L0full=outputs/slim_swap_safe_L0full
+python experiments/evaluation/analyze_l0_recheck.py</code></pre>
+<p class="small">변형: <code>outputs/slim_swap_{self,bestn6,st2000,rda..c,sea..c,safe}_L0full/</code>, 평가: <code>outputs/swap_&lt;arm&gt;_L0full_{500,val500}/</code>, 집계: <code>outputs/swap_masks/{summary_recheck.txt, metrics_recheck.json, plots/l0_recheck.png}</code>.</p>
+
+</div>
+</body>
+</html>

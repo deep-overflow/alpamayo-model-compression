@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-13</div>
+  <h1>0번 층 선택의 전수 조사 &mdash; 어떤 기존 결론이 이 한 층에 걸려 있었나</h1>
+  <div class="meta">
+    저장된 유지집합 166개(u40 VLM-only 형태)의 0번 층 제거 head와 저장된 평가 결과의 대조 &middot; GPU 0 &middot;
+    test500 평가가 있는 dual 계열 50 arm, val500 21 arm, 반쪽 추출 64 arm &middot; <code>outputs/swap_masks/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>0번 층에서 무엇을 지웠는지만으로 arm의 성적이 예측된다.</b> 출하본이 유지하는 head를 몇 개 지웠는가(<code>n_off</code>)와 test500 minADE@6의 순위 상관이 dual 계열 50 arm에서 +0.55(p=3e-5), val500 21 arm에서 +0.65다. <code>n_off</code>=0인 6 arm은 0.950&ndash;0.994에 모여 있고 붕괴가 없다.</li>
+    <li><b>서로 다른 arm 집단 사이에서 옮겨간다.</b> 반쪽 추출 64 arm에서 맞춘 head별 가중치로 test500의 50 arm을 줄 세우면 &rho;=+0.55, 반대 방향은 +0.44다. 두 집단 모두에서 가장 해로운 것은 head 30을 지우는 것이다(+0.19 / +0.30).</li>
+    <li><b><code>calib_100</code>이 "운 좋은 추출"이었던 내용이 head 단위로 드러난다.</b> 다른 클립으로 잰 dual arm 31개 중 28개가 head 4를 지우는데, <code>calib_100</code>으로 잰 11개는 하나도 지우지 않는다. 대신 <code>calib_100</code> 쪽은 head 20(8/11)과 29(9/11)를 지우고, 다른 쪽은 거의 지우지 않는다(0/31, 1/31).</li>
+    <li><b>기각했던 arm 몇 개가 이 교란에 걸려 있다.</b> self-anchored target의 두 arm(<code>dualself</code> 1.318, <code>dualbestn6</code> 1.257)은 둘 다 head 30을 지웠다. <code>dualsafe</code>는 head 4와 7을 지웠다. 2,000클립 arm과 누적 사다리(200/300/500)는 전부 같은 조합(4, 7, 26)을 지운다 &mdash; 기준이 수렴한 답이 그 조합이다.</li>
+    <li><b>0번 층이 전부는 아니다.</b> 0번 층 제거 집합이 완전히 같은 <code>dual_nt_c500</code>(1.048)과 <code>dual_u40_st2000</code>(1.202)이 0.154 벌어진다. 0번 층에서 위험한 조합을 지웠을 때 그 손상의 크기는 나머지 마스크에 달려 있다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>0번 층 Q head 13개를 지우지 않으면 캘리브레이션 추출과 시드에 따른 성능 차이가 사라진다(<code>2026-10-13_layer0-exemption.html</code>). 그렇다면 중요도를 arm마다 따로 재서 비교한 지금까지의 실험은 "0번 층에서 무엇이 지워졌는가"라는 숨은 요인을 공유했을 수 있다. 저장된 유지집합에서 그 요인을 읽어, 어떤 결론을 다시 재야 하는지 가린다. 이것은 arm 간 상관이므로 "다시 재면 어떻게 되는가"의 답이 아니라 "무엇을 다시 재야 하는가"의 답이다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>유지집합</td><td><code>outputs/slim_*/slim_meta.json</code> 중 36개 층 모두 Q 19개 &middot; MLP 7390개이고 expert를 건드리지 않은 166개</td></tr>
+  <tr><td>성적</td><td>각 평가 실행의 <code>config.json</code> <code>model</code> 필드로 유지집합에 연결. Ada, 500클립이 모두 있는 실행만. test500 83개, val500 48개가 연결됨</td></tr>
+  <tr><td>dual 계열</td><td>기준이 <code>max(rank I_traj, rank I_CoC)</code>이고 중요도를 어디서&middot;어떻게 쟀는지만 다른 arm 50개(test500 기준): 시드, 추출(nt / rd / se / su), 하드풀, 크기 사다리, 캘리브레이션 출처, 추정량&middot;가중 변형</td></tr>
+  <tr><td><code>n_off</code></td><td>그 arm이 0번 층에서 지운 13개 head 중 출하본이 유지하는 것의 수(0&ndash;4 관측)</td></tr>
+  <tr><td>독립 집단</td><td>클립 영향 연구의 반쪽 추출 64 arm(<code>subinf_00..63</code>, <code>calib_100</code>의 50클립 부분집합). 성적은 150 val 클립에서의 무압축 대비 &Delta;minADE로, 위 50 arm과 클립&middot;지표&middot;arm이 모두 다르다</td></tr>
+</table>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 <code>n_off</code>와 성적</h3>
+<table>
+  <tr><th><code>n_off</code></th><th class="num">test500: arm 수</th><th class="num">평균</th><th class="num">범위</th><th class="num">붕괴 (&gt;1.3)</th><th class="num">val500: arm 수</th><th class="num">평균</th><th class="num">범위</th></tr>
+  <tr><td>0</td><td class="num">6</td><td class="num"><b>0.973</b></td><td class="num">0.950&ndash;0.994</td><td class="num">0</td><td class="num">5</td><td class="num"><b>0.910</b></td><td class="num">0.890&ndash;0.924</td></tr>
+  <tr><td>1</td><td class="num">9</td><td class="num">1.095</td><td class="num">0.942&ndash;1.670</td><td class="num">1</td><td class="num">3</td><td class="num">1.006</td><td class="num">0.884&ndash;1.227</td></tr>
+  <tr><td>2</td><td class="num">8</td><td class="num">1.087</td><td class="num">0.935&ndash;1.318</td><td class="num">1</td><td class="num">6</td><td class="num">1.047</td><td class="num">0.891&ndash;1.355</td></tr>
+  <tr><td>3</td><td class="num">17</td><td class="num">1.137</td><td class="num">0.981&ndash;1.718</td><td class="num">1</td><td class="num">2</td><td class="num">1.459</td><td class="num">1.196&ndash;1.722</td></tr>
+  <tr><td>4</td><td class="num">10</td><td class="num">1.226</td><td class="num">1.018&ndash;1.774</td><td class="num">3</td><td class="num">5</td><td class="num">1.189</td><td class="num">0.929&ndash;1.744</td></tr>
+  <tr><th>Spearman</th><th class="num" colspan="4">+0.553 (p=3e-5, 50 arm)</th><th class="num" colspan="3">+0.654 (p=0.001, 21 arm)</th></tr>
+</table>
+<p>반쪽 추출 64 arm에서는 <code>n_off</code>와 &Delta;minADE의 상관이 +0.204(p=0.11)로 약하다. 평균은 0 &rarr; 4에서 +0.130 &rarr; +0.312로 오르지만 <code>n_off</code>=1에서도 +0.880까지 나온다 &mdash; 개수보다 어떤 head인가가 중요하다.</p>
+<figure>
+  <img src="PLOT::sm::l0_census.png" alt="n_off 대 성적">
+  <figcaption>왼쪽: dual 계열 50 arm의 test500. 점선은 출하본. 오른쪽: 반쪽 추출 64 arm(독립 집단)의 150 val 클립 &Delta;minADE. <code>n_off</code>=0에는 붕괴가 없고, 1 이상에서는 붕괴가 섞여 나온다.</figcaption>
+</figure>
+
+<h3>3.2 head별: 지운 arm과 남긴 arm의 성적 차이</h3>
+<table>
+  <tr><th>head</th><th class="num">test500 50 arm: 지운 수</th><th class="num">지움 &minus; 남김</th><th class="num">p</th><th class="num">반쪽 64 arm: 지운 수</th><th class="num">지움 &minus; 남김</th><th class="num">p</th><th class="num">ridge 가중치 (반쪽 / test)</th></tr>
+  <tr><td><b>30</b></td><td class="num">6</td><td class="num"><b>+0.192</b></td><td class="num">0.004</td><td class="num">10</td><td class="num"><b>+0.297</b></td><td class="num">0.0002</td><td class="num">+0.232 / +0.151</td></tr>
+  <tr><td>24</td><td class="num">6</td><td class="num">+0.137</td><td class="num">0.27</td><td class="num">&lt;5</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">+0.210 / +0.116</td></tr>
+  <tr><td>4</td><td class="num">28</td><td class="num">+0.074</td><td class="num">0.001</td><td class="num">30</td><td class="num">+0.058</td><td class="num">0.025</td><td class="num">+0.010 / &minus;0.012</td></tr>
+  <tr><td>7</td><td class="num">31</td><td class="num">+0.088</td><td class="num">0.003</td><td class="num">43</td><td class="num">&minus;0.050</td><td class="num">0.75</td><td class="num">&minus;0.027 / +0.039</td></tr>
+  <tr><td>10</td><td class="num">4</td><td class="num">+0.182</td><td class="num">0.15</td><td class="num">6</td><td class="num">&minus;0.080</td><td class="num">0.18</td><td class="num">&minus;0.061 / +0.085</td></tr>
+  <tr><td>18</td><td class="num">19</td><td class="num">+0.025</td><td class="num">0.30</td><td class="num">29</td><td class="num">&minus;0.103</td><td class="num">0.018</td><td class="num">&minus;0.169 / &minus;0.027</td></tr>
+  <tr><td>26</td><td class="num">18</td><td class="num">&minus;0.002</td><td class="num">0.94</td><td class="num">29</td><td class="num">+0.040</td><td class="num">0.74</td><td class="num">&minus;0.101 / &minus;0.020</td></tr>
+  <tr><td>15</td><td class="num">23</td><td class="num">&minus;0.101</td><td class="num">0.004</td><td class="num">42</td><td class="num">&minus;0.153</td><td class="num">0.040</td><td class="num">&minus;0.151 / &minus;0.053</td></tr>
+  <tr><td>29</td><td class="num">17</td><td class="num">&minus;0.113</td><td class="num">&lt;0.001</td><td class="num">42</td><td class="num">&minus;0.130</td><td class="num">0.026</td><td class="num">&minus;0.093 / +0.020</td></tr>
+  <tr><td>20</td><td class="num">13</td><td class="num">&minus;0.167</td><td class="num">&lt;0.001</td><td class="num">43</td><td class="num">+0.027</td><td class="num">0.77</td><td class="num">+0.033 / &minus;0.101</td></tr>
+</table>
+<p>head 20&middot;29&middot;15를 "지우면 좋다"는 것은 그 head가 해롭다는 뜻이 아니다. 13개를 반드시 지워야 하므로, 이들을 지운 arm은 다른 head를 남긴 arm이다.</p>
+<p><b>집단 간 전이.</b> 두 집단에서 모두 흔들리는 15개 head의 지표로 ridge 회귀를 맞췄다. 반쪽 추출 64 arm에서 맞춰 test500 50 arm을 줄 세우면 Spearman +0.549(p=4e-5), test500 50 arm에서 맞춰 반쪽 추출 64 arm을 줄 세우면 +0.435(p=3e-4)다.</p>
+
+<h3>3.3 <code>calib_100</code>과 다른 클립의 차이</h3>
+<table>
+  <tr><th>0번 층 head</th><th class="num"><code>calib_100</code>으로 잰 dual arm (시드 11개)</th><th class="num">다른 클립으로 잰 dual arm (31개)</th></tr>
+  <tr><td>4를 지움</td><td class="num">0 / 11</td><td class="num"><b>28 / 31</b></td></tr>
+  <tr><td>7을 지움</td><td class="num">4 / 11</td><td class="num">27 / 31</td></tr>
+  <tr><td>20을 지움</td><td class="num"><b>8 / 11</b></td><td class="num">0 / 31</td></tr>
+  <tr><td>29를 지움</td><td class="num"><b>9 / 11</b></td><td class="num">1 / 31</td></tr>
+  <tr><td>15를 지움</td><td class="num">8 / 11</td><td class="num">6 / 31</td></tr>
+</table>
+<p>31개는 nt 블록 5, rd 3, se 3, su 3, tr 블록 5, 크기 사다리 9, 캘리브레이션 출처 3이다. 모든 dual 계열 arm이 공통으로 지우는 head는 11, 12, 13, 23, 27, 31이다.</p>
+
+<h3>3.4 계열별 0번 층 (공통 6개 외에 지운 head; * 는 출하본이 유지하는 head)</h3>
+<table>
+  <tr><th>arm</th><th class="num"><code>n_off</code></th><th class="num">test500</th><th class="num">val500</th><th>추가로 지운 head</th></tr>
+  <tr><td colspan="5"><b>추출 규칙</b></td></tr>
+  <tr><td><code>rd_a</code> / <code>rd_b</code> / <code>rd_c</code></td><td class="num">4 / 4 / 3</td><td class="num">1.379 / 1.180 / 1.025</td><td class="num">&mdash;</td><td>a: 4* 7* 18* 24* &middot; b: 4* 7* 18* 30* &middot; c: 4* 7* 26*</td></tr>
+  <tr><td><code>se_a</code> / <code>se_b</code> / <code>se_c</code></td><td class="num">3 / 3 / 3</td><td class="num">1.008 / 1.136 / 0.981</td><td class="num">&mdash;</td><td>a: 4* 7* 10* &middot; b: 18* 26* 30* &middot; c: 4* 18* 26*</td></tr>
+  <tr><td><code>su_a</code> / <code>su_b</code> / <code>su_c</code></td><td class="num">4 / 3 / 4</td><td class="num">1.184 / 1.051 / 1.181</td><td class="num">&mdash;</td><td>a: 4* 10* 18* 26* &middot; b: 4* 7* 18* &middot; c: 4* 7* 10* 26*</td></tr>
+  <tr><td>nt 블록 a&ndash;e</td><td class="num">4 / 2 / 4 / 4 / 3</td><td class="num">1.022 / 1.060 / 1.348 / 1.774 / 1.718</td><td class="num">0.968 / 0.973 / 1.309 / 1.744 / 1.722</td><td>a: 4* 7* 18* 26* &middot; b: 4* 7* &middot; c: 4* 7* 18* 26* &middot; d: 4* 7* 10* 26* &middot; e: 7* 18* 24*</td></tr>
+  <tr><td colspan="5"><b>캘리브레이션 크기</b></td></tr>
+  <tr><td><code>nt_c200</code> / <code>c300</code> / <code>c500</code></td><td class="num">3 / 3 / 3</td><td class="num">1.131 / 1.061 / 1.048</td><td class="num">&mdash;</td><td>셋 다 4* 7* 26*</td></tr>
+  <tr><td><code>dual_u40_st2000</code> (n=2,000)</td><td class="num">3</td><td class="num">1.202</td><td class="num">1.196</td><td>4* 7* 26* (폐루프 arm <code>dual_st2000</code>, <code>st2000b</code>도 동일)</td></tr>
+  <tr><td colspan="5"><b>추정량&middot;가중 변형 (전부 <code>calib_100</code>)</b></td></tr>
+  <tr><td><code>dualself</code> / <code>dualbestn6</code> (self-anchored, 기각)</td><td class="num">2 / 1</td><td class="num">1.318 / 1.257</td><td class="num">1.172 / 1.228</td><td>self: 4* <b>30*</b> &middot; bestn6: <b>30*</b></td></tr>
+  <tr><td><code>dualgtk3</code> / <code>gtk5</code> / <code>gtk10</code></td><td class="num">0 / 0 / 1</td><td class="num">0.995 / 0.993 / 0.962</td><td class="num">0.890 / 0.922 / 0.905</td><td>gtk10: 4*</td></tr>
+  <tr><td><code>dualsafe</code> (클립 가중, 기각)</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">1.355</td><td>4* 7*</td></tr>
+  <tr><td><code>dual_u40_it3</code> (반복 재측정, 기각)</td><td class="num">4</td><td class="num">1.021</td><td class="num">0.994</td><td>7* 8* 18* 21*</td></tr>
+  <tr><td><code>maxstep11</code> / <code>meandual</code> / <code>dualfix</code></td><td class="num">2 / 2 / 0</td><td class="num">0.935 / &mdash; / 0.965</td><td class="num">0.892 / 0.949 / 0.924</td><td>maxstep11: 24* 26* &middot; meandual: 4* 7*</td></tr>
+  <tr><td><code>dual2nd</code></td><td class="num">4</td><td class="num">1.018</td><td class="num">0.929</td><td>2* 7* 18* 24*</td></tr>
+</table>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>확실히 다시 재야 하는 결론: self-anchored target의 기각.</b> 기각된 두 arm이 둘 다 head 30을 지웠고, head 30은 접합 실험&middot;단일 head 지도&middot;두 arm 집단 모두에서 가장 해로운 head다. 같은 계열에서 타깃만 GT로 둔 <code>gtk</code> 세 arm은 head 30을 유지했고 성적이 정상이다. "타깃을 모델 쪽으로 옮기면 나빠진다"는 결론은 "그 arm들이 우연히 head 30을 지웠다"로 대체될 가능성이 높다.</li>
+  <li><b>크기 실험의 해석이 바뀐다.</b> 사다리(200/300/500)와 n=2,000이 전부 같은 0번 층 조합(4, 7, 26 제거)에 도달한다. 즉 dual 기준을 모집단에 가깝게 추정하면 0번 층에서 head 4와 7을 지우는 것이 "수렴한 답"이고, <code>calib_100</code>만 거기서 벗어나 있다. "선택은 수렴하는데 성능은 나쁘다"는 관찰은 기준이 0번 층에서 틀린 답으로 수렴한다는 뜻이었다. 폐루프에서 2,000클립 arm이 &minus;0.112였던 것도 같은 후보다.</li>
+  <li><b><code>calib_100</code>은 head 4를 지키는 유일한 캘리브레이션 세트다.</b> 다른 클립 31 arm 중 28개가 head 4를 지우는데 <code>calib_100</code>의 11개 시드 arm은 하나도 지우지 않는다. 시드 잡음으로는 설명되지 않는 체계적 차이다 &mdash; "운"의 내용은 이 100클립에서 head 4&middot;7의 I_traj 순위가 다른 세트보다 높게 나온다는 것이다. 왜 그런지는 모른다.</li>
+  <li><b>추출 규칙 결론(<code>se</code>가 <code>rd</code>보다 0.153 좋다)은 판단을 보류해야 한다.</b> <code>rd</code>의 나쁜 두 arm은 head 24 또는 30을 지웠고(a: 24, b: 30), <code>se</code>는 세 arm 중 하나만 30을 지웠다(b, 세 개 중 가장 나쁨). 규칙이 0번 층 선택을 체계적으로 바꾼다는 근거는 없고(<code>n_off</code>가 3&ndash;4로 같음), 규칙당 3 arm에서 head 24&middot;30을 누가 뽑았는지가 차이를 만들었을 수 있다.</li>
+  <li><b>영향이 없어 보이는 결론.</b> 중요도 파일 하나(<code>importance_v2</code>)를 공유한 기준 비교, <code>gtk</code>(노이즈 K배 무효), <code>dualfix</code>(35번 층 결함 무해), <code>maxstep11</code>(합집합에 항 추가 무해)은 0번 층이 출하본과 같거나 위험 head를 건드리지 않았다.</li>
+  <li><b>0번 층 집합만으로 전부 설명되지는 않는다.</b> <code>nt_c500</code>과 <code>st2000</code>은 0번 층 제거 집합이 같은데 0.154 벌어지고, 반쪽 추출 집단에서 <code>n_off</code>의 상관은 약하다. 0번 층의 위험한 조합이 방아쇠이고, 손상의 크기는 나머지 마스크가 정한다는 접합 실험의 그림(정상 arm에 넣으면 41%만 재현)과 맞는다. 그래서 어느 결론이든 확정하려면 면제 조건에서 다시 재야 한다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>arm 간 상관이다. head별 대조는 13개를 반드시 지워야 한다는 제약 때문에 서로 얽혀 있고, 다중 비교 보정을 하지 않았다.</li>
+    <li>평가가 연결된 arm만 봤다. <code>dualsafe</code>&middot;<code>meandual</code>의 test500, 대부분 arm의 val500은 저장된 실행이 없다.</li>
+    <li>dual 기준 arm만 계열로 묶었다. 단일 기준(traj / coc / j)이나 재구성 계열은 0번 층 밖의 선택도 크게 달라 같은 방식으로 읽을 수 없다.</li>
+  </ul>
+</div>
+<div class="callout opinion">
+  <strong>다음 단계 제안</strong>
+  기존 결론을 확정하려면 해당 arm에 0번 층 면제를 적용해 다시 재면 된다(arm당 test500 68분, 유지집합은 산술로 생성). 우선순위: (1) <code>dualself</code>, <code>dualbestn6</code> &mdash; 기각이 뒤집히는지, (2) <code>dual_u40_st2000</code> &mdash; 크기 결론, (3) <code>rd_a..c</code>, <code>se_a..c</code> &mdash; 추출 규칙 결론, (4) <code>dualsafe</code>. 10개 arm이면 Ada 3&ndash;4장에서 약 3&ndash;4시간이다.
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>python experiments/evaluation/analyze_l0_census.py     # GPU 불필요, 약 2분</code></pre>
+<p class="small">출력: <code>outputs/swap_masks/{summary_census.txt, metrics_census.json, plots/l0_census.png}</code>. 표의 수치는 <code>summary_census.txt</code>에서 옮겼다.</p>
+
+</div>
+</body>
+</html>

@@ -76,6 +76,14 @@
   </div>
 </header>
 
+<!-- layer0-correction-2026-10-13 -->
+<div style="border:1px solid #B3261E;border-left:5px solid #B3261E;background:#FFF8F6;color:#29261B;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 8px 8px 0;font-size:0.95rem;line-height:1.65">
+<strong style="display:block;margin-bottom:0.5rem;color:#B3261E">2026-10-13 정정 &mdash; 클립 축(dualsafe)의 기각은 0번 층 Q head 선택의 결과였다</strong>
+<p style="margin:0 0 0.6rem">val500의 <code>dualsafe &minus; dual</code> +0.1945(평균 +0.4649)는 클립 가중이나 유효 표본 축소(Kish 100 &rarr; 70.8)의 효과가 아니었다. <code>dualsafe</code>는 0번 층에서 출하본이 유지하는 head 4&middot;7을 지웠고, 0번 층 Q head 32개를 전부 살리면 val500 minADE@6이 <b>1.3553 &rarr; 0.9198</b>이 되어 출하본(0.8904) 대비 +0.029 [&minus;0.011, +0.068]로 구별되지 않는다(격차의 94%가 사라짐).</p>
+<p style="margin:0 0 0.6rem">&ldquo;다른 100클립 추출을 뽑은 것과 구별되지 않는다&rdquo;는 관찰은 맞았지만, 그 다른 추출들의 손해도 같은 0번 층 원인이었다. &ldquo;안전 신호는 가중이 아니라 추출에 넣어야 한다&rdquo;와 &ldquo;유지집합 겹침 94%에서도 0.19 m를 잃는다&rdquo;는 &ldquo;유지 Q head 684개 중 0번 층의 한두 개가 결과를 정했다&rdquo;로 대체된다. 목적 축(<code>r_consistency</code>) 결과는 영향받지 않는다. C절의 측정값(변위 크기가 arm을 정렬하지 못함)은 유효하나, 거기서 <code>dual_st2000</code>과 <code>dualsafe</code>가 잃은 것도 같은 원인이다.</p>
+<p style="margin:0;font-size:0.88rem;color:#6B6555">근거: <a href="2026-10-13_layer0-recheck.html">2026-10-13_layer0-recheck.html</a>, <a href="2026-10-13_layer0-census.html">2026-10-13_layer0-census.html</a>. 전체 요약: <a href="2026-10-13_calibration-variance-is-layer0.html">2026-10-13_calibration-variance-is-layer0.html</a>. 원문은 아래에 그대로 둔다.</p>
+</div>
+
 <p class="lede">
 출하 기준은 <code>max(rank I_traj, rank I_CoC)</code>다. 여기에 무엇을 더 넣으면 나아지는가?
 더할 수 있는 축은 둘이다 — <b>클립 축</b>(어느 클립에서 잰 중요도를 더 믿을 것인가)과

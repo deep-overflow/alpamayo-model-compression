@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration &middot; 2026-10-11 ~ 2026-10-13</div>
+  <h1>캘리브레이션 분산의 정체 &mdash; 0번 층 Q head 13개</h1>
+  <div class="meta">
+    세션 종합 &middot; <code>nvidia/Alpamayo-1.5-10B</code>, <code>dual_u40_v2</code>(VLM &minus;24.0%) &middot; 개루프 test500 / val500 / OOD-val, minADE@6 &middot; RTX 5880 Ada &middot;
+    세부 리포트 8개의 요약이며 새 측정은 없다 &middot; 코드: 브랜치 <code>worktree-calib-coc-multimode</code>, draft PR #84
+  </div>
+</header>
+
+<div class="callout">
+  <strong>결론</strong>
+  <p>이 프로젝트에서 "가장 큰 단일 요인"으로 기록돼 온 캘리브레이션 추출 분산 &mdash; 같은 레시피에서 100클립만 바꾸면 test500 minADE@6이 0.950에서 1.774까지 퍼지는 현상 &mdash; 은 <b>0번 층에서 Q head 32개 중 어느 13개를 지우는가</b>로 결정되고 있었다. 그 13개를 지우지 않으면 클립을 통째로 바꾸든, 2,000개로 늘리든, 시드를 바꾸든, 타깃이나 가중을 바꾸든 arm들이 0.930&ndash;0.992(표준편차 0.018)에 모인다. 0번 층 Q head 13개는 제거 파라미터의 0.51%이고, 그만큼을 MLP 채널로 되갚는 대가는 세 세트에서 +0.004 / &minus;0.001 / +0.002로 측정되지 않는다.</p>
+</div>
+
+<h2><span class="num">1</span>질문이 좁혀진 순서</h2>
+<table>
+  <tr><th>#</th><th>질문</th><th>답</th><th>리포트</th></tr>
+  <tr><td>1</td><td>캘리브레이션 세트에 따라 왜 성능이 갈리는가 &mdash; 세트의 multimodality가 다른가</td><td>아니다. 여섯 세트(600클립, CoC 6 &times; 궤적 6)는 22개 지표 전부에서 구별되지 않는다(p &ge; 0.38). 궤적 변동의 85&ndash;96%는 CoC가 아니라 디노이징 노이즈에서 나온다</td><td><code>coc_multimode/2026-10-11_calibration-multimodality.html</code></td></tr>
+  <tr><td>2</td><td>세트 안의 난이도 분포가 다른가</td><td>아니다. CoC NLL, 궤적 흩어짐, meanADE, minADE 모두 세트마다 넓고 고르게 퍼져 있고 위치&middot;폭&middot;균형 차이가 없다</td><td><code>calib_difficulty/2026-10-12_calibration-difficulty.html</code></td></tr>
+  <tr><td>3</td><td>CoC를 바꾸면 중요도가 바뀌는가</td><td>바뀐다. <code>I_CoC</code>의 순위 상관이 0.47로 떨어지고 세트의 유지집합이 2&ndash;6% 움직인다. <code>I_traj</code>는 CoC보다 FM 노이즈 시드에 더 민감하다</td><td><code>coc_importance/2026-10-12_coc-importance.html</code></td></tr>
+  <tr><td>4</td><td>클립을 고정하고 시드만 바꾸면 성능이 같은가</td><td>아니다. 같은 <code>calib_100</code>에서 12개 arm이 0.950&ndash;1.670. FM 노이즈 시드 하나로 +0.62 붕괴, 시드 불변 재실행도 +0.083</td><td><code>seed_arms/2026-10-12_importance-seed-arms.html</code></td></tr>
+  <tr><td>5</td><td>붕괴한 arm과 정상 arm의 마스크는 어디가 다른가</td><td>0번 층 Q head. head 하나를 되돌리면 2.050 &rarr; 0.978. 다른 클립으로 붕괴한 블록도 0번 층 19개 head만 바꾸면 격차의 91&ndash;97%가 사라진다</td><td><code>swap_masks/2026-10-12_layer0-head-collapse.html</code></td></tr>
+  <tr><td>6</td><td>0번 층을 컷에서 빼면 해결되는가</td><td>그렇다. 8개 arm의 표준편차가 0.337 &rarr; 0.015(test500), 0.402 &rarr; 0.023(val500). 예산을 맞춰도 같다</td><td><code>swap_masks/2026-10-13_layer0-exemption.html</code></td></tr>
+  <tr><td>7</td><td>어떤 기존 결론이 여기에 걸려 있었나</td><td>0번 층에서 지운 head만으로 50개 arm의 성적이 예측된다(&rho;=+0.55). <code>calib_100</code>은 head 4를 지키는 유일한 세트다</td><td><code>swap_masks/2026-10-13_layer0-census.html</code></td></tr>
+  <tr><td>8</td><td>그 결론들은 면제 후에도 남는가</td><td>대부분 남지 않는다. 10개 arm 모두 출하본 근처로 돌아온다</td><td><code>swap_masks/2026-10-13_layer0-recheck.html</code></td></tr>
+</table>
+
+<h2><span class="num">2</span>핵심 수치</h2>
+
+<h3>2.1 원인 위치 (cruise 120클립, 예산 동일한 접합 변형)</h3>
+<table>
+  <tr><th>사례</th><th class="num">원래</th><th class="num">0번 층 head만 정상 arm 것으로</th><th class="num">정상 arm</th></tr>
+  <tr><td>FM 노이즈 시드 arm <code>n1</code> (head 하나: 30 유지, 20 제거)</td><td class="num">2.050</td><td class="num">0.978</td><td class="num">0.944</td></tr>
+  <tr><td>시드 불변 재실행 <code>ref</code> (head 하나: 7 유지, 19 제거)</td><td class="num">1.130</td><td class="num">0.931</td><td class="num">0.955</td></tr>
+  <tr><td>다른 클립 블록 c / d / e (19개 head)</td><td class="num">1.514 / 2.254 / 2.120</td><td class="num">0.935 / 0.979 / 1.021</td><td class="num">0.918</td></tr>
+</table>
+<p>MLP 채널 차이(316&ndash;9,220개)와 다른 층의 Q head 차이는 무관했다. 단일 head가 아니라 조합 효과다: 혼자 지워 확실히 해로운 것은 head 30뿐인데(+0.318), 블록 d는 head 30을 유지하고도 4&middot;7&middot;10&middot;26을 함께 지워 +1.34 무너진다.</p>
+
+<h3>2.2 처방의 효과 (0번 층 Q head 32개 유지 + MLP 채널 1,109개 추가 제거)</h3>
+<table>
+  <tr><th>세트</th><th class="num">무압축</th><th class="num">출하본</th><th class="num">원래: arm 평균 범위 (표준편차)</th><th class="num">면제 + 예산 맞춤: 범위 (표준편차)</th><th class="num">출하본의 변화 [95% CI]</th></tr>
+  <tr><td>test500 (8 arm)</td><td class="num">0.842</td><td class="num">0.950</td><td class="num">0.950 &ndash; 1.774 (0.337)</td><td class="num">0.955 &ndash; 0.990 (0.015)</td><td class="num">+0.006 [&minus;0.021, +0.038]</td></tr>
+  <tr><td>val500 (8 arm; 원본은 5)</td><td class="num">0.824</td><td class="num">0.890</td><td class="num">0.890 &ndash; 1.744 (0.402)</td><td class="num">0.876 &ndash; 0.942 (0.023)</td><td class="num">&minus;0.015 [&minus;0.046, +0.008]</td></tr>
+  <tr><td>OOD-val (8 arm; 원본은 출하본만)</td><td class="num">1.000</td><td class="num">1.119</td><td class="num">&mdash;</td><td class="num">1.105 &ndash; 1.213 (0.037)</td><td class="num">&minus;0.005 [&minus;0.048, +0.036]</td></tr>
+</table>
+<figure>
+  <img src="PLOT::sm::l0_exempt_matched.png" alt="test500의 8개 arm, 세 변형">
+  <figcaption>test500. 분홍은 원본, 파랑은 0번 층 면제, 노랑은 면제 + 예산 맞춤. 파선은 무압축, 점선은 출하본.</figcaption>
+</figure>
+
+<h3>2.3 기존 결론의 재측정 (0번 층 면제, test500; <code>dualsafe</code>만 val500)</h3>
+<table>
+  <tr><th>기존 결론</th><th>arm</th><th class="num">그대로 &minus; 출하본</th><th class="num">면제 후</th><th>판정</th></tr>
+  <tr><td>2,000클립으로 기준을 수렴시키면 나빠진다</td><td><code>dual_u40_st2000</code></td><td class="num">+0.252</td><td class="num">+0.000 [&minus;0.034, +0.035]</td><td class="bad">철회</td></tr>
+  <tr><td>여유거리 가중은 프루닝 대가의 3.3배를 잃는다</td><td><code>dualsafe</code></td><td class="num">+0.465</td><td class="num">+0.029 [&minus;0.011, +0.068]</td><td class="bad">철회</td></tr>
+  <tr><td>self-anchored target은 나쁘다</td><td><code>dualself</code>, <code>dualbestn6</code></td><td class="num">+0.338</td><td class="num">+0.042 [+0.003, +0.085]</td><td>대부분 철회, 작은 차이는 경계선</td></tr>
+  <tr><td>무작위 추출은 나쁘다</td><td><code>rd</code> 3개</td><td class="num">+0.245</td><td class="num">+0.026 [&minus;0.006, +0.058]</td><td class="bad">철회</td></tr>
+  <tr><td>층화 추출이 무작위보다 0.153 좋다</td><td><code>se</code> &minus; <code>rd</code></td><td class="num">&minus;0.153</td><td class="num">&minus;0.027 [&minus;0.048, &minus;0.009]</td><td>82% 축소, 작은 효과는 남을 수 있음</td></tr>
+</table>
+<figure>
+  <img src="PLOT::sm::l0_recheck.png" alt="10개 arm의 재측정">
+  <figcaption>분홍은 원본, 파랑은 0번 층 Q head를 전부 살린 변형. 점선은 같은 세트의 출하본, 파선은 무압축.</figcaption>
+</figure>
+<p>"면제 후" 열의 기준점은 같은 면제를 적용한 출하본이다(<code>dualsafe</code> 행만 원본 출하본; 면제 출하본 기준으로는 +0.037 [+0.004, +0.071]). 이 재측정은 예산을 맞추지 않은 변형(0.51% 덜 지움)으로 했다. 면제를 적용한 17개 arm 전체(test500): arm 평균 0.950&ndash;1.774(표준편차 0.260, 13개가 1.05 초과) &rarr; 0.930&ndash;0.992(표준편차 0.018, 1.05 초과 0개).</p>
+
+<h3>2.4 왜 선택이 0번 층에서 주사위가 되는가</h3>
+<ul>
+  <li>0번 층 32개 head 중 8개는 캘리브레이션과 시드를 바꾼 16개 중요도 실행 모두에서 지워지고, 12개가 dual 점수가 비슷한 띠(0.29&ndash;0.77)에 몰려 있으며 13번째 컷이 그 가운데를 지난다.</li>
+  <li>순위 점수는 32개 head에서 1/31 단위로만 움직여 컷 경계에서 정확히 동률이 되는 일이 흔하다(출하본도 그렇다). 그때는 인덱스 순서가 정한다.</li>
+  <li>기준은 이 층에서 작동하지 않는다. head를 지웠을 때의 손상과 점수의 상관이 &rho;=&minus;0.30(n.s.)이고, 점수 1위 head를 지워도 손해가 없다.</li>
+  <li><code>calib_100</code>은 head 4를 지키는 유일한 캘리브레이션 세트다(시드 11개 중 0개가 지움; 다른 클립 31 arm 중 28개가 지움). 이것이 "운 좋은 추출"의 내용이고, 왜 그런지는 모른다.</li>
+</ul>
+
+<h2><span class="num">3</span>철회&middot;수정이 필요한 기존 서술</h2>
+<table>
+  <tr><th>기존 서술</th><th>지금의 판단</th></tr>
+  <tr><td>캘리브레이션 추출이 이 프로젝트에서 측정된 가장 큰 단일 요인이다 (2026-08-19, 09-03)</td><td>현상은 맞고 원인이 다르다. 클립의 내용이 아니라 0번 층에서 지워진 head 조합이다. 0번 층을 면제하면 추출 간 표준편차가 0.34&ndash;0.40에서 0.015&ndash;0.023으로 줄어든다</td></tr>
+  <tr><td><code>calib_100</code>은 운 좋은 추출이고, 출하본의 우위는 기준이 아니라 추출의 성질이다 (09-06)</td><td>"운"의 내용이 0번 층 head 선택으로 특정됐다. 면제하면 다른 추출도 출하본과 같아지므로, 우위는 기준&middot;추출 어느 쪽의 성질도 아니다</td></tr>
+  <tr><td>선택 안정성은 성능 안정성을 사 주지 않는다; n=2,000은 n=100보다 나쁘다 (09-06)</td><td>철회. 수렴한 선택이 0번 층에서 head 4&middot;7&middot;26을 지우기 때문이었고, 면제하면 n=2,000 arm은 출하본과 같다(0.948 대 0.950)</td></tr>
+  <tr><td>중요도 측정은 한 번이면 되고 실행 간 비결정성은 무해하다 (09-10)</td><td>면제 전에는 틀렸다(재실행이 +0.083). 면제 후에는 다시 성립할 가능성이 높다(면제한 재실행 arm은 출하본 대비 +0.007~+0.015)</td></tr>
+  <tr><td><code>dualsafe</code> 기각; 안전 신호는 가중이 아니라 추출에 넣어야 한다 (09-08)</td><td>철회. 면제하면 +0.029 [&minus;0.011, +0.068]</td></tr>
+  <tr><td>타깃을 모델 쪽으로 옮기면 세 세트 확정 기각; 타깃은 전형적이어야 한다 (09-10)</td><td>대부분 철회. 기각의 86&ndash;90%가 head 30이었다. 남은 +0.04는 경계선이고 설명(전형성, 순서통계량)은 근거를 잃었다</td></tr>
+  <tr><td>표준 추출을 <code>se</code>로 바꾸자 (09-12)</td><td>근거 약화. 효과가 &minus;0.153에서 &minus;0.027로 줄었고 규칙 안 산포는 둘 다 0.015 수준이 됐다</td></tr>
+  <tr><td>유지집합 겹침은 성능을 예측하지 못한다</td><td>유지. 다만 이유가 구체화됐다: 유지 Q head 684개 중 0번 층의 한두 개가 결과를 정했다</td></tr>
+  <tr><td>개별 클립 기여 0%, 가법성 없음 (09-15)</td><td>관측은 유효하나 같은 원인일 가능성이 높다(반쪽 추출 64 arm에서도 head 30을 지운 arm이 +0.30 나쁨). 면제 조건에서 재측정하지 않았다</td></tr>
+</table>
+<p>영향이 없어 보이는 것: 중요도 파일 하나를 공유한 기준 비교, <code>gtk</code>(노이즈 K배), <code>dualfix</code>, <code>maxstep11</code>. 0번 층 선택이 출하본과 같거나 위험한 head를 건드리지 않았다.</p>
+
+<h2><span class="num">4</span>아직 모르는 것</h2>
+<ul>
+  <li><b>폐루프.</b> 이번 결과는 전부 개루프다. 폐루프에서 2,000클립 arm이 &minus;0.112였던 것이 같은 원인인지, 면제가 폐루프 점수를 어떻게 바꾸는지는 재지 않았다.</li>
+  <li><b>면제 후의 작은 잔차.</b> 면제한 16개 arm 중 13개가 면제한 출하본보다 높다(+0.017, CI에 0 포함). 세 세트의 여덟 arm에서는 중앙값 +0.015 / +0.015 / +0.029로 중앙값 CI가 0을 배제한다. arm 간 잔여 산포 안에서 출하본이 좋은 쪽에 있는 것인지, 1번 층 이후의 같은 종류 취약점인지 구별하지 못했다.</li>
+  <li><b>왜 0번 층인가, 어떤 조합인가.</b> head들이 서로를 대신하는 무리라는 것까지만 안다.</li>
+  <li><b>다른 기준&middot;예산.</b> 전부 <code>dual_u40_v2</code>다. 단일 기준, 재구성 계열, 다른 비율에서 0번 층이 같은 역할을 하는지 모른다.</li>
+  <li><b>재측정하지 않은 결론.</b> 반쪽 추출 64개, 하드풀, 캘리브레이션 출처(OOD&middot;pooled), 반복 재캘리브레이션.</li>
+</ul>
+
+<h2><span class="num">5</span>권고</h2>
+<ol>
+  <li><b>레시피에 0번 층 Q 면제를 넣는다.</b> 완료(2026-10-14): <code>make_slim.py --config dual_u40_l0keep_v2</code>(일반형 <code>&lt;crit&gt;_u&lt;N&gt;_l0keep_v2</code>, 채널 수는 예산에서 유도). <code>importance_v2</code>로 빌드하면 평가한 &ldquo;면제 + 예산 맞춤&rdquo; 출하본을 유닛 단위로 재현한다. 이후의 dual 계열 arm은 그 설정으로 만든다. 출하본은 이미 무해한 조합을 지운 상태라 성능이 바뀌지 않지만, 재현성과 캘리브레이션 둔감성을 얻는다.</li>
+  <li><b>캘리브레이션 관련 문서를 정정한다.</b> 완료(2026-10-14): 여섯 리포트(추출 분산, 캘리브레이션 크기 개루프&middot;폐루프, <code>dualsafe</code>, self-anchored target, 추출 규칙)와 <code>CLAUDE.md</code>에 정정을 달았다. 논문에서 캘리브레이션 민감도를 다룬다면 서술이 달라져야 한다.</li>
+  <li><b>폐루프에서 확인한다.</b> 출하본, 면제 출하본, 2,000클립 arm의 면제 변형. 인계 제동 인공물로 새 폐루프 arm이 보류 중이라 판단이 필요하다.</li>
+  <li><b>남은 잔차와 기전을 본다.</b> 1번 층의 같은 접합 실험, 0번 층 쌍 지도.</li>
+</ol>
+
+<h2><span class="num">6</span>산출물</h2>
+<table>
+  <tr><th>종류</th><th>위치</th></tr>
+  <tr><td>세부 리포트</td><td><code>reports/evaluation/2026-10-1{1,2,3}_*.html</code> 9개(이 문서 포함). 같은 파일이 <code>outputs/coc_multimode/</code>, <code>outputs/calib_difficulty/</code>, <code>outputs/coc_importance/</code>, <code>outputs/seed_arms/</code>, <code>outputs/swap_masks/</code>, <code>outputs/calibration_summary/</code>에도 있다. 이번 세션 이전 실험의 정리는 <code>outputs/calibration_summary/2026-10-11_calibration-summary.html</code>(그 해석 일부는 이 문서로 대체됨)</td></tr>
+  <tr><td>레시피</td><td><code>make_slim.py --config dual_u40_l0keep_v2</code> &rarr; <code>outputs/slim_dual_u40_l0keep_v2/</code></td></tr>
+  <tr><td>코드</td><td>브랜치 <code>worktree-calib-coc-multimode</code> (draft PR #84), <code>experiments/evaluation/</code>: <code>run_coc_multimode.py</code>, <code>run_coc_importance.py</code>, <code>launch_seed_arms.sh</code>, <code>make_swap_masks.py</code>, <code>make_l0_masks.py</code>, <code>make_l0_exempt.py</code>, <code>launch_swap_masks.sh</code>, 각 <code>analyze_*.py</code>; <code>run_importance.py</code>에 <code>--roll-offset</code> / <code>--noise-offset</code> / <code>--no-perclip</code></td></tr>
+  <tr><td>유지집합</td><td><code>outputs/slim_swap_*/slim_meta.json</code> (접합&middot;면제 변형 58개), <code>outputs/slim_dual_seed_*/</code> (시드 arm 9개)</td></tr>
+  <tr><td>평가</td><td><code>outputs/swap_*_{cruise120,cruise60,500,val500,oodval}/</code>, <code>outputs/dual_seed_*_test/</code></td></tr>
+  <tr><td>용량이 큰 것</td><td><code>outputs/coc_importance/imp_s*of4.npz</code> 3.7 GB (조건별 중요도 배열; 필요 없으면 삭제 가능)</td></tr>
+</table>
+
+</div>
+</body>
+</html>

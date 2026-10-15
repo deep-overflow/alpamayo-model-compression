@@ -22,6 +22,14 @@ Configs:
                       generalises. Unlike `_qcut<N>` the budget is NOT held -- it is the
                       output, which is the point: this is how a budget difference gets
                       decomposed by axis. plans/2026-09-17_budget-axis-split.md.
+  <crit>_u<N>_l0keep_v2 -- the same family with layer 0's Q heads EXEMPT from the cut and
+                      the budget paid back in MLP channels spread evenly over the layers
+                      (floored: 13 heads -> 1,109 channels, 4,096 params short at u40).
+                      Which layer-0 heads an arm dropped was what made calibration draws
+                      and importance seeds collapse; with the layer exempt 17 arms land at
+                      0.930-0.992 on test500 instead of 0.950-1.774. `dual_u40_l0keep_v2`
+                      with importance_v2 reproduces outputs/slim_swap_ship_L0fullM unit for
+                      unit. reports/evaluation/2026-10-13_layer0-exemption.html.
   tyr_u40 / tyr_uniform_u40 -- Tyr-the-Pruner baseline: OSSCAR-reconstructed
                       supernet weights at the searched / uniform level assignment,
                       same -2.66B budget by construction.
@@ -181,7 +189,9 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     # the optional _qcut<N> trades Q heads for MLP channels at the SAME parameter
     # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
     # the difference into channels (plans/2026-09-05_axis-allocation.md)
-    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?_v2$", cfg_name)
+    # the optional _l0keep exempts layer 0's Q heads from the cut and pays the budget back
+    # in MLP channels (see the block below)
+    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?(_l0keep)?_v2$", cfg_name)
     # `_q<N>m<M>` sets BOTH axis counts explicitly: cut N Q heads and M MLP channels per
     # layer. `_qcut<N>` cannot express this -- it pins N and solves for M so the budget is
     # unchanged -- and holding the budget is exactly what has to be given up to ask which
@@ -620,6 +630,39 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             print(f"qcut{n_q}: cut {n_q}/{tc.num_attention_heads} heads and "
                   f"{n_m}/{tc.intermediate_size} channels per layer "
                   f"({per_layer:,} params, unchanged)", flush=True)
+
+        if uni is not None and uni.group(4) is not None:
+            # Layer 0 keeps ALL of its Q heads. Which 13 of layer 0's 32 heads a
+            # dual_u40_v2 arm dropped decided whether it collapsed on cruise: twelve of
+            # them sit in one flat band of the dual score with the cut through the
+            # middle, the rank scores tie exactly at the cut, and the score does not see
+            # which of them matter (damage vs score rho -0.30). Calibration draw, FM-noise
+            # seed and a plain re-run all moved that choice; exempting the layer takes 17
+            # arms from 0.950-1.774 to 0.930-0.992 on test500
+            # (reports/evaluation/2026-10-13_layer0-exemption.html, ..._layer0-recheck.html).
+            # The heads layer 0 no longer loses are paid back in MLP channels, spread
+            # evenly over the layers and taken from each layer's own ranking, i.e. the
+            # channels the criterion would have cut next. One head is worth 85.33
+            # channels, so the trade cannot be exact: the channel count is floored and
+            # the shortfall is printed (13 heads -> 1,109 channels, 4,096 parameters =
+            # 0.00015% short). `dual_u40_l0keep_v2` with importance_v2 reproduces the
+            # evaluated outputs/slim_swap_ship_L0fullM kept set unit for unit.
+            attn_cost = 2 * tc.head_dim * tc.hidden_size
+            mlp_cost = 3 * tc.hidden_size
+            n_layers = tc.num_hidden_layers
+            n_q0 = round(float(rq[0]) * tc.num_attention_heads)
+            n_extra, short = divmod(n_q0 * attn_cost, mlp_cost)
+            extra = np.full(n_layers, n_extra // n_layers)
+            extra[: n_extra - extra.sum()] += 1           # 13 heads: 31 x 29 layers + 30 x 7
+            rq = np.array(rq, dtype=float)
+            rq[0] = 0.0
+            rm = (np.round(np.asarray(rm, dtype=float) * tc.intermediate_size) + extra) \
+                / tc.intermediate_size
+            assert (rm < 1).all()
+            print(f"l0keep: layer 0 keeps all {tc.num_attention_heads} Q heads "
+                  f"({n_q0} restored); {n_extra} more MLP channels cut "
+                  f"({int(extra.max())}/{int(extra.min())} per layer), "
+                  f"{short:,} params short of the unexempted budget", flush=True)
 
         def half(name):
             if name == "traj":
