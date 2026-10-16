@@ -69,7 +69,8 @@
     <li><b>기준 점수 자체가 그보다 낫다.</b> 출하본 dual 점수를 제거한 head에 대해 합한 대조군 B0는 A +0.566, B +0.341이다. 같은 head 하나를 지운 단일 head 지도에서는 &minus;0.30이라, 기준 점수는 head 하나의 손상은 못 보지만 calib_100의 선택에서 얼마나 벗어났는지는 잡는다.</li>
     <li><b>전파된 궤적 손실은 보인다(G2 통과).</b> 1&ndash;35층은 출하본 마스크로 두고 0번 층만 바꿔 calib_100에서 잰 FM 손실(P2)이 A를 ρ <b>+0.783</b>(p=2e&minus;11), B를 <b>+0.628</b>(p=3e&minus;8)로 정렬한다. B0보다 낫고(ρ 차이의 95% CI가 두 집단 모두 0 위), 결과에 맞춘 census 예측(+0.549 / +0.435)보다도 높다.</li>
     <li><b>언어 손실로는 보이지 않는다.</b> 같은 조건의 CoC NLL은 &minus;0.079 / +0.172로 무관하다. 붕괴는 궤적 쪽 현상이고, 네트워크를 거친 뒤에야 나타난다.</li>
-    <li><b>점수가 비슷한 head끼리 묶는 접근에 대한 답:</b> 묶음 안에서 고를 신호는 0번 층 안에 없고 전파된 FM 손실에 있다. 그 신호로 head를 고르는 규칙(3단계)은 비용 재계산 때문에 아직 돌리지 않았다(7절).</li>
+    <li><b>점수가 비슷한 head끼리 묶는 접근에 대한 답:</b> 묶음 안에서 고를 신호는 0번 층 안에 없고 전파된 FM 손실에 있다.</li>
+    <li><b>그 신호로 고르면 수작업 예외 없이 붕괴가 사라진다(3단계).</b> 각 arm의 0번 층 모호한 13개 head 중 7개를 P2 탐욕적 탐색으로 고르면(예산은 출하본과 비트 단위로 같음), 붕괴 arm 셋(n1 1.670, nt_c 1.348, nt_d 1.774)이 0.973 / 0.988 / 0.968로 돌아온다. 격차 회복률은 103% / 100% / 98%이고, 네 arm의 SD는 0.0097이다. 다만 0번 층 보존 쌍둥이와 ±0.03 안에서 같다고 보인 것은 4개 중 2개(n1, nt_c)이고, 출하본(+0.010)과 nt_d(+0.014)는 구간 상한이 0.044 / 0.039다(7절).</li>
   </ul>
 </div>
 
@@ -149,13 +150,40 @@
 
 <h2><span class="num">6</span>아직 모르는 것</h2>
 <ul>
-  <li>P2로 head를 고르는 규칙이 실제로 수작업 예외(<code>_l0keep</code>)를 대신할 수 있는지 (3단계, 미실행).</li>
+  <li>P2 선택 규칙이 4개 arm 밖(다른 시드·추출 arm, 다른 예산, val500·OOD)에서도 같은지. 이번 검증은 test500의 4개 arm뿐이다.</li>
+  <li>출하본과 nt_d에서 남은 +0.010 / +0.014가 실재하는지. 중앙값은 +0.002 / +0.004로 작지만 Wilcoxon p=0.049 / 0.019다.</li>
   <li>왜 0번 층인가. 다른 층의 모호한 띠는 같은 방식으로 조합을 바꿔도 손상이 없었다.</li>
   <li>폐루프.</li>
 </ul>
 
-<h2><span class="num">7</span>3단계: 실행 전 비용 재계산</h2>
-<p>계획은 3단계를 "Ada 4장으로 약 3시간"으로 적었지만, 그 추정은 틀렸다. 출하본 기준으로 0번 층의 모호한 띠는 13개 head이고, 그중 7개를 지워야 한다(확실히 유지 13개, 확실히 제거 6개). P2로 탐욕적 선택을 하면 arm당 약 70개 조합을 평가한다. 50클립 &times; 마스크당 4.5초(K=8 샘플링 포함)면 arm당 약 4.4카드시간, 8개 arm이면 약 35카드시간(Ada 4장으로 약 9시간)이고 평가가 별도다. 줄일 방법은 세 가지다: 샘플링을 끄고 FM 손실만 재는 옵션 추가, 띠를 점수 순위로 정의(per-clip 중요도가 없는 seed arm에도 적용 가능), 후보를 탐욕적 탐색 대신 arm의 자연스러운 대안 조합으로 한정. 이 설계 변경은 사용자 결정 사항이라 실행하지 않았다.</p>
+<h2><span class="num">7</span>3단계: P2로 0번 층을 고르면 예외 없이 붕괴가 사라지는가</h2>
+<p><b>설계 (실행 전 2026-10-16에 계획에 추가).</b> 처음 계획한 8개 arm·K=8 샘플링은 비용이 약 35카드시간이라, 사용자 승인을 받아 다음처럼 줄였다.</p>
+<ul>
+  <li>샘플링 없이 FM 손실만 재는 실행기(<code>run_l0_select.py</code>)를 썼다. 마스크·클립당 약 1.0초다.</li>
+  <li>각 arm의 <b>자기</b> 캘리브레이션 클립 앞 50개를 썼다. 50개는 2단계에서 P2가 안정되는 최소 개수였다.</li>
+  <li>모호한 띠는 각 arm 자기 0번 층 dual 점수의 순위로 정했다. 위 13개는 유지, 아래 6개는 제거, 가운데 13개 중 7개를 탐욕적으로 제거한다.</li>
+  <li>1&ndash;35층은 각 arm 그대로다. 그래서 예산이 <code>dual_u40_v2</code>와 비트 단위로 같고 MLP로 갚을 필요가 없다.</li>
+  <li>대상은 4개 arm(출하본, n1, nt_c, nt_d)이다. 탐욕적 선택 &rarr; 접합 &rarr; cruise120 &rarr; test500 순서로 Ada에서 돌렸다.</li>
+</ul>
+<div class="scroll"><table>
+  <tr><th>arm</th><th>0번 층에서 되살린 head &rarr; 대신 지운 head</th><th class="num">P2 (원래 &rarr; 선택)</th><th class="num">원래</th><th class="num">P2 선택</th><th class="num">0번 층 보존 쌍둥이</th><th class="num">선택 &minus; 쌍둥이 [95% CI]</th><th class="num">회복률</th></tr>
+  <tr><td>출하본</td><td>5, 12 &rarr; 18, 26</td><td class="num">0.2798 &rarr; 0.2756</td><td class="num">0.9498</td><td class="num">0.9658</td><td class="num">0.9557</td><td class="num">+0.010 [&minus;0.025, +0.044]</td><td class="num">&mdash;</td></tr>
+  <tr><td>n1</td><td><b>30</b>, 27 &rarr; 18, 26</td><td class="num">0.2973 &rarr; 0.2665</td><td class="num"><b>1.6703</b></td><td class="num">0.9729</td><td class="num">0.9903</td><td class="num">&minus;0.017 [&minus;0.051, +0.008]</td><td class="num">103%</td></tr>
+  <tr><td>nt_c</td><td><b>7</b>, 9, 27 &rarr; 15, 19, 29</td><td class="num">0.2817 &rarr; 0.2684</td><td class="num"><b>1.3479</b></td><td class="num">0.9875</td><td class="num">0.9885</td><td class="num">&minus;0.001 [&minus;0.017, +0.013]</td><td class="num">100%</td></tr>
+  <tr><td>nt_d</td><td><b>10</b>, 27 &rarr; 6, 9</td><td class="num">0.3128 &rarr; 0.2882</td><td class="num"><b>1.7742</b></td><td class="num">0.9683</td><td class="num">0.9546</td><td class="num">+0.014 [&minus;0.013, +0.039]</td><td class="num">98%</td></tr>
+</table></div>
+<ul>
+  <li><b>G3 통과</b>: 네 arm 평균의 SD가 0.0097(원래 0.38 수준)이고, 가장 나쁜 arm이 0.9875다.</li>
+  <li><b>G3-recover 통과</b>: 붕괴 arm 셋이 원래&ndash;쌍둥이 격차의 98&ndash;103%를 회복했다(원래 대비 &minus;0.70 / &minus;0.36 / &minus;0.81, 모두 p&lt;1e&minus;27).</li>
+  <li><b>G3-twin은 4개 중 2개만 통과</b>: n1과 nt_c는 상한이 +0.03 아래다. 출하본과 nt_d는 평균 차이 구간이 0을 포함하지만 상한이 +0.044 / +0.039로 기준을 넘고, 중앙값은 +0.002 / +0.004(Wilcoxon p=0.049 / 0.019)다.</li>
+  <li>출하본은 원래 조합이 이미 좋은 쪽이었고, P2가 head 5&middot;12를 18&middot;26으로 바꾸면서 +0.016 [&minus;0.015, +0.055]로 약간 나빠졌다(유의하지 않음).</li>
+  <li>미리 적어 둔 예측: n1에서 head 30을 되살릴 것이라는 예측은 맞았다. nt 블록은 덜 확실하다고 예측했는데, nt_d가 붕괴 조합 4&middot;7&middot;10&middot;26 중 4&middot;7&middot;26을 계속 지우는데도 회복했다. 조합 하나(head 10)를 되살린 것으로 충분했다.</li>
+  <li>일관성 검사: cruise120 실행 값은 test500의 같은 120클립과 비트 단위로 같다(최대 차이 0).</li>
+</ul>
+<div class="callout opinion">
+  <strong>해석</strong>
+  수작업 예외(<code>_l0keep</code>)가 하던 일, 즉 붕괴를 막는 일을 P2 선택이 같은 예산에서 층 이름을 지정하지 않고 해낸다. 다만 "예외와 동등하다"고 말할 수 있는 것은 아직 4개 중 2개다. 남은 차이는 크기가 작다(평균 +0.01, 중앙값 +0.003). 하지만 이 판정 폭으로는 같다고도 다르다고도 할 수 없다. 실용적으로는 두 방법 모두 붕괴를 막는다. 예외 쪽이 더 단순하고 비용도 들지 않는다(P2 선택은 arm당 약 1시간 GPU). 그래서 지금 권장 레시피는 여전히 <code>_l0keep</code>이다. P2 선택은 "왜 그 head들인가"를 데이터로 고를 수 있다는 근거이고, 0번 층이 아닌 다른 층에서 같은 문제가 생길 때(예: 더 높은 압축률) 쓸 수 있는 일반 도구다.
+</div>
 
 <p class="small">재현: <code>python experiments/evaluation/make_l0_redundancy_masks.py</code>; 캡처 <code>run_racfit.py --exp-id l0red_h_calib100 --layer-start 0 --layer-end 1 --folds 1 --mixes VT --keeps-q 19 --keeps-m 7390 --no-dual --dump-hessian --rollouts-from racfit_v1</code>; <code>python experiments/evaluation/analyze_l0_redundancy.py --prop-shards l0_redundancy/attempt1/l0red_prop_s{0..3}.metrics.json l0red_prop_rest_s{0..3}</code>; <code>python experiments/evaluation/analyze_l0_p2_clips.py</code>.</p>
 </div>

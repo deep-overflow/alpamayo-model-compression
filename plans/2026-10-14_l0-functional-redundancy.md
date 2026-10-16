@@ -139,6 +139,43 @@ If G3 passes, the rule does what the exemption does, at the original budget and 
 layer. Extending it to all 36 layers is a follow-up plan. Other layers are harmless at u40, so
 it matters only at higher budgets.
 
+### Step 3 as run (amended 2026-10-16, after G2 passed and before any step-3 run; option (a))
+
+The original estimate was wrong: the K = 8 sampling in `run_token_ablation.py` costs 4.5 s per
+mask per clip, so a greedy search over the layer-0 band is ~4.4 card-hours per arm. P2 needs no
+sampling. Step 2's clip-count analysis (`outputs/l0_redundancy/p2_clip_count.txt`) puts the
+floor at ~50 clips. The design as run:
+
+- **Runner** `run_l0_select.py`: model loaded once, the dense reference text built once per clip,
+  then FM loss (and NLL) only, through `run_token_ablation.eval_config` with no seeds.
+- **Clips**: the first 50 of each arm's OWN calibration manifest and cache. `dual_u40_v2` and
+  `dual_seed_n1` use `calib_100` / `calib`; `dual_nt_c` / `_d` use `calib_nt100_c` / `_d` /
+  `calib_nt`. No arm sees another arm's clips or any evaluation clip.
+- **Band by rank, not bootstrap**: seed arms have no per-clip importance, so the band comes from
+  the arm's own layer-0 dual score. The top 13 heads are kept, the bottom 6 dropped, and the middle
+  13 form the band, 7 of which are dropped. This matches the bootstrap band of the shipped arm,
+  which was 13 heads with 13 certain keeps and 6 certain drops.
+- **Search**: forward greedy. Starting from the 6 fixed drops, add the band head whose drop
+  gives the lowest P2, 7 times; every candidate score is recorded. The arm's own layers 1-35 mask
+  is held fixed. The budget is that of `dual_u40_v2` exactly, with no MLP payback.
+- **Arms**: shipped `dual_u40_v2`, and the three collapse cases `dual_seed_n1`, `dual_nt_c`,
+  `dual_nt_d`. The new kept set is spliced into each arm (`slim_swap_<arm>_L0p2`) and evaluated on
+  `test_cruise120` first, then test500 (Ada, `run_baseline.py`).
+
+Gates (test500, minADE@6, 20,000-draw paired bootstrap):
+
+- **G3**: across the four arms, SD of the arm means <= 0.05 and no arm above 1.05. As built they
+  are 0.950 / 1.670 / 1.348 / 1.774 (ship / n1 / nt_c / nt_d); with the exemption, SD 0.015.
+- **G3-twin**: each arm's 95% CI upper bound vs its `_l0keep` twin (`swap_<arm>_L0fullM_500`)
+  below +0.03.
+- **G3-recover**: for n1 / nt_c / nt_d, at least 80% of the gap between the as-built arm and its
+  twin closes.
+
+Prediction, registered: G3 passes for n1, because P2 should keep head 30, the head whose
+single swap recovers n1. G3 is less likely for nt_c / nt_d, because their damage is spread
+over 4-7 heads and a greedy path can miss a combination. Step 2 also showed that P2 orders arms
+well but does not single out the extreme collapses.
+
 ## What this does not settle
 
 - Why layer 0 alone. The other layers' bands are just as wide and cost nothing.

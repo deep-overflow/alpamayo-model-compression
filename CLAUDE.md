@@ -648,8 +648,18 @@ o_proj input Hessian fail (output energy removed with cross terms rho +0.44 / +0
 residual nothing), and are beaten by the criterion's own score summed over the dropped heads
 (+0.57 / +0.34). Mean FM loss on calib_100 with the shipped mask in layers 1-35 and the candidate
 set in layer 0 ranks them at +0.78 / +0.63, above the outcome-fitted census; CoC NLL under the same
-masks does not (-0.08 / +0.17). It needs ~50 calibration clips, and costs 4.5 s per mask per clip
-at K=8, so a greedy selector over layer 0's 13-head band is ~4.4 card-hours per arm -- not run.
+masks does not (-0.08 / +0.17). It needs ~50 calibration clips.
+
+As a selector (`run_l0_select.py` -> `make_l0_select_swaps.py` -> `analyze_l0_select.py`,
+2026-10-16), it chooses 7 of the 13 heads in each arm's own layer-0 band, ranked by the arm's own
+score, by forward greedy P2 on the arm's own first 50 calibration clips. That is FM loss only,
+~1.0 s per mask per clip, about 1 h per arm on one Ada. The rest of the arm is unchanged, so the
+budget is `dual_u40_v2`'s exactly. On test500 the three collapse arms come back: n1 1.670 -> 0.973,
+nt_c 1.348 -> 0.988, nt_d 1.774 -> 0.968, closing 98-103% of the gap to their `_l0keep` twins, and
+the four arms' SD is 0.0097. Against the twins only n1 and nt_c are shown within +0.03; the shipped
+arm (+0.010 [-0.025,+0.044]) and nt_d (+0.014 [-0.013,+0.039]) are not. So `_l0keep` stays the
+recipe (simpler, free); the selector is the data-driven version for when another layer has the
+same problem.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -946,7 +956,7 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-10-13_layer0-census.html`, `2026-10-13_layer0-recheck.html` | `evaluation/l0_census_report_template.html`, `evaluation/l0_recheck_report_template.html` | 기존 결론이 0번 층에 걸려 있었는가. 저장된 유지집합 166개: 0번 층 제거 집합만으로 dual 계열 50 arm이 ρ=+0.55로 정렬되고 반쪽 추출 64 arm과 서로 전이(+0.44~+0.55); `calib_100`은 head 4를 지키는 유일한 세트(0/11 대 28/31). **재측정(0번 층 Q 유지)**: n=2,000 +0.252 → +0.000, `dualsafe` +0.465 → +0.029, self-anchored +0.338 → +0.042(경계선), se − rd −0.153 → −0.027; 17 arm 0.950–1.774(SD 0.260) → 0.930–0.992(SD 0.018). 미재측정: 반쪽 추출 64, 하드풀, 캘리브레이션 출처, it3, 폐루프 |
 | `2026-10-13_calibration-variance-is-layer0.html` | `evaluation/calib_layer0_overview_report_template.html` | 위 여덟 리포트의 **한 장 요약**: 질문이 좁혀진 순서, 핵심 수치, 철회·수정이 필요한 기존 서술의 표, 아직 모르는 것, 권고. 캘리브레이션 추출 분산·시드 잡음·기각된 arm 여럿이 같은 한 가지 원인(0번 층 Q head 13개)이었음 |
 | `2026-10-15_raw-max-criterion.html` | `evaluation/rawmax_report_template.html` | 원래값 `max`(궤적 점수를 스텝 단위로 맞춘 두 안)와 단일 기준을 0번 층 보존 상태로 재측정: 원래값은 이득 없음(0.03 m 이상 배제, 원인은 22층의 점수 비 계단), `coc`는 여전히 패배·`traj`는 dual과 구별 불가, `dualv3`는 나쁨 재현 |
-| `2026-10-15_l0-functional-redundancy.html` | `evaluation/l0red_report_template.html` | 0번 층 붕괴 조합을 결과 없이 맞히는 신호: 0번 층 국소 기하(출력 에너지·재적합 잔차)는 실패, 전파된 calib FM 손실은 50/64 arm을 ρ +0.78 / +0.63으로 정렬(기준 점수·census보다 우수), CoC NLL은 무관; 선택 규칙(3단계)은 비용 때문에 미실행 |
+| `2026-10-15_l0-functional-redundancy.html` | `evaluation/l0red_report_template.html` | 0번 층 붕괴 조합을 결과 없이 맞히는 신호: 0번 층 국소 기하(출력 에너지·재적합 잔차)는 실패, 전파된 calib FM 손실은 50/64 arm을 ρ +0.78 / +0.63으로 정렬(기준 점수·census보다 우수), CoC NLL은 무관; 그 신호로 0번 층 7개 head를 고르면(예산 동일, 예외 없음) 붕괴 arm 셋이 격차의 98–103% 회복·4 arm SD 0.0097, 다만 `_l0keep` 쌍둥이와 ±0.03 동등은 4개 중 2개만 |
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
 `ls reports/evaluation/` is the full set (87 entries as of 2026-10-15: 82 html + 3 tex + 1 json + 1 md).
 
