@@ -54,6 +54,14 @@ Configs:
                       I_CoC ALONE in layers 22-35 (plans/2026-09-25_depth-aware-dual.md).
                       Same budget, allocation, expert and KV as dual_u40_v2; its late
                       layers are coc_u40_v2's unit for unit.
+  rawmean_u40_v2   -- max(I_traj / 10, I_CoC) on RAW values, no rank_norm: I_traj is |sum|
+                      over the ten FM steps, so /10 is |mean|, on I_CoC's per-step scale.
+                      `rawabsmean` takes mean_s |g_s| from --stepvlm as the trajectory half;
+                      `lnorm` divides each half by its own per-layer mean (scale removed,
+                      shape kept), the control for whether raw magnitude matters at all.
+                      The per-layer ratio of the halves steps at layer 22, so the first two
+                      are depth-switched (trunk mostly I_traj, late band mostly I_CoC).
+                      plans/2026-10-14_raw-max-criterion.md.
   dualfix_u40_v2   -- dual with the degenerate-layer guard: a layer whose half is constant
                       (the last layer's trajectory importance is structurally zero) no
                       longer contributes its INDEX ORDER to max(rank, rank).
@@ -767,6 +775,15 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 sm = np.maximum.reduce([guarded_rank(st["mlp_abs_step"][i]) for i in range(nq)]
                                        + [guarded_rank(imp["coc_vlm_mlp"])])
                 return sq, sm
+            if name == "trajmean":
+                # I_traj is |sum| over the ten FM steps, so /10 is |mean|: the trajectory
+                # score on I_CoC's per-step scale, for the raw-value max (`rawmean`)
+                return imp["traj_vlm_q"] / 10, imp["traj_vlm_mlp"] / 10
+            if name == "trajabs":
+                # mean over the ten FM steps of the per-step |grad| (`rawabsmean`); its
+                # within-layer ranks are |sum|'s to Spearman 0.99, its scale is not
+                st = np.load(REPO / "outputs" / stepvlm / "step_importance_vlm.npz")
+                return st["q_abs_step"].mean(0), st["mlp_abs_step"].mean(0)
             if name == "cache":
                 # cache-Jacobian importance (plans/2026-08-30_cache-jlens-criterion.md):
                 # E ||d cache / d g||^2 weighted by the expert's per-(layer, group)
@@ -792,6 +809,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         delta = float(fm.group(1)) / 100 if fm else 0.0
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
                  "dualv3": ("traj", "coc"),
+                 "rawmean": ("trajmean", "coc"), "rawabsmean": ("trajabs", "coc"),
+                 "lnorm": ("traj", "coc"),
                  "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
                  "dual2nd": ("traj2", "coc2"),
@@ -820,7 +839,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             r[flat] = -np.inf
             return r
 
-        rank = rank_or_nan if stem.startswith("dualfix") else rank_norm
+        def raw(x):
+            # rawmean / rawabsmean: max() compares magnitudes, not ranks
+            return x
+
+        def layer_mean(x):
+            # lnorm: each score over its own per-layer mean -- the scale goes, the shape
+            # of the distribution stays. Layer 35's all-zero I_traj maps to 0, so I_CoC
+            # decides there.
+            return x / np.maximum(x.mean(1, keepdims=True), 1e-30)
+
+        rank = {"rawmean": raw, "rawabsmean": raw, "lnorm": layer_mean}.get(
+            stem, rank_or_nan if stem.startswith("dualfix") else rank_norm)
         sq, sm = half(parts[0])
         for p in parts[1:]:
             oq, om = half(p)

@@ -432,6 +432,7 @@ These names are the vocabulary of `outputs/`, `reports/`, and the alpasim driver
 | `dualsafe_u40_v2` | dual, `I_traj` half를 GT 경로 여유거리로 클립 가중 (`w=exp(-d/5)`) | uniform 0.398563 | **VLM only** (−2.66B, 24.0%) — **REJECT** (**2026-10-13 정정**: 손해는 0번 층 head 4·7을 지운 탓 — 0번 층 Q 유지 시 val500 +0.029, 아래 `_l0keep`) |
 | `dual_u40_qcut4_v2` (= dual+h4) | dual, 같은 예산을 head 4 + MLP 5666으로 재배분 | uniform 0.398563 + `_qcut4` | **VLM only** (−2.66B, 24.0%) — **폐루프 REJECT** |
 | `dual_u40_l0keep_v2` | dual, **0번 층 Q head는 컷에서 제외** | uniform 0.398563, 0번 층 Q 0개 + MLP 채널 1,109개 추가(층 0–28에 31, 29–35에 30) | **VLM only** (−2,657,447,936, 24.0%; 4,096 적게 제거) — **dual 계열 권장 레시피 (2026-10-14)** |
+| `rawmean` / `rawabsmean` / `lnorm` `_u40_l0keep_v2` | `max(I_traj/10, I_CoC)` / `max(mean_s|g_s|, I_CoC)` / 두 half를 각자 층별 평균으로 나눈 뒤 `max` — **rank_norm 없이 원래값** | 위와 동일 | **VLM only**, 위와 동일 — 셋 다 dual보다 낫지 않음 (2026-10-15, 아래 `_l0keep` 절) |
 
 The five `*_u40_v2` configs are one family: `make_slim.build_masks` dispatches on the
 `_u40_v2` suffix and the stem names the criterion, so all five hold budget, allocation, expert
@@ -622,11 +623,33 @@ layer-0 head 4 (0 of 11 seed arms drop it, 28 of 31 arms on other clips do) -- t
 "lucky draw" was.
 
 Not re-measured, so do not cite either way: the 64 half-split arms, hard-pool blocks, calibration
-source (OOD / pooled), `it3`, `maxstep11 @ st2000`, criteria other than dual, and **anything
-closed loop** (the n=2,000 closed-loop loss of -0.112 is the likely same cause). A small residual
-survives exemption -- the other arms sit a median +0.015 / +0.015 / +0.029 above the shipped arm
-on test500 / val500 / OOD-val -- and whether that is ordinary arm-to-arm scatter (SD 0.015-0.037)
-or a second, smaller weak layer is open. Why layer 0, and which combinations, is not known.
+source (OOD / pooled), `it3`, `maxstep11 @ st2000`, criteria other than those below, and
+**anything closed loop** (the n=2,000 closed-loop loss of -0.112 is the likely same cause). A small
+residual survives exemption -- the other arms sit a median +0.015 / +0.015 / +0.029 above the
+shipped arm on test500 / val500 / OOD-val -- and whether that is ordinary arm-to-arm scatter
+(SD 0.015-0.037) or a second, smaller weak layer is open. Why layer 0 is not known.
+
+**Criteria re-measured with layer 0 kept (2026-10-15, open loop, test500 / val500 vs the exempt
+shipped arm; `reports/evaluation/2026-10-15_raw-max-criterion.html`, `analyze_rawmax.py`).**
+`coc` still loses (+0.108 [+0.053,+0.167] / +0.088 [+0.029,+0.150], CoC degeneracy 9.0% / 9.2%),
+but 83% of its earlier test500 loss (1.584) was layer 0. `traj` is indistinguishable from dual on
+both sets (-0.022 / +0.012, CIs span 0), so the union's open-loop edge over FM-only is gone --
+argue it from language or closed loop. `dualv3` (CoC score alone from layer 22) is worse on both
+(+0.043 / +0.087, degeneracy doubles): the late-layer `I_traj` term is not a free shadow. Raw-value
+max (`rawmean`, `rawabsmean`) gains nothing -- a gain >= 0.03 m is excluded -- because the
+`I_traj/I_CoC` ratio steps at layer 22, so any one constant gives a trunk-`traj` / late-`coc`
+criterion; `lnorm` (per-layer scale removed) keeps 95-98% of dual's units and drives the same.
+
+**Which layer-0 combinations collapse is visible only after propagation (2026-10-15,
+`reports/evaluation/2026-10-15_l0-functional-redundancy.html`, `make_l0_redundancy_masks.py`,
+`analyze_l0_redundancy.py`, `analyze_l0_p2_clips.py`).** Scored with no outcome against 50
+dual-family arms (test500) and 64 half-split arms (val150): layer-0-local linear signals from the
+o_proj input Hessian fail (output energy removed with cross terms rho +0.44 / +0.12; refit
+residual nothing), and are beaten by the criterion's own score summed over the dropped heads
+(+0.57 / +0.34). Mean FM loss on calib_100 with the shipped mask in layers 1-35 and the candidate
+set in layer 0 ranks them at +0.78 / +0.63, above the outcome-fitted census; CoC NLL under the same
+masks does not (-0.08 / +0.17). It needs ~50 calibration clips, and costs 4.5 s per mask per clip
+at K=8, so a greedy selector over layer 0's 13-head band is ~4.4 card-hours per arm -- not run.
 
 `j_traj` is the rollout-free twin of `cocsafe`: identical structure, ratio, and expert/KV axes,
 with only the reasoning half of the criterion swapped from CoC-NLL Taylor to the J-lens score — so
@@ -922,8 +945,10 @@ Plot styling (colors, background) lives at the top of `make_plots.py` and is dup
 | `2026-10-12_layer0-head-collapse.html`, `2026-10-13_layer0-exemption.html` | `evaluation/swap_masks_report_template.html`, `evaluation/l0_exempt_report_template.html` | 마스크 접합으로 원인 위치 → 처방. **시드 arm·나쁜 추출의 cruise 붕괴는 0번 층 Q head 선택**: head 하나 되돌리면 2.050 → 0.978, 블록 c·d·e는 0번 층 19개 head만 바꿔 격차의 91–97% 소멸; 단일 head가 아닌 조합 효과(head 30만 단독 +0.318), 기준은 못 알아봄(ρ=−0.30). **0번 층 Q 32개 유지 + MLP 1,109채널**: 8 arm의 SD가 test500 0.337 → 0.015, val500 0.402 → 0.023, 출하본 불변, 예산 맞춤 대가 +0.004 / −0.001 / +0.002. 잔차: 다른 arm이 출하본보다 중앙값 +0.015~+0.029 |
 | `2026-10-13_layer0-census.html`, `2026-10-13_layer0-recheck.html` | `evaluation/l0_census_report_template.html`, `evaluation/l0_recheck_report_template.html` | 기존 결론이 0번 층에 걸려 있었는가. 저장된 유지집합 166개: 0번 층 제거 집합만으로 dual 계열 50 arm이 ρ=+0.55로 정렬되고 반쪽 추출 64 arm과 서로 전이(+0.44~+0.55); `calib_100`은 head 4를 지키는 유일한 세트(0/11 대 28/31). **재측정(0번 층 Q 유지)**: n=2,000 +0.252 → +0.000, `dualsafe` +0.465 → +0.029, self-anchored +0.338 → +0.042(경계선), se − rd −0.153 → −0.027; 17 arm 0.950–1.774(SD 0.260) → 0.930–0.992(SD 0.018). 미재측정: 반쪽 추출 64, 하드풀, 캘리브레이션 출처, it3, 폐루프 |
 | `2026-10-13_calibration-variance-is-layer0.html` | `evaluation/calib_layer0_overview_report_template.html` | 위 여덟 리포트의 **한 장 요약**: 질문이 좁혀진 순서, 핵심 수치, 철회·수정이 필요한 기존 서술의 표, 아직 모르는 것, 권고. 캘리브레이션 추출 분산·시드 잡음·기각된 arm 여럿이 같은 한 가지 원인(0번 층 Q head 13개)이었음 |
+| `2026-10-15_raw-max-criterion.html` | `evaluation/rawmax_report_template.html` | 원래값 `max`(궤적 점수를 스텝 단위로 맞춘 두 안)와 단일 기준을 0번 층 보존 상태로 재측정: 원래값은 이득 없음(0.03 m 이상 배제, 원인은 22층의 점수 비 계단), `coc`는 여전히 패배·`traj`는 dual과 구별 불가, `dualv3`는 나쁨 재현 |
+| `2026-10-15_l0-functional-redundancy.html` | `evaluation/l0red_report_template.html` | 0번 층 붕괴 조합을 결과 없이 맞히는 신호: 0번 층 국소 기하(출력 에너지·재적합 잔차)는 실패, 전파된 calib FM 손실은 50/64 arm을 ρ +0.78 / +0.63으로 정렬(기준 점수·census보다 우수), CoC NLL은 무관; 선택 규칙(3단계)은 비용 때문에 미실행 |
 This table is not exhaustive -- it covers the reports whose provenance is documented here.
-`ls reports/evaluation/` is the full set (85 entries as of 2026-10-14: 80 html + 3 tex + 1 json + 1 md).
+`ls reports/evaluation/` is the full set (87 entries as of 2026-10-15: 82 html + 3 tex + 1 json + 1 md).
 
 `reports/evaluation/2026-08-11_baseline_table.tex` is the anchor table for the paper's experimental
 section: protocol and baseline in one table, so every pruned config is reported as a delta against
