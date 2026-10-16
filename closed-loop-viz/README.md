@@ -225,6 +225,14 @@ video/
 The per-arm halves are 496 videos and ~3.8 GB per arm; a ninth arm costs the same again
 and one `render_arms_queue.sh` invocation with `ARMS=` naming it.
 
+**2026-10-16: the camera replays were deleted** to free the root partition (99% full): all
+1,984 files under `video/<arm>/<suite>/camera/`, 27 GB. The `camera/` directories are kept
+empty, and the exact file list is in `video/deleted_camera_2026-10-16.txt`. The top-down,
+`matrix150`, `matrix_hard100` and `dual_vs_h4` videos (2,233 files, 5.4 GB) were kept. Nothing
+is lost for good: each camera replay comes back from its `rollout.asl` through
+`replay_camera.py` (one scene) or `render_arm_all.sh` / `render_arms_queue.sh` with
+`PHASE=cam` (whole suites, skip-if-exists), on a GPU renderer.
+
 Files are `<score>_<scene>.mp4` with the score to three decimals, so listing a directory
 sorts by score. It is the **scene** score — the mean over the scene's rollouts, the number
 the tables use — not the score of the worse rollout the video shows; the two differ on a
