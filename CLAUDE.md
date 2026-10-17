@@ -265,6 +265,15 @@ separate draw. `build_cache.py` / `build_ood_cache.py` stream each clip
 members cross the wire — 500 clips in 24 min instead of ~1 TB of chunks) into a per-clip npz that
 `sample_cache.load_cached` reads in ~0.4 s.
 
+**The `eval` and `train` caches were pruned on 2026-10-17** to free disk: only clips named by an
+`outputs/eval_sets/*` manifest (plus `recovery_sets/val_official_238`) were kept. `eval` went
+18,868 -> 807 samples and `train` 51,219 -> 7,602, freeing 313 GB. Every eval/calibration manifest
+still finds all its samples, but `make_eval_sets.py` and `make_calib_blocks.py` draw from these
+caches' `index.json`, so re-running them now samples a far smaller pool and will not reproduce the
+existing sets -- use the stored manifests. The original indexes are kept as
+`index_full_2026-10-17.json` beside each `index.json`, and the deleted stems are listed in
+`outputs/cache_prune_2026-10-17/`; `build_cache.py` can re-stream any of them.
+
 Seeds come from the clip, never the loop index: `sc.clip_seed(seed, clip_id)` =
 `sha256(f"{seed}:{clip_id}")[:4]`. `run_eval.py` still derives them from the loop index, which is
 why a `--clip-offset` shard and a whole run disagree there; `run_baseline.py` exists partly to
