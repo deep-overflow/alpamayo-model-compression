@@ -274,6 +274,16 @@ existing sets -- use the stored manifests. The original indexes are kept as
 `index_full_2026-10-17.json` beside each `index.json`, and the deleted stems are listed in
 `outputs/cache_prune_2026-10-17/`; `build_cache.py` can re-stream any of them.
 
+**The local raw camera mirror is gone (2026-10-17).** `data/physicalai_av/camera/` held 350
+chunks x 4 cameras (front_wide, front_tele, cross_left, cross_right; 1,400 zips, 1.9 TB), all of
+them official-**train** chunks; it was deleted to free space (list in
+`outputs/camera_prune_2026-10-17/`). Every cache that was built from it exists, so no experiment
+lost data, but the three scripts that read the mirror directly (`build_ood_cache.py`,
+`eval_ood.py`, `fetch_scene_camera.py`) must now stream from the Hub. The shared HF cache's
+`datasets--nvidia--PhysicalAI-Autonomous-Vehicles` snapshot still has 1,400 links into that
+directory; they now dangle, which `huggingface_hub` reads as "not cached"
+(`try_to_load_from_cache` returns `None`), so loaders stream the member instead of failing.
+
 Seeds come from the clip, never the loop index: `sc.clip_seed(seed, clip_id)` =
 `sha256(f"{seed}:{clip_id}")[:4]`. `run_eval.py` still derives them from the loop index, which is
 why a `--clip-offset` shard and a whole run disagree there; `run_baseline.py` exists partly to
