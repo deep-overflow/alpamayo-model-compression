@@ -702,7 +702,10 @@ bash experiments/head_analysis/launch_alpasim_matrix.sh <n_scenes> <n_rollouts> 
   on Blackwell 2–3. Keep new configs on **Ada** drivers — moving one to Blackwell reintroduces the
   kernel confound the map exists to avoid. Launches are staggered 120 s so the first run populates
   the shared scene cache, which lives off-repo at `/mnt/nvme1n1/ad_vla/data/nre-artifacts` (a
-  symlink inside `data/` dangles in the containers).
+  symlink inside `data/` dangles in the containers). Since 2026-10-17 that path is itself a
+  relative symlink to `data/alpasim/nre-artifacts` (see Scene suites). Docker resolves a
+  symlinked bind-mount source on the host, so the launchers were left unchanged -- but no
+  closed-loop run has gone through the new layout yet, so check the first one's scene loading.
 - **`launch_alpasim_shards.sh` does not use that split** — it puts driver, renderer, physics and
   trafficsim of one shard all on the *same* card (`services.*.gpus=[$gpu]`). Every shipped
   150-scene result (`m2601_merged_*`) came from that path, four Ada cards, `OMP_NUM_THREADS=8`,
@@ -824,11 +827,15 @@ landing outside 0.42–0.58 means the setup is wrong, not the scenes.
 
 `public_2601` (913 scenes) and `public_2604` (1,606) share 159 scene_ids but **zero artifact
 uuids** — 2604 re-rendered everything under the 26.04 release. Results from the two are not
-comparable, they need separate `PREFIX`es, and the caches are separate
-(`data/alpasim/nre-artifacts` is the 1.7 TB 2601 tree; `data/nre-artifacts` is ours). The
-2026-08-11 matrix uses **2601** because 2604 would have needed ~100 GB of new downloads for 150
-scenes while 2601 was fully local; its 913 usdz are hardlinked into our cache (free, same
-filesystem, but `du` on that directory now double-counts).
+comparable, and they need separate `PREFIX`es. The 2026-08-11 matrix uses **2601** because 2604
+would have needed ~100 GB of new downloads for 150 scenes while 2601 was fully local.
+**There is one scene tree** (merged 2026-10-17): `data/alpasim/nre-artifacts` holds the 917 usdz
+(1.77 TB), `ego-hoods/` and every `scenesets/` entry, and `data/nre-artifacts` -- which our
+launchers, `closed-loop-viz/` and sangoh's / soowon's closed-loop scripts all name -- is a
+relative symlink to it. Before the merge the two paths were separate directories sharing the usdz
+as hardlinks, so deleting either one freed nothing; only `scenesets/` (7.8 GB) was ours alone.
+All links inside the tree are relative (`../../all-usdzs/<uuid>.usdz`), which is what let the
+scenesets move without rewriting; 36 of them were already dangling before the move.
 
 Scene selection is `sorted(artifacts, key=scene_id)[:N]`. scene_id is `clipgt-<UUID>`, so that is an
 unbiased draw *in expectation*, deterministic, and **nested** — raising N extends the same sample.
