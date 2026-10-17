@@ -189,7 +189,7 @@ nqa = sum(len(m["questions"]) for m in train)
 counts = np.array([cfg["num_clips"]] * 2 + [nqa] * 2)
 weights = np.array([float(a[:4].sum()), float(a[4:].sum()), float(b[:3].sum()), float(b[3:].sum())])
 masses = counts * weights
-val = pd.read_parquet("/mnt/nvme1n1/ad_vla/data/lingoqa/val.parquet")
+val = pd.read_parquet("/mnt/nvme1n1/ad_vla/data/lingoqa/val/val.parquet")
 record(
     "wl_mixture",
     {
