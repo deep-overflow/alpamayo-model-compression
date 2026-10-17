@@ -394,6 +394,12 @@ Output convention: every run writes `outputs/<exp_id>/` containing `config.json`
 `slim_cocsafe_r30` and `slim_integrated_mag` currently have **no `slim_state.pt`** — deleted
 2026-08-06 to reclaim space; their `slim_meta.json` is intact, so `make_slim.py` rebuilds them
 in ~1.5 h each.
+The same holds since 2026-10-17 for `slim_spg_s1_uni_nr`, `slim_act_h0_l35k`,
+`slim_pr_s1_dual_mlp70` and `slim_pr_s1_act_mlp70` (outputs copy and alpasim driver copy, one
+hardlinked inode each; masks kept in `<arm>_src/masks.npz`). That round also removed the
+`coc_importance/imp_s*of4.npz` shards (merged result and `records_*` kept), the layers-0–2 remnant
+of `tyr_supernet_u40` (its `metadata.json` / `summary.txt` copied out) and
+`l0red_h_calib100/sol/L00_m_H.pt`; the list is in `outputs/outputs_prune_2026-10-17/`.
 
 ## LLM-Pruner port (`experiments/llm_pruner/`, from 2026-09-06)
 
