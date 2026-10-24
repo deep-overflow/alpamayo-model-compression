@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoC 유무와 액션 품질 — OOD train + val</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6; --text: #29261B;
+    --text-muted: #6B6555; --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --warn: #eda100; --bad: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); margin: 0;
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem; }
+  .container { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, serif; font-size: 2.0rem; font-weight: 500;
+    line-height: 1.3; margin: 0 0 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.4rem; font-weight: 500;
+    margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  code { font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.86em;
+    background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto;
+    font-family: "Berkeley Mono", "SF Mono", Menlo, monospace; font-size: 0.84rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem;
+    border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  tbody tr:last-child td { border-bottom: none; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .sig { color: var(--bad); font-weight: 600; }
+  .ns { color: var(--text-muted); }
+  .callout { background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  .callout.good { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .lede { font-size: 1.05rem; color: var(--text-muted); }
+  figure { margin: 1.75rem 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+  figcaption { color: var(--text-muted); font-size: 0.84rem; margin-top: 0.6rem; }
+  ul, ol { padding-left: 1.3rem; } li { margin: 0.35rem 0; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 1.5rem 0; }
+  .kpi div { flex: 1 1 150px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem; }
+  .kpi .v { font-family: "Tiempos Headline", Georgia, serif; font-size: 1.5rem; display: block; }
+  .kpi .k { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head><body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Alpamayo 1.5 · CoC의 역할</div>
+  <h1>CoC를 쓰고 운전하는 것이 안 쓰고 운전하는 것보다 나은가 — OOD train + val</h1>
+  <div class="meta">
+    2026-10-07 · <code>nvidia/Alpamayo-1.5-10B</code> (무압축, rev <code>7aba8293</code>) ·
+    OOD 1,533클립 = train 1,271 + val 262 · 개루프, 조건 간 페어드(같은 클립·같은 디노이징 노이즈) ·
+    RTX 5880 Ada × 4, 약 9.5 GPU-시간 ·
+    <code>outputs/coc_ablation_ood/</code>
+  </div>
+</header>
+
+<p class="lede">
+릴리스 추론은 CoC(Chain-of-Causation) 한 문장을 먼저 쓰고 그 KV 캐시 위에서 액션을 디노이징한다.
+CoC를 쓰지 않고 바로 액션을 생성하면 궤적이 나빠지는가? <b>나빠지지 않는다.</b> OOD 1,533클립에서
+CoC를 뺀 세 가지 방식 모두 minADE@6이 rollout과 구별되지 않고(−0.016 ~ −0.022 m, CI가 전부 0 포함),
+점추정은 오히려 CoC가 없는 쪽이 약간 낮다. train과 val이 같은 결론이다. 다만 <b>사람이 쓴 정답 CoC</b>를
+넣으면 궤적이 좋아진다(CoC 없음 대비 −0.042 m, p=0.0009) — 즉 expert는 CoC를 읽을 수 있지만,
+모델이 스스로 쓴 CoC는 개루프 정확도에 보탬이 되지 않는다.
+</p>
+
+<div class="kpi">
+  <div><span class="v">−0.018 m</span><span class="k">CoC 제거 시 minADE@6 변화 [−0.049, +0.009]</span></div>
+  <div><span class="v">5 / 5 FAIL</span><span class="k">"CoC가 돕는다" 사전 등록 게이트</span></div>
+  <div><span class="v">−0.042 m</span><span class="k">정답 CoC vs CoC 없음 (@8, p=0.0009)</span></div>
+  <div><span class="v">p = 1.00</span><span class="k">궤적 전용 지시문에서 모델이 스스로 CoC를 건너뛸 확률</span></div>
+</div>
+
+<h2><span class="num">1</span>무엇을 비교했나</h2>
+
+<p>
+expert는 VLM의 층별 KV 캐시를 읽으므로, "CoC 유무"는 디노이징을 시작할 때 캐시에 무엇이 들어 있는가로
+정의된다. 네 조건 모두 같은 클립, 같은 seed(<code>clip_seed(42, clip_id) + k</code>, k=0..7)의
+디노이징 노이즈를 쓰므로 차이는 캐시 내용에서만 온다.
+</p>
+
+<table>
+<thead><tr><th>조건</th><th>VLM 시퀀스</th><th class="r">강제 토큰 NLL</th><th>성격</th></tr></thead>
+<tbody>
+<tr><td><code>rollout</code></td><td>prompt<code>…&lt;|cot_start|&gt;</code> + 모델이 쓴 CoC + <code>&lt;|cot_end|&gt;&lt;|traj_future_start|&gt;</code></td><td class="r">0.22</td><td>릴리스 추론 (기준)</td></tr>
+<tr><td><code>empty</code></td><td>같은 prompt + <code>&lt;|cot_end|&gt;&lt;|traj_future_start|&gt;</code></td><td class="r">8.77</td><td>CoC 0토큰. 사전 등록 주 조건</td></tr>
+<tr><td><code>skip</code></td><td>prompt에서 <code>&lt;|cot_start|&gt;</code> 제거 + <code>&lt;|traj_future_start|&gt;</code></td><td class="r">33.95</td><td>CoC 구획 자체가 없음</td></tr>
+<tr><td><code>trajprompt</code></td><td>지시문을 "output the future trajectory."로 교체, assistant는 <code>&lt;|traj_future_start|&gt;</code>로 시작</td><td class="r"><b>0.00</b></td><td><b>모델의 네이티브 no-CoC 모드</b></td></tr>
+</tbody></table>
+
+<div class="callout good">
+<p><b><code>trajprompt</code>는 추측한 포맷이 아니다.</b> 기본 지시문("output the chain-of-thought reasoning
+of the driving process, then output the future trajectory.")에서 모델은 assistant 턴 첫 토큰으로
+<code>&lt;|cot_start|&gt;</code>를 p=1.00으로 내고, 지시문을 "output the future trajectory."로 바꾸면
+<code>&lt;|traj_future_start|&gt;</code>를 p=1.00으로 낸다(8/8 클립에서 직접 확인, 1,533클립 전체에서
+해당 토큰 NLL 평균 0.00). 즉 이 체크포인트는 CoC 없이 액션으로 직행하는 모드를 학습했다.
+반대로 <code>empty</code>(NLL 8.8)와 <code>skip</code>(34.0)은 모델이 스스로는 가지 않는 시퀀스다.
+이 사실은 4클립 스모크 직후, 전체 결과를 보기 전에 계획서에 날짜와 함께 추가했다.</p>
+</div>
+
+<p>
+지표는 2026-08-19 프로토콜대로 minADE@6 · minFDE@6의 <b>평균</b>이 1차이고(k=8로 돌려 앞 6개로 축소),
+델타가 두꺼운 꼬리를 가지므로 중앙값과 Wilcoxon을 병기한다. Δ = (no-CoC) − (rollout)이며
+<b>Δ &gt; 0이면 CoC가 돕는다</b>는 뜻이다. CI는 클립 부트스트랩 95%(10,000회).
+rollout 조건은 같은 프로세스에서 다시 돌렸고, 저장된 <code>baseline_ada_ood</code>의 minADE@8과
+<b>1,533/1,533 비트 일치</b>했다.
+</p>
+
+<h2><span class="num">2</span>결과 (사실)</h2>
+
+<h3>2.1 조건별 절대값, minADE@6 / minFDE@6 (6.4 s)</h3>
+
+<table>
+<thead><tr><th>세트</th><th>조건</th><th class="r">minADE@6 평균</th><th class="r">중앙값</th><th class="r">minFDE@6 평균</th><th class="r">샘플평균 ADE</th><th class="r">ADE@1</th></tr></thead>
+<tbody>
+<tr><td rowspan="4"><b>전체</b> (1,533)</td><td><code>rollout</code></td><td class="r">0.9343</td><td class="r">0.5424</td><td class="r">2.3616</td><td class="r">2.0250</td><td class="r">2.0028</td></tr>
+<tr><td><code>empty</code></td><td class="r">0.9159</td><td class="r">0.5352</td><td class="r">2.3014</td><td class="r">2.0067</td><td class="r">1.9680</td></tr>
+<tr><td><code>skip</code></td><td class="r">0.9121</td><td class="r">0.5433</td><td class="r">2.2388</td><td class="r">2.0234</td><td class="r">1.9760</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r">0.9185</td><td class="r">0.5376</td><td class="r">2.2544</td><td class="r">2.0451</td><td class="r">2.0135</td></tr>
+<tr><td rowspan="4"><b>train</b> (1,271)</td><td><code>rollout</code></td><td class="r">0.9209</td><td class="r">0.5376</td><td class="r">2.3339</td><td class="r">2.0070</td><td class="r">1.9849</td></tr>
+<tr><td><code>empty</code></td><td class="r">0.9007</td><td class="r">0.5320</td><td class="r">2.2628</td><td class="r">1.9854</td><td class="r">1.9485</td></tr>
+<tr><td><code>skip</code></td><td class="r">0.8980</td><td class="r">0.5373</td><td class="r">2.2003</td><td class="r">2.0053</td><td class="r">1.9623</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r">0.9055</td><td class="r">0.5359</td><td class="r">2.2217</td><td class="r">2.0319</td><td class="r">2.0068</td></tr>
+<tr><td rowspan="4"><b>val</b> (262)</td><td><code>rollout</code></td><td class="r">0.9995</td><td class="r">0.5745</td><td class="r">2.4959</td><td class="r">2.1127</td><td class="r">2.0897</td></tr>
+<tr><td><code>empty</code></td><td class="r">0.9894</td><td class="r">0.5461</td><td class="r">2.4886</td><td class="r">2.1099</td><td class="r">2.0625</td></tr>
+<tr><td><code>skip</code></td><td class="r">0.9808</td><td class="r">0.5783</td><td class="r">2.4255</td><td class="r">2.1114</td><td class="r">2.0425</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r">0.9814</td><td class="r">0.5539</td><td class="r">2.4132</td><td class="r">2.1091</td><td class="r">2.0461</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::abs_by_split.png" alt="조건별 minADE@6">
+<figcaption>조건별 minADE@6 평균과 95% CI. 네 조건의 CI가 모든 세트에서 겹친다.</figcaption></figure>
+
+<h3>2.2 페어드 델타 (no-CoC − rollout), minADE@6</h3>
+
+<table>
+<thead><tr><th>세트</th><th>조건</th><th class="r">Δ 평균 [95% CI]</th><th class="r">Δ 중앙값</th><th class="r">Wilcoxon p</th><th class="r">0.05 m 넘게 악화 / 개선</th></tr></thead>
+<tbody>
+<tr><td rowspan="3"><b>전체</b></td><td><code>empty</code></td><td class="r ns">−0.0185 [−0.0489, +0.0086]</td><td class="r">+0.0018</td><td class="r">0.46</td><td class="r">32.6% / 31.6%</td></tr>
+<tr><td><code>skip</code></td><td class="r ns">−0.0222 [−0.0573, +0.0110]</td><td class="r">+0.0042</td><td class="r">0.63</td><td class="r">35.3% / 34.4%</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r ns">−0.0159 [−0.0520, +0.0177]</td><td class="r">−0.0021</td><td class="r">0.85</td><td class="r">35.0% / 36.0%</td></tr>
+<tr><td rowspan="3"><b>train</b></td><td><code>empty</code></td><td class="r ns">−0.0202 [−0.0559, +0.0113]</td><td class="r">+0.0008</td><td class="r">0.70</td><td class="r">31.3% / 31.2%</td></tr>
+<tr><td><code>skip</code></td><td class="r ns">−0.0229 [−0.0647, +0.0147]</td><td class="r">+0.0035</td><td class="r">0.81</td><td class="r">34.9% / 34.5%</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r ns">−0.0154 [−0.0581, +0.0232]</td><td class="r">−0.0025</td><td class="r">0.73</td><td class="r">34.2% / 35.9%</td></tr>
+<tr><td rowspan="3"><b>val</b></td><td><code>empty</code></td><td class="r ns">−0.0101 [−0.0618, +0.0371]</td><td class="r">+0.0060</td><td class="r">0.38</td><td class="r">38.9% / 33.6%</td></tr>
+<tr><td><code>skip</code></td><td class="r ns">−0.0188 [−0.0803, +0.0377]</td><td class="r">+0.0102</td><td class="r">0.54</td><td class="r">37.4% / 34.0%</td></tr>
+<tr><td><code>trajprompt</code></td><td class="r ns">−0.0182 [−0.0787, +0.0381]</td><td class="r">−0.0004</td><td class="r">0.79</td><td class="r">38.5% / 36.6%</td></tr>
+</tbody></table>
+
+<p>
+아홉 칸 전부 CI가 0을 포함하고, 아홉 칸 전부 평균의 부호가 음수(CoC가 없는 쪽이 낮음)다.
+다른 지표도 같다(전체 세트):
+</p>
+
+<table>
+<thead><tr><th>지표</th><th class="r"><code>empty</code></th><th class="r"><code>skip</code></th><th class="r"><code>trajprompt</code></th></tr></thead>
+<tbody>
+<tr><td>minFDE@6, 6.4 s</td><td class="r ns">−0.0602 [−0.1619, +0.0245]</td><td class="r">−0.1228 [−0.2380, −0.0155]</td><td class="r ns">−0.1072 [−0.2250, +0.0040]</td></tr>
+<tr><td>샘플평균 ADE (6개)</td><td class="r ns">−0.0184 [−0.0528, +0.0130]</td><td class="r ns">−0.0016 [−0.0421, +0.0367]</td><td class="r ns">+0.0201 [−0.0225, +0.0613]</td></tr>
+<tr><td>ADE@1 (단일 샘플)</td><td class="r ns">−0.0348 [−0.0719, +0.0002]</td><td class="r ns">−0.0268 [−0.0753, +0.0208]</td><td class="r ns">+0.0107 [−0.0392, +0.0603]</td></tr>
+<tr><td>minADE@6, 3.2 s</td><td class="r ns">+0.0008 [−0.0048, +0.0059]</td><td class="r ns">+0.0042 [−0.0030, +0.0110]</td><td class="r ns">+0.0040 [−0.0034, +0.0113]</td></tr>
+<tr><td>minADE@6, 1.6 s</td><td class="r ns">+0.0000 [−0.0010, +0.0010]</td><td class="r">+0.0016 [+0.0003, +0.0030]</td><td class="r ns">+0.0006 [−0.0008, +0.0021]</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::delta_by_horizon.png" alt="지평별 델타">
+<figcaption>지평별 Δ minADE@6. 점선은 이 레포의 결정 임계 0.05 m. 1.6 s · 3.2 s에서는 차이가 수 mm이고,
+6.4 s에서만 CI가 넓어지며 중심은 0 아래다.</figcaption></figure>
+
+<h3>2.3 사전 등록 게이트</h3>
+
+<table>
+<thead><tr><th>게이트</th><th>기준</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>G1</td><td><code>empty</code> Δ의 CI 하한 &gt; 0, train·val 둘 다</td><td class="sig">FAIL (하한 −0.056 / −0.062)</td></tr>
+<tr><td>G2</td><td><code>empty</code> Δ 평균 ≥ 0.05 m, 전체</td><td class="sig">FAIL (−0.0185)</td></tr>
+<tr><td>G3</td><td><code>skip</code>이 같은 부호로 CI가 0 배제</td><td class="sig">FAIL (부호는 같으나 CI가 0 포함)</td></tr>
+<tr><td>G1′ / G2′</td><td>같은 규칙을 네이티브 모드 <code>trajprompt</code>에 (스모크 후·전체 결과 전 추가)</td><td class="sig">FAIL / FAIL</td></tr>
+</tbody></table>
+
+<p>
+계획서의 판정 규칙대로 "<b>개루프 궤적 정확도에는 차이 없음</b>"이다. 동등성으로 읽으면 <code>empty</code>의
+CI [−0.049, +0.009]는 ±0.05 m 안에 완전히 들어오고, <code>skip</code>(하한 −0.057)과
+<code>trajprompt</code>(하한 −0.052)는 아래쪽, 즉 "CoC가 없는 쪽이 더 좋다" 방향으로만 살짝 벗어난다.
+어느 조건에서도 "CoC를 빼면 0.05 m 이상 나빠진다"는 배제된다(상한 +0.009 / +0.011 / +0.018).
+</p>
+
+<h3>2.4 클립 단위로는 움직이지만 방향이 없다</h3>
+
+<table>
+<thead><tr><th>두 컨텍스트 (같은 노이즈)</th><th class="r">|Δ minADE@6| 중앙값</th><th class="r">0.05 m 넘게 달라진 클립</th></tr></thead>
+<tbody>
+<tr><td><code>rollout</code> vs <code>empty</code></td><td class="r">0.0857</td><td class="r">64.2%</td></tr>
+<tr><td><code>rollout</code> vs <code>trajprompt</code></td><td class="r">0.1100</td><td class="r">71.0%</td></tr>
+<tr><td><code>empty</code> vs <code>skip</code> (토큰 하나 차이, 둘 다 CoC 없음)</td><td class="r">0.0706</td><td class="r">59.0%</td></tr>
+<tr><td><code>empty</code> vs <code>trajprompt</code> (둘 다 CoC 없음)</td><td class="r">0.0885</td><td class="r">64.8%</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::delta_hist.png" alt="클립별 델타 분포">
+<figcaption>클립별 Δ 분포(로그 축, ±1.5 m에서 절단). 세 조건 모두 0을 중심으로 대칭이다.</figcaption></figure>
+
+<h3>2.5 정답 CoC를 넣으면 (저장된 값, k=8)</h3>
+
+<p>
+GT CoC teacher-forcing은 프로토콜상 새로 돌리지 않았고, 같은 클립·같은 seed·같은 카드로 측정해 둔
+<code>baseline_ada_ood</code>의 <code>minADE_tf</code>(@8만 저장됨)를 clip id로 붙였다. 양쪽을 @8로 맞춘 값이다.
+</p>
+
+<table>
+<thead><tr><th>세트</th><th class="r">CoC 없음 (<code>empty</code>)</th><th class="r">자기 CoC (<code>rollout</code>)</th><th class="r">정답 CoC</th><th class="r">정답 − 자기</th><th class="r">정답 − 없음</th></tr></thead>
+<tbody>
+<tr><td>전체 (1,533)</td><td class="r">0.8205</td><td class="r">0.8457</td><td class="r"><b>0.7781</b></td><td class="r">−0.0676 [−0.1132, −0.0257] p=0.0012</td><td class="r">−0.0424 [−0.0756, −0.0111] p=0.0009</td></tr>
+<tr><td>train (1,271)</td><td class="r">0.8086</td><td class="r">0.8301</td><td class="r"><b>0.7611</b></td><td class="r">−0.0690 [−0.1159, −0.0271] p=0.0022</td><td class="r">−0.0475 [−0.0840, −0.0154] p=0.0026</td></tr>
+<tr><td>val (262)</td><td class="r">0.8785</td><td class="r">0.9214</td><td class="r"><b>0.8609</b></td><td class="r ns">−0.0605 [−0.2012, +0.0787] p=0.26</td><td class="r ns">−0.0176 [−0.1095, +0.0931] p=0.17</td></tr>
+</tbody></table>
+
+<h3>2.6 하위집단 (탐색용, 게이트 아님)</h3>
+
+<figure><img src="PLOT::coc::delta_by_bucket.png" alt="버킷별 델타">
+<figcaption>주행 버킷별 Δ. 네 버킷 모두 세 조건의 CI가 0을 포함한다.</figcaption></figure>
+
+<table>
+<thead><tr><th>집단</th><th class="r">n</th><th class="r">rollout minADE@6</th><th class="r">Δ <code>empty</code> [95% CI]</th><th class="r">Δ <code>trajprompt</code></th></tr></thead>
+<tbody>
+<tr><td>decel_stop</td><td class="r">321</td><td class="r">1.023</td><td class="r ns">+0.0005 [−0.071, +0.060]</td><td class="r">−0.0137</td></tr>
+<tr><td>turn</td><td class="r">120</td><td class="r">1.355</td><td class="r ns">−0.0267 [−0.072, +0.019]</td><td class="r">+0.0223</td></tr>
+<tr><td>accel</td><td class="r">266</td><td class="r">0.946</td><td class="r ns">−0.0248 [−0.128, +0.041]</td><td class="r">−0.0066</td></tr>
+<tr><td>cruise</td><td class="r">826</td><td class="r">0.835</td><td class="r ns">−0.0226 [−0.059, +0.012]</td><td class="r">−0.0252</td></tr>
+<tr><td>CoC 짧음 (≤15토큰)</td><td class="r">624</td><td class="r">0.823</td><td class="r ns">+0.0062 [−0.026, +0.036]</td><td class="r">−0.0241</td></tr>
+<tr><td>CoC 중간 (≤17)</td><td class="r">496</td><td class="r">0.948</td><td class="r ns">+0.0082 [−0.022, +0.039]</td><td class="r">+0.0649</td></tr>
+<tr><td>CoC 김</td><td class="r">413</td><td class="r">1.087</td><td class="r">−0.0877 [−0.186, −0.006]</td><td class="r">−0.1005</td></tr>
+<tr><td>생성 CoC 첫 어절 = GT 첫 어절</td><td class="r">155</td><td class="r">0.604</td><td class="r ns">+0.0297 [−0.017, +0.084]</td><td class="r">+0.0376</td></tr>
+<tr><td>생성 CoC 첫 어절 ≠ GT 첫 어절</td><td class="r">1,378</td><td class="r">0.971</td><td class="r ns">−0.0239 [−0.058, +0.007]</td><td class="r">−0.0219</td></tr>
+</tbody></table>
+
+<p>
+이벤트 클러스터 9종(n≥20) 중 <code>empty</code> Δ의 CI가 0을 배제하는 것은 없다. 생성된 CoC는 평균 17.2토큰
+(중앙값 16), 퇴화율 0.59%(9/1,533)이며, 이 실행 경로(sdpa, 배치 1)에서 <code>generate()</code>는 클립당
+평균 1.46 s였다(prefill + CoC decode; latency 벤치마크가 아님).
+</p>
+
+<h2><span class="num">3</span>해석 (의견)</h2>
+
+<div class="callout">
+<p><b>모델이 스스로 쓴 CoC는 OOD 개루프 궤적을 개선하지 않는다.</b> 세 가지 제거 방식이 서로 다른
+교란을 갖는데도(<code>empty</code>·<code>skip</code>은 분포 밖 시퀀스, <code>trajprompt</code>는 분포 안이지만
+지시문이 다름) 같은 답을 내고, 독립인 두 split에서 재현된다. 분포 밖 시퀀스라서 no-CoC가 불리했을
+것이라는 사전 우려는 반대 방향으로 해소됐다 — 불리한 조건에서도 나빠지지 않았다.</p>
+</div>
+
+<ul>
+<li><b>expert가 CoC를 못 읽어서가 아니다.</b> 정답 CoC는 CoC 없음보다 −0.042 m, 자기 CoC보다 −0.068 m 좋다
+(전체·train에서 유의, val은 n=262라 방향만 같음). 순서는 <b>자기 CoC(0.846) &gt; CoC 없음(0.821) &gt; 정답 CoC(0.778)</b>
+이다. 캐시의 CoC 토큰은 액션에 영향을 주는 통로이고(pathway map: CoC 토큰이 prompt text보다 43배 인과적으로
+조밀), 그 통로에 실린 내용이 정확할 때만 이득이다.</li>
+<li><b>정답 CoC의 이득은 상한으로 읽어야 한다.</b> GT CoC는 이벤트를 아는 사람이 사후에 쓴 문장이라 미래
+행동에 대한 정보("Stop at the stop sign…")가 새어 들어간다. −0.042 m는 "완벽한 추론이 주는 이득"이 아니라
+"완벽한 추론 + 정답 유출"의 합이다.</li>
+<li><b>자기 CoC가 중립~약한 손해인 이유(가설).</b> OOD에서 모델의 CoC는 틀릴 때가 많고, 틀린 문장은
+정답 문장이 주는 이득을 상쇄한다. 첫 어절 일치 집단(+0.030)과 불일치 집단(−0.024)의 부호가 갈리는 것이
+이와 일관되지만 둘 다 CI가 0을 포함하고, 첫 어절 일치는 거친 대리지표다(일치율 10.1%는 GT 문장이
+자유 서술이기 때문). 확정하려면 CoC 정확도를 judge로 채점해 층화해야 한다.</li>
+<li><b>클립 단위 변동은 CoC의 효과로 읽으면 안 된다.</b> CoC 유무로 64%의 클립이 0.05 m 넘게 달라지지만,
+둘 다 CoC가 없고 토큰 하나만 다른 <code>empty</code>와 <code>skip</code>도 59%가 그만큼 달라진다. 변동의 대부분은
+"캐시가 조금이라도 바뀌면 샘플이 달라진다"는 민감도이고, CoC 내용에 귀속할 수 있는 부분은 그 위의 작은
+차이(중앙값 0.086 대 0.071)뿐이다.</li>
+<li><b>"CoC가 긴 클립에서는 CoC가 해롭다"(−0.088)는 믿지 말 것.</b> 그 집단은 rollout 조건 자신의 속성으로
+골랐고(긴 CoC ↔ 어려운 클립, rollout 1.087), 한 arm의 속성으로 뽑은 하위집단에서 그 arm이 불리하게 보이는 것은
+이 레포가 여러 번 겪은 선택 편향의 형태다. 스무 개 가까운 탐색 집단 중 하나가 5%에서 걸린 것이기도 하다.</li>
+<li><b>기존 결과와의 정합.</b> soowon 분석의 "CoC swap ≤0.03 m, GT CoC −0.056"과 같은 크기대이고, 이 레포가
+반복해 본 "CoC 건강도는 주행 품질의 대리지표가 아니다"(빈 출력으로 붕괴한 Týr 계열이 폐루프에서 baseline을
+이김, <code>dual+h4</code>는 퇴화 0.0%인데 최악)의 무압축 모델 버전이다. 빈 CoC는 무압축 모델에서도 궤적을
+해치지 않는다.</li>
+</ul>
+
+<h3>이 결과가 말하지 않는 것</h3>
+
+<ul>
+<li><b>개루프다.</b> 6.4초 단발 예측의 GT 대비 오차만 본다. 폐루프에서 CoC가 재계획 간 일관성이나
+정지 준수에 기여하는지는 측정하지 않았다. 이 레포에서 개루프와 폐루프가 엇갈린 사례가 여섯 번 있다.</li>
+<li><b>무압축 모델 하나, OOD 세트 하나다.</b> in-distribution(val500 / test500)이나 프루닝된 arm에서는
+다를 수 있다. 특히 프루닝 arm은 CoC가 더 자주 틀리므로 no-CoC가 더 유리할 가능성이 있다.</li>
+<li><b>CoC의 가치가 궤적뿐인 것은 아니다.</b> 설명 가능성, VQA류 능력, 학습 시 보조 신호로서의 역할은
+이 실험의 범위 밖이다. "추론 시 CoC를 쓰는 것"이 궤적에 무익하다는 것과 "CoC로 학습하는 것"이 무익하다는
+것은 다른 주장이다.</li>
+<li><b>GT CoC 단은 @8 저장값이다.</b> 2.5절은 1차 지표(@6)가 아니다. 다만 같은 클립·seed·카드이고
+rollout이 비트 단위로 재현되므로 페어링은 정확하다.</li>
+</ul>
+
+<h3>다음 단계 제안</h3>
+
+<ol>
+<li><b>폐루프에서 같은 비교</b> — alpasim 드라이버에 <code>trajprompt</code> 모드를 붙이면(지시문 한 줄 교체,
+모델이 스스로 CoC를 건너뜀) CoC decode 시간을 통째로 없앤 arm이 된다. 개루프에서 손해가 없으므로
+150씬 1회의 가치가 있다. 이것이 CoC decode 축을 "가속 대상"이 아니라 "제거 대상"으로 볼 수 있는지 정한다.</li>
+<li><b>in-distribution 재현</b> — val500 / test500에서 같은 러너(<code>--manifest</code>만 일반화하면 됨), 약 3 GPU-시간.</li>
+<li><b>CoC 정확도 층화</b> — (gt_coc, gen_coc) judge 채점으로 "맞는 CoC는 돕고 틀린 CoC는 해친다"를 직접 검정.</li>
+</ol>
+
+<h2><span class="num">4</span>재현</h2>
+
+<pre><code># 평가 (Ada 4장, 약 2.4시간)
+.venv/bin/python experiments/evaluation/launch_coc_ablation.py --gpus 4 5 6 7
+# 분석 → outputs/coc_ablation_ood/{metrics.json, summary.txt, plots/}
+.venv/bin/python experiments/evaluation/analyze_coc_ablation.py
+</code></pre>
+
+<p>
+계획서와 사전 등록 게이트: <code>plans/2026-10-07_coc-vs-nococ-ood.md</code>.
+러너 <code>experiments/evaluation/run_coc_ablation.py</code>는 <code>run_baseline.py</code>의 rollout 조건을
+그대로 재사용하고 no-CoC 시퀀스 세 개를 같은 <code>eval_config_samples</code>에 넣는다.
+</p>
+
+<h2><span class="num">5</span>추가 분석 (2026-10-08): CoC가 GT에 가까울수록 CoC가 더 돕는가</h2>
+
+<p>
+3절의 가설("맞는 CoC는 돕고 틀린 CoC는 해친다")을 직접 검정했다. 생성 CoC와 GT CoC의 유사도를 세 가지로
+재고, Δ = minADE@6(<code>trajprompt</code>) − minADE@6(<code>rollout</code>)(&gt;0이면 CoC가 도움)과의 관계를 봤다.
+새 주행 평가는 없고 저장된 1,533행을 썼다. 가설·판정 기준·대조는 결과를 보기 전에 계획서에 적었다.
+</p>
+
+<table>
+<thead><tr><th>척도</th><th>정의</th><th class="r">자기 CoC</th><th class="r">다른 클립의 CoC</th><th class="r">GT 자신</th></tr></thead>
+<tbody>
+<tr><td>judge 행동</td><td rowspan="2">로컬 <code>Qwen/Qwen3-8B</code>가 행동 일치·원인 일치를 각각 0/1/2로 채점(답 토큰 확률의 기댓값). 합(0–4)이 주 척도</td><td class="r">1.240</td><td class="r">0.656</td><td class="r">2.000</td></tr>
+<tr><td>judge 원인</td><td class="r">1.056</td><td class="r">0.341</td><td class="r">2.000</td></tr>
+<tr><td>임베딩</td><td><code>all-mpnet-base-v2</code> 평균 풀링 코사인</td><td class="r">0.596</td><td class="r">0.488</td><td class="r">1.000</td></tr>
+<tr><td>NLL</td><td>저장된 <code>nll_gtcoc</code>의 부호 반전. 생성 문장이 아니라 클립·모델의 속성</td><td class="r" colspan="3">평균 −3.01</td></tr>
+</tbody></table>
+
+<p>
+두 텍스트 척도는 자기 클립의 CoC와 다른 클립의 CoC를 AUC 0.73–0.76으로 구분한다. 척도 간 순위상관은
+judge–임베딩 +0.65, judge–NLL +0.33, 임베딩–NLL +0.34다. judge 합이 3.5를 넘는(완전 일치) 클립이 39.0%다.
+</p>
+
+<h3>5.1 사전 등록 판정: 유사도는 CoC의 이득을 예측하지 못한다</h3>
+
+<table>
+<thead><tr><th>척도</th><th class="r">H1: ρ(S, Δ) [95% CI]</th><th class="r">난이도 통제 편상관</th><th class="r">음성 대조 ρ(S, empty − trajprompt)</th><th class="r">양성 대조 ρ(S, GT − rollout)</th></tr></thead>
+<tbody>
+<tr><td>judge (합)</td><td class="r ns">−0.006 [−0.053, +0.041]</td><td class="r">+0.026</td><td class="r ns">+0.017 [−0.031, +0.065]</td><td class="r ns">+0.014 [−0.036, +0.062]</td></tr>
+<tr><td>judge 행동</td><td class="r ns">+0.003 [−0.045, +0.050]</td><td class="r">+0.035</td><td class="r ns">+0.014 [−0.034, +0.065]</td><td class="r ns">+0.010 [−0.042, +0.059]</td></tr>
+<tr><td>judge 원인</td><td class="r ns">−0.013 [−0.060, +0.034]</td><td class="r">+0.018</td><td class="r ns">+0.020 [−0.027, +0.067]</td><td class="r ns">+0.015 [−0.033, +0.066]</td></tr>
+<tr><td>임베딩</td><td class="r ns">−0.034 [−0.086, +0.015]</td><td class="r">−0.014</td><td class="r ns">+0.049 [−0.001, +0.096]</td><td class="r ns">−0.010 [−0.062, +0.040]</td></tr>
+<tr><td>NLL</td><td class="r ns">+0.010 [−0.039, +0.064]</td><td class="r">+0.014</td><td class="r ns">+0.020 [−0.031, +0.071]</td><td class="r ns">−0.038 [−0.085, +0.014]</td></tr>
+</tbody></table>
+
+<p>
+<b>H1은 세 척도 모두 불성립</b>이다. CI 폭이 ±0.05라 |ρ| &gt; 0.09인 관계는 배제된다. train·val로 나눠도,
+minFDE로 바꿔도, <code>empty</code> 기준으로 바꿔도 같다(전부 CI가 0 포함). 음성 대조는 순위 기준으로 깨끗하다.
+</p>
+
+<h3>5.2 rollout이 이긴 클립과 진 클립의 유사도 (H2)</h3>
+
+<table>
+<thead><tr><th>집단</th><th class="r">n</th><th class="r">judge (0–4)</th><th class="r">judge 행동</th><th class="r">judge 원인</th><th class="r">임베딩</th><th class="r">−NLL</th></tr></thead>
+<tbody>
+<tr><td>rollout이 이김 (Δ &gt; +0.05)</td><td class="r">536</td><td class="r">2.278</td><td class="r">1.240</td><td class="r">1.038</td><td class="r">0.589</td><td class="r">−3.002</td></tr>
+<tr><td>동률 (|Δ| ≤ 0.05)</td><td class="r">445</td><td class="r">2.305</td><td class="r">1.232</td><td class="r">1.073</td><td class="r">0.598</td><td class="r">−3.040</td></tr>
+<tr><td>rollout이 짐 (Δ &lt; −0.05)</td><td class="r">552</td><td class="r">2.306</td><td class="r">1.246</td><td class="r">1.060</td><td class="r">0.602</td><td class="r">−2.980</td></tr>
+<tr><td>이김 − 짐</td><td class="r"></td><td class="r ns">−0.028</td><td class="r ns">−0.006</td><td class="r ns">−0.022</td><td class="r ns">−0.013</td><td class="r ns">−0.022</td></tr>
+<tr><td>Mann-Whitney p</td><td class="r"></td><td class="r">0.46</td><td class="r">0.79</td><td class="r">0.26</td><td class="r">0.17</td><td class="r">0.83</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::sim_by_winner.png" alt="승패별 유사도">
+<figcaption>rollout이 trajprompt를 이긴 클립, 비긴 클립, 진 클립의 GT 유사도. 세 척도 모두 차이가 없다.</figcaption></figure>
+
+<h3>5.3 유사도 5분위별 (judge 기준)</h3>
+
+<table>
+<thead><tr><th>judge 5분위</th><th class="r">n</th><th class="r">rollout minADE@6</th><th class="r">Δ trajprompt − rollout [95% CI]</th><th class="r">GT − rollout (@8)</th><th class="r">GT − trajprompt (@8)</th></tr></thead>
+<tbody>
+<tr><td>Q1 (0.00–0.62, 가장 다름)</td><td class="r">307</td><td class="r">1.112</td><td class="r ns">−0.046 [−0.135, +0.033]</td><td class="r">−0.140</td><td class="r">−0.083</td></tr>
+<tr><td>Q2 (0.62–1.38)</td><td class="r">307</td><td class="r">1.102</td><td class="r ns">+0.016 [−0.083, +0.107]</td><td class="r">−0.124</td><td class="r">−0.086</td></tr>
+<tr><td>Q3 (1.38–3.33)</td><td class="r">306</td><td class="r">0.962</td><td class="r ns">−0.062 [−0.167, +0.021]</td><td class="r">−0.047</td><td class="r">+0.024</td></tr>
+<tr><td>Q4 (3.34–4.00)</td><td class="r">307</td><td class="r">0.753</td><td class="r ns">+0.009 [−0.036, +0.054]</td><td class="r">−0.036</td><td class="r">−0.057</td></tr>
+<tr><td>Q5 (4.00, 완전 일치)</td><td class="r">306</td><td class="r">0.743</td><td class="r ns">+0.003 [−0.052, +0.060]</td><td class="r">+0.010</td><td class="r">+0.005</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::coc::sim_dose_response.png" alt="유사도 5분위별 델타">
+<figcaption>유사도 5분위별 Δ(파랑)와 음성 대조(회색). 세 척도 모두 Δ가 유사도에 따라 올라가지 않는다.</figcaption></figure>
+
+<h3>5.4 사후 분석 (평균 기반)</h3>
+
+<p>
+등록한 통계량은 순위상관인데, 이 델타는 꼬리가 두껍고 프로토콜의 1차 통계는 평균이다. 5분위 평균에서
+"GT − rollout" 열이 단조로 보여, 평균 기반 기울기(유사도 1 SD당)와 Q5 − Q1 차이를 결과를 본 뒤에 추가했다.
+</p>
+
+<table>
+<thead><tr><th>결과 변수</th><th class="r">judge 기울기 [95% CI]</th><th class="r">judge Q5 − Q1</th><th class="r">임베딩 기울기</th><th class="r">NLL 기울기</th></tr></thead>
+<tbody>
+<tr><td>Δ trajprompt − rollout (주 질문)</td><td class="r ns">+0.009 [−0.022, +0.042]</td><td class="r ns">+0.048 [−0.050, +0.155]</td><td class="r ns">−0.024 [−0.059, +0.010]</td><td class="r ns">+0.020 [−0.010, +0.053]</td></tr>
+<tr><td>음성 대조 empty − trajprompt</td><td class="r">+0.020 [+0.003, +0.037]</td><td class="r ns">+0.022 [−0.025, +0.073]</td><td class="r">+0.019 [+0.002, +0.037]</td><td class="r ns">−0.007 [−0.025, +0.010]</td></tr>
+<tr><td>양성 대조 GT − rollout</td><td class="r">+0.057 [+0.018, +0.105]</td><td class="r">+0.150 [+0.030, +0.290]</td><td class="r ns">+0.001 [−0.039, +0.041]</td><td class="r ns">−0.017 [−0.056, +0.021]</td></tr>
+<tr><td>GT − trajprompt</td><td class="r ns">+0.032 [−0.002, +0.075]</td><td class="r ns">+0.088 [−0.019, +0.219]</td><td class="r ns">+0.012 [−0.019, +0.043]</td><td class="r">−0.032 [−0.062, −0.001]</td></tr>
+</tbody></table>
+
+<h3>5.5 해석 (의견)</h3>
+
+<div class="callout">
+<p><b>CoC의 정확도는 CoC를 쓰는 것의 이득을 예측하지 못한다.</b> judge가 GT와 완전히 일치한다고 본 20%의
+클립에서도 CoC를 쓴 쪽과 안 쓴 쪽은 같다(+0.003 [−0.052, +0.060]). 3절에서 세운 "맞는 CoC는 돕는다"는
+가설은 지지되지 않는다.</p>
+</div>
+
+<ul>
+<li><b>틀린 CoC를 정답으로 바꾸면 좋아진다는 것은 judge에서만, 평균 기준으로만 보인다(사후).</b> 자기 CoC가
+GT와 가장 다른 클립에서 GT로 바꾸면 −0.14 m, 완전 일치 클립에서는 0이다(Q5 − Q1 +0.150 [+0.030, +0.290]).
+임베딩과 NLL에서는 보이지 않고, 등록한 순위상관으로는 세 척도 모두 보이지 않는다. 여러 검정 중 하나이므로
+확정으로 읽으면 안 된다.</li>
+<li><b>두 결과를 함께 읽으면(가설):</b> 모델이 맞는 CoC를 쓸 수 있는 클립에서는 쓰지 않아도 같은 궤적을 낸다.
+GT CoC가 이득을 주는 곳은 모델이 스스로 맞는 CoC를 쓰지 못한 클립, 즉 GT 문장이 모델에게 없던 정보를
+주는 곳이다. 이 모델에서 자기 CoC는 궤적의 원인이라기보다 같은 내부 상태의 또 다른 출력처럼 행동한다.</li>
+<li><b>음성 대조가 평균 기준으로는 완전히 깨끗하지 않다.</b> judge와 임베딩의 기울기가 +0.02 m로 0을 살짝
+배제한다(둘 다 CoC가 없는 조건 사이인데도). 크기가 주 질문의 기울기(+0.009)보다 크므로, 유사도 척도가
+클립 속성을 일부 재고 있다는 뜻이고, 주 질문에서 양의 기울기가 나왔더라도 CoC 효과로 귀속할 수 없었다.</li>
+<li><b>한계.</b> 클립 간 상관이다. 유사도가 높은 클립은 애초에 쉽다(rollout 0.743 대 1.112). judge는 관대한
+편이다("Gentle deceleration approaching the intersection…"과 "Keep distance to the lead scooter…"에 2/2).
+CoC는 클립당 한 번만 샘플링했다. 결정적인 검정은 같은 클립에서 CoC를 여러 개 샘플링해 클립 내부에서
+유사도와 궤적을 비교하는 것이다.</li>
+</ul>
+
+<h3>5.6 더 큰 judge로 재채점 (Qwen3-32B, 같은 프롬프트)</h3>
+
+<p>
+5.5절의 한계 중 "judge가 관대하다"를 확인하려고, 프롬프트는 그대로 두고 judge만
+<code>Qwen/Qwen3-32B</code>로 바꿔 1,533쌍을 다시 채점했다(Blackwell 4장, 복제본 2개).
+</p>
+
+<table>
+<thead><tr><th>항목</th><th class="r">Qwen3-8B</th><th class="r">Qwen3-32B</th></tr></thead>
+<tbody>
+<tr><td>자기 CoC: 행동 / 원인 평균</td><td class="r">1.240 / 1.056</td><td class="r">0.981 / 0.899</td></tr>
+<tr><td>다른 클립의 CoC: 행동 / 원인 평균</td><td class="r">0.656 / 0.341</td><td class="r">0.349 / 0.231</td></tr>
+<tr><td>자기 대 다른 클립 AUC: 행동 / 원인</td><td class="r">0.728 / 0.758</td><td class="r">0.761 / 0.760</td></tr>
+<tr><td>합이 3.5 초과(완전 일치)인 클립</td><td class="r">39.0%</td><td class="r">24.4%</td></tr>
+<tr><td>H1: ρ(judge, Δ) [95% CI]</td><td class="r ns">−0.006 [−0.053, +0.041]</td><td class="r ns">−0.008 [−0.059, +0.039]</td></tr>
+<tr><td>H2: 이긴 클립 − 진 클립의 judge 점수 (p)</td><td class="r ns">−0.028 (0.46)</td><td class="r ns">−0.060 (0.47)</td></tr>
+<tr><td>최상위 5분위의 Δ [95% CI]</td><td class="r ns">+0.003 [−0.052, +0.060]</td><td class="r ns">+0.023 [−0.030, +0.081]</td></tr>
+<tr><td>최하위 5분위의 Δ [95% CI]</td><td class="r ns">−0.046 [−0.135, +0.033]</td><td class="r ns">+0.019 [−0.047, +0.086]</td></tr>
+<tr><td>사후: GT − rollout의 Q5 − Q1 [95% CI]</td><td class="r">+0.150 [+0.030, +0.290]</td><td class="r">+0.102 [+0.009, +0.215]</td></tr>
+<tr><td>사후: 음성 대조 기울기 [95% CI]</td><td class="r">+0.020 [+0.003, +0.037]</td><td class="r ns">+0.016 [−0.002, +0.034]</td></tr>
+</tbody></table>
+
+<p>
+두 judge의 합 점수 순위상관은 +0.90이고, 반올림한 점수가 같은 비율은 행동 66.6%, 원인 76.3%다.
+32B가 더 엄격하다. 5.5절에서 예로 든 쌍("Gentle deceleration approaching the intersection…" 대
+"Keep distance to the lead scooter…")은 2.0 / 2.0에서 0.85 / 0.51로 내려갔다.
+</p>
+
+<figure><img src="PLOT::coc::sim_dose_response_q32.png" alt="Qwen3-32B judge 5분위별 델타">
+<figcaption>Qwen3-32B judge 기준 5분위별 Δ. 유사도에 따른 상승이 없다. 가운데 5분위 하나가 0 아래로 내려가지만
+(−0.093 [−0.205, −0.011]) 양옆과 이어지지 않는 한 칸이다.</figcaption></figure>
+
+<ul>
+<li><b>주 결론은 그대로다.</b> 더 엄격한 judge가 완전 일치로 본 306클립에서도 CoC를 쓴 쪽이 낫지 않다.</li>
+<li><b>"틀린 CoC를 GT로 바꾸면 좋아진다"는 사후 결과가 재현된다.</b> GT − rollout이 5분위를 따라
+−0.106, −0.090, −0.082, −0.056, −0.004로 단조다. 다만 두 judge는 같은 계열 모델이고 서로 +0.90으로
+상관하므로 독립적인 재현은 아니다.</li>
+<li><b>남은 한계는 같다.</b> 사람 채점과의 대조가 없고, 클립 간 상관이다.</li>
+</ul>
+
+<p>
+재현: <code>score_coc_similarity.py --gpu 0</code> → <code>outputs/coc_ablation_ood/coc_similarity.json</code>,
+<code>analyze_coc_similarity.py</code> → <code>metrics_similarity.json</code>, <code>summary_similarity.txt</code>.
+</p>
+
+<h2><span class="num">6</span>CoC 교체 실험 (2026-10-08): 틀린 CoC를 정답으로 바꾸면 얼마나 좋아지는가</h2>
+
+<p>
+5절의 "GT로 바꾸면 좋아진다"는 예전 저장값(@8)을 붙인 사후 결과였다. 여기서는 같은 시드로 CoC를 직접
+바꿔 넣어 @6로 쟀다. 내용과 문체를 분리하려고 네 가지 CoC를 넣었다. 짝 클립은 고정 배열이고, 조건·집단
+정의·질문은 실행 전에 계획서에 적었다. GT CoC 조건은 저장값을 1,533/1,533 재현했다.
+</p>
+
+<table>
+<thead><tr><th>조건</th><th>캐시에 넣은 CoC</th><th>내용</th><th>문체</th></tr></thead>
+<tbody>
+<tr><td><code>trajprompt</code></td><td>없음 (네이티브 no-CoC 모드)</td><td>—</td><td>—</td></tr>
+<tr><td><code>rollout</code></td><td>모델이 이 클립에서 쓴 CoC</td><td>모델의 판단</td><td>모델</td></tr>
+<tr><td><code>gt</code></td><td>이 클립의 GT CoC</td><td>정답</td><td>사람</td></tr>
+<tr><td><code>gt_swap</code></td><td>다른 클립의 GT CoC</td><td>무관</td><td>사람</td></tr>
+<tr><td><code>gen_swap</code></td><td>다른 클립에서 모델이 쓴 CoC</td><td>무관</td><td>모델</td></tr>
+</tbody></table>
+
+<p>
+클립은 자기 CoC가 얼마나 맞는지로 나눴다(Qwen3-32B judge 합 0–4, 실행 전 고정):
+<b>틀림</b> ≤ 1.0 (589클립), <b>부분</b> (570), <b>맞음</b> &gt; 3.5 (374).
+</p>
+
+<h3>6.1 조건별 minADE@6 / minFDE@6 평균 (m)</h3>
+
+<table>
+<thead><tr><th>집단</th><th class="r">n</th><th class="r">CoC 없음</th><th class="r">자기 CoC</th><th class="r">GT CoC</th><th class="r">다른 클립 GT</th><th class="r">다른 클립 자기 CoC</th></tr></thead>
+<tbody>
+<tr><td>전체</td><td class="r">1,533</td><td class="r">0.919 / 2.254</td><td class="r">0.934 / 2.362</td><td class="r"><b>0.863 / 2.156</b></td><td class="r">0.970 / 2.506</td><td class="r">0.952 / 2.440</td></tr>
+<tr><td>train</td><td class="r">1,271</td><td class="r">0.906 / 2.222</td><td class="r">0.921 / 2.334</td><td class="r"><b>0.842 / 2.083</b></td><td class="r">0.958 / 2.479</td><td class="r">0.933 / 2.393</td></tr>
+<tr><td>val</td><td class="r">262</td><td class="r">0.981 / 2.413</td><td class="r">1.000 / 2.496</td><td class="r">0.966 / 2.508</td><td class="r">1.027 / 2.640</td><td class="r">1.045 / 2.665</td></tr>
+<tr><td>자기 CoC 틀림</td><td class="r">589</td><td class="r">1.014 / 2.550</td><td class="r">1.025 / 2.655</td><td class="r"><b>0.928 / 2.365</b></td><td class="r">1.019 / 2.664</td><td class="r">1.047 / 2.733</td></tr>
+<tr><td>자기 CoC 부분</td><td class="r">570</td><td class="r">0.912 / 2.219</td><td class="r">0.956 / 2.398</td><td class="r">0.873 / 2.134</td><td class="r">1.009 / 2.579</td><td class="r">0.953 / 2.399</td></tr>
+<tr><td>자기 CoC 맞음</td><td class="r">374</td><td class="r">0.778 / 1.843</td><td class="r">0.758 / 1.844</td><td class="r">0.745 / 1.860</td><td class="r">0.834 / 2.147</td><td class="r">0.803 / 2.039</td></tr>
+</tbody></table>
+
+<figure><img src="PLOT::swap::swap_vs_nococ.png" alt="CoC 없음 대비 각 CoC의 효과">
+<figcaption>CoC 없음 대비 Δ minADE@6 (음수가 더 좋음). GT CoC만 0 아래로 내려가고, 그 폭은 자기 CoC가 틀린 집단에서 가장 크다.</figcaption></figure>
+
+<h3>6.2 사전 등록 질문과 판정 (Δ minADE@6, 95% CI)</h3>
+
+<table>
+<thead><tr><th>질문</th><th>비교</th><th class="r">Δ minADE@6</th><th class="r">Δ minFDE@6</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>Q1 틀린 CoC를 정답으로</td><td><code>gt − rollout</code>, 틀림 집단</td><td class="r"><b>−0.097 [−0.158, −0.041]</b></td><td class="r">−0.291 [−0.487, −0.107]</td><td>예상대로 (rollout의 −9.5%)</td></tr>
+<tr><td>Q2 맞는 CoC를 정답으로</td><td><code>gt − rollout</code>, 맞음 집단</td><td class="r ns">−0.013 [−0.050, +0.027]</td><td class="r ns">+0.016 [−0.120, +0.157]</td><td>예상대로 (0)</td></tr>
+<tr><td>Q1 − Q2</td><td>틀림 − 맞음의 차이</td><td class="r">−0.084 [−0.158, −0.017]</td><td class="r"></td><td>집단 간 차이 있음</td></tr>
+<tr><td>Q3 문체만의 효과</td><td><code>gt_swap − gen_swap</code>, 전체</td><td class="r ns">+0.018 [−0.018, +0.053]</td><td class="r ns">+0.067 [−0.054, +0.189]</td><td>문체 효과 없음</td></tr>
+<tr><td rowspan="2">Q4 무관한 CoC는 해로운가</td><td><code>gt_swap − trajprompt</code>, 전체</td><td class="r">+0.052 [+0.014, +0.090]</td><td class="r">+0.252 [+0.122, +0.386]</td><td>해롭다</td></tr>
+<tr><td><code>gen_swap − trajprompt</code>, 전체</td><td class="r ns">+0.034 [−0.001, +0.071]</td><td class="r">+0.185 [+0.067, +0.304]</td><td>FDE에서 해롭다</td></tr>
+<tr><td rowspan="3">Q5 정답 CoC의 순이득</td><td><code>gt − trajprompt</code>, 전체</td><td class="r">−0.056 [−0.096, −0.017]</td><td class="r ns">−0.099 [−0.231, +0.034]</td><td>이득</td></tr>
+<tr><td>틀림 집단</td><td class="r">−0.086 [−0.137, −0.036]</td><td class="r">−0.185 [−0.358, −0.020]</td><td>이득</td></tr>
+<tr><td>맞음 집단</td><td class="r ns">−0.033 [−0.091, +0.024]</td><td class="r ns">+0.017 [−0.188, +0.224]</td><td>구별 안 됨</td></tr>
+</tbody></table>
+
+<h3>6.3 주 측정값(−0.097 m)의 구조</h3>
+
+<ul>
+<li><b>소수 클립이 만든다.</b> 틀림 집단 589클립 중 변화 폭이 큰 상위 5%(29클립)가 합의 87%를 차지한다.
+10% 절사 평균은 −0.026 m, 중앙값은 −0.009 m다. 0.05 m 넘게 좋아진 클립이 39%, 나빠진 클립이 31%다.</li>
+<li><b>먼 지평에서 나온다.</b> 1.6 s에서 −0.005, 3.2 s에서 −0.024, 6.4 s에서 −0.097 m다.</li>
+<li><b>"틀림"의 정의에는 강건하다.</b> judge 8B 기준 −0.132 / 맞음 −0.014, 32B 엄격 기준(≤0.5 / &gt;3.9)
+−0.123 / −0.001, 두 judge가 모두 동의하는 클립만 −0.109 / −0.005. 임베딩 3분위로 나누면 구분이 안 된다
+(−0.093 / −0.097) — 임베딩 코사인은 CoC의 옳고 그름을 재지 못한다.</li>
+<li><b>val 단독으로는 보이지 않는다.</b> 전체 <code>gt − rollout</code>이 train −0.079 [−0.126, −0.036]인데
+val은 −0.034 [−0.134, +0.085]다. n=262라 CI가 넓고 train 값을 포함한다.</li>
+</ul>
+
+<h3>6.4 해석 (의견) — 5.5절의 정정 포함</h3>
+
+<div class="callout">
+<p><b>CoC의 내용은 궤적에 영향을 준다. 그런데 모델이 스스로 쓴 CoC는 평균적으로 그 영향을 이득으로
+바꾸지 못한다.</b> 자기 CoC는 CoC 없음과 같고(+0.016, n.s.), 다른 클립에서 가져온 무관한 CoC보다도
+유의하게 낫지 않다(−0.018, n.s.).</p>
+</div>
+
+<ul>
+<li><b>내용이 통로를 탄다는 것은 확실하다.</b> 같은 사람 문체에서 정답과 무관한 문장의 차이가 −0.107 m
+[−0.149, −0.068]이고 세 집단 모두에서 유의하다. 문체만 바꾼 효과는 없다(Q3). 5절까지는 이를 저장값으로
+추정했고, 이제 직접 쟀다.</li>
+<li><b>정정: "틀린 CoC는 해치지 않는다"는 절반만 맞다.</b> 장면과 무관한 CoC는 CoC 없음보다 나쁘다
+(+0.03~+0.05 m, FDE +0.19~+0.25 m). 반면 모델이 그 장면을 보고 쓴 "틀린" CoC는 CoC 없음과 같다
+(틀림 집단 +0.011 [−0.047, +0.073]). 모델의 오답은 장면과 어긋나지 않는 그럴듯한 대안이라서일 수 있다(가설).</li>
+<li><b>"맞는 CoC는 돕는다"도 측정되지 않는다.</b> 자기 CoC가 맞는 374클립에서 자기 CoC는 CoC 없음보다
+−0.020 [−0.070, +0.028], GT CoC는 −0.033 [−0.091, +0.024]다. 방향은 이득 쪽이지만 0과 구별되지 않고,
+0.05 m를 넘는 이득일 가능성은 낮다.</li>
+<li><b>GT CoC의 이득은 모델이 틀린 곳, 그중에서도 소수 클립에 몰려 있다.</b> 모델이 장면에서 읽어내지 못한
+것을 GT 문장이 알려 주는 경우로 읽는다. GT 문장은 사후에 쓴 것이라 미래 행동 정보가 섞여 있으므로,
+이 값은 "더 나은 추론기가 줄 수 있는 이득"의 상한이다.</li>
+</ul>
+
+<p>
+재현: <code>launch_coc_ablation.py --script run_coc_swap.py --exp-id coc_swap_ood --gpus 4 5 6 7</code> →
+<code>analyze_coc_swap.py</code> → <code>outputs/coc_swap_ood/{metrics.json, summary.txt, plots/}</code>.
+</p>
+
+<footer>
+Alpamayo-1.5-10B rev 7aba8293 · OOD 1,533 (<code>outputs/eval_sets/ood.parquet</code>) · k=8, seed 42 ·
+RTX 5880 Ada × 4 · 결정적 설정(CUBLAS_WORKSPACE_CONFIG=:4096:8, TF32 off)
+</footer>
+
+</div>
+</body></html>
