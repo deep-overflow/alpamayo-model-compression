@@ -8,6 +8,8 @@
 #   Usage:  bash experiments/transfer/push_neuron.sh <NEURON_USER> [tier ...]
 #   Tiers:  code data weights recipes   (default: all four)
 #           resume   the whole run dir of $RESUME_RUNS, to continue an interrupted run
+#           minitron the Minitron KD set (train samples of kd_r1.parquet, ~55 GB), its
+#                    manifests and the width student's recipe (minitron/README.md)
 #           cosmos   the Cosmos-Reason2-8B safetensors, which `weights` skips
 #           oodval   the 262 OOD-val clips (1.5 GB). The `data` tier ships the whole
 #                    8.5 GB ood namespace because training needs its other half; this
@@ -228,6 +230,21 @@ if has recipes; then
   recipe_list $TRAIN_CONFIGS > "$TMP/slims.txt"
   echo "  $(grep -c 'slim_meta.json$' "$TMP/slims.txt") recipes, $(total_of "$OUT" "$TMP/slims.txt")"
   run "${RSYNC[@]}" --files-from="$TMP/slims.txt" "$OUT/" "$HOST:$SCRATCH/outputs/"
+fi
+
+if has minitron; then
+  # Minitron baseline (minitron/plans/2026-10-23_plan.md): the KD set's train samples, its
+  # manifests (kd_r1 + calib_1024), and the width student's recipe. The teacher is the
+  # base checkpoint, which the `weights` tier already carries.
+  step "Minitron KD set -> $SCRATCH/datasets/physicalai_av/pre_processed + outputs/minitron"
+  sample_list train "$OUT/minitron/kd_sets/kd_r1.parquet" > "$TMP/kd.txt"
+  echo "  $(wc -l < "$TMP/kd.txt") samples, $(total_of "$PRE" "$TMP/kd.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/kd.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/outputs/minitron/slim_mtw24"
+  run "${RSYNC[@]}" "$OUT/minitron/kd_sets" "$HOST:$SCRATCH/outputs/minitron/"
+  run "${RSYNC[@]}" "$OUT/minitron/slim_mtw24/slim_meta.json" \
+      "$HOST:$SCRATCH/outputs/minitron/slim_mtw24/"
 fi
 
 if has resume; then
