@@ -242,3 +242,6 @@ open-loop-viz/
 /_ICLR_2027__*.pdf
 /analysis*.tex
 /method*.tex
+
+# Minitron baseline results: a symlink to /mnt/nvme1n1/ad_vla/outputs/chan/minitron.
+/minitron/outputs
