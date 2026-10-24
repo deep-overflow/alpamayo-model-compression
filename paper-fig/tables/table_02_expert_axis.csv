@@ -1,0 +1,4 @@
+Comparison,Removed (M) Q / MLP,Mean ΔminADE@6 95% CI (m),Median ΔminADE@6 95% CI (m)
+Q25 − MLP25 Ada · equal unit fraction,75.5 / 456.5,"+0.0316 [−0.0356, +0.0761]","+0.0205 [+0.0103, +0.0380]"
+Q25 − MLP4.13 Ada · matched parameters,75.5 / 75.4,"+0.0317 [−0.0355, +0.0761]","+0.0217 [+0.0103, +0.0375]"
+Q50 − MLP50 Blackwell · equal unit fraction,151.0 / 913.0,"+0.2459 [+0.1694, +0.3168]","+0.1171 [+0.0848, +0.1815]"

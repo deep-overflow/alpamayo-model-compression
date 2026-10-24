@@ -1,0 +1,88 @@
+% ============================================================
+% Sec. 2 draft: why the two objectives select different units
+% Numbers: paper-analysis/2026-09-24_finding1_numbers.md (scripts/finding1_numbers.py).
+% Shares: per-layer additive shares, averaged over the layers of each band;
+% text = prompt + generated CoC. Rank agreement: raw (uncorrected) Spearman.
+% Bands: layers 0-21 ("early and middle") and 22-34 ("late").
+% Main text and figures use Q heads; MLP channels go to the supplement.
+% Terms: "CoC score" = first-order Taylor score under the CE loss of the CoC;
+% "trajectory score" = first-order Taylor score under the FM loss.
+% TODO: use the same two terms in Sec. 1 and the method section.
+% ============================================================
+
+% TODO: renumber findings (Sec. 1 is Finding 1; this is Finding 2).
+
+\subsection{Why the Two Objectives Select Different Units}
+\label{sec:vlm_analysis}
+
+\noindent\textbf{Finding 2.}\ \emph{The CoC and trajectory scores rank units
+alike in the early and middle layers but differently in the late layers, because
+there the two scores come from different token positions.}
+
+\paragraph{The rankings part in the late layers.}
+For each unit we compute a first-order Taylor score under each of the two
+losses: the cross-entropy of the generated CoC (the \emph{CoC score}) and the
+flow-matching loss of the trajectory (the \emph{trajectory score}).
+Within each VLM layer, we rank Q heads by each score and compare the two
+rankings with Spearman's $\rho$ (Figure~\ref{fig:vlm_analysis}a).
+In layers 0--21 the rankings largely agree ($\rho=0.78$). In layers 22--34 they
+part ($\rho=0.33$).
+The two scores thus favor similar heads in the early and middle layers and
+different heads in the late layers.
+MLP channels show the same drop ($0.75\to0.34$), as do all results below
+(supplement).
+
+\paragraph{Where each score comes from.}
+A unit produces an output at every token position, and its Taylor score is a sum
+of the contributions of these outputs. Grouping the contributions by the kind of
+token splits each score into shares from vision, ego-history, prompt-text and
+generated-CoC positions (Figure~\ref{fig:vlm_analysis}b,c).
+% NOTE: exact definition (signed per-type shares that sum to the clip-level
+% |sum_p a_p g_p|) goes in the appendix if needed.
+
+In layers 0--21, most of the trajectory score comes from vision positions
+(58\%). The CoC score is split between vision (47\%) and text positions (48\%),
+a text share nearly twice that of the trajectory score (26\%). This difference
+in text share is the main difference between the two scores in these layers.
+
+In layers 22--34 the two scores part. The CoC score comes almost entirely from
+text positions (96\%). The trajectory score stays spread over vision (34\%),
+text (53\%) and ego-history positions (13\%), and most of its text share comes
+from the generated CoC (33 of 53 points).
+In the late layers, the CoC score therefore favors heads that process language
+positions, whereas the trajectory score favors heads that also read the scene,
+the ego history and the generated reasoning.
+
+\paragraph{Position explains most of the disagreement.}
+When both scores are restricted to the same kind of position, the late-layer
+rankings agree again: $\rho$ rises from $0.33$ to $0.72$ at vision, $0.75$ at
+prompt-text and $0.86$ at ego-history positions (Figure~\ref{fig:vlm_analysis}d).
+The exception is the generated-CoC positions ($0.36$): even at the same tokens,
+the two scores favor different heads.
+% NOTE (MLP, supplement): 0.34 -> 0.47-0.52 at vision / prompt-text /
+% ego-history, 0.24 at generated-CoC positions. MLP channel scores are noisier
+% (split-half reliability 0.46-0.49 in layers 22-34 vs. 0.81-0.89 for Q heads);
+% corrected for this, MLP rises from 0.54 to 0.71-0.83 (CoC positions 0.38).
+
+% ------------------------------------------------------------
+% Figures
+% ------------------------------------------------------------
+% fig:vlm_analysis (main, one figure, four panels, Q heads; one row of four,
+% or 2x2 with (a, d) on top and (b, c) below)
+%   (a) per-layer Spearman rho between CoC and trajectory rankings of Q heads,
+%       layers 0-34 (fig3_vlm_rank with the MLP line removed). The Q-head curve
+%       oscillates in the late layers (32 heads per layer); overlay the 0-21 and
+%       22-34 band means as horizontal lines, or add a per-layer bootstrap band.
+%   (b) per-layer shares of the trajectory score at vision / text / ego-history
+%       positions, Q heads.  TODO: generate (existing fig3_vlm_traj_share is MLP?).
+%   (c) per-layer shares of the CoC score, Q heads.  TODO: generate.
+%   (d) layers 22-34, rank agreement with both scores restricted to one kind of
+%       position: bars for all positions / vision / prompt-text / ego-history /
+%       generated-CoC (0.33 / 0.72 / 0.75 / 0.86 / 0.36). TODO: generate.
+%   Caption draft: "CoC and trajectory scores of Q heads in the VLM.
+%   (a) Agreement between the two rankings within each layer. (b, c) Share of
+%   each layer's trajectory score (b) and CoC score (c) that comes from each kind
+%   of token position; late layers (22-34) are shaded. (d) Agreement in layers
+%   22-34 when both scores are restricted to one kind of token position."
+% Supplement:
+%   - MLP versions of (a)-(d).

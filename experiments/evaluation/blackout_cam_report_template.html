@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>카메라별 블랙아웃 &mdash; 개루프</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; camera robustness &middot; 2026-10-18</div>
+  <h1>카메라별 최신 프레임 블랙아웃 &mdash; 가장 중요한 카메라는 전방 광각이 아니라 전방 망원</h1>
+  <div class="meta">
+    무압축 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>), test500 + OOD-val262, rollout만,
+    카메라 4대 &times; 762클립, Ada RTX 5880 &times;4 (GPU 4&ndash;7, 카드당 카메라 1대), 2026-10-18 22:42&ndash;2026-10-19 00:28 KST.
+    저장된 Ada baseline과 같은 시드로 페어드.<br>
+    계획: <code>plans/2026-10-18_camera-blackout-openloop.md</code> ("추가: 카메라별 고정 블랙아웃") ·
+    러너 <code>run_baseline.py --blackout-cam</code> · 분석 <code>experiments/evaluation/analyze_blackout_cam.py</code>
+    &rarr; <code>outputs/blackout_cam_analysis/</code> · 앞 실험(무작위 1대):
+    <code>reports/evaluation/2026-10-18_camera-blackout-openloop.html</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>한 문장</strong>
+  카메라 1대의 최신(t0) 프레임을 모든 클립에서 검게 바꿔도 비용은 대부분 0&ndash;3%로 작다. 그중
+  <strong>두 세트 모두에서 일관되게 비용이 나는 카메라는 전방 망원(30&deg;) 하나</strong>이고(6.4초 minADE@6
+  test500 +3.0%, OOD-val262 <strong>+6.5%</strong> [+1.0%, +12.4%]), OOD에서는 다중 비교 보정 후에도 전방 광각보다
+  유의하게 나쁘다(Holm p=0.015). 사전 등록한 H2(전방 광각이 가장 중요)는 <strong>지지되지 않았다</strong>.
+  전방 광각을 가리면 두 세트 모두 궤적 비용이 거의 없다(+2.3% / &minus;1.1%, 둘 다 중앙값 기준 유의하지 않음).
+</div>
+
+<h2><span class="num">1</span> 목적</h2>
+<p>
+  앞 실험(클립마다 무작위 카메라 1대)에서는 최신 프레임 1장을 잃는 비용이 2&ndash;4%로 작고 일관됐지만,
+  카메라당 60&ndash;132클립뿐이라 <strong>어느 카메라가 중요한지</strong>는 세트마다 순서가 달라 말할 수 없었다.
+  이번에는 카메라 4대 각각을 <strong>모든 클립</strong>에서 가려, 같은 클립 위에서 카메라끼리 직접 비교한다.
+</p>
+<ul>
+  <li><strong>H2 (사전 등록)</strong>: 전방 광각의 6.4초 minADE@6 비용이 다른 세 카메라보다 크다
+    (카메라 간 페어드 CI &gt; 0, Holm 보정 Wilcoxon p &lt; 0.05, 두 세트 모두).</li>
+</ul>
+
+<h2><span class="num">2</span> 설정</h2>
+<div class="tablewrap"><table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>조건</td><td>카메라 index 0 좌측 크로스 120&deg; / 1 전방 광각 120&deg; / 2 우측 크로스 120&deg; / 6 전방 망원 30&deg; 각각에 대해,
+    모든 클립에서 그 카메라의 t0 프레임만 <code>image_frames[slot, -1] = 0</code>. 나머지 15장은 그대로</td></tr>
+  <tr><td>모델·세트·지표</td><td>앞 실험과 동일: 무압축 10B, test500 / OOD-val262 (rollout만), k=8 저장 &rarr; minADE@6 / minFDE@6, 지평 1.6 / 3.2 / 6.4초</td></tr>
+  <tr><td>기준</td><td>저장된 Ada baseline (<code>baseline_pred_test</code> / <code>baseline_pred_oodval</code>), 같은 샘플링 시드</td></tr>
+  <tr><td>통계</td><td>페어드 &Delta; = 블랙아웃 &minus; baseline, 부트스트랩 200,000회 평균 CI, 중앙값 + Wilcoxon, 10% 절사평균.
+    카메라 간 비교는 같은 클립의 &Delta; 차이, 6쌍에 Holm 보정</td></tr>
+  <tr><td>비교 척도</td><td><code>dual_u40_v2_pred_*</code> (출하 24% 프루닝, 같은 클립·시드)</td></tr>
+</table></div>
+
+<h2><span class="num">3</span> 결과 (사실)</h2>
+
+<h3>3.1 게이트</h3>
+<div class="tablewrap"><table>
+  <tr><th>게이트</th><th>기준</th><th>결과</th><th>판정</th></tr>
+  <tr><td>G0' 재현성</td><td>앞 실험(무작위 1대)에서 같은 카메라가 가려졌던 클립은 비트 동일</td>
+    <td>test500 117 / 132 / 131 / 120, OOD 73 / 66 / 60 / 63 &mdash; <strong>762/762 동일</strong></td><td class="good">PASS</td></tr>
+  <tr><td>H2 전방 광각 최대</td><td>전방 광각 &minus; 다른 카메라 &gt; 0 (CI, Holm p &lt; 0.05), 두 세트</td>
+    <td>test500, OOD 모두 성립하지 않음. OOD에서는 반대로 전방 광각 &minus; 망원 = &minus;0.0754 [&minus;0.1369, &minus;0.0189], Holm p=0.015</td>
+    <td class="bad">지지 안 됨</td></tr>
+</table></div>
+
+<h3>3.2 baseline 대비, 6.4초 (주 지표)</h3>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>가린 카메라</th><th class="num">minADE@6</th><th class="num">&Delta; [95% CI]</th><th class="num">상대</th><th class="num">중앙값 / p</th>
+    <th class="num">minFDE@6</th><th class="num">&Delta; [95% CI]</th><th class="num">상대</th></tr>
+  <tr><td>test500</td><td>baseline</td><td class="num">0.8417</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">2.2673</td><td class="num">&ndash;</td><td class="num">&ndash;</td></tr>
+  <tr><td></td><td>좌측 크로스</td><td class="num">0.8650</td><td class="num">+0.0233 [+0.0049, +0.0498]</td><td class="num">+2.8%</td><td class="num">+0.0016 / 0.039</td><td class="num">2.3462</td><td class="num">+0.0790 [+0.0149, +0.1704]</td><td class="num">+3.5%</td></tr>
+  <tr><td></td><td>전방 광각</td><td class="num">0.8607</td><td class="num">+0.0190 [&minus;0.0023, +0.0473]</td><td class="num">+2.3%</td><td class="num">+0.0028 / 0.57</td><td class="num">2.3356</td><td class="num">+0.0683 [&minus;0.0035, +0.1658]</td><td class="num">+3.0%</td></tr>
+  <tr><td></td><td>우측 크로스</td><td class="num">0.8521</td><td class="num">+0.0104 [+0.0022, +0.0189]</td><td class="num">+1.2%</td><td class="num">+0.0008 / 0.024</td><td class="num">2.2791</td><td class="num">+0.0118 [&minus;0.0132, +0.0376]</td><td class="num">+0.5%</td></tr>
+  <tr><td></td><td><strong>전방 망원</strong></td><td class="num">0.8670</td><td class="num">+0.0252 [&minus;0.0007, +0.0520]</td><td class="num">+3.0%</td><td class="num"><strong>+0.0081 / 0.006</strong></td><td class="num">2.3700</td><td class="num"><strong>+0.1027</strong> [+0.0101, +0.2023]</td><td class="num">+4.5%</td></tr>
+  <tr><td></td><td class="small">참고: 24% 프루닝</td><td class="num">0.9498</td><td class="num">+0.1081 [+0.0549, +0.1610]</td><td class="num">+12.8%</td><td class="num">+0.0524 / 6e&minus;9</td><td class="num">2.5459</td><td class="num">+0.2786 [+0.0974, +0.4624]</td><td class="num">+12.3%</td></tr>
+  <tr><td>OOD-val262</td><td>baseline</td><td class="num">0.9995</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">2.4959</td><td class="num">&ndash;</td><td class="num">&ndash;</td></tr>
+  <tr><td></td><td>좌측 크로스</td><td class="num">1.0018</td><td class="num">+0.0022 [&minus;0.0301, +0.0250]</td><td class="num">+0.2%</td><td class="num">+0.0005 / 0.34</td><td class="num">2.5185</td><td class="num">+0.0226 [&minus;0.1037, +0.1148]</td><td class="num">+0.9%</td></tr>
+  <tr><td></td><td>전방 광각</td><td class="num">0.9891</td><td class="num">&minus;0.0105 [&minus;0.0433, +0.0176]</td><td class="num">&minus;1.1%</td><td class="num">+0.0051 / 0.54</td><td class="num">2.4919</td><td class="num">&minus;0.0040 [&minus;0.0821, +0.0696]</td><td class="num">&minus;0.2%</td></tr>
+  <tr><td></td><td>우측 크로스</td><td class="num">1.0079</td><td class="num">+0.0083 [&minus;0.0071, +0.0238]</td><td class="num">+0.8%</td><td class="num">+0.0025 / 0.13</td><td class="num">2.5284</td><td class="num">+0.0325 [&minus;0.0166, +0.0822]</td><td class="num">+1.3%</td></tr>
+  <tr><td></td><td><strong>전방 망원</strong></td><td class="num">1.0644</td><td class="num"><strong>+0.0649</strong> [+0.0102, +0.1239]</td><td class="num"><strong>+6.5%</strong></td><td class="num"><strong>+0.0157 / 0.005</strong></td><td class="num">2.6798</td><td class="num"><strong>+0.1839</strong> [+0.0137, +0.3649]</td><td class="num">+7.4%</td></tr>
+  <tr><td></td><td class="small">참고: 24% 프루닝</td><td class="num">1.1192</td><td class="num">+0.1197 [+0.0216, +0.2261]</td><td class="num">+12.0%</td><td class="num">+0.0776 / 3e&minus;5</td><td class="num">2.8514</td><td class="num">+0.3555 [+0.0535, +0.6811]</td><td class="num">+14.2%</td></tr>
+</table></div>
+
+<figure>
+  <img src="PLOT::cam::relative_by_camera.png" alt="카메라별 baseline 대비 상대 변화, 지평별">
+  <figcaption>그림 1. 카메라별 baseline 대비 상대 변화(%)와 95% CI (위 minADE@6, 아래 minFDE@6). 회색 네모는 같은 클립의 24% 프루닝.
+  OOD에서 전방 망원(분홍)만 지평이 길어질수록 커지며 0에서 떨어진다.</figcaption>
+</figure>
+
+<h3>3.3 지평별 &Delta; (평균 [95% CI], m)</h3>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>가린 카메라</th><th class="num">minADE@6 1.6 s</th><th class="num">minADE@6 3.2 s</th><th class="num">minFDE@6 1.6 s</th><th class="num">minFDE@6 3.2 s</th></tr>
+  <tr><td>test500</td><td>좌측 크로스</td><td class="num">+0.0007 [+0.0001, +0.0014]</td><td class="num">+0.0036 [&minus;0.0002, +0.0081]</td><td class="num">+0.0022 [&minus;0.0003, +0.0046]</td><td class="num">+0.0126 [&minus;0.0000, +0.0293]</td></tr>
+  <tr><td></td><td>전방 광각</td><td class="num">&minus;0.0001 [&minus;0.0009, +0.0006]</td><td class="num">+0.0026 [&minus;0.0013, +0.0072]</td><td class="num">+0.0004 [&minus;0.0020, +0.0028]</td><td class="num">+0.0092 [&minus;0.0057, +0.0271]</td></tr>
+  <tr><td></td><td>우측 크로스</td><td class="num">+0.0005 [&minus;0.0002, +0.0013]</td><td class="num">+0.0021 [&minus;0.0011, +0.0052]</td><td class="num">+0.0010 [&minus;0.0017, +0.0035]</td><td class="num">+0.0068 [&minus;0.0014, +0.0147]</td></tr>
+  <tr><td></td><td>전방 망원</td><td class="num">+0.0002 [&minus;0.0015, +0.0020]</td><td class="num">+0.0050 [&minus;0.0016, +0.0119]</td><td class="num">+0.0006 [&minus;0.0046, +0.0061]</td><td class="num">+0.0145 [&minus;0.0053, +0.0348]</td></tr>
+  <tr><td>OOD-val262</td><td>좌측 크로스</td><td class="num">&minus;0.0002 [&minus;0.0015, +0.0010]</td><td class="num">&minus;0.0023 [&minus;0.0076, +0.0025]</td><td class="num">&minus;0.0025 [&minus;0.0065, +0.0013]</td><td class="num">+0.0005 [&minus;0.0179, +0.0163]</td></tr>
+  <tr><td></td><td>전방 광각</td><td class="num">+0.0005 [&minus;0.0010, +0.0021]</td><td class="num">+0.0002 [&minus;0.0074, +0.0070]</td><td class="num">+0.0001 [&minus;0.0039, +0.0041]</td><td class="num">&minus;0.0039 [&minus;0.0333, +0.0210]</td></tr>
+  <tr><td></td><td>우측 크로스</td><td class="num">+0.0004 [&minus;0.0010, +0.0016]</td><td class="num">+0.0058 [+0.0018, +0.0100]</td><td class="num">&minus;0.0016 [&minus;0.0055, +0.0022]</td><td class="num">+0.0158 [+0.0035, +0.0284]</td></tr>
+  <tr><td></td><td><strong>전방 망원</strong></td><td class="num"><strong>+0.0030</strong> [+0.0000, +0.0063]</td><td class="num"><strong>+0.0168</strong> [+0.0047, +0.0300]</td><td class="num">+0.0080 [&minus;0.0007, +0.0174]</td><td class="num"><strong>+0.0510</strong> [+0.0073, +0.0968]</td></tr>
+</table></div>
+<p class="small">baseline: test500 minADE@6 0.0521 (1.6 s) / 0.2075 (3.2 s), minFDE@6 0.1327 / 0.5529 · OOD-val262 minADE@6 0.0650 / 0.2585, minFDE@6 0.1751 / 0.6843.</p>
+
+<figure>
+  <img src="PLOT::cam::delta_by_camera_fixed.png" alt="카메라별 절대 변화, 1.6초와 6.4초">
+  <figcaption>그림 2. 카메라별 절대 &Delta; (m), 1.6초(위)와 6.4초(아래), minADE@6(파랑)·minFDE@6(주황).</figcaption>
+</figure>
+
+<h3>3.4 카메라끼리 직접 비교 (같은 클립, 6.4초 minADE@6, 행 &minus; 열)</h3>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>쌍</th><th class="num">&Delta; 차이 [95% CI]</th><th class="num">중앙값</th><th class="num">Wilcoxon p</th><th class="num">Holm p</th></tr>
+  <tr><td>test500</td><td>좌측 크로스 &minus; 전방 망원</td><td class="num">&minus;0.0020 [&minus;0.0370, +0.0415]</td><td class="num">&minus;0.0067</td><td class="num">0.015</td><td class="num">0.091</td></tr>
+  <tr><td></td><td>전방 광각 &minus; 전방 망원</td><td class="num">&minus;0.0062 [&minus;0.0450, +0.0399]</td><td class="num">&minus;0.0116</td><td class="num">0.050</td><td class="num">0.20</td></tr>
+  <tr><td></td><td>우측 크로스 &minus; 전방 망원</td><td class="num">&minus;0.0149 [&minus;0.0401, +0.0105]</td><td class="num">&minus;0.0076</td><td class="num">0.035</td><td class="num">0.18</td></tr>
+  <tr><td></td><td>나머지 3쌍 (크로스·광각 간)</td><td class="num" colspan="2">CI 모두 0 포함</td><td class="num">0.21&ndash;0.76</td><td class="num">0.63&ndash;0.81</td></tr>
+  <tr><td>OOD-val262</td><td>좌측 크로스 &minus; 전방 망원</td><td class="num">&minus;0.0627 [&minus;0.1310, +0.0008]</td><td class="num">&minus;0.0191</td><td class="num">0.025</td><td class="num">0.10</td></tr>
+  <tr><td></td><td><strong>전방 광각 &minus; 전방 망원</strong></td><td class="num"><strong>&minus;0.0754</strong> [&minus;0.1369, &minus;0.0189]</td><td class="num">&minus;0.0257</td><td class="num">0.0025</td><td class="num"><strong>0.015</strong></td></tr>
+  <tr><td></td><td>우측 크로스 &minus; 전방 망원</td><td class="num">&minus;0.0566 [&minus;0.1172, +0.0012]</td><td class="num">&minus;0.0172</td><td class="num">0.011</td><td class="num">0.054</td></tr>
+  <tr><td></td><td>나머지 3쌍 (크로스·광각 간)</td><td class="num" colspan="2">CI 모두 0 포함</td><td class="num">0.76&ndash;0.99</td><td class="num">1.0</td></tr>
+</table></div>
+<p class="small">minFDE@6 6.4초에서 Holm p &lt; 0.05인 쌍은 test500 우측 크로스 &minus; 전방 망원(&minus;0.0908 [&minus;0.1864, +0.0003], Holm 0.046) 하나다.
+1.6초 비교에서는 어떤 쌍도 Holm 0.05를 넘지 못했다(최소 0.067). 전체 표는 <code>outputs/blackout_cam_analysis/summary.txt</code>.</p>
+
+<h3>3.5 꼬리를 뺀 크기 (6.4초 minADE@6, 10% 절사평균 [95% CI])</h3>
+<div class="tablewrap"><table>
+  <tr><th>가린 카메라</th><th class="num">test500</th><th class="num">OOD-val262</th></tr>
+  <tr><td>좌측 크로스</td><td class="num">+0.0040 [+0.0002, +0.0082]</td><td class="num">+0.0040 [&minus;0.0022, +0.0110]</td></tr>
+  <tr><td>전방 광각</td><td class="num">+0.0004 [&minus;0.0071, +0.0083]</td><td class="num">+0.0016 [&minus;0.0114, +0.0138]</td></tr>
+  <tr><td>우측 크로스</td><td class="num">+0.0052 [+0.0014, +0.0090]</td><td class="num">+0.0040 [&minus;0.0023, +0.0102]</td></tr>
+  <tr><td><strong>전방 망원</strong></td><td class="num"><strong>+0.0160</strong> [+0.0043, +0.0279]</td><td class="num"><strong>+0.0319</strong> [+0.0094, +0.0554]</td></tr>
+</table></div>
+
+<h3>3.6 CoC (추론 텍스트)</h3>
+<div class="tablewrap"><table>
+  <tr><th>가린 카메라</th><th class="num">CoC 텍스트 동일 test500</th><th class="num">OOD-val262</th><th class="num">CoC 퇴화율 test500</th><th class="num">OOD-val262</th></tr>
+  <tr><td>baseline</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">0.6%</td><td class="num">0.0%</td></tr>
+  <tr><td>좌측 크로스</td><td class="num">94.8%</td><td class="num">93.5%</td><td class="num">0.4%</td><td class="num">0.0%</td></tr>
+  <tr><td>전방 광각</td><td class="num"><strong>87.2%</strong></td><td class="num"><strong>83.2%</strong></td><td class="num">0.6%</td><td class="num">1.1%</td></tr>
+  <tr><td>우측 크로스</td><td class="num">95.8%</td><td class="num">94.7%</td><td class="num">0.6%</td><td class="num">0.4%</td></tr>
+  <tr><td>전방 망원</td><td class="num">89.4%</td><td class="num"><strong>82.8%</strong></td><td class="num">0.6%</td><td class="num">0.0%</td></tr>
+</table></div>
+
+<h2><span class="num">4</span> 해석 (의견)</h2>
+
+<div class="callout opinion">
+  <strong>전방 망원은 다른 카메라가 대신할 수 없는 시야라서 중요하다</strong>
+  전방 광각 120&deg;의 시야는 좌·우 크로스 120&deg;와 망원 30&deg;이 상당 부분 겹쳐 덮지만, 망원이 주는 먼 전방의
+  고해상도 정보는 다른 어떤 카메라에도 없다. 그래서 전방 광각 손실은 보상되고 망원 손실은 보상되지 않는 것으로 본다.
+  망원 비용이 지평이 길수록 커지는 것(OOD 1.6초 +4.6% &rarr; 3.2초 +6.5% &rarr; 6.4초 +6.5%, minFDE@6은 7.4%)도
+  먼 거리 정보가 먼 미래 궤적에 쓰인다는 해석과 맞는다. OOD에서 효과가 더 큰 것은 긴 꼬리 장면일수록 먼 전방
+  단서(예: 앞쪽 공사 구간, 정체)에 더 의존하기 때문일 수 있으나, 이 데이터로 검증하지는 않았다.
+</div>
+
+<div class="callout opinion">
+  <strong>전방 광각은 추론 텍스트는 바꾸지만 궤적은 거의 바꾸지 않는다</strong>
+  전방 광각을 가리면 CoC 텍스트가 가장 많이 바뀌는데(12.8% / 16.8%), 궤적 비용은 두 세트 모두 거의 없다.
+  CoC가 바뀌어도 추론 품질이 무너지지는 않고(퇴화율 &le; 1.1%), 같은 상황을 다른 문장으로 쓰는 수준의 변화로 보인다.
+  앞 실험에서 확인한 대로 블랙아웃은 추론보다 시각 경로로 궤적에 닿으며, 그 경로에서 전방 광각은 중복이 크다.
+</div>
+
+<div class="callout opinion">
+  <strong>앞 실험의 카메라별 분해가 틀린 방향을 가리켰다</strong>
+  무작위 1대 실험의 카메라별 부분집합(132클립)에서는 test500 전방 광각이 +0.034(Wilcoxon p=0.007)로 가장 커 보였다.
+  같은 계산이 비트 동일함을 확인했으므로 차이는 계산 잡음이 아니라 <strong>어느 클립이 그 부분집합에 들어갔는지</strong>에서 왔다.
+  전체 500클립에서는 +0.019(중앙값 p=0.57)다. 소표본 부분집합의 순위는 믿지 말고, 카메라 비교는 같은 클립 위에서 할 것.
+</div>
+
+<h3>다음 단계 제안</h3>
+<ul>
+  <li><strong>폐루프에는 전방 망원 블랙아웃을 우선 후보로.</strong> 단일 카메라 중 유일하게 두 세트에서 비용이 일관되고,
+    OOD에서 24% 프루닝 비용의 약 절반(6.4초 minADE@6 기준 54%)에 이른다.</li>
+  <li>그래도 개루프 비용은 작으므로, 폐루프 전에 더 강한 개입을 개루프에서 확인할 가치가 있다:
+    전방 망원의 4프레임 전부 블랙(카메라 고장 지속), 또는 4대 모두 t0 블랙.</li>
+  <li>압축 모델의 견고성 비교도 전방 망원 조건에서 하는 것이 효율적이다(효과가 있는 조건에서만 차이를 볼 수 있다).</li>
+</ul>
+
+<h2><span class="num">5</span> 재현</h2>
+<pre><code>bash experiments/evaluation/launch_blackout_cam.sh            # 카메라 4대, Ada 4-7, ~2시간
+.venv/bin/python experiments/evaluation/analyze_blackout_cam.py # -> outputs/blackout_cam_analysis/
+python experiments/head_analysis/build_report.py \
+    experiments/evaluation/blackout_cam_report_template.html \
+    reports/evaluation/2026-10-18_camera-blackout-percamera.html \
+    cam=$PWD/outputs/blackout_cam_analysis/plots</code></pre>
+<p class="small">출력: <code>outputs/blackout_cam{0,1,2,6}_{test,oodval}/</code> (행 파일 <code>baseline_bkcam{idx}_s0of1.json</code> + <code>config.json</code>),
+<code>outputs/blackout_cam_analysis/</code> (<code>config.json</code>, <code>metrics.json</code>, <code>summary.txt</code>, <code>plots/</code>). 로그: <code>logs/blackout_cam/</code>.</p>
+
+</div>
+</body>
+</html>

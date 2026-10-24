@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>블랙아웃 폐루프 &mdash; Origin150</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; camera robustness &middot; closed loop &middot; 2026-10-19</div>
+  <h1>매 스텝 최신 프레임 1장 블랙아웃 &mdash; 폐루프 주행은 측정 가능하게 나빠지지 않는다</h1>
+  <div class="meta">
+    무압축 <code>nvidia/Alpamayo-1.5-10B</code>, alpasim Origin150 (<code>public_2601</code> 앞 150씬) &times; 2 rollout,
+    Ada RTX 5880 &times;4 (GPU 4&ndash;7, shard당 카드 1장), 드라이버 8스레드, 2026-10-19 14:05&ndash;23:00 KST.
+    기준은 저장된 <code>m2601_merged_baseline</code>(2026-08-10, 같은 경로·카드·스레드), 씬 페어드.<br>
+    계획: <code>plans/2026-10-19_camera-blackout-closedloop.md</code> · 개입: alpasim 드라이버
+    <code>driver.inference.blackout_t0_random_camera=true</code> · 분석
+    <code>experiments/evaluation/analyze_blackout_closedloop.py</code> &rarr; <code>outputs/blackout_closedloop/</code> ·
+    개루프 선행: <code>2026-10-18_camera-blackout-openloop.html</code>, <code>2026-10-18_camera-blackout-percamera.html</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>한 문장</strong>
+  무압축 모델이 매 정책 스텝(0.1초)마다 무작위 카메라 1대의 최신 프레임을 검게 받으면서 150씬을 주행해도,
+  씬 점수는 baseline과 구별되지 않는다(<strong>+0.024 [&minus;0.007, +0.055]</strong>, 방향은 오히려 블랙아웃이 높다).
+  게이트·차선 유지·제동·차간 거리·CoC 어디에도 유의한 악화가 없고, 연속된 두 계획 사이의 변화조차 늘지 않으며
+  어느 카메라가 가려졌는지와도 무관하다. G1은 미통과지만, 신뢰구간 하한이 &minus;0.007이라 평균 점수 손해가
+  <strong>0.007보다 크다는 가능성은 95%로 배제</strong>된다.
+</div>
+
+<h2><span class="num">1</span> 목적</h2>
+<p>
+  개루프에서 최신 프레임 1장을 검게 바꾸면 minADE@6이 2&ndash;4% 나빠졌고, 카메라별로는 전방 망원만 일관된 비용을 냈다.
+  폐루프에서는 같은 개입이 0.1초마다 반복되므로 작은 섭동이 쌓일 수도, 평균되어 사라질 수도 있다. 질문은
+  <strong>매 스텝 무작위로 1장이 검게 들어올 때 폐루프 주행 성능이 얼마나 떨어지는가</strong>이다.
+</p>
+
+<h2><span class="num">2</span> 설정</h2>
+<div class="tablewrap"><table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>개입</td><td>매 추론마다 카메라 4대 중 1대를 무작위로 골라 그 카메라의 최신(t0) 프레임만 검은 사본으로 교체.
+    프레임 버퍼의 원본은 그대로라 다음 스텝에서는 같은 프레임이 0.1초 전 자리에 정상 이미지로 들어간다(한 입력에 검은 프레임은 항상 1장).
+    카메라는 <code>random.Random(f"blackout:{session_seed}:{inference_count}")</code>로 골라 ASL만으로 재계산할 수 있고, 매 스텝 <code>debug_info</code>에 기록.</td></tr>
+  <tr><td>결정 (2026-10-19)</td><td>최신 프레임 4장 중 1장 · 검은 프레임은 다음 스텝에 남기지 않음 · Origin150만 · 기존 baseline 런 재사용</td></tr>
+  <tr><td>장면·rollout</td><td>Origin150 (<code>public_2601</code> scene_id 정렬 앞 150) &times; 2 rollout = 300, 같은 suite CSV로 shard</td></tr>
+  <tr><td>기준 런의 동등성</td><td>시뮬레이터 코드는 baseline 런 이후 바뀐 파일 없음(최신 수정 2026-07-25), 같은 shard 경로·Ada 4장·<code>OMP_NUM_THREADS=8</code>,
+    렌더러 버전 동일(<code>26.1.112-59673f88</code>, 10씬 확인), 장면 파일은 다시 내려받았으나 원본과 바이트 동일(cmp), 채점 기준 동일</td></tr>
+  <tr><td>통계</td><td>rollout 평균 &rarr; 씬 평균, 씬 페어드 &Delta; = 블랙아웃 &minus; baseline, 부트스트랩 평균 CI(200,000회) 주, Wilcoxon 부.
+    alpasim에는 시드 제어가 없어 rollout 잡음이 양쪽 모두에 들어 있다.</td></tr>
+</table></div>
+
+<h2><span class="num">3</span> 결과 (사실)</h2>
+
+<h3>3.1 게이트</h3>
+<div class="tablewrap"><table>
+  <tr><th>게이트</th><th>기준</th><th>결과</th><th>판정</th></tr>
+  <tr><td>G0 개입 확인 (전수)</td><td>모든 드라이버 응답에 <code>blackout_cam</code>, 재계산 일치, 빈 궤적 0, baseline에는 기록 없음</td>
+    <td>300 rollout, 응답 54,260개 전부 기록·재계산 일치, 빈 궤적 0. 카메라별 13,705 / 13,397 / 13,654 / 13,504 (좌측 / 전방 광각 / 우측 / 망원)</td><td class="good">PASS</td></tr>
+  <tr><td>G1 효과 존재</td><td>씬 점수 &Delta;의 CI가 0을 배제</td><td>+0.0238 [&minus;0.0067, +0.0546]</td><td class="bad">FAIL</td></tr>
+</table></div>
+
+<h3>3.2 점수와 게이트 (씬 페어드)</h3>
+<div class="tablewrap"><table>
+  <tr><th>지표</th><th class="num">baseline</th><th class="num">블랙아웃</th><th class="num">&Delta; [95% CI]</th><th class="num">Wilcoxon p</th><th class="num">씬 &minus; / + / 0</th><th class="num">rollout 수</th></tr>
+  <tr><td><strong>씬 점수</strong></td><td class="num">0.7496</td><td class="num">0.7733</td><td class="num"><strong>+0.0238</strong> [&minus;0.0067, +0.0546]</td><td class="num">0.14</td><td class="num">32 / 45 / 73</td><td class="num">통과 267 &rarr; 271</td></tr>
+  <tr><td>offroad 비율</td><td class="num">0.070</td><td class="num">0.077</td><td class="num">+0.0067 [&minus;0.0167, +0.0300]</td><td class="num">0.59</td><td class="num">4 / 7 / 139</td><td class="num">21 &rarr; 23</td></tr>
+  <tr><td>과실 충돌 비율</td><td class="num">0.040</td><td class="num">0.020</td><td class="num">&minus;0.0200 [&minus;0.0400, &minus;0.0033]</td><td class="num">0.034</td><td class="num">7 / 1 / 142</td><td class="num">12 &rarr; 6</td></tr>
+  <tr><td>offroad 또는 과실 충돌</td><td class="num">0.110</td><td class="num">0.097</td><td class="num">&minus;0.0133 [&minus;0.0467, +0.0200]</td><td class="num">0.42</td><td class="num">11 / 7 / 132</td><td class="num">33 &rarr; 29</td></tr>
+  <tr><td>충돌 전체</td><td class="num">0.133</td><td class="num">0.113</td><td class="num">&minus;0.0200 [&minus;0.0533, +0.0100]</td><td class="num">0.23</td><td class="num">12 / 6 / 132</td><td class="num">40 &rarr; 34</td></tr>
+  <tr><td>진행률 (clipped)</td><td class="num">0.7467</td><td class="num">0.7571</td><td class="num">+0.0104 [&minus;0.0109, +0.0316]</td><td class="num">0.41</td><td class="num">56 / 60 / 34</td><td class="num"></td></tr>
+  <tr><td>주행 거리 (m)</td><td class="num">124.2</td><td class="num">126.1</td><td class="num">+1.93 [&minus;3.16, +6.92]</td><td class="num">0.47</td><td class="num">74 / 75 / 1</td><td class="num"></td></tr>
+  <tr><td>계획 이탈 (plan deviation)</td><td class="num">0.3157</td><td class="num">0.3168</td><td class="num">+0.0011 [&minus;0.0127, +0.0149]</td><td class="num">0.70</td><td class="num">65 / 84 / 0</td><td class="num"></td></tr>
+  <tr><td>GT 경로까지 거리 (m)</td><td class="num">2.886</td><td class="num">2.896</td><td class="num">+0.0100 [&minus;0.1268, +0.1519]</td><td class="num">0.27</td><td class="num">82 / 67 / 1</td><td class="num"></td></tr>
+</table></div>
+<p class="small">참고 척도: 같은 Origin150에서 24% 프루닝(<code>dual_u40_v2</code>)의 출하 점수 차이는 baseline 대비 +0.079였다.
+같은 런 안의 두 rollout 간 점수 차이(절댓값 평균)는 baseline 0.145, 블랙아웃 0.095다.</p>
+
+<figure>
+  <img src="PLOT::bc::score_paired.png" alt="씬별 점수 산점도와 차이 히스토그램">
+  <figcaption>그림 1. 씬별 점수(왼쪽, 겹침을 피하려 살짝 흩뜨림)와 씬 차이 분포(오른쪽). 150씬 중 73씬이 정확히 같고, 나머지는 양쪽으로 흩어진다.</figcaption>
+</figure>
+
+<h3>3.3 연속 대리지표 (점수보다 민감한 지표)</h3>
+<div class="tablewrap"><table>
+  <tr><th>지표 (<code>analyze_lateral.py</code> / <code>analyze_longitudinal.py</code>)</th><th class="num">&Delta; [95% CI]</th><th class="num">p</th></tr>
+  <tr><td>차선 밖 시간 비율</td><td class="num">+0.0023 [&minus;0.0171, +0.0218]</td><td class="num">0.89</td></tr>
+  <tr><td>차선 가장자리 0.2 m 이내 시간</td><td class="num">&minus;0.0115 [&minus;0.0293, +0.0062]</td><td class="num">0.15</td></tr>
+  <tr><td>차선 여유 p05 (m)</td><td class="num">+0.0166 [&minus;0.0045, +0.0376]</td><td class="num">0.086</td></tr>
+  <tr><td>최장 차선 이탈 (s)</td><td class="num">&minus;0.0007 [&minus;0.333, +0.345]</td><td class="num">0.92</td></tr>
+  <tr><td>잘못된 차선 시간</td><td class="num">&minus;0.0098 [&minus;0.0238, +0.0028]</td><td class="num">0.18</td></tr>
+  <tr><td>근접 시 제동 가속</td><td class="num">+0.0037 [&minus;0.033, +0.043]</td><td class="num">0.36</td></tr>
+  <tr><td>근접 시 제동 비율</td><td class="num">&minus;0.0031 [&minus;0.029, +0.022]</td><td class="num">0.43</td></tr>
+  <tr><td>차간 시간 p05 (s)</td><td class="num">+0.201 [&minus;0.021, +0.612]</td><td class="num">0.20</td></tr>
+  <tr><td>차간 시간 1초 미만 비율</td><td class="num">&minus;0.0050 [&minus;0.020, +0.010]</td><td class="num">0.72</td></tr>
+  <tr><td>선행차 TTC 2초 미만 비율</td><td class="num">&minus;0.0048 [&minus;0.016, +0.005]</td><td class="num">0.85</td></tr>
+  <tr><td>근접 시 속도 (m/s)</td><td class="num">&minus;0.049 [&minus;0.230, +0.126]</td><td class="num">0.49</td></tr>
+</table></div>
+<p class="small">전체 표: <code>outputs/blackout_closedloop/lateral/summary.txt</code>, <code>longitudinal/summary.txt</code>.</p>
+
+<h3>3.4 CoC (추론 텍스트)</h3>
+<p>퇴화율 0.6% &rarr; 0.6% (빈 출력 0.1%, soup 0.5% 동일), 평균 길이 74 &rarr; 74, 고유 단어 비율 0.94 &rarr; 0.94
+(<code>outputs/blackout_closedloop/alpasim_eval/summary.txt</code>).</p>
+
+<h3>3.5 연속된 두 계획 사이의 변화 (plan churn)</h3>
+<p>스텝 t의 계획과 t&minus;0.1초 계획이 같은 미래 시각에서 얼마나 다른지(m). 블랙아웃이 계획을 흔든다면 가장 먼저 여기서 보여야 한다.</p>
+<div class="tablewrap"><table>
+  <tr><th>비교</th><th class="num">0.5초 앞</th><th class="num">1.0초 앞</th><th class="num">3.0초 앞</th></tr>
+  <tr><td>baseline 런 (씬 평균)</td><td class="num">0.0425</td><td class="num">0.1500</td><td class="num">1.279</td></tr>
+  <tr><td>블랙아웃 런 (씬 평균)</td><td class="num">0.0417</td><td class="num">0.1468</td><td class="num">1.266</td></tr>
+  <tr><td>&Delta; 블랙아웃 &minus; baseline [95% CI]</td><td class="num">&minus;0.0008 [&minus;0.0023, +0.0010]</td><td class="num">&minus;0.0033 [&minus;0.0075, +0.0011]</td><td class="num">&minus;0.0136 [&minus;0.0481, +0.0207]</td></tr>
+  <tr><td>같은 rollout 안: 망원이 가려진 스텝 &minus; 나머지 [95% CI]</td><td class="num">+0.0002 [&minus;0.0014, +0.0019], p=0.13</td><td class="num">+0.0010 [&minus;0.0033, +0.0053], p=0.65</td><td class="num">+0.0169 [&minus;0.0131, +0.0467], p=0.29</td></tr>
+</table></div>
+
+<figure>
+  <img src="PLOT::bc::churn_by_camera.png" alt="가려진 카메라별 계획 변화">
+  <figcaption>그림 2. 블랙아웃 런에서 각 카메라가 가려진 스텝의 계획 변화(점, rollout 간 95% CI)와 baseline 런의 평균(점선).
+  네 카메라 모두 baseline과 겹치고 서로도 구별되지 않는다.</figcaption>
+</figure>
+
+<h2><span class="num">4</span> 해석 (의견)</h2>
+
+<div class="callout opinion">
+  <strong>매 스텝 프레임 1장의 손실은 바로 다음 계획조차 바꾸지 못한다</strong>
+  가장 민감한 신호인 연속 계획 간 변화가 baseline과 같고, 어느 카메라가 가려졌는지와도 무관하다. 검은 프레임은
+  한 스텝만 존재하고, 같은 카메라의 0.1&ndash;0.3초 전 프레임 세 장이 거의 같은 장면을 담고 있어 모델이 거기서 대신 읽는
+  것으로 본다. 개루프의 1.6초 비용이 1&ndash;2 mm(+2&ndash;4%)였던 것과 맞는 결과다. 폐루프가 실제로 실행하는 지평(~1.9초)에서는
+  그 크기가 주행을 바꿀 만큼이 아니었다.
+</div>
+
+<div class="callout opinion">
+  <strong>개루프의 "전방 망원이 중요하다"가 여기서 보이지 않는 이유</strong>
+  망원 비용은 6.4초 지평에서 컸고(OOD +6.5%) 1.6초에서는 작았다. 이번 개입에서 망원이 가려지는 것은 전체 스텝의 25%이고,
+  그 스텝에서도 망원의 과거 프레임은 정상이다. 폐루프는 먼 지평 계획을 실행하기 전에 0.1초 뒤 새 계획으로 바꾸므로,
+  망원 손실이 만드는 먼 지평 오차가 실행되기 어렵다. 실제로 망원 스텝의 3초 앞 계획 변화도 나머지와 구별되지 않았다(+0.017, p=0.29).
+</div>
+
+<div class="callout opinion">
+  <strong>과실 충돌 감소(12 &rarr; 6건)는 효과로 읽지 않는다</strong>
+  이 보고서에서 본 지표가 25개 가까이 되고 보정하지 않은 p=0.034이며, 건수가 작고(씬 기준 7 대 1), 같은 모델을 두 번
+  돌렸을 때의 잡음 바닥이 측정되어 있지 않다. 블랙아웃이 안전을 높인다는 기전도 없다. 판단은 "해가 관찰되지 않았다"까지다.
+</div>
+
+<div class="callout opinion">
+  <strong>한계</strong>
+  (1) 기준은 2개월 전 같은 조건의 런이고 시드 제어가 없어, 같은 모델을 다시 돌렸을 때의 차이(잡음 바닥)를 따로 재지 않았다.
+  (2) 강제 GT 인계 시점의 제동 인공물(2026-10-08)이 두 조건에 똑같이 들어 있다. 근접 시 제동 지표는 바뀌지 않아(+0.004) 블랙아웃이 그
+  반응을 바꾼 흔적은 없다. (3) 점수는 GT 경로 4 m 이탈 뒤를 채점하지 않는다.
+</div>
+
+<h3>다음 단계 제안</h3>
+<ul>
+  <li><strong>지속형 고장으로 강도 올리기</strong>: 한 카메라(특히 전방 망원)를 rollout 내내 가리거나, 검은 프레임이 과거 프레임 자리에 남게 하기.
+    한 스텝짜리 손실은 시간적 중복으로 흡수되므로, 의미 있는 비용은 손실이 여러 스텝 이어질 때 나타날 가능성이 크다. 개루프에서 먼저 30분으로 확인할 수 있다.</li>
+  <li>압축 모델(MoOP 등)의 견고성 비교는 비용이 보이는 개입을 찾은 뒤에 하는 것이 효율적이다.</li>
+</ul>
+
+<h2><span class="num">5</span> 재현</h2>
+<pre><code># alpasim 드라이버 (기본값 꺼짐): src/driver/src/alpasim_driver/{schema.py,main.py}
+PREFIX=m2601_bkrand_ DRIVER_OMP_THREADS=8 \
+EXTRA_OVERRIDES="++driver.inference.blackout_t0_random_camera=true" \
+  bash experiments/head_analysis/launch_alpasim_shards.sh baseline 150 2 "4 5 6 7"
+.venv/bin/python experiments/head_analysis/merge_alpasim_shards.py --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    --shards m2601_bkrand_baseline_sh{0,1,2,3} --out m2601_merged_bkrand_baseline --expect-scenes 150
+/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python experiments/evaluation/analyze_blackout_closedloop.py
+# + analyze_lateral.py / analyze_longitudinal.py / analyze_alpasim.py
+#   --prefix m2601_merged_ --configs baseline bkrand_baseline (--reference baseline)</code></pre>
+<p class="small">런: <code>alpasim-runs/m2601_merged_bkrand_baseline</code> (shard <code>m2601_bkrand_baseline_sh0..3</code>).
+분석: <code>outputs/blackout_closedloop/</code> (<code>summary.txt</code>, <code>metrics.json</code>, <code>plots/</code>, <code>lateral/</code>, <code>longitudinal/</code>, <code>alpasim_eval/</code>).</p>
+
+</div>
+</body>
+</html>
