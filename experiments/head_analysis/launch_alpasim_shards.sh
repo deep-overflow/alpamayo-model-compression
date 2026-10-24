@@ -32,6 +32,8 @@
 #   DRIVER_OMP_THREADS=8     worth 2.3x wall-clock; must not be mixed within one comparison
 #   ONLY_SHARDS="0 2"        run a subset while keeping the same k-way split
 #   DRY_RUN=1                write the shard suites and print the plan, launch nothing
+#   EXTRA_OVERRIDES="..."    extra wizard overrides, space-separated, e.g.
+#                            "++driver.inference.blackout_t0_random_camera=true"
 #
 # Example, the hard-100 set (make_hard_suite.py writes the CSV):
 #   SUITE=public_2601_hard100 PREFIX=h100_ DRIVER_OMP_THREADS=8 \
@@ -152,6 +154,10 @@ for i in "${!GPUS[@]}"; do
   log_dir="$RUNS/${PREFIX}${CFG}_sh${i}"
   extra=()
   [ "$CFG" != "baseline" ] && extra+=("driver.model.checkpoint_path=/mnt/drivers/${CFG}")
+  if [ -n "${EXTRA_OVERRIDES-}" ]; then
+    read -r -a extra_ov <<<"$EXTRA_OVERRIDES"
+    extra+=("${extra_ov[@]}")
+  fi
   # The driver burns ~11.6 cores while the model runs on the GPU: with OMP_NUM_THREADS
   # unset, torch opens one intra-op thread per core (64 here) and the OpenMP barriers
   # busy-wait, so 64 threads sit at ~18% each doing nothing. Four shards make that 256

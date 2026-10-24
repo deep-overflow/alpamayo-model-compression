@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>최신 프레임 1장 블랙아웃 &mdash; 개루프</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; camera robustness &middot; 2026-10-18</div>
+  <h1>최신 프레임 1장 블랙아웃 &mdash; 개루프 비용은 작고 일관되며, 24% 프루닝의 약 1/5</h1>
+  <div class="meta">
+    무압축 <code>nvidia/Alpamayo-1.5-10B</code> (rev <code>7aba829</code>), test500 + OOD-val262, rollout만,
+    Ada RTX 5880 &times;4 (GPU 4&ndash;7), 2026-10-18 21:30&ndash;21:58 KST.
+    저장된 Ada baseline(<code>baseline_pred_test</code> / <code>baseline_pred_oodval</code>)과 같은 시드로 페어드.<br>
+    계획: <code>plans/2026-10-18_camera-blackout-openloop.md</code> ·
+    러너 <code>experiments/evaluation/run_baseline.py --blackout</code> ·
+    분석 <code>experiments/evaluation/analyze_blackout.py</code> &rarr; <code>outputs/blackout_analysis/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>한 문장</strong>
+  매 추론 입력 16장 중 무작위 카메라 1대의 최신(t0) 프레임을 검은 이미지로 바꾸면 minADE@6이
+  <strong>모든 지평에서 2&ndash;4% 나빠진다</strong>. 1.6초&middot;3.2초에서는 평균의 CI가 두 세트 모두 0을
+  배제하지만, 사전 등록한 주 지표인 6.4초 평균은 양쪽으로 크게 튀는 소수 클립 때문에 CI가 0을 포함해
+  <strong>G1은 미통과</strong>다. 크기는 24% 프루닝(<code>dual_u40_v2</code>)이 같은 클립에서 내는 비용의
+  <strong>14&ndash;26%</strong>이고, CoC 텍스트가 바뀌지 않은 클립(92% / 86%)만으로도 짧은 지평 악화가 유의하다.
+</div>
+
+<h2><span class="num">1</span> 목적</h2>
+<p>
+  Alpamayo 1.5는 매 추론마다 카메라 4대(좌측 크로스 120&deg; / 전방 광각 120&deg; / 우측 크로스 120&deg; /
+  전방 망원 30&deg;) &times; 시점 4개(t0&minus;0.3, &minus;0.2, &minus;0.1, t0초) = <strong>16장</strong>을 받는다.
+  alpasim 폐루프 런(150씬 35개, hard100 9개)이 전부 이 설정이었음은 같은 날 rollout 로그 약 1만 2천 개를
+  전수 검사해 확인했다. 질문은 <strong>최신 시점 프레임 중 1장이 들어오지 않고 검은 이미지로 대체될 때
+  주행 성능이 얼마나 떨어지는가</strong>이고, 폐루프(카드 4장에 config당 ~8시간)에 앞서 개루프(~30분)로 효과
+  크기를 먼저 잰다.
+</p>
+<ul>
+  <li><strong>H1</strong>: 최신 프레임 1장을 잃으면 minADE@6이 증가한다.</li>
+  <li><strong>H2 (탐색)</strong>: 가려진 카메라가 전방 광각일 때 하락이 가장 크다.</li>
+  <li>반대 가능성: 과거 프레임 12장과 ego history가 남아 있어 거의 보상된다.</li>
+</ul>
+
+<h2><span class="num">2</span> 설정</h2>
+<div class="tablewrap"><table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>모델</td><td><code>nvidia/Alpamayo-1.5-10B</code>, rev <code>7aba8293</code>, 무압축, bf16, SDPA</td></tr>
+  <tr><td>평가셋</td><td>test500 (공식 test), OOD-val262 (<code>ood_val</code> 매니페스트). rollout 조건만, TF 없음 (2026-08-19 프로토콜)</td></tr>
+  <tr><td>개입</td><td>클립마다 카메라 슬롯 <code>sha256(f"blackout:0:{clip_id}")[:4] % 4</code>를 골라
+    <code>image_frames[slot, -1] = 0</code>. JPEG 디코드 후 0으로 채우므로 정확히 검정이다.</td></tr>
+  <tr><td>개입 검증 (CPU)</td><td>프로세서 출력에서 바뀌는 이미지는 의도한 1장뿐(3클립 확인), 토큰 수 3,344로 불변,
+    검은 패치는 정규화 후 전부 &minus;1.0. 이미지 슬롯·카메라 이름·<code>frame 3</code> 텍스트는 그대로다.</td></tr>
+  <tr><td>가려진 카메라 분포</td><td>test500: 좌측 117 / 전방 광각 132 / 우측 131 / 망원 120 · OOD-val262: 73 / 66 / 60 / 63</td></tr>
+  <tr><td>기준</td><td>저장된 Ada baseline. 카메라 선택 시드를 궤적 샘플링 시드(<code>clip_seed</code>)와 분리해, 두 조건이 같은 샘플링 시드를 공유한다.</td></tr>
+  <tr><td>지표</td><td>k=8 샘플을 저장하고 앞 6개로 minADE@6 / minFDE@6. 지평 1.6 / 3.2 / 6.4초. CoC 퇴화율, CoC 텍스트 동일 비율</td></tr>
+  <tr><td>통계</td><td>페어드 &Delta; = 블랙아웃 &minus; baseline. 평균의 부트스트랩 CI(200,000회), 중앙값 + Wilcoxon, 10% 절사평균(20,000회)</td></tr>
+  <tr><td>비교 척도</td><td><code>dual_u40_v2_pred_*</code> (출하 24% 프루닝, Ada, 같은 클립·시드)</td></tr>
+  <tr><td>하드웨어</td><td>Ada RTX 5880 &times;4 (GPU 4&ndash;7), 세트마다 4 shard, 클립당 ~9초</td></tr>
+</table></div>
+
+<h2><span class="num">3</span> 결과 (사실)</h2>
+
+<h3>3.1 게이트</h3>
+<div class="tablewrap"><table>
+  <tr><th>게이트</th><th>기준</th><th>결과</th><th>판정</th></tr>
+  <tr><td>G0 파이프라인</td><td>수정한 러너로 블랙아웃 없이 test500 앞 10클립 &rarr; <code>baseline_pred_test</code>와 비트 동일</td>
+    <td><code>ade_rollout_k</code> 10/10, <code>gen_coc</code> 10/10, <code>pred_xy_k</code> 10/10 동일</td><td class="good">PASS</td></tr>
+  <tr><td>G1 효과 존재</td><td>6.4초 minADE@6 평균 &Delta;의 CI가 0을 배제</td>
+    <td>test500 +0.0189 [&minus;0.0023, +0.0406] · OOD-val262 +0.0261 [&minus;0.0234, +0.0773]</td><td class="bad">FAIL (두 세트)</td></tr>
+</table></div>
+
+<h3>3.2 baseline 대비 (minADE@6 / minFDE@6, 평균, m)</h3>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>지평</th><th class="num">baseline</th><th class="num">블랙아웃</th><th class="num">&Delta; 평균 [95% CI]</th>
+    <th class="num">상대</th><th class="num">&Delta; 중앙값</th><th class="num">Wilcoxon p</th><th class="num">악화 클립</th></tr>
+  <tr><td colspan="9"><strong>minADE@6</strong></td></tr>
+  <tr><td>test500</td><td>1.6 s</td><td class="num">0.0521</td><td class="num">0.0533</td><td class="num"><strong>+0.0012</strong> [+0.0003, +0.0021]</td><td class="num">+2.3%</td><td class="num">+0.0003</td><td class="num">0.0003</td><td class="num">57%</td></tr>
+  <tr><td>test500</td><td>3.2 s</td><td class="num">0.2075</td><td class="num">0.2120</td><td class="num"><strong>+0.0046</strong> [+0.0004, +0.0086]</td><td class="num">+2.2%</td><td class="num">+0.0010</td><td class="num">0.0004</td><td class="num">55%</td></tr>
+  <tr><td>test500</td><td>6.4 s</td><td class="num">0.8417</td><td class="num">0.8606</td><td class="num">+0.0189 [&minus;0.0023, +0.0406]</td><td class="num">+2.2%</td><td class="num">+0.0029</td><td class="num">0.006</td><td class="num">55%</td></tr>
+  <tr><td>OOD-val262</td><td>1.6 s</td><td class="num">0.0650</td><td class="num">0.0674</td><td class="num"><strong>+0.0024</strong> [+0.0004, +0.0045]</td><td class="num">+3.7%</td><td class="num">+0.0009</td><td class="num">0.0006</td><td class="num">59%</td></tr>
+  <tr><td>OOD-val262</td><td>3.2 s</td><td class="num">0.2585</td><td class="num">0.2671</td><td class="num"><strong>+0.0086</strong> [+0.0002, +0.0175]</td><td class="num">+3.3%</td><td class="num">+0.0016</td><td class="num">0.044</td><td class="num">56%</td></tr>
+  <tr><td>OOD-val262</td><td>6.4 s</td><td class="num">0.9995</td><td class="num">1.0257</td><td class="num">+0.0261 [&minus;0.0234, +0.0773]</td><td class="num">+2.6%</td><td class="num">+0.0033</td><td class="num">0.21</td><td class="num">53%</td></tr>
+  <tr><td colspan="9"><strong>minFDE@6</strong></td></tr>
+  <tr><td>test500</td><td>1.6 s</td><td class="num">0.1327</td><td class="num">0.1359</td><td class="num"><strong>+0.0033</strong> [+0.0003, +0.0062]</td><td class="num">+2.5%</td><td class="num">+0.0010</td><td class="num">0.002</td><td class="num">56%</td></tr>
+  <tr><td>test500</td><td>3.2 s</td><td class="num">0.5529</td><td class="num">0.5654</td><td class="num">+0.0124 [&minus;0.0009, +0.0250]</td><td class="num">+2.2%</td><td class="num">+0.0044</td><td class="num">0.0004</td><td class="num">55%</td></tr>
+  <tr><td>test500</td><td>6.4 s</td><td class="num">2.2673</td><td class="num">2.3344</td><td class="num">+0.0671 [&minus;0.0050, +0.1488]</td><td class="num">+3.0%</td><td class="num">+0.0134</td><td class="num">0.006</td><td class="num">54%</td></tr>
+  <tr><td>OOD-val262</td><td>1.6 s</td><td class="num">0.1751</td><td class="num">0.1794</td><td class="num">+0.0043 [&minus;0.0015, +0.0103]</td><td class="num">+2.5%</td><td class="num">+0.0012</td><td class="num">0.10</td><td class="num">56%</td></tr>
+  <tr><td>OOD-val262</td><td>3.2 s</td><td class="num">0.6843</td><td class="num">0.7072</td><td class="num">+0.0229 [&minus;0.0113, +0.0577]</td><td class="num">+3.3%</td><td class="num">+0.0069</td><td class="num">0.040</td><td class="num">58%</td></tr>
+  <tr><td>OOD-val262</td><td>6.4 s</td><td class="num">2.4959</td><td class="num">2.5830</td><td class="num">+0.0871 [&minus;0.0756, +0.2450]</td><td class="num">+3.5%</td><td class="num">+0.0212</td><td class="num">0.073</td><td class="num">56%</td></tr>
+</table></div>
+
+<figure>
+  <img src="PLOT::bk::relative_by_horizon.png" alt="baseline 대비 minADE@6 상대 변화, 지평별, 블랙아웃과 24% 프루닝">
+  <figcaption>그림 1. baseline 대비 minADE@6 상대 변화(%)와 95% CI. 파란색은 블랙아웃(16장 중 1장), 회색은
+  같은 클립·시드의 24% 프루닝(<code>dual_u40_v2</code>). 지평마다 오차 크기가 수십 배 달라서 상대값으로 그렸다.</figcaption>
+</figure>
+
+<div class="tablewrap"><table>
+  <tr><th>비교 척도: 24% 프루닝 (<code>dual_u40_v2</code>) minADE@6 &Delta;</th><th class="num">1.6 s</th><th class="num">3.2 s</th><th class="num">6.4 s</th></tr>
+  <tr><td>test500 dual</td><td class="num">+0.0084 [+0.0051, +0.0117]</td><td class="num">+0.0334 [+0.0210, +0.0458]</td><td class="num">+0.1081 [+0.0549, +0.1610]</td></tr>
+  <tr><td>test500 블랙아웃 &divide; dual</td><td class="num">14%</td><td class="num">14%</td><td class="num">17%</td></tr>
+  <tr><td>OOD-val262 dual</td><td class="num">+0.0094 [+0.0028, +0.0165]</td><td class="num">+0.0317 [+0.0061, +0.0587]</td><td class="num">+0.1197 [+0.0216, +0.2261]</td></tr>
+  <tr><td>OOD-val262 블랙아웃 &divide; dual</td><td class="num">26%</td><td class="num">27%</td><td class="num">22%</td></tr>
+</table></div>
+
+<figure>
+  <img src="PLOT::bk::delta_by_horizon.png" alt="baseline 대비 절대 변화, 지평별">
+  <figcaption>그림 2. 같은 결과의 절대값(m). minFDE@6과 프루닝 비교 척도를 함께 그렸다.</figcaption>
+</figure>
+
+<h3>3.3 꼬리: 6.4초 CI가 넓은 이유</h3>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>지평</th><th>|&Delta;| 상위 5클립의 &Delta; (m)</th><th class="num">상위 5클립 몫</th><th class="num">10% 절사평균 [95% CI]</th></tr>
+  <tr><td>test500</td><td>1.6 s</td><td>+0.094, &minus;0.066, +0.060, +0.045, &minus;0.036</td><td class="num">16%</td><td class="num"><strong>+0.0010</strong> [+0.0004, +0.0015]</td></tr>
+  <tr><td>test500</td><td>6.4 s</td><td>+2.850, &minus;2.681, +1.639, &minus;1.151, &minus;1.038</td><td class="num">&minus;4%</td><td class="num"><strong>+0.0085</strong> [+0.0025, +0.0153]</td></tr>
+  <tr><td>OOD-val262</td><td>1.6 s</td><td>+0.099, &minus;0.093, +0.088, &minus;0.065, +0.065</td><td class="num">15%</td><td class="num"><strong>+0.0016</strong> [+0.0006, +0.0026]</td></tr>
+  <tr><td>OOD-val262</td><td>6.4 s</td><td>+3.429, &minus;3.333, +2.512, &minus;1.486, +1.333</td><td class="num">36%</td><td class="num">+0.0085 [&minus;0.0039, +0.0212]</td></tr>
+</table></div>
+<p class="small">상위 5클립 몫 = 그 5클립 &Delta;의 합 &divide; 전체 &Delta;의 합. 6.4초에서는 양쪽으로 2&ndash;3 m씩 움직인 클립이
+서로 상쇄하므로 몫이 음수이거나 작아도 분산은 크다.</p>
+
+<figure>
+  <img src="PLOT::bk::scatter_minade.png" alt="클립별 baseline 대 블랙아웃 minADE@6 산점도">
+  <figcaption>그림 3. 클립별 minADE@6 (6.4초), 로그 축. 대부분 대각선 위에 있고, 소수 클립이 양방향으로 크게 벗어난다.</figcaption>
+</figure>
+
+<h3>3.4 CoC (추론 텍스트)</h3>
+<div class="tablewrap"><table>
+  <tr><th>항목</th><th class="num">test500</th><th class="num">OOD-val262</th></tr>
+  <tr><td>CoC 퇴화율 baseline &rarr; 블랙아웃</td><td class="num">0.6% &rarr; 0.8% (&Delta; +0.2pp [&minus;0.4, +1.0])</td><td class="num">0.0% &rarr; 0.8% (&Delta; +0.8pp [0.0, +1.9])</td></tr>
+  <tr><td>CoC 텍스트가 baseline과 똑같은 클립</td><td class="num">92.2%</td><td class="num">86.3%</td></tr>
+  <tr><td>&nbsp;&nbsp;가린 카메라: 좌측 크로스</td><td class="num">94.9%</td><td class="num">91.8%</td></tr>
+  <tr><td>&nbsp;&nbsp;가린 카메라: 전방 광각</td><td class="num"><strong>86.4%</strong></td><td class="num"><strong>78.8%</strong></td></tr>
+  <tr><td>&nbsp;&nbsp;가린 카메라: 우측 크로스</td><td class="num">96.2%</td><td class="num">91.7%</td></tr>
+  <tr><td>&nbsp;&nbsp;가린 카메라: 전방 망원</td><td class="num">91.7%</td><td class="num">82.5%</td></tr>
+</table></div>
+
+<p>CoC 텍스트가 바뀌었는지로 클립을 나누면 (minADE@6 &Delta; 평균 [95% CI]):</p>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>CoC</th><th class="num">n</th><th class="num">1.6 s</th><th class="num">6.4 s</th><th class="num">6.4 s 중앙값 / Wilcoxon p</th></tr>
+  <tr><td>test500</td><td>그대로</td><td class="num">461</td><td class="num"><strong>+0.0014</strong> [+0.0006, +0.0022]</td><td class="num">+0.0149 [&minus;0.0001, +0.0305]</td><td class="num">+0.0024 / 0.036</td></tr>
+  <tr><td>test500</td><td>바뀜</td><td class="num">39</td><td class="num">&minus;0.0010 [&minus;0.0070, +0.0048]</td><td class="num">+0.0658 [&minus;0.1432, +0.2770]</td><td class="num">+0.0330 / 0.021</td></tr>
+  <tr><td>OOD-val262</td><td>그대로</td><td class="num">226</td><td class="num"><strong>+0.0026</strong> [+0.0004, +0.0047]</td><td class="num">+0.0219 [&minus;0.0121, +0.0597]</td><td class="num">+0.0020 / 0.38</td></tr>
+  <tr><td>OOD-val262</td><td>바뀜</td><td class="num">36</td><td class="num">+0.0015 [&minus;0.0042, +0.0088]</td><td class="num">+0.0526 [&minus;0.2385, +0.3424]</td><td class="num">+0.0121 / 0.35</td></tr>
+</table></div>
+
+<h3>3.5 가려진 카메라별 (탐색)</h3>
+<p class="small">카메라당 60&ndash;132클립이라 검정력이 낮고 다중 비교 보정을 하지 않았다. 방향만 본다.</p>
+<div class="tablewrap"><table>
+  <tr><th>세트</th><th>가린 카메라</th><th class="num">n</th><th class="num">1.6 s &Delta; [95% CI]</th><th class="num">6.4 s &Delta; [95% CI]</th><th class="num">6.4 s 중앙값 / p</th></tr>
+  <tr><td>test500</td><td>좌측 크로스 120</td><td class="num">117</td><td class="num">&minus;0.0001 [&minus;0.0018, +0.0013]</td><td class="num">&minus;0.0022 [&minus;0.0185, +0.0114]</td><td class="num">&minus;0.0010 / 0.96</td></tr>
+  <tr><td>test500</td><td>전방 광각 120</td><td class="num">132</td><td class="num">+0.0015 [+0.0000, +0.0030]</td><td class="num">+0.0343 [&minus;0.0019, +0.0737]</td><td class="num">+0.0101 / 0.007</td></tr>
+  <tr><td>test500</td><td>우측 크로스 120</td><td class="num">131</td><td class="num">+0.0015 [+0.0003, +0.0029]</td><td class="num">+0.0161 [+0.0019, +0.0326]</td><td class="num">+0.0011 / 0.15</td></tr>
+  <tr><td>test500</td><td>전방 망원 30</td><td class="num">120</td><td class="num">+0.0017 [&minus;0.0007, +0.0045]</td><td class="num">+0.0254 [&minus;0.0503, +0.1014]</td><td class="num">+0.0048 / 0.31</td></tr>
+  <tr><td>OOD-val262</td><td>좌측 크로스 120</td><td class="num">73</td><td class="num">&minus;0.0001 [&minus;0.0029, +0.0023]</td><td class="num">&minus;0.0414 [&minus;0.1424, +0.0172]</td><td class="num">&minus;0.0027 / 0.55</td></tr>
+  <tr><td>OOD-val262</td><td>전방 광각 120</td><td class="num">66</td><td class="num">&minus;0.0013 [&minus;0.0042, +0.0016]</td><td class="num">&minus;0.0210 [&minus;0.0788, +0.0322]</td><td class="num">+0.0012 / 0.94</td></tr>
+  <tr><td>OOD-val262</td><td>우측 크로스 120</td><td class="num">60</td><td class="num">+0.0029 [&minus;0.0015, +0.0065]</td><td class="num">+0.0250 [&minus;0.0051, +0.0606]</td><td class="num">+0.0079 / 0.098</td></tr>
+  <tr><td>OOD-val262</td><td>전방 망원 30</td><td class="num">63</td><td class="num">+0.0088 [+0.0029, +0.0151]</td><td class="num">+0.1548 [+0.0041, +0.3310]</td><td class="num">+0.0151 / 0.098</td></tr>
+</table></div>
+
+<figure>
+  <img src="PLOT::bk::delta_by_camera.png" alt="가려진 카메라별 minADE@6 변화">
+  <figcaption>그림 4. 가려진 카메라별 minADE@6 &Delta; (1.6초 초록, 6.4초 파랑), 95% CI. 탐색 결과다.</figcaption>
+</figure>
+
+<h3>3.6 주행 상황(bucket)별, test500 6.4초 (탐색)</h3>
+<div class="tablewrap"><table>
+  <tr><th>bucket</th><th class="num">n</th><th class="num">&Delta; 평균 [95% CI]</th><th class="num">중앙값 / Wilcoxon p</th></tr>
+  <tr><td>decel_stop</td><td class="num">65</td><td class="num">&minus;0.0306 [&minus;0.0619, &minus;0.0051]</td><td class="num">&minus;0.0008 / 0.31</td></tr>
+  <tr><td>turn</td><td class="num">82</td><td class="num">+0.0630 [&minus;0.0447, +0.1733]</td><td class="num">+0.0211 / 0.005</td></tr>
+  <tr><td>accel</td><td class="num">75</td><td class="num">&minus;0.0071 [&minus;0.0591, +0.0406]</td><td class="num">+0.0029 / 0.90</td></tr>
+  <tr><td>cruise</td><td class="num">278</td><td class="num">+0.0244 [+0.0102, +0.0402]</td><td class="num">+0.0030 / 0.015</td></tr>
+</table></div>
+<p class="small">OOD-val262는 bucket마다 29&ndash;140클립이고 네 칸 모두 평균 CI가 0을 포함한다(turn +0.2066 [&minus;0.0226, +0.5293], n=29).
+수치는 <code>outputs/blackout_analysis/summary.txt</code>에 있다.</p>
+
+<h2><span class="num">4</span> 해석 (의견)</h2>
+
+<div class="callout opinion">
+  <strong>효과는 실재하지만 작다</strong>
+  모든 지평·두 세트에서 중앙값이 양수이고, 짧은 지평에서는 평균의 CI도 0을 배제한다. 그래서 "최신 프레임 1장은
+  무시된다"는 반대 가설은 지지되지 않는다. 다만 크기는 2&ndash;4%로, 이 프로젝트가 판정에 쓰는 0.05 m 기준과
+  24% 프루닝 비용(+0.11&ndash;0.12 m)에 비해 작다. 남은 15장, 특히 0.1초 전의 같은 카메라 프레임이 거의 같은
+  장면을 담고 있어 대부분 보상되는 것으로 본다.
+</div>
+
+<div class="callout opinion">
+  <strong>G1 미통과는 효과가 없어서라기보다 6.4초 꼬리 때문이다 (단, 사전 등록대로 FAIL로 기록)</strong>
+  6.4초에서는 소수 클립이 &plusmn;2&ndash;3 m씩 양쪽으로 움직인다. 입력이 조금만 바뀌어도 6개 샘플이 어느 경로
+  모드로 가는지가 바뀌는, 이 프로토콜에서 늘 보는 heavy tail이다. 극단 10%를 자르면 test500에서는 CI가
+  0을 배제한다(+0.0085 [+0.0025, +0.0153]). 그래도 주 지표는 평균으로 사전 등록했으므로 판정은 바꾸지 않는다.
+</div>
+
+<div class="callout opinion">
+  <strong>추론보다 시각 경로로 궤적에 닿는다</strong>
+  CoC 텍스트는 대부분 그대로이고(92% / 86%) 퇴화율도 거의 변하지 않는다. 그런데 텍스트가 그대로인 클립만으로도
+  1.6초 악화가 유의하다. 검은 이미지가 바꾼 시각 토큰이 KV cache를 통해 expert에 직접 전달되는 경로로 보인다.
+  텍스트가 바뀐 클립(39 / 36개)은 6.4초 중앙값이 더 크지만 표본이 작다.
+</div>
+
+<div class="callout opinion">
+  <strong>어떤 카메라가 가장 중요한지는 이 데이터로 말할 수 없다</strong>
+  두 세트에서 일관된 것은 두 가지뿐이다. 좌측 크로스 카메라를 가려도 궤적이 변하지 않았고, 전방 광각을 가리면
+  CoC 텍스트가 가장 많이 바뀌었다(13.6% / 21.2%). 궤적 영향의 순서는 세트마다 다르다. test500에서는 전방 광각이
+  가장 크고, OOD에서는 망원이 가장 크다. OOD 망원의 6.4초 평균은 꼬리가 만든 값이지만(평균 +0.155, 중앙값 +0.015),
+  1.6초 악화(+0.0088 [+0.0029, +0.0151])는 꼬리 효과가 아니다. H2는 지지도 반증도 되지 않았다.
+  <br><br><strong>후속 (같은 날):</strong> 카메라 4대를 각각 모든 클립에서 가린 실험
+  (<code>2026-10-18_camera-blackout-percamera.html</code>)에서 답이 나왔다. 두 세트 모두에서 일관되게 비용이 나는 카메라는
+  <strong>전방 망원</strong>뿐이고(OOD 6.4초 +6.5%, 전방 광각보다 유의하게 나쁨, Holm p=0.015), 전방 광각은 거의 0이다.
+  위 표의 test500 전방 광각 +0.034는 그 132클립 부분집합의 우연이었다(전체 500클립에서 +0.019, 중앙값 p=0.57).
+</div>
+
+<h3>폐루프로 넘기기 전에</h3>
+<ul>
+  <li><strong>개입 강도를 먼저 정할 것.</strong> 사전 등록 규칙상 G1이 두 세트 모두 실패했으므로, 폐루프에 같은 개입을
+    그대로 넣기 전에 더 강한 개입을 개루프에서 각 ~30분으로 확인하는 것을 권한다.
+    (a) 4대 모두 t0 블랙, (b) 카메라 1대의 4프레임 전부 블랙(카메라 고장이 지속되는 경우).</li>
+  <li><strong>폐루프 실효 지평은 ~1.9초</strong>(2026-09-11)라서, 이번 개입이 1.6초에서 내는 +2&ndash;4%가 폐루프에서 관련된
+    크기다. 매 스텝(0.1초) 반복되면 누적될 수도 있으므로, 개루프의 작은 효과가 폐루프에서도 작다고 단정할 수는 없다.</li>
+  <li><strong>폐루프 설계에서 정할 두 가지</strong>: 가릴 카메라를 매 스텝 새로 뽑을지 rollout 동안 고정할지, 그리고 검은 프레임이
+    다음 스텝의 t&minus;0.1 자리로 밀려 들어가게 할지(고장 모사) t0 자리에만 둘지(이번 개루프와 같은 개입).</li>
+  <li>압축 모델(dual 등)의 견고성 비교는 효과가 충분히 큰 개입을 찾은 뒤가 효율적이다.</li>
+</ul>
+
+<h2><span class="num">5</span> 재현</h2>
+<pre><code>bash experiments/evaluation/launch_blackout.sh            # G0 + 블랙아웃, Ada 4-7, ~30분
+.venv/bin/python experiments/evaluation/analyze_blackout.py # -> outputs/blackout_analysis/
+python experiments/head_analysis/build_report.py \
+    experiments/evaluation/blackout_report_template.html \
+    reports/evaluation/2026-10-18_camera-blackout-openloop.html \
+    bk=$PWD/outputs/blackout_analysis/plots</code></pre>
+<p class="small">출력: <code>outputs/blackout_test/</code>, <code>outputs/blackout_oodval/</code>, <code>outputs/blackout_g0/</code>
+(행 파일 + <code>config.json</code>), <code>outputs/blackout_analysis/</code> (<code>config.json</code>, <code>metrics.json</code>,
+<code>summary.txt</code>, <code>plots/</code>). 로그: <code>logs/blackout/</code>.</p>
+
+</div>
+</body>
+</html>

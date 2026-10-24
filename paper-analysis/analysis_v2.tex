@@ -1,0 +1,106 @@
+\section{Analysis}
+\label{sec:analysis}
+
+% Revision of analysis.tex (2026-09-23). Finding 1 now covers both the depth/rank difference and
+% its token-level anatomy (formerly Findings 1 and 2); Finding 2 is the band-restricted
+% ablation that tests it; Finding 3 is the former expert Finding 2, unchanged except numbering.
+% The design rationale (formerly a closing subsection here) now lives in method_v2.tex.
+% Numbers: outputs/importance_v2 and outputs/gradanat_v1 (Finding 1), outputs/armheld_v1 +
+% tokabl_v1 + armmix_v1 (Finding 2); reports/evaluation/2026-09-21_why-importance-differs.html
+% and 2026-09-21_importance-causal-validation.html.
+
+\subsection{Analysis Setup}
+\label{sec:analysis_setup}
+
+We analyze Alpamayo-1.5-10B~\cite{wang2025alpamayo} to find out how importance scores distribute in the VLM backbone across the two objectives and in the action expert across denoising steps. We use 100 calibration clips selected from the PhysicalAI Autonomous Vehicles training dataset~\cite{wang2025alpamayo} for Taylor importance computation; the sampling procedure is described in Appendix~\ref{app:calibration_sampling}. For each VLM unit $u$ in layer $\ell$ (a query head or an MLP channel) we obtain two scores: $I^{\mathrm{CoC}}_{\ell,u}$ from the CE loss of the model's own CoC rollout and $I^{\mathrm{traj}}_{\ell,u}$ from the FM loss averaged over the 10 denoising steps. The ablations in Sec.~\ref{sec:band_ablation} use a separate set of 100 clips drawn from the in-distribution validation split, disjoint from the calibration clips.
+
+\subsection{Importance Score in VLM Backbone}
+\label{sec:vlm_analysis}
+
+\begin{finding}
+\textbf{Finding 1.} Parameters important for reasoning and those important for action generation occupy different parts of the VLM backbone. Up to layer 21 both objectives earn their importance mainly from what the units write at vision positions and rank units nearly alike; from layer 22 on, importance concentrates on the units' outputs at language positions -- almost entirely for CoC, only partially for trajectory -- and the two rankings diverge. Read at the same kind of position the rankings agree again at every depth, except at the generated-CoC tokens.
+\end{finding}
+
+\input{fig/fig3_vlm_analysis}
+
+We measure the layerwise importance for each objective, separately for query heads and MLP channels, and normalize each profile by its maximum across VLM layers to account for the difference in score scale. As shown in Figures~\ref{fig:vlm_mlp_importance} and~\ref{fig:vlm_qhead_importance}, trajectory importance peaks in intermediate layers (layer 18 for MLP channels, 19 for Q heads) and drops rapidly, whereas CoC importance keeps rising and peaks later (layer 27 and 24). The two profiles are not two independent shapes: the ratio $I^{\mathrm{traj}}/I^{\mathrm{CoC}}$ of the raw layer sums is nearly constant within layers 0--21 and again within layers 23--34, and falls by about $4.6\times$ between them (a two-level step at layer 23 explains 93\% of its variance for MLP channels and 86\% for Q heads). The different peaks therefore follow from a single change of regime at layers 22--23, which we use throughout to split the backbone into a \emph{trunk} (layers 0--21) and a \emph{late} band (layers 22--35).
+
+The same boundary separates agreement from disagreement within a layer. Figure~\ref{fig:vlm_rank_correlation} shows that the within-layer Spearman correlation between the two rankings falls from $0.78$ (mean over layers 0--21) to $0.34$ (layers 22--34) for Q heads and from $0.75$ to $0.34$ for MLP channels. For Q heads this is a genuine disagreement: each score reproduces its own ranking equally well in both bands when the calibration clips are split into disjoint halves (self-agreement $0.85\!\to\!0.82$ and $0.90\!\to\!0.89$), so the ceiling any agreement can reach is flat in depth and the corrected agreement still falls from $0.85$ to $0.37$. For MLP channels the ceiling itself falls in late layers, and about one third of the raw drop is measurement noise (corrected $0.92\!\to\!0.54$); the disagreement is smaller than the raw curve suggests but remains. At the budget used in Sec.~\ref{sec:structured_pruning} (19 of 32 heads per layer), the two single-objective selections share only 68\% of their retained Q heads in the late band, i.e.\ about six heads per layer are chosen differently.
+
+Where an objective's importance is earned can be read off exactly. A unit's gate gradient is a sum over token positions, $\partial L/\partial g_{\ell,u}=\sum_p x_{\ell,u}(p)\,\partial L/\partial x_{\ell,u}(p)$, so each score splits into the parts contributed by the unit's output at vision (2{,}880 tokens per clip), ego-history (48), prompt-text (157), and generated-CoC (about 16) positions -- i.e.\ into how much of the objective's first-order sensitivity comes from the information the unit writes at each kind of position. In layers 6--17 both objectives earn their importance mainly from the units' outputs at vision positions (90\% of $I^{\mathrm{traj}}$ and 75\% of $I^{\mathrm{CoC}}$ for MLP channels; 72\% and 63\% for Q heads), which is why the two rankings largely agree there. They do not agree completely, and the remainder is already the language side: $I^{\mathrm{CoC}}$ earns 24\% (MLP) and 34\% (Q heads) of its trunk importance at text-side positions, against 7\% and 18\% for $I^{\mathrm{traj}}$, so what the units write at text positions matters to the CoC objective even in the trunk -- and it is at those positions, the generated CoC in particular, that the two objectives value different units (below). Across layers 17--21 the importance of both objectives moves to language positions, and from layer 22 on it is concentrated there, but to different degrees. In layers 27--34, $I^{\mathrm{CoC}}$ is earned almost entirely (98\%) by the units' outputs at text-side positions (prompt text and generated CoC), whereas $I^{\mathrm{traj}}$ is earned there only partially (49\% for Q heads, 66\% for MLP channels) and keeps a substantial part at vision (35\% and 26\%) and ego-history (16\% and 8\%) positions. In the late band the two scores are therefore earned at different positions.
+% Optional figure: paper-fig/fig4_same_token_q_head.pdf (and _mlp); figures/fig4_token_handoff5_*
+% show the per-type shares. The numbers stand on their own if the figures are dropped.
+
+This difference in where importance is earned accounts for most of the rank disagreement. When \emph{both} scores are read at the same kind of position, the ceiling-corrected agreement in layers 22--34 rises from $0.38$ (pooled scores) to $0.79$ at vision positions, $0.81$ at prompt-text positions, and $0.94$ at ego-history positions for Q heads (MLP channels: $0.54\!\to\!0.72$, $0.74$, $0.83$): at any one kind of position the two objectives value nearly the same units. The exception is the generated CoC ($0.41$ for Q heads, $0.37$ for MLP channels): among the units whose outputs at the reasoning tokens matter, the two objectives rank different ones. For Q heads this holds at every depth ($0.47$ in the trunk), and it is the source of the trunk's residual disagreement as well -- $0.85$ and $0.92$ pooled against $0.96$ and $0.98$ at vision positions. The disagreement between the two scores is thus, first, a difference in which positions' outputs each score is earned at and, second, a disagreement about which units matter at the reasoning tokens; neither score is a function of the other. These are first-order sensitivities: whether a loss still depends on those outputs once the units are removed is a separate question, and it is what decides which score to trust at which depth. This raises the question that motivates our design: if one objective's score were used alone, would it discard units the other objective's loss depends on, and where? The next finding tests it directly.
+
+\subsection{Which Objective Sees Function in Each Depth Band}
+\label{sec:band_ablation}
+
+\begin{finding}
+\textbf{Finding 2.} In the late band, only the CoC objective's importance corresponds to what its loss depends on once units are removed: no late-layer selection changes the FM loss, whereas discarding the units the trajectory score alone drops raises the CoC NLL by 65\%. In the trunk, where both objectives earn their importance at vision positions, both losses depend on the units that either score ranks highly, and keeping their union preserves the action far better than either score alone.
+\end{finding}
+
+An importance score is a first-order estimate of how much a loss depends on a unit, so we test what removing the selected units actually does to each loss. At the per-layer budget of Sec.~\ref{sec:vlm_pruning} (19 of 32 Q heads and 7{,}390 of 12{,}288 MLP channels retained in every layer) we build three selections: by $I^{\mathrm{CoC}}$ alone, by $I^{\mathrm{traj}}$ alone, and by the larger of the two within-layer ranks (the rule adopted in Eq.~\ref{eq:vlm_combined_score}). Each selection is applied as a mask to the dense model, either in the trunk only, in the late band only, or everywhere, on 100 held-out clips. To score all selections on identical tokens we teacher-force the dense model's own CoC text and measure the CoC NLL, the FM loss (10 steps, same noise), and minADE over 8 samples; the expert and the KV projections are untouched throughout.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Band-restricted ablation of the three selection rules on 100 held-out clips, relative to the dense model (CoC NLL $0.171$, FM loss $0.243$, minADE $0.84$\,m). Late-band masks leave the FM loss and minADE unchanged for every rule; trunk masks separate the rules on both channels.}
+\label{tab:band_ablation}
+\begin{tabular}{llrrr}
+\toprule
+mask band & selection rule & $\Delta$FM loss & $\Delta$CoC NLL & $\Delta$minADE \\
+\midrule
+late (22--35) & $I^{\mathrm{traj}}$ only & $-0.1\%$ & $+65.5\%$ & $+0.00$\,m \\
+              & $I^{\mathrm{CoC}}$ only  & $+0.1\%$ & $+6.3\%$  & $+0.00$\,m \\
+              & union (Eq.~\ref{eq:vlm_combined_score}) & $+0.1\%$ & $+10.1\%$ & $+0.00$\,m \\
+\midrule
+trunk (0--21) & $I^{\mathrm{traj}}$ only & $+26.1\%$ & $+51.2\%$ & $+2.64$\,m \\
+              & $I^{\mathrm{CoC}}$ only  & $+17.0\%$ & $+28.3\%$ & $+0.46$\,m \\
+              & union                    & $+4.8\%$  & $+25.2\%$ & $+0.06$\,m \\
+\midrule
+all layers    & $I^{\mathrm{traj}}$ only & $+6.6\%$  & $+240.6\%$ & $+0.06$\,m \\
+              & $I^{\mathrm{CoC}}$ only  & $+15.8\%$ & $+67.2\%$  & $+0.56$\,m \\
+              & union                    & $+5.5\%$  & $+32.6\%$  & $+0.01$\,m \\
+\bottomrule
+\end{tabular}
+\end{table}
+% All entries are mean deltas over the 100 clips from outputs/armheld_v1/summary.txt
+% (section iii), divided by the dense values. Optional figure: paper-fig/
+% fig5_damage_by_band_fm.pdf and _nll.pdf show the FM and NLL columns as bars.
+
+Table~\ref{tab:band_ablation} gives the result. In the late band, the FM loss does not depend on the units' outputs at this budget: no selection changes it by more than $0.1\%$ or moves minADE at all, and neither do random selections of the same size ($\le 0.6\%$). The importance the trajectory objective earns there -- half or more of it at language positions (Finding~1) -- is therefore a first-order quantity with no counterpart in removal: damage to the FM loss per unit of $I^{\mathrm{traj}}$ falls from $0.011$ in the trunk to zero in the late band. The CoC NLL, by contrast, does depend on those outputs, and on exactly the units the two scores disagree about: removing the trajectory-only selection raises the NLL by $65.5\%$, against $6.3\%$ for the CoC-only selection and $10.1\%$ for the union, and removing only the late-band heads that the trajectory score discards and the union keeps raises it by $8.6\%$, against $1.3$--$3.2\%$ for random sets of the same size. Damage to the NLL per unit of $I^{\mathrm{CoC}}$ is the same in both bands ($0.11$ and $0.14$), so the importance the CoC objective earns at language positions is importance its loss depends on. A criterion that lets $I^{\mathrm{traj}}$ decide in the late layers discards outputs the CoC objective depends on and gains nothing for the action.
+
+In the trunk, where both objectives earn their importance from what the units write at vision positions, both losses depend on the same units -- and on more of them than either score alone identifies. With masks restricted to layers 0--21, the FM loss rises by $4.8\%$ under the union but by $17.0\%$ under $I^{\mathrm{CoC}}$ alone and $26.1\%$ under $I^{\mathrm{traj}}$ alone, and minADE by $0.06$\,m against $0.46$\,m and $2.64$\,m; the CoC NLL is also lowest under the union. This is the band in which the two scores agree at $0.85$--$0.96$ and differ on only about two heads per layer, so the gain is not a compromise between two rankings: keeping a unit whenever \emph{either} objective's importance is high preserves the action better than the action objective's own ranking. The trajectory score alone discards trunk units whose outputs the language path depends on, and the damage is amplified by the intact late layers -- the same trunk selection costs $6.6\%$ when the late band is also pruned and $8.8\%$ when the late band is thinned at random -- which is why whole-model FM differences between the union and the trajectory-only rule are small (Table~\ref{tab:band_ablation}, bottom) even though the trunk selections differ substantially. The CoC score alone discards trunk units whose outputs the action depends on. Applied everywhere, the single-objective rules fail on different channels (trajectory-only: NLL $+240.6\%$; CoC-only: minADE $+0.56$\,m) while the union keeps both within a few percent of the dense model.
+
+The whole-model rows might still suggest that the trajectory score alone would do for a reader who cares only about driving (FM loss $+6.6\%$ against $+5.5\%$ for the union; minADE $+0.06$\,m against $+0.01$\,m). That near-parity is an artefact of the trajectory-only rule damaging both bands at once: its trunk selection alone costs $+26.1\%$, and thinning the late band by any rule -- the trajectory score, the CoC score, or random choice -- cancels part of that cost ($+6.6\%$, $+13.5\%$, $+8.8\%$). The natural alternative to the union, a depth-split rule that uses $I^{\mathrm{traj}}$ where the two scores agree (the trunk) and $I^{\mathrm{CoC}}$ where they disagree (the late band), is therefore not a substitute: it costs FM $+13.5\%$ and minADE $+0.98$\,m. Holding the late band fixed at the union's own selection and changing only the trunk from the union to the trajectory score costs $+7.7\%$ and $+0.26$\,m against $+5.5\%$ and $+0.01$\,m. The union is needed in the trunk itself, for the action, before the language channel -- which the trajectory score alone destroys (NLL $+240.6\%$) -- is even considered.
+% Mixed-band masks: outputs/armmix_v1/summary.txt (same 100 clips, same protocol). On the full
+% open-loop evaluation of the physically pruned arms (Sec. Experiments), trajectory-only costs
+% 1.2-2.8x the union's minADE in cruise, decel/stop and turns (outputs/failure_by_situation_v1).
+Sec.~\ref{sec:structured_pruning} builds the selection rule on these findings.
+
+\subsection{Importance Score in Action Expert}
+\label{sec:expert_analysis}
+
+\begin{finding}
+\textbf{Finding 3.} In the action expert, MLP channels exhibit more stable importance rankings across denoising steps and more concentrated importance than Q heads.
+\end{finding}
+
+\input{fig/fig4_expert_analysis}
+
+We next examine how action expert importance rankings vary across the 10 denoising steps in Figure~\ref{fig:expert_importance}.
+For each layer and unit type, we compute the Spearman correlation between the unit-score vectors $A_{s,\ell,:}$ and $A_{s',\ell,:}$, and average these correlations over the 36 expert layers to obtain the heatmaps.
+
+Q-head rankings are similar between adjacent steps but gradually diverge as the step distance increases~(Fig.~\ref{fig:expert_importance}(\subref{fig:expert_qhead_rank})), while MLP-channel rankings remain similar across steps~(Fig.~\ref{fig:expert_importance}(\subref{fig:expert_mlp_rank})).
+When averaged over layers and the 45 distinct step pairs, the mean Spearman correlation is approximately $0.668$ for Q heads and $0.874$ for MLP channels, so MLP channels exhibit greater ranking stability across steps.
+
+We also compare how importance is distributed within each unit type. We sum the per-step scores, $B_{\ell,u}=\sum_{s=0}^{9}A_{s,\ell,u}$, sort units in ascending order of $B$ within each layer, and average over layers the fraction of importance removed by discarding the bottom $k$ units:
+\begin{equation}
+    C(k)=\frac{1}{L}\sum_{\ell=0}^{L-1}
+      \frac{\sum_{i=1}^{k}B_{\ell,i}}
+           {\max\!\left(\sum_{u=1}^{U}B_{\ell,u},10^{-12}\right)},
+    \label{eq:importance_concentration}
+\end{equation}
+where $i$ denotes the $i$th unit in ascending order and $L$ the number of layers. Q heads and MLP channels are analyzed separately, with $U=16$ and $U=8{,}256$.
+
+The cumulative curves reveal a marked difference (Fig.~\ref{fig:expert_importance}(\subref{fig:expert_cumulative})). Removing 14 of 16 Q heads ($87.5\%$) accounts for approximately $68.5\%$ of layer importance on average, whereas removing approximately $90\%$ of MLP channels accounts for only $1.8\%$: Q-head importance is broadly distributed and MLP-channel importance is strongly concentrated in the top $10\%$ of channels. The stable rankings and concentrated importance motivate retaining a small, fixed set of channels across all steps and leaving expert attention intact.

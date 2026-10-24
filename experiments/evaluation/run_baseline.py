@@ -35,6 +35,7 @@ import os
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 import argparse
+import hashlib
 import json
 import random
 import sys
@@ -77,6 +78,12 @@ def seed_all(seed):
     np.random.seed(seed % (2**32))
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+def blackout_slot(seed, clip_id, n_cam):
+    """Camera slot whose t0 frame is blacked out, from the clip id (not the sampling seed)."""
+    h = hashlib.sha256(f"blackout:{seed}:{clip_id}".encode()).digest()
+    return int.from_bytes(h[:4], "big") % n_cam
 
 
 def gt_coc_seq(tok, prompt_ids, gt_text, device):
@@ -142,13 +149,27 @@ def main():
                          "Needed by anything scoring the trajectory against something "
                          "other than the GT path -- the open-loop collision proxy reads "
                          "them. 8x64x2 at mm precision is ~7 KB/clip, ~3.5 MB per set.")
+    ap.add_argument("--blackout", action="store_true",
+                    help="replace the t0 frame of one camera per clip with a black image; "
+                         "the camera is drawn from the clip id, so sampling seeds are unchanged")
+    ap.add_argument("--blackout-seed", type=int, default=0)
+    ap.add_argument("--blackout-cam", type=int, default=None, choices=[0, 1, 2, 6],
+                    help="black out the t0 frame of this camera index on every clip "
+                         "(0 cross-left, 1 front-wide, 2 cross-right, 6 front-tele)")
     args = ap.parse_args()
+    if args.blackout and args.blackout_cam is not None:
+        ap.error("--blackout and --blackout-cam are exclusive")
+    blackout = args.blackout or args.blackout_cam is not None
 
     tag = "baseline" if args.model == "baseline" else Path(args.model).name
     if args.quant:
         # the rows file has to name the intervention, not just the checkpoint it sits on
         qs = Path(args.quant).stem
         tag = qs if tag == "baseline" else f"{tag}_{qs}"
+    if args.blackout:
+        tag = f"{tag}_bk1"
+    if args.blackout_cam is not None:
+        tag = f"{tag}_bkcam{args.blackout_cam}"
     exp_id = args.exp_id or f"baseline_{args.which}"
     out_dir = REPO / "outputs" / exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -230,6 +251,11 @@ def main():
         "max_gen": args.max_gen, "shard": [args.shard, args.n_shards],
         "sets_id": args.sets_id, "gpu": gpu_name, "model_revision": MODEL_REV,
         "manifest": args.manifest, "cache": args.cache, "quant": quant_meta,
+        "blackout": ({"frame": "t0", "n_cams": 1, "camera": args.blackout_cam,
+                      "rule": "fixed camera index"} if args.blackout_cam is not None else
+                     {"frame": "t0", "n_cams": 1, "seed": args.blackout_seed,
+                      "rule": "sha256(f'blackout:{seed}:{clip_id}')[:4] % n_cam"}
+                     if args.blackout else None),
         "deterministic": {"use_deterministic_algorithms": True,
                           "warn_only": not args.strict_deterministic,
                           "cudnn_deterministic": True, "tf32": False,
@@ -242,6 +268,13 @@ def main():
             continue
         t0 = time.time()
         data = sc.load_cached(sc.path_for(m["cache"], m["clip_id"], m["t0_us"]))
+        if blackout:
+            # image_frames: (n_cam, n_frame, 3, H, W) uint8, frame -1 = t0
+            if args.blackout_cam is None:
+                slot = blackout_slot(args.blackout_seed, m["clip_id"], data["image_frames"].shape[0])
+            else:
+                slot = int((data["camera_indices"] == args.blackout_cam).nonzero()[0, 0])
+            data["image_frames"][slot, -1] = 0                      # (3, H, W)
         inputs = lib.build_inputs(model, processor, data, "cuda")
         prompt_len = inputs["input_ids"].shape[1]
         gt_xy = data["ego_future_xyz"][0, 0, :, :2].cpu().numpy()  # (64, 2)
@@ -250,6 +283,8 @@ def main():
         traj_seeds = [base + k for k in range(args.k)]
 
         rec = {"clip_id": m["clip_id"], "bucket": el.bucket(gt_xy), "seed": base}
+        if blackout:
+            rec["blackout_cam"] = int(data["camera_indices"][slot])
 
         # own-rollout condition: the model writes its own reasoning, then drives on it
         seed_all(base)

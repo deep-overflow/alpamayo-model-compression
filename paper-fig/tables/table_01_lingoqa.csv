@@ -1,0 +1,8 @@
+Method,Removed (%),LingoQA ↑ Accuracy (%)
+Dense,0.0,73.2
+Wanda,24.0,9.2
+LLM-Pruner,24.0,44.8
+Týr-the-Pruner,24.0,34.2
+Traj,24.0,37.0
+CoC,24.0,30.2
+Dual,24.0,68.8

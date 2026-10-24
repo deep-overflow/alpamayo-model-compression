@@ -1,1 +1,8 @@
 video/
+
+# Camera renders, recorded frames and scene assets come from the gated PhysicalAI-AV / NuRec
+# data (license: keep on the secure network); the metrics and reasoning JSON beside them are ours.
+eb_qual/**/*.png
+eb_qual/**/*.mp4
+eb_qual/**/*.jpeg
+eb_qual/**/scene/
