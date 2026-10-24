@@ -44,13 +44,13 @@ MoOP 행과 같은 코드로 비교되도록 다음은 원래 위치에서 가�
 
 | # | 단계 | 상태 |
 |---|---|---|
-| 1 | `minitron/` 폴더와 확정 계획서 | 이 PR |
-| 2 | teacher 진단 G0-T (이산 궤적 토큰 NLL, FM 손실; train vs val) | |
-| 3 | hidden 수술 코드 + G0a–c | |
-| 4 | 증류 캐시 보충 (약 8,600 샘플) | |
-| 5 | 중요도 측정 (1,024 샘플) | |
-| 6 | MT-W zs 평가 | |
-| 7 | `train_kd.py` smoke (G0d, GPU당 배치) | |
+| 1 | `minitron/` 폴더와 확정 계획서 | 완료 (PR #89) |
+| 2 | teacher 진단 G0-T (이산 궤적 토큰 NLL, FM 손실; train vs val) | 완료 — (a) PASS, (b) 차이 3% 안팎 |
+| 3 | hidden 수술 코드 + G0a–c | 완료 — G0a·G0c PASS, G0b는 허용치 초과를 사용자가 수용 |
+| 4 | 증류 캐시 보충 (약 9,200 샘플) | 보정 1,024개 완료, 나머지 진행 중 |
+| 5 | 중요도 측정 (1,024 샘플) | 완료 — `outputs/minitron/slim_mtw24` |
+| 6 | MT-W zs 평가 | 진행 중 (Ada 5–7) |
+| 7 | `train_kd.py` smoke (G0d, GPU당 배치) | 이 박스에서 통과 (GPU당 1샘플); A100에서 배치 크기 결정 필요 |
 | 8 | MT-W + KD 학습 (NEURON A100 × 4) | |
 | 9 | 평가 (test500 / val500 / OOD-Val262, LingoQA, 지연시간) | |
 | 10 | 리포트 | |
