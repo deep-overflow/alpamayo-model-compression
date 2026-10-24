@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>action 층화 캘리브레이션 추출 &mdash; 맞춰야 할 것은 다양성이 아니라 평가 분포</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { background: var(--bg-code); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; calibration draw &middot; 2026-10-12</div>
+  <h1>캘리브레이션 세트 안의 난이도 분포 &mdash; 여섯 세트 모두 쉬운 클립부터 어려운 클립까지 고르게 담고 있고, 서로 구별되지 않는다</h1>
+  <div class="meta">
+    <code>calib_100</code> + 블록 a&ndash;e (각 100클립) &middot; 무압축 <code>nvidia/Alpamayo-1.5-10B</code> &middot;
+    표준 프로토콜(클립당 CoC 1개, 궤적 6개) &middot; 저장된 측정 재분석, GPU 0 &middot; <code>outputs/calib_difficulty/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>각 세트는 넓은 난이도 범위를 담고 있다.</b> 세트 안에서 CoC NLL의 p90/p10이 13&ndash;22배, minADE@6이 9&ndash;18배, 궤적 6개의 끝점 흩어짐이 5&ndash;11배다. 어느 세트도 쉬운 쪽이나 어려운 쪽으로 몰려 있지 않다.</li>
+    <li><b>난이도 균형은 여섯 세트 모두 무작위 추출 수준이다.</b> 600클립을 합쳐 5분위로 자르면 세트마다 분위당 11&ndash;27개(기대 20)가 들어가고, 다섯 지표 &times; 여섯 세트 30칸 전부 &chi;&sup2; p &ge; 0.17이다. 정규화 엔트로피 0.978&ndash;0.999는 100클립 무작위 추출의 기대값(0.988)과 같다.</li>
+    <li><b>세트 간 차이는 위치도 폭도 없다.</b> 다섯 지표와 종합 난이도 모두 위치(Kruskal&ndash;Wallis p &ge; 0.52)와 폭(Brown&ndash;Forsythe p &ge; 0.43)이 구별되지 않는다.</li>
+    <li><b>CoC 난이도와 궤적 난이도는 독립된 두 축이다.</b> NLL과 궤적 지표 넷의 상관이 &rho;=0.01&ndash;0.08이다. 그래서 "문장은 쉬운데 궤적은 어려운" 클립과 그 반대가 모든 세트에 있다(3&times;3 격자 9칸이 전 세트에서 5개 이상 채워짐).</li>
+    <li><b>가장 눈에 띄는 차이는 calib_100의 CoC NLL이 낮은 쪽으로 약간 치우친 것이다</b>(중앙값 0.100, 나머지 0.129&ndash;0.156; 가장 어려운 5분위에 15개). 그러나 유의하지 않고(KS p=0.16), 세트 통계 21개 중 arm 성능과 p&lt;0.05인 것이 2개로 우연 기대(약 1개)와 구분되지 않는다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p>캘리브레이션 세트가 좋으려면 다양한 난이도의 클립이 고르게 들어 있어야 한다는 가설을 여섯 세트에서 직접 확인한다. 세 가지를 클립마다 잰다: (1) CoC가 얼마나 어려운가(VLM이 자기 문장에 주는 NLL), (2) 궤적이 얼마나 multimodal한가(샘플 6개의 흩어짐), (3) 궤적이 GT에서 얼마나 먼가(meanADE와 minADE). 그다음 세트 안에서 이 값들이 얼마나 넓게, 얼마나 고르게 퍼져 있는지를 본다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<table>
+  <tr><th>항목</th><th>값</th></tr>
+  <tr><td>자료</td><td><code>run_coc_multimode.py</code>가 저장한 600클립 측정 중 <b>CoC 0번과 그 궤적 6개</b>. 표준 개루프 프로토콜과 비트 동일함이 확인돼 있고(600/600), <code>run_importance</code>가 조건으로 삼는 것과 같은 CoC다</td></tr>
+  <tr><td>CoC NLL</td><td>샘플된 CoC의 토큰당 평균 NLL(teacher-forced, temperature 1)</td></tr>
+  <tr><td>끝점 흩어짐</td><td>궤적 6개의 6.4초 끝점이 그 평균에서 떨어진 RMS 거리. GT를 쓰지 않는 multimodality 지표</td></tr>
+  <tr><td>ADE 표준편차</td><td>GT 대비 ADE 6개의 표준편차. 같은 흩어짐을 평가 지표의 눈으로 본 것</td></tr>
+  <tr><td>meanADE@6 / minADE@6</td><td>6개의 평균 ADE(전형적 샘플이 GT에서 얼마나 먼가)와 최소 ADE(가장 좋은 샘플)</td></tr>
+  <tr><td>폭</td><td>분위수, IQR, IQR/중앙값, p90/p10</td></tr>
+  <tr><td>균형</td><td>600클립을 합쳐 5분위로 자른 뒤 세트별 분위 점유. 세트가 전체를 닮았으면 분위당 20개. 정규화 엔트로피(1 = 완전 균형), &chi;&sup2;, 나머지 다섯 세트 대비 KS</td></tr>
+  <tr><td>종합 난이도</td><td>다섯 지표의 합산 백분위 평균(0 = 가장 쉬움, 1 = 가장 어려움)</td></tr>
+</table>
+
+<h2><span class="num">3</span>Results (Facts)</h2>
+
+<h3>3.1 CoC 난이도 (NLL / 토큰)</h3>
+<table>
+  <tr><th>세트</th><th class="num">평균</th><th class="num">p10</th><th class="num">p25</th><th class="num">중앙값</th><th class="num">p75</th><th class="num">p90</th><th class="num">IQR</th><th class="num">p90/p10</th><th>5분위 점유 (쉬움 &rarr; 어려움)</th><th class="num">엔트로피</th><th class="num">&chi;&sup2; p</th></tr>
+  <tr><td>calib_100</td><td class="num">0.159</td><td class="num">0.020</td><td class="num">0.058</td><td class="num"><b>0.100</b></td><td class="num">0.218</td><td class="num">0.332</td><td class="num">0.160</td><td class="num">16.5</td><td>23 / 27 / 17 / 18 / 15</td><td class="num">0.985</td><td class="num">0.31</td></tr>
+  <tr><td>a</td><td class="num">0.190</td><td class="num">0.029</td><td class="num">0.066</td><td class="num">0.130</td><td class="num">0.267</td><td class="num">0.380</td><td class="num">0.201</td><td class="num">13.1</td><td>20 / 20 / 17 / 20 / 23</td><td class="num">0.997</td><td class="num">0.93</td></tr>
+  <tr><td>b</td><td class="num">0.176</td><td class="num">0.019</td><td class="num">0.078</td><td class="num">0.129</td><td class="num">0.233</td><td class="num">0.390</td><td class="num">0.156</td><td class="num">20.6</td><td>18 / 18 / 22 / 24 / 18</td><td class="num">0.995</td><td class="num">0.81</td></tr>
+  <tr><td>c</td><td class="num">0.180</td><td class="num">0.019</td><td class="num">0.070</td><td class="num">0.130</td><td class="num">0.246</td><td class="num">0.409</td><td class="num">0.176</td><td class="num">21.7</td><td>20 / 18 / 27 / 15 / 20</td><td class="num">0.988</td><td class="num">0.42</td></tr>
+  <tr><td>d</td><td class="num">0.182</td><td class="num">0.022</td><td class="num">0.058</td><td class="num"><b>0.156</b></td><td class="num">0.282</td><td class="num">0.365</td><td class="num">0.224</td><td class="num">16.5</td><td>22 / 18 / 12 / 23 / 25</td><td class="num">0.982</td><td class="num">0.26</td></tr>
+  <tr><td>e</td><td class="num">0.179</td><td class="num">0.029</td><td class="num">0.066</td><td class="num">0.135</td><td class="num">0.236</td><td class="num">0.376</td><td class="num">0.170</td><td class="num">13.1</td><td>17 / 19 / 25 / 20 / 19</td><td class="num">0.995</td><td class="num">0.77</td></tr>
+</table>
+<p>세트 간 위치 Kruskal p=0.61, 폭 Brown&ndash;Forsythe p=0.92. d는 가운데 분위가 비고(12개) 양 끝이 많은 모양이고, calib_100은 쉬운 두 분위에 50개가 있다. 둘 다 나머지 세트와 구별되지 않는다(KS p=0.19 / 0.16).</p>
+
+<h3>3.2 궤적 multimodality (샘플 6개의 흩어짐)</h3>
+<table>
+  <tr><th>세트</th><th class="num">끝점 RMS 평균 [m]</th><th class="num">p10</th><th class="num">중앙값</th><th class="num">p90</th><th class="num">최대</th><th class="num">p90/p10</th><th>5분위 점유</th><th class="num">&chi;&sup2; p</th><th class="num">ADE SD 중앙값</th><th class="num">ADE SD p90</th></tr>
+  <tr><td>calib_100</td><td class="num">3.150</td><td class="num">1.198</td><td class="num">2.924</td><td class="num">6.069</td><td class="num">8.66</td><td class="num">5.1</td><td>21 / 15 / 22 / 24 / 18</td><td class="num">0.65</td><td class="num">0.710</td><td class="num">1.481</td></tr>
+  <tr><td>a</td><td class="num">3.305</td><td class="num">1.045</td><td class="num">2.514</td><td class="num">5.747</td><td class="num">18.24</td><td class="num">5.5</td><td>20 / 22 / 19 / 19 / 20</td><td class="num">0.99</td><td class="num">0.734</td><td class="num">1.654</td></tr>
+  <tr><td>b</td><td class="num">3.176</td><td class="num">0.782</td><td class="num">2.698</td><td class="num">5.686</td><td class="num">19.26</td><td class="num">7.3</td><td>21 / 22 / 19 / 19 / 19</td><td class="num">0.98</td><td class="num">0.634</td><td class="num">1.623</td></tr>
+  <tr><td>c</td><td class="num">3.444</td><td class="num">0.976</td><td class="num"><b>3.027</b></td><td class="num">6.131</td><td class="num">17.56</td><td class="num">6.3</td><td>17 / 22 / 19 / 20 / 22</td><td class="num">0.93</td><td class="num">0.685</td><td class="num">1.551</td></tr>
+  <tr><td>d</td><td class="num"><b>3.556</b></td><td class="num">0.608</td><td class="num">2.693</td><td class="num"><b>6.755</b></td><td class="num"><b>21.95</b></td><td class="num"><b>11.1</b></td><td>26 / 15 / 17 / 22 / 20</td><td class="num">0.45</td><td class="num">0.709</td><td class="num"><b>1.761</b></td></tr>
+  <tr><td>e</td><td class="num">3.072</td><td class="num">1.031</td><td class="num">2.714</td><td class="num">5.996</td><td class="num">9.42</td><td class="num">5.8</td><td>15 / 24 / 24 / 16 / 21</td><td class="num">0.45</td><td class="num">0.714</td><td class="num">1.441</td></tr>
+</table>
+<p>세트 간 위치 Kruskal p=0.97, 폭 Brown&ndash;Forsythe p=0.43. d는 흩어짐이 가장 작은 클립(p10 0.61 m)과 가장 큰 클립(최대 21.95 m)을 함께 갖고 있어 범위가 가장 넓다. calib_100과 e는 최대값이 9 m 근처로 극단 클립이 없다.</p>
+
+<h3>3.3 궤적 난이도 (meanADE@6, minADE@6)</h3>
+<table>
+  <tr><th>세트</th><th class="num">meanADE 평균</th><th class="num">p10</th><th class="num">중앙값</th><th class="num">p90</th><th class="num">최대</th><th>5분위 점유</th><th class="num">minADE 평균</th><th class="num">p10</th><th class="num">중앙값</th><th class="num">p90</th><th class="num">최대</th><th>5분위 점유</th></tr>
+  <tr><td>calib_100</td><td class="num">1.871</td><td class="num">0.566</td><td class="num">1.436</td><td class="num">3.220</td><td class="num">13.67</td><td>19 / 19 / 20 / 26 / 16</td><td class="num">0.911</td><td class="num">0.178</td><td class="num">0.567</td><td class="num">1.569</td><td class="num">11.18</td><td>19 / 18 / 24 / 22 / 17</td></tr>
+  <tr><td>a</td><td class="num"><b>1.949</b></td><td class="num">0.568</td><td class="num"><b>1.530</b></td><td class="num">3.675</td><td class="num">7.44</td><td>18 / 16 / 22 / 19 / 25</td><td class="num"><b>0.994</b></td><td class="num">0.166</td><td class="num">0.595</td><td class="num"><b>2.395</b></td><td class="num">6.23</td><td>15 / 19 / 20 / 23 / 23</td></tr>
+  <tr><td>b</td><td class="num">1.794</td><td class="num">0.488</td><td class="num">1.168</td><td class="num">3.606</td><td class="num"><b>18.76</b></td><td>25 / 23 / 19 / 14 / 19</td><td class="num">0.934</td><td class="num">0.165</td><td class="num">0.447</td><td class="num">2.109</td><td class="num"><b>17.28</b></td><td>23 / 22 / 18 / 21 / 16</td></tr>
+  <tr><td>c</td><td class="num">1.735</td><td class="num">0.471</td><td class="num">1.304</td><td class="num">3.593</td><td class="num">7.40</td><td>17 / 23 / 22 / 16 / 22</td><td class="num">0.813</td><td class="num">0.152</td><td class="num">0.595</td><td class="num">1.999</td><td class="num">3.44</td><td>22 / 14 / 21 / 21 / 22</td></tr>
+  <tr><td>d</td><td class="num">1.907</td><td class="num">0.450</td><td class="num">1.364</td><td class="num">3.582</td><td class="num">12.25</td><td>23 / 18 / 17 / 23 / 19</td><td class="num">0.817</td><td class="num">0.130</td><td class="num">0.405</td><td class="num">2.287</td><td class="num">6.38</td><td>23 / 26 / 19 / 11 / 21</td></tr>
+  <tr><td>e</td><td class="num">1.659</td><td class="num">0.603</td><td class="num">1.415</td><td class="num">2.896</td><td class="num">5.24</td><td>18 / 21 / 20 / 22 / 19</td><td class="num">0.795</td><td class="num">0.163</td><td class="num">0.516</td><td class="num">1.848</td><td class="num">3.49</td><td>18 / 21 / 18 / 22 / 21</td></tr>
+</table>
+<p>meanADE: 위치 p=0.62, 폭 p=0.80. minADE: 위치 p=0.52, 폭 p=0.81. 5분위 점유의 &chi;&sup2; p는 meanADE 0.46&ndash;0.97, minADE 0.17&ndash;0.95다. 가장 낮은 값(minADE, d: 0.17)은 d의 네 번째 분위가 11개로 빈 데서 온다.</p>
+<figure>
+  <img src="PLOT::cd::distributions.png" alt="세트별 지표 분포">
+  <figcaption>상자는 IQR, 수염은 p10&ndash;p90, 세로축은 로그. 다섯 지표 모두에서 여섯 세트의 상자와 수염이 겹친다.</figcaption>
+</figure>
+<figure>
+  <img src="PLOT::cd::quintile_occupancy.png" alt="세트별 5분위 점유">
+  <figcaption>칸의 숫자는 그 세트에서 합산 5분위(Q1 가장 쉬움, Q5 가장 어려움)에 든 클립 수. 흰색이 20(균형)이고 붉을수록 많고 푸를수록 적다. 한 세트가 여러 지표에서 같은 방향으로 치우친 패턴은 없다.</figcaption>
+</figure>
+
+<h3>3.4 종합 난이도와 그 다양성</h3>
+<table>
+  <tr><th>세트</th><th class="num">평균</th><th class="num">표준편차</th><th class="num">p10</th><th class="num">중앙값</th><th class="num">p90</th><th class="num">아주 쉬움 (&lt;0.2)</th><th class="num">아주 어려움 (&gt;0.8)</th><th>5분위 점유</th><th class="num">엔트로피</th></tr>
+  <tr><td>calib_100</td><td class="num">0.496</td><td class="num">0.206</td><td class="num">0.224</td><td class="num">0.511</td><td class="num">0.742</td><td class="num">8</td><td class="num">5</td><td>22 / 20 / 14 / 24 / 20</td><td class="num">0.991</td></tr>
+  <tr><td>a</td><td class="num"><b>0.521</b></td><td class="num">0.205</td><td class="num">0.214</td><td class="num"><b>0.533</b></td><td class="num">0.778</td><td class="num">8</td><td class="num">7</td><td>19 / 14 / 27 / 18 / 22</td><td class="num">0.986</td></tr>
+  <tr><td>b</td><td class="num">0.479</td><td class="num"><b>0.224</b></td><td class="num">0.173</td><td class="num">0.452</td><td class="num">0.778</td><td class="num"><b>15</b></td><td class="num"><b>10</b></td><td>25 / 22 / 16 / 16 / 21</td><td class="num">0.990</td></tr>
+  <tr><td>c</td><td class="num">0.507</td><td class="num">0.209</td><td class="num">0.223</td><td class="num">0.507</td><td class="num">0.763</td><td class="num">9</td><td class="num">6</td><td>17 / 25 / 18 / 19 / 21</td><td class="num">0.994</td></tr>
+  <tr><td>d</td><td class="num">0.494</td><td class="num">0.208</td><td class="num">0.219</td><td class="num">0.506</td><td class="num">0.748</td><td class="num">8</td><td class="num">6</td><td>20 / 19 / 22 / 23 / 16</td><td class="num">0.995</td></tr>
+  <tr><td>e</td><td class="num">0.503</td><td class="num">0.200</td><td class="num">0.236</td><td class="num">0.507</td><td class="num">0.772</td><td class="num">7</td><td class="num">5</td><td>17 / 20 / 23 / 20 / 20</td><td class="num">0.997</td></tr>
+</table>
+<p>세트 간 위치 Kruskal p=0.83, 폭 Brown&ndash;Forsythe p=0.67. b가 양 끝(아주 쉬움 15, 아주 어려움 10)이 가장 많고 표준편차가 가장 크다. 100클립 무작위 추출의 5분위 엔트로피 기대값은 약 0.988이고, 여섯 세트(0.986&ndash;0.997)가 모두 그 근처다.</p>
+<figure>
+  <img src="PLOT::cd::composite_cdf.png" alt="종합 난이도 누적 분포">
+  <figcaption>종합 난이도의 세트별 누적 분포. 점선(대각선)이 전체 600클립을 그대로 닮은 경우다. 여섯 곡선이 모두 대각선에 붙어 있다.</figcaption>
+</figure>
+
+<h3>3.5 두 축의 결합: CoC 난이도 &times; 궤적 난이도</h3>
+<p>지표 간 순위 상관(600클립): NLL은 끝점 흩어짐 +0.02, ADE SD +0.01, meanADE +0.08, minADE +0.08로 궤적 지표 넷과 거의 무관하다. 궤적 지표끼리는 끝점 흩어짐&ndash;ADE SD +0.87, ADE SD&ndash;meanADE +0.74, meanADE&ndash;minADE +0.82, 끝점 흩어짐&ndash;minADE +0.34다.</p>
+<table>
+  <tr><th>세트</th><th>NLL 낮음: minADE 낮/중/높</th><th>NLL 중간</th><th>NLL 높음</th><th class="num">최소 칸</th><th class="num">최대 칸</th><th class="num">엔트로피</th></tr>
+  <tr><td>calib_100</td><td>13 / 20 / 10</td><td>10 / 7 / 12</td><td>9 / 7 / 12</td><td class="num">7</td><td class="num">20</td><td class="num">0.977</td></tr>
+  <tr><td>a</td><td>13 / 9 / 11</td><td>5 / 15 / 9</td><td>9 / 11 / 18</td><td class="num">5</td><td class="num">18</td><td class="num">0.976</td></tr>
+  <tr><td>b</td><td>14 / 7 / 7</td><td>17 / 15 / 10</td><td>8 / 11 / 11</td><td class="num">7</td><td class="num">17</td><td class="num">0.979</td></tr>
+  <tr><td>c</td><td>8 / 11 / 12</td><td>12 / 17 / 11</td><td>8 / 11 / 10</td><td class="num">8</td><td class="num">17</td><td class="num"><b>0.989</b></td></tr>
+  <tr><td>d</td><td>11 / 13 / 10</td><td>14 / 6 / 5</td><td>16 / 12 / 13</td><td class="num">5</td><td class="num">16</td><td class="num">0.976</td></tr>
+  <tr><td>e</td><td>8 / 10 / 13</td><td>18 / 6 / 11</td><td>7 / 12 / 15</td><td class="num">6</td><td class="num">18</td><td class="num">0.975</td></tr>
+</table>
+<p>칸당 기대값 11.1. 100클립을 9칸에 무작위로 넣었을 때의 엔트로피 기대값은 약 0.982다. 모든 세트에서 9칸이 전부 5개 이상 채워져 있다.</p>
+<figure>
+  <img src="PLOT::cd::joint_grid.png" alt="CoC NLL 대 minADE 산점도">
+  <figcaption>클립 하나가 점 하나, 두 축 모두 로그. 점선은 합산 3분위 경계. 어느 세트도 한 구석이 비어 있지 않다.</figcaption>
+</figure>
+
+<h3>3.6 무엇이 클립을 어렵게 만드는가 (600클립 합산, 주행 상황별 중앙값)</h3>
+<table>
+  <tr><th>버킷</th><th class="num">n</th><th class="num">CoC NLL</th><th class="num">끝점 흩어짐 [m]</th><th class="num">ADE SD</th><th class="num">meanADE</th><th class="num">minADE</th><th class="num">종합</th></tr>
+  <tr><td>cruise</td><td class="num">320</td><td class="num">0.102</td><td class="num">2.684</td><td class="num">0.654</td><td class="num">1.266</td><td class="num">0.458</td><td class="num">0.470</td></tr>
+  <tr><td>decel_stop</td><td class="num">89</td><td class="num">0.161</td><td class="num">1.495</td><td class="num">0.418</td><td class="num">0.808</td><td class="num">0.264</td><td class="num">0.355</td></tr>
+  <tr><td>accel</td><td class="num">98</td><td class="num">0.128</td><td class="num"><b>3.593</b></td><td class="num"><b>0.915</b></td><td class="num">1.610</td><td class="num">0.542</td><td class="num">0.568</td></tr>
+  <tr><td>turn</td><td class="num">93</td><td class="num"><b>0.226</b></td><td class="num">3.465</td><td class="num">0.851</td><td class="num"><b>2.046</b></td><td class="num"><b>0.918</b></td><td class="num"><b>0.655</b></td></tr>
+</table>
+
+<h3>3.7 세트 통계와 그 세트로 만든 arm의 성능 (n=6)</h3>
+<p>21개 세트 통계(다섯 지표의 중앙값&middot;IQR&middot;엔트로피, 종합 난이도 다섯 가지, 결합 격자 엔트로피)를 arm의 test500 minADE@6(0.950 / 1.022 / 1.060 / 1.348 / 1.774 / 1.718)와 비교했다. p&lt;0.05는 둘이다: CoC NLL 중앙값 &rho;=+0.83(p=0.042), ADE SD 엔트로피 &rho;=&minus;0.83(p=0.042). 그 다음은 meanADE 엔트로피와 종합 엔트로피 +0.77(p=0.07)인데 부호가 "균형이 좋을수록 arm이 나쁘다" 쪽이다. 21개를 n=6에서 검정하면 우연히 약 1개가 p&lt;0.05에 든다.</p>
+
+<h2><span class="num">4</span>Analysis (Opinion)</h2>
+<ol>
+  <li><b>여섯 세트 모두 난이도가 다양하고 균형 잡혀 있다.</b> 세 축 어디에서도 한 세트가 쉬운 쪽이나 어려운 쪽에 몰려 있지 않고, 관측된 치우침은 100클립을 무작위로 뽑으면 나오는 크기다. 6속성 그리디 매칭이 난이도를 직접 맞추지 않는데도 결과적으로 난이도 분포가 같다.</li>
+  <li><b>따라서 "난이도 다양성"으로는 추출 간 성능 차이를 설명할 수 없다.</b> 가장 좋은 arm을 만든 calib_100과 가장 나쁜 arm을 만든 d&middot;e가 난이도의 위치&middot;폭&middot;균형 어느 것으로도 갈리지 않는다. 종합 난이도로 가장 다양한 세트는 b(양 끝이 가장 많음)인데 b의 arm은 중간 성적이다.</li>
+  <li><b>세트 차이로 읽을 만한 것은 꼬리뿐이다.</b> d는 흩어짐과 ADE SD의 최대값이 가장 크고(21.95 m, 7.36 m), calib_100과 e는 극단 클립이 없다. 그런데 calib_100과 e의 arm은 각각 최고와 최악권이므로 이것도 성능을 가르지 못한다.</li>
+  <li><b>CoC NLL 중앙값과 arm 성능의 &rho;=+0.83은 기록해 둘 만하지만 근거로 쓰기엔 약하다.</b> 방향은 "CoC가 쉬운 세트일수록 arm이 좋다"이고 calib_100이 가장 낮다. 다만 세트 간 NLL 차이 자체가 유의하지 않고(p=0.61), 21개 중 2개 적중은 우연과 구분되지 않으며, 앞선 측정에서 CoC를 바꿨을 때 calib_100의 선택이 가장 민감했다는 사실과도 방향이 맞지 않는다. 확인하려면 세트가 더 필요하다(nt 블록 외에 rd/se/su 9세트가 있다).</li>
+  <li><b>CoC 난이도와 궤적 난이도가 독립이라는 점은 추출 설계에 쓸 수 있다.</b> 한 축으로 층화해도 다른 축은 통제되지 않는다. 그리고 주행 상황이 두 축을 다르게 움직인다: 정지는 궤적이 가장 쉬운데 문장은 cruise보다 어렵고, 가속은 문장은 쉬운데 궤적 흩어짐이 가장 크다.</li>
+</ol>
+<div class="callout opinion">
+  <strong>한계</strong>
+  <ul>
+    <li>난이도는 무압축 모델의 눈으로 잰 것이다. 프루닝된 모델에게 어려운 클립은 다를 수 있다.</li>
+    <li>CoC는 클립당 한 번 샘플링한 것이다(표준 프로토콜). CoC를 6번 뽑으면 NLL이 달라지는 클립이 있고, 그 분석은 <code>2026-10-11_calibration-multimodality.html</code>에 있다.</li>
+    <li>궤적 6개는 흩어짐의 꼬리를 재기에 적다.</li>
+    <li>세트가 6개라 세트 수준의 상관은 기술적 수치다. 세트당 100클립에서 5분위 점유는 &plusmn;4 정도가 표집 잡음이다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">5</span>재현</h2>
+<pre><code>python experiments/evaluation/analyze_calib_difficulty.py     # GPU 불필요, 약 10초</code></pre>
+<p class="small">입력: <code>outputs/cocmm_&lt;manifest&gt;/rows_s*of2.json</code>. 출력: <code>outputs/calib_difficulty/{metrics.json, summary.txt, plots/}</code>. 표의 수치는 <code>summary.txt</code>에서 옮겼다.</p>
+
+</div>
+</body>
+</html>

@@ -59,17 +59,21 @@ def traj_weight(kind, n_tok, device):
     return (t < 19).float()  # (64,) 1 for the first 1.9 s, else 0
 
 
-def process_clip(model, processor, data, args, seed, acc):
+def process_clip(model, processor, data, args, seed, acc, roll_seed=None):
     inputs = lib.build_inputs(model, processor, data, "cuda")
     prompt_len = inputs["input_ids"].shape[1]
 
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    # roll_seed decouples the CoC sample from the flow-matching noise, which `seed` alone
+    # ties together; None keeps the shipped behaviour bit-for-bit
+    roll_seed = seed if roll_seed is None else roll_seed
+    torch.manual_seed(roll_seed)
+    torch.cuda.manual_seed_all(roll_seed)
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         roll = lib.run_rollout(model, inputs, max_generation_length=args.max_gen)
     eos_pos = roll["eos_pos"]
     coc_start, coc_end = prompt_len, eos_pos + 1
     seq_tf = roll["sequences"][:, :coc_end]  # (1, T) prompt + generated CoC
+    coc_ids = seq_tf[0, coc_start:coc_end].tolist()
     del roll
 
     x1 = lib.gt_actions(model, data, "cuda").to(torch.float32)  # (1, 64, 2)
@@ -175,7 +179,7 @@ def process_clip(model, processor, data, args, seed, acc):
     expert_gates.remove()
     del cache, cache_t, leaves, grads, ts, gs
     rec = {"coc_len": coc_end - coc_start, "prompt_len": prompt_len,
-           "fm_loss": fm_loss, "peak_gb": peak}
+           "fm_loss": fm_loss, "peak_gb": peak, "coc_ids": coc_ids}
     if args.traj_target == "bestn":
         rec["bestn"] = bestn
     return rec
@@ -254,6 +258,16 @@ def main():
                          "sharding cannot change any clip's score -- merge with "
                          "merge_importance.py")
     ap.add_argument("--n-shards", type=int, default=1)
+    ap.add_argument("--roll-offset", type=int, default=0,
+                    help="sample each clip's CoC under clip_seed + N * 100003 instead of "
+                         "clip_seed, leaving the flow-matching noise seed where it was. "
+                         "The stride matches run_coc_multimode.py, so offset j scores the "
+                         "j-th CoC that runner sampled. 0 is the shipped estimator")
+    ap.add_argument("--noise-offset", type=int, default=0,
+                    help="draw the flow-matching noise under clip_seed + N, leaving the "
+                         "CoC rollout seed where it was. 0 is the shipped estimator")
+    ap.add_argument("--no-perclip", action="store_true",
+                    help="skip importance_perclip.npz (567 MB per 100 clips)")
     ap.add_argument("--mask", type=str, default=None,
                     help="npz with q_mask/mlp_mask (L,H)/(L,I) 0-1 keep masks: score the "
                          "VLM with these units removed. The mask hooks are installed "
@@ -353,6 +367,7 @@ def main():
         "model_revision": "7aba8293c09993f2e125c6819df05d7fa3e873ea",
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4]",
         "mask": args.mask,
+        "roll_offset": args.roll_offset, "noise_offset": args.noise_offset,
         "fm_steps": args.fm_steps, "gradient_checkpointing": args.checkpoint,
         "traj_mode": args.traj_mode,
         "traj_target": args.traj_target,
@@ -372,8 +387,9 @@ def main():
         torch.cuda.reset_peak_memory_stats()
         clip_acc = {obj: {k: np.zeros(s) for k, s in shapes.items()} for obj in ("coc", "traj")}
         # seed from the clip id, not the loop index: sharding must not change a result
-        rec = process_clip(model, processor, data, args,
-                           sc.clip_seed(args.seed, clip_id), clip_acc)
+        base = sc.clip_seed(args.seed, clip_id)
+        rec = process_clip(model, processor, data, args, base + args.noise_offset, clip_acc,
+                           roll_seed=base + args.roll_offset * 100003)
         for obj, d in clip_acc.items():
             for k, v in d.items():
                 acc[obj][k] += v
@@ -384,8 +400,8 @@ def main():
               f"fm={rec['fm_loss']:.4f} peak={rec['peak_gb']:.1f}GB "
               f"({time.time() - t0:.0f}s)", flush=True)
         if (ci + 1) % 10 == 0 or ci + 1 == len(calib):
-            save(out_dir, acc, records, ci + 1, per_clip_acc)
-    save(out_dir, acc, records, len(records), per_clip_acc)
+            save(out_dir, acc, records, ci + 1, None if args.no_perclip else per_clip_acc)
+    save(out_dir, acc, records, len(records), None if args.no_perclip else per_clip_acc)
     print("saved ->", out_dir, flush=True)
 
 

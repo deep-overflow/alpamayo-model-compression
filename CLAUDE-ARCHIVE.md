@@ -106,6 +106,7 @@ External baseline `lp_r50` built in soowon's tree; ported 2026-09-06 for second-
 | `expert_u25` | expert Taylor | uniform 25% | **expert only** (−0.53B, 4.8%) |
 | `dualexp_u40_e25` | dual (VLM) + znorm (expert) | uniform | **VLM + expert** (−3.19B, 28.8%) |
 | `dual_u40_l0keep_v2` | dual (VLM fixed Q0) | uniform | **VLM only** (−2.66B, 24.0%) |
+| `rawmean` / `rawabsmean` / `lnorm` `_u40_l0keep_v2` | `max` of raw (not rank-normalised) scores | as `_l0keep` | **VLM only** — none beats dual (2026-10-15) |
 
 All five `*_u40_v2` configs remove exactly 2,657,452,032 params (19/32 Q heads and 7390/12288 channels).
 Kept-set overlap: 75.7% (traj–coc), 62.7% (traj–j), 75.6% (coc–j) on Q heads.
@@ -114,6 +115,30 @@ Kept-set overlap: 75.7% (traj–coc), 62.7% (traj–j), 75.6% (coc–j) on Q hea
 Kept sets overlap 84.8% (Q heads) / 83.3% (MLP).
 
 The uniform ratio is **0.3985632694**, not 0.40 — from `run_grid.allocations()` matching `slim_integrated_mag`'s realized budget.
+
+## Calibration variance and layer 0 (2026-10-11 – 10-16)
+
+The calibration-draw / importance-seed variance and several rejected arms (`dualsafe`, n=2,000,
+self-anchored target, `se` vs `rd` draw rules) were one cause: **which 13 of layer 0's 32 Q heads
+a `dual_u40_v2` arm drops**. It is a combination effect in a redundant group with tied rank scores
+at the cut, invisible to the criterion. `_l0keep` exempts layer 0's Q heads and pays the budget
+back as 1,109 MLP channels (2,657,447,936 params removed); `--config dual_u40_l0keep_v2
+--importance importance_v2` reproduces the evaluated arm unit for unit.
+
+- Scripts: `run_coc_multimode.py`, `run_coc_importance.py`, `launch_seed_arms.sh` (random sources
+  inside importance); `make_swap_masks.py`, `make_l0_masks.py`, `make_l0_exempt.py`,
+  `launch_swap_masks.sh` + `analyze_swap_masks.py` / `analyze_l0_*.py` (mask splicing, census,
+  re-check); `analyze_rawmax.py` (criteria with layer 0 kept); `make_l0_redundancy_masks.py`,
+  `analyze_l0_redundancy.py`, `analyze_l0_p2_clips.py`, `run_l0_select.py`,
+  `make_l0_select_swaps.py`, `analyze_l0_select.py` (layer-0 functional redundancy, P2 selector).
+- With layer 0 kept (open loop, test500 / val500 vs the exempt shipped arm): `traj` is
+  indistinguishable from dual (−0.022 / +0.012, CIs span 0; TF CoC NLL +166% vs dual's +32%);
+  `coc` still loses (+0.108 / +0.088); raw-value `max` gains nothing (≥0.03 m excluded).
+- Which layer-0 combinations collapse is visible only after propagation: calib FM loss with the
+  candidate layer-0 set ranks 50 / 64 arms at ρ +0.78 / +0.63; layer-0-local Hessian signals fail.
+  As a greedy selector it recovers 98–103% of the collapse gap; `_l0keep` stays the recipe.
+- Open: why layer 0; the residual +0.015–0.029 of other arms over the shipped one; closed loop.
+- Reports: `2026-10-11` to `2026-10-15` in `reports/evaluation/`.
 
 ## Plans and reports
 

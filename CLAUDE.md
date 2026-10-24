@@ -89,3 +89,13 @@ A KV group is "removed" by masking its Q heads (not by zeroing K, which would sp
 - Worktrees need `outputs/` and `.venv` symlinks recreated before running
 - Determinism: `CUBLAS_WORKSPACE_CONFIG=:4096:8`, `use_deterministic_algorithms`, cudnn deterministic
 - GPU policy: Ada 4-7 for eval, 0-3 OK for training (since 2026-08-22)
+- Dual-family arms: build with `_l0keep` (`make_slim.py --config dual_u40_l0keep_v2`). Which of
+  layer 0's Q heads get cut decides cruise collapses, and that -- not the calibration clips -- was
+  the draw / seed variance (17 arms: SD 0.260 -> 0.018 on test500). Comparisons whose arms had
+  importance measured separately carry it until re-measured; nothing closed loop is re-measured.
+  Overview `reports/evaluation/2026-10-13_calibration-variance-is-layer0.html`, details in
+  `CLAUDE-ARCHIVE.md`.
+- Data pruned 2026-10-17 (lists in `outputs/*_prune_2026-10-17/`): eval/train caches keep only
+  manifest clips (use the stored manifests, do not re-draw sets); the raw camera mirror is gone
+  (stream from the Hub); `data/nre-artifacts` is a symlink to `data/alpasim/nre-artifacts` (no
+  closed-loop run has used it yet -- check scene loading); LingoQA lives in `data/lingoqa/{val,train}`.

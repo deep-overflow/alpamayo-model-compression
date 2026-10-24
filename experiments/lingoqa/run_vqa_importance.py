@@ -67,7 +67,7 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 # isort: on
 
 MODEL_REV = "7aba8293c09993f2e125c6819df05d7fa3e873ea"
-TRAIN = Path("/mnt/nvme1n1/ad_vla/data/lingoqa_train")
+TRAIN = Path("/mnt/nvme1n1/ad_vla/data/lingoqa/train")
 
 
 def load_train_manifest(n_clips, n_questions, seed):

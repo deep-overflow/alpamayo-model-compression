@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>원래값 max 기준과 단일 기준 재측정</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-card: #FFFFFF; --bg-code: #F0EEE6;
+    --text: #29261B; --text-muted: #6B6555;
+    --accent: #D97757; --accent-dark: #C15F3C;
+    --border: #E8E6DC; --table-stripe: #F5F4EF;
+    --good: #008300; --bad: #B3261E;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Söhne", "Pretendard", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.7; padding: 3rem 1.5rem 5rem;
+  }
+  .container { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 3rem; border-bottom: 2px solid var(--accent); padding-bottom: 1.5rem; }
+  .eyebrow { color: var(--accent-dark); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 2.0rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.75rem; }
+  .meta { color: var(--text-muted); font-size: 0.9rem; }
+  .meta code { background: none; padding: 0; color: var(--text-muted); }
+  h2 { font-family: "Tiempos Headline", Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; margin: 2.75rem 0 1rem; padding-top: 0.5rem; }
+  h2 .num { color: var(--accent); margin-right: 0.4rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin: 0 0 1rem 1.4rem; }
+  li { margin-bottom: 0.45rem; }
+  code { font-family: "Berkeley Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg-code); padding: 0.12em 0.35em; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 1.25rem 0 1.75rem; font-size: 0.9rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .scroll { overflow-x: auto; }
+  th { background: var(--bg-code); text-align: left; font-weight: 600; padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .callout { background: var(--bg-card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.opinion { border-left-color: var(--text-muted); }
+  .callout strong:first-child { display: block; margin-bottom: 0.35rem; }
+  figure { margin: 1.5rem 0 2rem; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  figcaption { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+  .small { font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="eyebrow">Evaluation track &middot; criterion &middot; 2026-10-15</div>
+  <h1>원래값 max 기준과 단일 기준 재측정 &mdash; 0번 층을 보존한 상태에서</h1>
+  <div class="meta">
+    7개 arm(<code>&lt;crit&gt;_u40_l0keep_v2</code>, 모두 0번 층 Q head 32개 유지, 제거 파라미터 2,657,447,936개로 동일) &middot;
+    test500 판정 + val500 재현 + 떼어 둔 indist 100클립 기전 확인 &middot; minADE@6, 클립·시드 페어드 &middot; RTX 5880 Ada &middot;
+    계획 <code>plans/2026-10-14_raw-max-criterion.md</code> &middot; 결과 <code>outputs/rawmax_compare/</code>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>요약</strong>
+  <ul>
+    <li><b>원래값 max는 dual보다 낫지 않다.</b> 궤적 점수를 스텝 평균 크기로 맞춘 두 안(<code>rawmean</code>, <code>rawabsmean</code>)이 test500에서 +0.023 [&minus;0.028, +0.072], +0.016 [&minus;0.023, +0.057]이다. 판정은 둘 다 불확정이지만, 사전 등록한 채택 기준인 0.03 m 이상의 개선은 95% 수준에서 배제된다(하한 &minus;0.028, &minus;0.023).</li>
+    <li><b>이유는 스케일이 아니라 깊이다.</b> 두 점수의 비가 22층에서 계단처럼 꺾이므로, 상수 하나로 스케일을 맞추면 0&ndash;21층은 궤적 점수가, 22층부터는 CoC 점수가 단독으로 고르는 기준이 된다. 층별 스케일까지 없앤 <code>lnorm</code>은 dual과 유지 집합이 95&ndash;98% 같고, 주행은 test500에서 동등, val500에서 경계선(+0.027, 하한 +0.0005, 중앙값 +0.007, Wilcoxon p=0.14)이다. test500에서 보였던 낮은 CoC 퇴화율은 val500에서 재현되지 않았다.</li>
+    <li><b>CoC 단독은 0번 층을 보존해도 진다, 두 세트 모두.</b> test500 +0.108 [+0.053, +0.167], val500 +0.088 [+0.029, +0.150]이고 CoC 퇴화율이 9.0% / 9.2%다(출하본 3.2% / 1.8%). 다만 예전 test500 손해(1.584)의 83%는 0번 층 탓이었다.</li>
+    <li><b>궤적 단독은 두 세트 모두 dual과 구별되지 않는다.</b> test500 &minus;0.022 [&minus;0.071, +0.037], val500 +0.012 [&minus;0.023, +0.049]로 부호도 갈린다. 개루프 궤적에서 합집합이 궤적 단독보다 낫다는 근거는 이 측정에 없다.</li>
+    <li><b>22층부터 CoC 점수만 쓰는 <code>dualv3</code>는 나쁘고, 재현된다.</b> test500 +0.043 [+0.001, +0.087], val500 +0.087 [+0.040, +0.142]이고 CoC 퇴화가 6.8% / 7.0%로 출하본의 두 배 이상이다. 9/25 깊이 인지 dual 계획의 가설(후반 층의 궤적 점수는 언어를 대가로 치르는 그림자)과 반대 결과다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">1</span>Purpose</h2>
+<p><code>dual</code>은 <code>max(rank_norm I_traj, rank_norm I_CoC)</code>다. <code>rank_norm</code>은 크기 정보를 버리고, 원래값의 <code>max</code>는 <code>I_traj</code>가 <code>I_CoC</code>의 약 10배라 궤적 점수가 유지 Q head의 94%를 정해 버린다는 이유로 기각된 적이 있다. 그 10배의 대부분은 FM 10스텝을 합친 데서 온다. 그래서 검증한 가설(사용자 제안)은 이것이다: <b>궤적 점수를 스텝 단위 크기로 맞추면 원래값이 담은 크기 정보가 살아나고, 원래값 max가 dual보다 잘 고른다.</b> 같은 실행에서, 0번 층 문제가 섞인 채로 측정됐던 단일 기준(궤적 단독·CoC 단독)도 0번 층을 보존해 다시 쟀다.</p>
+
+<h2><span class="num">2</span>Setup</h2>
+<div class="scroll"><table>
+  <tr><th>id</th><th>config</th><th>점수</th><th>중요도 파일</th><th class="num">dual과 겹침 Q / MLP</th><th>역할</th></tr>
+  <tr><td>R</td><td><code>dual</code></td><td>max(rank T, rank C)</td><td>importance_v2</td><td class="num">1 / 1</td><td>기준 (test500 = <code>swap_ship_L0fullM_500</code>)</td></tr>
+  <tr><td>A1</td><td><code>rawmean</code></td><td>max(T/10, C) = max(|스텝 평균|, C)</td><td>importance_v2</td><td class="num">0.898 / 0.887</td><td>제안 1</td></tr>
+  <tr><td>A2</td><td><code>rawabsmean</code></td><td>max(스텝별 |grad|의 평균, C)</td><td>v2_ada + stepvlm_v1</td><td class="num">0.898 / 0.880</td><td>제안 2 (R'과 짝)</td></tr>
+  <tr><td>R'</td><td><code>dual</code></td><td>max(rank T, rank C)</td><td>importance_v2_ada</td><td class="num">0.973 / 0.973</td><td>A2의 기준</td></tr>
+  <tr><td>C1</td><td><code>lnorm</code></td><td>max(T/층평균 T, C/층평균 C)</td><td>importance_v2</td><td class="num">0.954 / 0.977</td><td>스케일만 제거, 분포 모양 유지</td></tr>
+  <tr><td>C2</td><td><code>dualv3</code></td><td>0&ndash;21층 dual, 22층부터 rank C 단독</td><td>importance_v2</td><td class="num">0.923 / 0.924</td><td>A1의 후반 절반만 분리</td></tr>
+  <tr><td>E1 / E2</td><td><code>traj</code> / <code>coc</code></td><td>rank T / rank C</td><td>importance_v2</td><td class="num">0.867 / 0.868, 0.867 / 0.864</td><td>단일 기준 끝점</td></tr>
+</table></div>
+<p>모든 arm은 <code>make_slim.py --config &lt;crit&gt;_u40_l0keep_v2</code>로 만들었고, 유지 집합은 독립적인 numpy 재계산과 유닛 단위로 일치한다. 0번 층 Q head 32개를 유지하고 MLP 채널 1,109개로 예산을 맞춘다. 회귀 확인으로 다시 빌드한 R은 평가된 <code>slim_swap_ship_L0fullM</code>과 같다. 평가는 <code>run_baseline.py</code>(K=8, seed 42, 클립 ID에서 유도한 시드)로 R과 같은 경로이므로 클립 단위로 짝지어진다.</p>
+<p><b>사전 등록한 판정</b>(test500, 짝 기준 대비 minADE@6 평균, 부트스트랩 20,000회): 채택 = CI 상한 &lt; 0 이면서 평균 &le; &minus;0.03이고 val500에서 재현, 나쁨 = CI 하한 &gt; 0, 동등 = CI가 &plusmn;0.03 안, 그 외 불확정. 0.03은 0번 층을 보존한 뒤 추출·시드만 다른 arm 사이의 산포(SD 0.018, 출하본 대비 +0.015~+0.029)다.</p>
+
+<h2><span class="num">3</span>GPU 없이 본 선택 구조</h2>
+<div class="scroll"><table>
+  <tr><th>규칙</th><th class="num">0&ndash;21층에서 궤적 점수가 고른 비율 Q / MLP</th><th class="num">22&ndash;34층</th><th class="num">22&ndash;34층이 CoC 단독과 겹침</th></tr>
+  <tr><td>dual</td><td class="num">0.46 / 0.49</td><td class="num">0.48 / 0.49</td><td class="num">0.80 / 0.81</td></tr>
+  <tr><td>rawmean</td><td class="num">0.76 / 0.81</td><td class="num">0.11 / 0.03</td><td class="num">0.976 / 0.991</td></tr>
+  <tr><td>rawabsmean</td><td class="num">0.89 / 0.96</td><td class="num">0.17 / 0.06</td><td class="num">0.923 / 0.957</td></tr>
+  <tr><td>lnorm</td><td class="num">0.44 / 0.48</td><td class="num">0.48 / 0.48</td><td class="num">0.82 / 0.82</td></tr>
+</table></div>
+<p>층별 비 <code>mean(I_traj/10) / mean(I_CoC)</code>는 0&ndash;21층에서 0.94&ndash;2.01(Q), 22층부터 0.17&ndash;0.59다. 상수 하나로는 평균만 맞고 층마다 한쪽이 독점한다: <code>rawmean</code>은 35개 층 중 14개(Q)에서, <code>rawabsmean</code>은 MLP 29개 층에서 한쪽 점수가 90% 이상을 정한다. 층별 평균으로 나눈 <code>lnorm</code>은 독점하는 층이 없다.</p>
+
+<h2><span class="num">4</span>Results (facts) &mdash; test500</h2>
+<p class="small">무압축 0.8417, R 0.9557 (CoC 퇴화 3.2%), R' 0.9515 (3.0%). 차이는 arm &minus; 짝 기준, minADE@6, 500클립.</p>
+<div class="scroll"><table>
+  <tr><th>arm</th><th class="num">평균</th><th class="num">기준 대비 [95% CI]</th><th class="num">중앙값</th><th class="num">Wilcoxon p</th><th>판정</th><th class="num">CoC 퇴화 (McNemar p)</th></tr>
+  <tr><td>A1 rawmean</td><td class="num">0.9789</td><td class="num">+0.0232 [&minus;0.0282, +0.0715]</td><td class="num">&minus;0.0021</td><td class="num">0.44</td><td>불확정</td><td class="num">3.4% (1.0)</td></tr>
+  <tr><td>A2 rawabsmean (vs R')</td><td class="num">0.9672</td><td class="num">+0.0157 [&minus;0.0234, +0.0568]</td><td class="num">+0.0065</td><td class="num">0.69</td><td>불확정</td><td class="num">5.0% vs 3.0% (0.052)</td></tr>
+  <tr><td>C1 lnorm</td><td class="num">0.9524</td><td class="num">&minus;0.0033 [&minus;0.0293, +0.0226]</td><td class="num">+0.0005</td><td class="num">0.72</td><td class="good">동등</td><td class="num">1.6% (0.021)</td></tr>
+  <tr><td>C2 dualv3</td><td class="num">0.9986</td><td class="num">+0.0430 [+0.0006, +0.0873]</td><td class="num">+0.0142</td><td class="num">0.0032</td><td class="bad">나쁨</td><td class="num">6.8% (0.0029)</td></tr>
+  <tr><td>E1 traj</td><td class="num">0.9334</td><td class="num">&minus;0.0223 [&minus;0.0709, +0.0367]</td><td class="num">&minus;0.0069</td><td class="num">0.12</td><td>불확정</td><td class="num">1.8% (0.092)</td></tr>
+  <tr><td>E2 coc</td><td class="num">1.0638</td><td class="num">+0.1081 [+0.0531, +0.1673]</td><td class="num">+0.0434</td><td class="num">1.3e&minus;6</td><td class="bad">나쁨</td><td class="num">9.0% (3.8e&minus;5)</td></tr>
+  <tr><td>R' dual_ada</td><td class="num">0.9515</td><td class="num">&minus;0.0042 [&minus;0.0288, +0.0208]</td><td class="num">+0.0035</td><td class="num">0.95</td><td class="good">동등</td><td class="num">3.0% (1.0)</td></tr>
+</table></div>
+<p class="small">C2의 하한이 0에 가까워 부트스트랩을 200,000회로 다시 돌렸다: [+0.0008, +0.0875], 10% 절사평균 +0.028로 판정은 같다.</p>
+<figure>
+  <img src="PLOT::rawmax::rawmax_test500.png" alt="arm별 test500 minADE@6 차이와 95% 신뢰구간">
+  <figcaption>그림 1. 짝 기준 대비 test500 minADE@6 차이와 95% 부트스트랩 CI. 회색 띠는 동등 판정 폭 &plusmn;0.03 m.</figcaption>
+</figure>
+
+<h3>버킷별 평균 차이 (기준 대비)</h3>
+<div class="scroll"><table>
+  <tr><th>arm</th><th class="num">cruise</th><th class="num">decel_stop</th><th class="num">accel</th><th class="num">turn</th></tr>
+  <tr><td>A1 rawmean</td><td class="num">&minus;0.011</td><td class="num">&minus;0.056</td><td class="num">+0.149</td><td class="num">+0.086</td></tr>
+  <tr><td>A2 rawabsmean</td><td class="num">+0.015</td><td class="num">+0.004</td><td class="num">+0.018</td><td class="num">+0.025</td></tr>
+  <tr><td>C1 lnorm</td><td class="num">&minus;0.003</td><td class="num">&minus;0.035</td><td class="num">+0.051</td><td class="num">&minus;0.029</td></tr>
+  <tr><td>C2 dualv3</td><td class="num">+0.033</td><td class="num">+0.037</td><td class="num">+0.095</td><td class="num">+0.033</td></tr>
+  <tr><td>E1 traj</td><td class="num">+0.002</td><td class="num">+0.015</td><td class="num">&minus;0.025</td><td class="num">&minus;0.133</td></tr>
+  <tr><td>E2 coc</td><td class="num">+0.125</td><td class="num">+0.026</td><td class="num">+0.019</td><td class="num">+0.198</td></tr>
+</table></div>
+
+<h3>0번 층을 자른 원래 arm에서 0번 층을 보존한 arm으로 (test500)</h3>
+<div class="scroll"><table>
+  <tr><th>arm</th><th class="num">원래 (0번 층 13개 제거)</th><th class="num">0번 층 보존</th><th class="num">변화 [95% CI]</th></tr>
+  <tr><td>dual (출하본)</td><td class="num">0.9498</td><td class="num">0.9557</td><td class="num">+0.006 [&minus;0.021, +0.038]</td></tr>
+  <tr><td>traj</td><td class="num">1.0076</td><td class="num">0.9334</td><td class="num">&minus;0.074 [&minus;0.140, &minus;0.006]</td></tr>
+  <tr><td>coc</td><td class="num">1.5837</td><td class="num">1.0638</td><td class="num">&minus;0.520 [&minus;0.647, &minus;0.401]</td></tr>
+</table></div>
+
+<h2><span class="num">5</span>Results (facts) &mdash; 떼어 둔 100클립에서 본 기전</h2>
+<p class="small"><code>run_token_ablation.py --arm-masks</code>, indist_500 앞 100클립, dense 모델의 텍스트로 teacher forcing. dense: FM 0.2425, NLL 0.1708, minADE 0.8368. 기전 확인용이며 판정 기준이 아니다.</p>
+<div class="scroll"><table>
+  <tr><th>mask</th><th class="num">FM (dense 대비)</th><th class="num">NLL (dense 대비)</th><th class="num">FM &minus; dual [95% CI]</th><th class="num">NLL &minus; dual [95% CI]</th></tr>
+  <tr><td>dual</td><td class="num">+5.3%</td><td class="num">+32.3%</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+  <tr><td>rawmean</td><td class="num">+7.5%</td><td class="num">+34.6%</td><td class="num">+0.0054 [+0.0017, +0.0092]</td><td class="num">+0.0039 [&minus;0.0113, +0.0239]</td></tr>
+  <tr><td>rawabsmean</td><td class="num">+5.6%</td><td class="num">+44.4%</td><td class="num">+0.0009 [&minus;0.0029, +0.0045]</td><td class="num">+0.0206 [+0.0019, +0.0465]</td></tr>
+  <tr><td>dual_ada</td><td class="num">+5.8%</td><td class="num">+36.2%</td><td class="num">+0.0012 [&minus;0.0013, +0.0039]</td><td class="num">+0.0065 [&minus;0.0023, +0.0178]</td></tr>
+  <tr><td>lnorm</td><td class="num">+5.4%</td><td class="num">+27.6%</td><td class="num">+0.0003 [&minus;0.0028, +0.0035]</td><td class="num">&minus;0.0081 [&minus;0.0145, &minus;0.0027]</td></tr>
+  <tr><td>dualv3</td><td class="num">+5.4%</td><td class="num">+44.4%</td><td class="num">+0.0004 [&minus;0.0019, +0.0025]</td><td class="num">+0.0206 [+0.0047, +0.0377]</td></tr>
+  <tr><td>traj</td><td class="num">+5.4%</td><td class="num">+165.5%</td><td class="num">+0.0002 [&minus;0.0032, +0.0038]</td><td class="num">+0.2273 [+0.1893, +0.2674]</td></tr>
+  <tr><td>coc</td><td class="num">+5.9%</td><td class="num">+68.0%</td><td class="num">+0.0015 [&minus;0.0032, +0.0064]</td><td class="num">+0.0609 [+0.0232, +0.1060]</td></tr>
+</table></div>
+<p>사전 등록한 예측 네 개 중 하나만 맞았다(단측 Wilcoxon): rawmean의 FM이 dual보다 높다(p=1e&minus;4, 맞음). rawmean의 NLL이 dual보다 낮다(p=0.55, 틀림), dualv3의 NLL이 dual보다 낮다(p=0.96, 반대 방향), rawabsmean의 FM이 rawmean보다 높다(p=0.99, 반대 방향).</p>
+
+<h2><span class="num">6</span>Results (facts) &mdash; val500 재현</h2>
+<p>계획대로 test500에서 판정이 나온 arm(<code>dualv3</code>, CoC 단독: 나쁨)을 val500에서 재현했다. 여기에 논문의 합집합 주장을 직접 가르는 궤적 단독과, 판정 기준 밖에서 CoC 퇴화율이 낮게 나온 <code>lnorm</code>을 더했다(계획에 없던 추가 두 개). 기준은 0번 층을 보존한 출하본의 val500 실행 <code>swap_ship_L0fullM_val500</code>(0.8756, 퇴화 1.8%)이고, 무압축은 0.8236이다.</p>
+<div class="scroll"><table>
+  <tr><th>arm</th><th class="num">평균</th><th class="num">기준 대비 [95% CI, 200,000회]</th><th class="num">중앙값</th><th class="num">10% 절사평균</th><th class="num">Wilcoxon p</th><th>판정</th><th class="num">CoC 퇴화 (McNemar p)</th></tr>
+  <tr><td>C1 lnorm</td><td class="num">0.9021</td><td class="num">+0.0265 [+0.0005, +0.0573]</td><td class="num">+0.0071</td><td class="num">+0.0092</td><td class="num">0.14</td><td>경계선 나쁨 (평균만)</td><td class="num">1.6% (1.0)</td></tr>
+  <tr><td>C2 dualv3</td><td class="num">0.9624</td><td class="num">+0.0869 [+0.0398, +0.1430]</td><td class="num">+0.0167</td><td class="num">+0.0277</td><td class="num">0.0032</td><td class="bad">나쁨, 재현</td><td class="num">7.0% (1.3e&minus;5)</td></tr>
+  <tr><td>E1 traj</td><td class="num">0.8875</td><td class="num">+0.0120 [&minus;0.0235, +0.0496]</td><td class="num">&minus;0.0039</td><td class="num">&minus;0.0006</td><td class="num">0.84</td><td>불확정</td><td class="num">2.4% (0.55)</td></tr>
+  <tr><td>E2 coc</td><td class="num">0.9635</td><td class="num">+0.0879 [+0.0295, +0.1506]</td><td class="num">+0.0183</td><td class="num">+0.0416</td><td class="num">0.005</td><td class="bad">나쁨, 재현</td><td class="num">9.2% (1.2e&minus;7)</td></tr>
+</table></div>
+<p class="small">test500에서 0에 가까운 하한이 나온 두 판정(C2 test500, C1 val500)은 부트스트랩 200,000회에서도 같은 쪽에 남았다. C1 val500은 평균의 구간만 0을 배제하고, 중앙값·절사평균·Wilcoxon은 차이를 지지하지 않는다.</p>
+
+<h2><span class="num">7</span>Analysis (opinion)</h2>
+<div class="callout opinion">
+  <strong>해석</strong>
+  <ul>
+    <li><b>원래값 max가 실패하는 이유는 10배 스케일이 아니라 층마다 다른 스케일이다.</b> 상수로 나누면 전체 평균은 50:50이 되지만 0&ndash;21층은 궤적 쪽으로, 22층부터는 CoC 쪽으로 기운다. 그 결과 rawmean은 앞쪽 층에서 FM 손실이 늘었고(+0.0054, p=1e&minus;4), 주행은 개선되지 않았다. 층별로 스케일을 없앤 <code>lnorm</code>은 dual과 유지 집합이 95&ndash;98% 같고 주행도 거의 같다(val500의 +0.027은 꼬리 몇 클립의 평균 효과로 보인다). 즉 rank가 버리는 크기 정보는 선택을 거의 바꾸지 않고, 바꾸더라도 나아지는 방향이 아니다.</li>
+    <li><b>합집합이 필요한 곳은 앞쪽 층만이 아니다.</b> 후반 층을 CoC 점수만으로 고른 <code>dualv3</code>는 두 세트 모두에서 주행과 CoC 퇴화가 함께 나빠졌다(퇴화 6.8% / 7.0%). CoC 점수는 teacher-forced NLL에 대한 1차 근사이고, 자유 생성에서 문장을 끝맺는 능력과는 다르다. CoC 단독 arm의 퇴화율 9.0% / 9.2%도 같은 방향이다. 후반 층에서 궤적 점수가 고르는 unit은 FM에는 기능이 없어도 생성 안정성에는 기여하는 것으로 보인다.</li>
+    <li><b>논문의 합집합 논거는 다시 써야 한다.</b> 0번 층을 보존하면 CoC 단독은 두 세트 모두에서 여전히 지지만(+0.108 / +0.088), 궤적 단독은 dual과 구별되지 않는다(&minus;0.022 / +0.012, 둘 다 CI가 0을 포함). 궤적 단독의 teacher-forced NLL은 +166%로 크게 나빠지지만 자유 생성 퇴화율은 1.8% / 2.4%로 dual과 비슷하다. 따라서 합집합이 궤적 단독보다 낫다는 주장은 개루프 궤적이나 퇴화율이 아니라 언어 능력 지표(LingoQA)나 폐루프에서 입증해야 하고, 그 측정은 0번 층을 보존한 상태로는 아직 없다.</li>
+    <li><b>판정 폭에 대한 반성.</b> &plusmn;0.03 동등 폭은 유지 집합이 dual과 95% 이상 같은 arm(R', C1)에서만 도달할 수 있었다. 10% 이상 다른 arm은 짝 차이의 산포 때문에 500클립에서 CI 반폭이 약 0.05가 된다. 그래서 A1·A2는 "불확정"으로 남았고, 실제로 말할 수 있는 것은 "0.03 이상의 개선은 배제된다"이다.</li>
+  </ul>
+</div>
+
+<h2><span class="num">8</span>아직 모르는 것</h2>
+<ul>
+  <li>폐루프. 인계 제동 인공물을 없애기 전에는 새 폐루프 arm을 돌리지 않는다.</li>
+  <li>LingoQA로 본 궤적 단독과 dual의 언어 능력 차이 (0번 층 보존 상태).</li>
+  <li>원래값 max 두 안이 dual보다 조금 나쁜지(점추정 +0.016&ndash;0.023). 500클립에서는 CI 반폭이 약 0.05라 &plusmn;0.03 동등 판정에 도달하지 못했다.</li>
+</ul>
+
+<p class="small">재현: <code>python experiments/evaluation/analyze_rawmax.py</code> &rarr; <code>outputs/rawmax_compare/{summary.txt, metrics.json, plots/}</code>. 실행 스크립트와 빌드 검증은 이 리포트의 계획 파일에 적힌 경로를 따른다.</p>
+</div>
+</body>
+</html>
