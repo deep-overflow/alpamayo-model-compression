@@ -73,15 +73,22 @@
 
 ### VLM에서 Minitron 계열 직접 사례
 
-**Nemotron 3.5 Bolt 74B-A9B**(NVIDIA, 2026-10-15). Star Elastic([2605.07182](https://arxiv.org/abs/2605.07182))을 썼다. 1,024×8K
-캘리브레이션 활성 합 + Gumbel router + logit KL이다.
-- 압축은 텍스트 탑에만 했다.
-- 비전은 두 단계를 더 거쳐서야 복구됐다. 모델 카드는 이 단계를 "비전 벤치마크 복구에 결정적"이라고 썼다.
-  1. adapter만 학습(epoch당 이미지 약 6.6M)
-  2. 비전 중심 SFT(약 10.1B + 9.5B 토큰), SLERP 병합
-- hidden 폭은 비전 헤드 호환을 위해 유지했다고 한다 **[미확인, 검색 스니펫]**.
-- 부모 모델의 비전 수치가 없어 손실 크기는 알 수 없다.
-- 출처: [연구 페이지](https://research.nvidia.com/labs/nemotron/Nemotron-3.5-Bolt-24GB/), [모델 카드](https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-GGUF)
+**Nemotron 3.5 Bolt 74B-A9B**(NVIDIA, 2026-10-15). Star Elastic([2605.07182](https://arxiv.org/abs/2605.07182))을 썼다.
+**기술 보고서 원문으로 확인**(2026-10-25)한 내용은 다음과 같다.
+- **텍스트 탑만 압축했다.** MoE layer마다 routed expert 수와 중간 폭을 줄였다. hidden size는 "부모의 vision head와
+  호환되도록" **유지**했다(p.1: "preserving the hybrid architecture and hidden size to retain compatibility with the
+  parent's vision head").
+- **1단계: 압축 중 KD 120B 토큰.** 데이터는 부모 SFT 데이터 70% + 사전학습 데이터 30%이고, 비전 탑을 뗀 상태였다.
+  보고서 표현은 "knowledge distillation applied to recover **text-only** benchmarks during compression"이다.
+- **2단계: vision adapter만 학습.** 그 뒤 부모의 비전 탑을 다시 붙이고 adapter만 학습했다(이미지 전용 약 6.6M
+  샘플/epoch).
+- **3단계: 비전 중심 SFT.** LLM, adapter, 비전 인코더를 모두 학습했다(원래 blend 54.1B 토큰을 비전 쪽으로 재가중).
+  이어서 adapter만 학습한 체크포인트와 SLERP 병합(80:20)을 했다.
+- 보고서 결론: 2·3단계가 비전 복구에 "critical"이고, 텍스트는 "little to no degradation"이다.
+- 단계별 수치는 Figure 7에만 있어 텍스트로는 읽지 못했다.
+- **순서가 핵심이다: 디코더를 먼저(텍스트 KD 120B 토큰) 복구한 뒤에 접점을 학습했다.**
+- 출처: [기술 보고서](https://research.nvidia.com/labs/nemotron/files/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-Technical-Report.pdf),
+  [모델 카드](https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-GGUF)
 
 **같은 예산에서 VLM에 Minitron(활성 중요도 + logit KD)을 직접 비교한 논문은 찾지 못했다.**
 
@@ -155,7 +162,7 @@
 - LVLM 프루닝 × 복구 방식을 가장 크게 통제 비교했다.
 
 **Method**
-- width는 Taylor(CE)로 head와 뉴런을 자르고 residual 폭은 유지한다.
+- width는 Taylor(CE)로 head와 뉴런을 자른다. residual 폭을 유지했는지는 원문에 명시되지 않았다.
 - 층은 Block Influence로 고른다.
 - 복구는 projector만 SFT, LoRA, logit KD, hidden L2를 비교했다.
 
@@ -200,8 +207,8 @@
 
 | 논문 | 무엇을 잘랐나 | 복구 방법 | 결과 |
 |---|---|---|---|
-| Huang (IJCV 2026, 2604.24380) | LLaVA·InternVL·Bunny LLM의 head·뉴런 또는 층 | projector만 SFT / LoRA / logit KD / hidden L2 비교 | 저비율 손상은 비전-언어 정렬에 몰리고 projector만 SFT로 대부분 회복. SFT + hidden L2 최선, logit KD만으로는 고비율에서 SFT 미만. 데이터 5%로 90% 이상 |
-| Nemotron 3.5 Bolt (NVIDIA, 2026) | 텍스트 탑(Minitron 계열) | logit KL → **adapter만 학습 → 비전 중심 SFT** | 비전 벤치마크 복구에 "결정적"인 것은 뒤의 두 단계(카드 서술). 수치 없음 |
+| Huang (IJCV 2026, 2604.24380) | LLaVA·InternVL·Bunny LLM의 head·뉴런 또는 층 | projector만 SFT **또는** joint SFT(projector + LLM LoRA) — 단계가 아니라 대안. logit KD / hidden L2 추가 | 원문 확인: projector만 SFT는 15%에서 95% 이상 유지, 30% 미만에서 joint와 비슷, 60%에서 60–80%. 45% 이상은 LLM SFT가 필요 |
+| Nemotron 3.5 Bolt (NVIDIA, 2026) | 텍스트 탑, hidden 유지 | **텍스트 KD 120B 토큰(디코더 먼저)** → adapter만 학습 → 비전 중심 SFT + SLERP | 원문 확인: 뒤 두 단계가 비전 복구에 "critical", 텍스트는 거의 무손실 |
 | INTERLACE (2511.19676) | Qwen3-VL-8B/4B 층 25% | CE 미세조정, FineVision 1%, 약 6시간 | 긴 CoT 86.1% / 81.7%, 짧은 CoT 88.9%(SLEB 60.5%) |
 | Eddy-VL (2607.16316) | Qwen3-VL-Embedding-2B 층 28 → 24 | 층별 KD: 중간층 attention(1−CKA) + 최종층 MSE/cosine | 잃은 12.1점 중 6.4점 회복(56.8 → 63.2, teacher 68.9) |
 | HiPP-Prune (2603.06270) | LLaVA·Qwen2.5-VL MLP(층별 배분) | LM head·norm·projector + 마지막 층 LoRA, 800 step | POPE 72.89(dense 82.43), SQA 39(dense 64) — 복구는 약함 |
@@ -218,13 +225,28 @@
 **(3) VLA 복구** — Offline HSD, Shallow-π, SPAR, RLRC, CLP(대부분 기존 조사). 이 가운데 Offline HSD만 구조적
 프루닝 뒤 hidden 증류를 썼다.
 
-**모달리티 단계 복구(C3)는 MT-W에서는 후보가 아니라 진단이다**(2026-10-25 사용자 지적으로 정정).
-- Huang, LLaVA-KD, Bolt는 "비전-언어 접점(projector/adapter)을 먼저 복구하는 단계"가 효과가 크다고 보고한다.
-- 그러나 이 결론은 **디코더의 언어 능력이 대부분 살아 있다는 전제** 위에 있다.
-  - Huang width 15%: 텍스트 −1.07%, 멀티모달 −9.13%.
-  - 30%를 넘으면 언어 백본 자체가 무너지고 접점 복구만으로는 부족하다고 저자들도 쓴다.
-  - 세 연구 모두 residual 폭을 유지했다. 바뀐 것은 LLM 내부뿐이고, 접점은 바뀐 LLM에 맞게 입력을 다시 매핑했다.
-- MT-W에서는 이 전제가 성립할 이유가 약하다.
+**모달리티 단계 복구(C3)는 MT-W에서는 후보가 아니라 진단이다**(2026-10-25 사용자 지적으로 정정, 원문 확인).
+
+처음 조사 요약은 "세 연구가 '접점을 먼저 복구하는 단계'가 효과가 크다고 보고한다"였다. 원문을 보면
+**손상된 디코더를 둔 채 접점부터 복구한 연구는 하나도 없다.**
+- **Huang (IJCV 2026, 2604.24380).**
+  - projector만 학습하는 것은 첫 단계가 아니라 joint SFT의 **대안**이다.
+  - 디코더가 대부분 살아 있는 저비율에서만 충분하다. 저자 결론은 "15% 안팎이면 projector만으로 대부분 회복,
+    40% 이상이면 LLM SFT가 필요"다.
+  - Table 4(LLaVA-1.5-7B width)의 텍스트 성능 하락은 15% 1.07%, 30% 10.38%, 45% 56.92%다.
+    - 15% 값은 표의 평균(40.30 → 38.87)으로 계산하면 3.5%라 표 안에서 어긋난다.
+  - hidden 폭 유지 여부는 원문에 명시되지 않았다.
+  - 표 5 레시피는 45% 미만에서 layerwise, 45% 이상에서 widthwise다.
+- **LLaVA-KD (2410.16236).**
+  - DPT 단계는 projector만 학습한다(+0.9: 54.7 → 55.6).
+  - student LLM은 프루닝한 모델이 아니라 기성 Qwen1.5/2.5 0.5–1.8B이고, 동결 상태다. 표준 LLaVA 정렬 단계일 뿐이다.
+  - 언어 능력이 온전한 LLM에 새 projector를 맞추는 것이라 손상된 디코더와는 무관하다.
+- **Nemotron 3.5 Bolt.**
+  - **디코더를 먼저** 텍스트 KD 120B 토큰으로 복구했다.
+  - 그 뒤에 adapter만 학습하고, 이어서 전체 SFT를 했다.
+  - hidden size는 비전 헤드 호환을 위해 유지했다.
+
+- MT-W에서는 이 전제가 성립할 이유가 더 약하다.
   1. hidden 절단은 텍스트 임베딩과 비전 특징(merger·DeepStack 출력)에 **똑같이** 적용된다. 비전 쪽 입력만 따로
      어긋난 것이 아니다.
   2. 유지 채널 순위가 사실상 비전 위치 순위였다(CoC 위치와의 top-k 겹침 hidden 0.866, MLP 0.807). 그래서
@@ -239,7 +261,10 @@
 ## 3. 문헌의 공백 (세 갈래 공통)
 
 - VLM width 프루닝에서 활성(Minitron) vs 출력 기반 Taylor vs 토큰 종류 한정 통계를, 같은 예산과 같은 KD로 비교한 연구는 없다.
-- **모든 width 연구가 residual(hidden) 폭을 유지한다**: Huang, Kim, HiPP, Bolt(스니펫). merger, DeepStack, expert 인터페이스와 결합된 VLM hidden 폭 절단을 복구까지 본 연구는 없다. 우리 MT-W가 처음이다.
+- **hidden 폭을 자른 VLM width 연구는 찾지 못했다.**
+  - Bolt(원문 확인: 비전 헤드 호환을 위해 hidden 유지), Kim(residual 유지), HiPP(MLP만)는 hidden을 유지했다.
+  - Huang은 head·뉴런을 잘랐고 hidden에 대한 명시는 없다.
+  - merger, DeepStack, expert 인터페이스와 결합된 VLM hidden 폭 절단을 복구까지 본 연구는 없다. 우리 MT-W가 처음이다.
 - 하류 모듈이 읽는 전 층 KV를 증류한 복구는 없다.
 - VLM 구조적 프루닝 뒤의 on-policy 증류, prune + KD에서의 CoT 보존도 없다. 예외는 MuCRASP(기존 조사)다.
 - 모듈 간 예산 배분(ViT vs merger vs LLM vs action head)을 복구까지 본 연구는 BLIP-2(UKMP)뿐이다.
