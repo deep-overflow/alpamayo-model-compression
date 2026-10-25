@@ -1,12 +1,14 @@
-"""Pick the KD checkpoint on the probe set (plan D10-2: checkpoint chosen by the probe curve).
+"""Pick the KD checkpoint on val500 (plan D10-2; selection set decided 2026-10-25).
 
-Probe = val_official_238 (disjoint from val500 / test500), run_baseline protocol (k 8, seed 42).
-Epoch 0 is the zero-shot MT-W model, epochs 1..E the train_kd checkpoints. Rule: the epoch
-checkpoint with the lowest mean minADE@6; epoch 0 is a reference only, never selected.
-Writes outputs/minitron/<exp>_probe/{summary.json, summary.txt, selected.txt}.
+val500 = eval_sets/indist_500 (official val, distribution-matched like test_2000), run_baseline
+protocol (k 8, seed 42, max_gen 256). Being the selection set, val500 is no longer reported;
+the report uses test_2000 and OOD-Val262. Epoch 0 is the zero-shot MT-W model (its stored
+val500 rows), epochs 1..E the train_kd checkpoints. Rule: the epoch checkpoint with the lowest
+mean minADE@6; epoch 0 is a reference only, never selected.
+Writes outputs/minitron/<exp>_select/{summary.json, summary.txt, selected.txt}.
 
 Usage:
-  .venv/bin/python minitron/code/select_ckpt.py --exp mtw24_kd
+  .venv/bin/python minitron/code/select_ckpt.py --exp mtw24_kd --zs-arm mtw24_zs
 """
 
 import argparse
@@ -26,11 +28,13 @@ REPO = Path(__file__).resolve().parents[2]
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp", default="mtw24_kd")
+    ap.add_argument("--zs-arm", default="mtw24_zs")
     ap.add_argument("--epochs", type=int, default=3)
     args = ap.parse_args()
-    arms = {e: rows(f"minitron/{args.exp}_probe_e{e}") for e in range(args.epochs + 1)}
+    arms = {0: rows(f"minitron/{args.zs_arm}_indist")}
+    arms.update({e: rows(f"minitron/{args.exp}_val_e{e}") for e in range(1, args.epochs + 1)})
     ids = sorted(set.intersection(*(set(r) for r in arms.values())))
-    assert ids, "no clip common to every probe run"
+    assert len(ids) == 500, f"expected the 500 val500 clips in every run, got {len(ids)}"
     at6 = {e: np.array([min(r[c]["ade_rollout_k"][:6]) for c in ids]) for e, r in arms.items()}
     fde6 = {e: np.array([min(r[c]["fde_rollout_k"][:6]) for c in ids]) for e, r in arms.items()}
     rec = {}
@@ -44,12 +48,13 @@ def main():
                   "vs_e0_mean": float(d.mean()), "vs_e0_ci95": [float(lo), float(hi)]}
     best = min(range(1, args.epochs + 1), key=lambda e: rec[e]["minADE6_mean"])
     sel = f"outputs/minitron/{args.exp}/ckpt_epoch{best}"
-    out = REPO / "outputs" / "minitron" / f"{args.exp}_probe"
+    out = REPO / "outputs" / "minitron" / f"{args.exp}_select"
     out.mkdir(parents=True, exist_ok=True)
     (out / "summary.json").write_text(json.dumps(
-        {"probe": "val_official_238", "n_clips": len(ids), "rule": "lowest mean minADE@6, epochs >= 1",
-         "selected_epoch": best, "selected": sel, "epochs": rec}, indent=2))
-    lines = [f"probe val_official_238, n={len(ids)}; rule: lowest mean minADE@6 among epochs >= 1",
+        {"selection_set": "val500 (eval_sets/indist_500)", "n_clips": len(ids),
+         "rule": "lowest mean minADE@6, epochs >= 1", "selected_epoch": best, "selected": sel,
+         "epochs": rec}, indent=2))
+    lines = [f"selection on val500, n={len(ids)}; rule: lowest mean minADE@6 among epochs >= 1",
              "epoch  minADE@6 mean  median  minFDE@6  CoC degen  vs e0 [95% CI]"]
     for e, r in rec.items():
         lines.append(f"{e:5d}  {r['minADE6_mean']:13.4f}  {r['minADE6_median']:6.4f}  "

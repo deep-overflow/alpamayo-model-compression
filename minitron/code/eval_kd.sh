@@ -1,12 +1,13 @@
 #!/bin/bash
 # Evaluate a train_kd run once it finishes (plan section 5, D10-2), all on Ada 4-7:
-#   1. probe val_official_238 for epoch 0 (zero-shot MT-W) and every epoch checkpoint
-#   2. select_ckpt.py: lowest probe mean minADE@6 among the epoch checkpoints
+#   1. val500 (the selection set, not reported) for every epoch checkpoint; epoch 0 = the
+#      zero-shot MT-W rows already stored
+#   2. select_ckpt.py: lowest val500 mean minADE@6 among the epoch checkpoints
 #   3. one queue per card, card k running shard k/4 of: the selected checkpoint on test_2000
-#      (test500 + 1,500), val500 and OOD-Val262, then the reference arms (dense, MoOP, zero-shot
-#      MT-W) on the 1,500 added test clips -- skipped where their rows already exist. Protocol of
-#      the stored rows: k 8, seed 42 (per-clip), max_gen 256. Card 7 first runs LingoQA
-#      (standard protocol) for the selected checkpoint and the zero-shot MT-W.
+#      and OOD-Val262 (the reported sets), then the reference arms (dense, MoOP, zero-shot
+#      MT-W) on the 1,500 test clips added to test500 -- skipped where their rows already
+#      exist. Protocol of the stored rows: k 8, seed 42 (per-clip), max_gen 256. Card 7 first
+#      runs LingoQA (standard protocol) for the selected checkpoint and the zero-shot MT-W.
 #   4. LingoQA judge, paired readouts -> outputs/minitron/<exp>_eval/
 #
 #   nohup bash minitron/code/eval_kd.sh [exp] > outputs/minitron/<exp>_eval.log 2>&1 &
@@ -38,19 +39,6 @@ done
 while pgrep -f "minitron/code/train_kd.py" > /dev/null; do sleep 30; done
 stamp "training finished"
 
-probe() {  # <model dir> <tag> <gpu>
-  bash "$RETRY" 3 experiments/evaluation/run_baseline.py --set indist --sets-id recovery_sets \
-    --manifest val_official_238 --model "$1" --exp-id "minitron/${EXP}_probe_$2" --gpu "$3" \
-    > "$LOG/probe_$2.log" 2>&1
-}
-probe "$ZS" e0 7 &
-for e in 1 2 3; do probe "outputs/minitron/$EXP/ckpt_epoch$e" "e$e" $((3 + e)) & done
-wait
-stamp "probes done"
-$PY minitron/code/select_ckpt.py --exp "$EXP" > "$LOG/select.txt" 2>&1 || { cat "$LOG/select.txt"; exit 1; }
-SEL=$(cat "outputs/minitron/${EXP}_probe/selected.txt")
-stamp "selected $SEL"
-
 ol() {  # <card k> <model> <exp-id> <rows tag> <log name> <run_baseline args...>
   local k=$1 model=$2 exp=$3 tag=$4 name=$5
   shift 5
@@ -61,6 +49,20 @@ ol() {  # <card k> <model> <exp-id> <rows tag> <log name> <run_baseline args...>
   bash "$RETRY" 3 experiments/evaluation/run_baseline.py --model "$model" --exp-id "$exp" \
     --shard "$k" --n-shards 4 --gpu $((4 + k)) "$@" > "$LOG/${name}_s${k}.log" 2>&1
 }
+select_queue() {  # <card k>
+  for e in 1 2 3; do
+    ol "$1" "outputs/minitron/$EXP/ckpt_epoch$e" "minitron/${EXP}_val_e$e" "ckpt_epoch$e" "val_e$e" \
+      --set indist
+  done
+}
+for k in 0 1 2 3; do select_queue "$k" & done
+wait
+stamp "val500 for every epoch done"
+$PY minitron/code/select_ckpt.py --exp "$EXP" --zs-arm "$ZS_ARM" > "$LOG/select.txt" 2>&1 \
+  || { cat "$LOG/select.txt"; exit 1; }
+SEL=$(cat "outputs/minitron/${EXP}_select/selected.txt")
+stamp "selected $SEL"
+
 queue() {  # <card k>
   local k=$1 sel_tag
   sel_tag=$(basename "$SEL")
@@ -72,7 +74,6 @@ queue() {  # <card k>
            --exp-id "minitron/lingo_vqa_$ZS_ARM" --gpu 7 > "$LOG/lingo_$ZS_ARM.log" 2>&1
   fi
   ol "$k" "$SEL" "minitron/${EXP}_test" "$sel_tag" test --set test --n-indist 2000
-  ol "$k" "$SEL" "minitron/${EXP}_indist" "$sel_tag" indist --set indist
   ol "$k" "$SEL" "minitron/${EXP}_oodval" "$sel_tag" oodval --set ood --manifest ood_val
   ol "$k" baseline "${EXT}dense" baseline ext_dense --set test --manifest test_2000_ext1500
   ol "$k" "$MOOP" "${EXT}moop" "$(basename "$MOOP")" ext_moop --set test --manifest test_2000_ext1500
@@ -89,6 +90,6 @@ $PY experiments/lingoqa/analyze_lingo.py \
   --runs "minitron/lingo_vqa_$EXP" "minitron/lingo_vqa_$ZS_ARM" lingo_vqa_slim_dual_u40_v2 lingo_vqa_baseline \
   --baseline lingo_vqa_slim_dual_u40_v2 --exp-id "minitron/lingo_$EXP" > "$LOG/lingo_analysis.txt" 2>&1
 $PY minitron/code/compare_openloop.py --arm "minitron/$EXP" --ref "minitron/$ZS_ARM" \
-  > "$LOG/openloop.txt" 2>&1
+  --sets test2000 oodval > "$LOG/openloop.txt" 2>&1
 stamp "all done"
 touch "$LOG/DONE"
