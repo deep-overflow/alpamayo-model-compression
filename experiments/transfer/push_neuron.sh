@@ -91,6 +91,9 @@ fi
 CODE_EXCLUDES=(--exclude '.venv' --exclude 'outputs' --exclude 'wandb'
                --exclude '__pycache__' --exclude '*.pyc' --exclude 'logs/'
                --exclude '.claude/worktrees')
+# A worktree's .git is a pointer file; the target's .git is a directory from an earlier push
+# of the main checkout, and rsync cannot replace one with the other (exit 23).
+[ -f "$CODE_SRC/.git" ] && CODE_EXCLUDES+=(--exclude '/.git')
 
 run() {
   if [ -n "${LIST_ONLY-}" ]; then
