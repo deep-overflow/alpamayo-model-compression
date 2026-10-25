@@ -28,7 +28,8 @@ cache gradient-free anyway, so the second pass changes no gradient; it costs a f
 
 Sharding is FSDP2 (fully_shard) on every decoder layer / ViT block and on every module the
 step calls directly -- embed_tokens, the final norm, visual, lm_head, expert,
-action_in_proj, action_out_proj -- so no parameter is read outside its own forward. The
+action_in_proj, action_out_proj -- so no parameter is read outside its own forward
+(--shard-group N: HSDP, sharded inside groups of N ranks and replicated across them). The
 student keeps fp32 master weights with bf16 compute; the teacher is bf16 and sharded the same
 way. Both are loaded on CPU one after the other and moved to GPU shard by shard, which keeps
 host memory at one model per rank. AdamW (betas 0.9 / 0.95, weight decay 0.1 -- Megatron
@@ -69,6 +70,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
 from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
+from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, fully_shard
 from torch.distributed.tensor import DTensor
 
@@ -93,13 +95,14 @@ N_TOK = 64  # diffusion tokens = waypoints
 # ---------------------------------------------------------------- distributed / models
 
 
-def dist_init(gpus):
+def dist_init(gpus, offload=False):
     local = int(os.environ.get("LOCAL_RANK", "0"))
     dev = gpus[local] if gpus else local
     torch.cuda.set_device(dev)  # before init, or NCCL opens contexts on every card
-    # gloo for CPU tensors: with --cpu-offload the gradient-norm reduction runs on CPU
-    dist.init_process_group("cpu:gloo,cuda:nccl", timeout=timedelta(hours=2),
-                            device_id=torch.device(f"cuda:{dev}"))
+    # gloo for CPU tensors: with --cpu-offload the gradient-norm reduction runs on CPU.
+    # Only then -- DeviceMesh (HSDP) cannot split a group whose backend is "cpu:gloo,cuda:nccl"
+    dist.init_process_group("cpu:gloo,cuda:nccl" if offload else "nccl",
+                            timeout=timedelta(hours=2), device_id=torch.device(f"cuda:{dev}"))
     return dist.get_rank(), dist.get_world_size(), torch.device(f"cuda:{dev}")
 
 
@@ -111,14 +114,14 @@ def shard_modules(model):
             model.vlm.lm_head, model.expert, model.action_in_proj, model.action_out_proj]
 
 
-def shard(model, device, mp, dtype=None, offload=False):
+def shard(model, device, mp, dtype=None, offload=False, mesh=None):
     kw = {"offload_policy": CPUOffloadPolicy()} if offload else {}
     for m in shard_modules(model):
         if dtype is not None:  # cast only what this unit will own, one unit at a time
             for p in m.parameters():
                 if not isinstance(p, DTensor):
                     p.data = p.data.to(dtype)
-        fully_shard(m, mp_policy=mp, **kw)
+        fully_shard(m, mp_policy=mp, mesh=mesh, **kw)
     for m in model.modules():  # buffers outside any shard unit (rotary inv_freq, ...)
         for name, b in list(m.named_buffers(recurse=False)):
             if b is not None and b.device != device:
@@ -127,24 +130,24 @@ def shard(model, device, mp, dtype=None, offload=False):
     assert not loose, f"parameters outside every FSDP unit: {loose[:5]}"
 
 
-def load_teacher(device):
+def load_teacher(device, mesh=None):
     t = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", revision=MODEL_REV,
                                     dtype=torch.bfloat16)
     t.eval()
     for p in t.parameters():
         p.requires_grad_(False)
-    shard(t, device, MixedPrecisionPolicy(param_dtype=torch.bfloat16))
+    shard(t, device, MixedPrecisionPolicy(param_dtype=torch.bfloat16), mesh=mesh)
     return t
 
 
-def load_student(ckpt, device, offload=False):
+def load_student(ckpt, device, offload=False, mesh=None):
     s = sl.load_slim(REPO / ckpt, device="cpu")
     for p in s.parameters():
         p.requires_grad_(True)
     s.vlm.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     shard(s, device, MixedPrecisionPolicy(param_dtype=torch.bfloat16,
                                           reduce_dtype=torch.float32),
-          dtype=torch.float32, offload=offload)  # fp32 master weights, cast unit by unit
+          dtype=torch.float32, offload=offload, mesh=mesh)  # fp32 master weights, cast unit by unit
     s.train()
     return s
 
@@ -382,6 +385,9 @@ def main():
     ap.add_argument("--no-save", action="store_true")
     ap.add_argument("--cpu-offload", action="store_true",
                     help="student params / grads / AdamW state on CPU (fits 48 GB cards, slow)")
+    ap.add_argument("--shard-group", type=int, default=0,
+                    help="HSDP: shard over groups of N consecutive ranks, replicate across "
+                         "groups (cvlab21: 4 = one CPU socket); 0 = shard over all ranks")
     ap.add_argument("--teacher-targets", default=None,
                     help="dir from make_teacher_targets.py; the teacher is then not loaded")
     ap.add_argument("--seed", type=int, default=0)
@@ -392,7 +398,7 @@ def main():
         tcfg = json.loads((Path(args.teacher_targets) / "config.json").read_text())
         assert tcfg["epochs"] >= args.epochs, f"targets hold {tcfg['epochs']} velocity slots"
 
-    rank, world, device = dist_init(args.gpus)
+    rank, world, device = dist_init(args.gpus, args.cpu_offload)
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     out_dir = REPO / "outputs" / "minitron" / args.exp_id
@@ -421,23 +427,29 @@ def main():
             print(f"[mem] {tag}: {torch.cuda.memory_allocated(device) / 2**30:.1f} GiB "
                   f"(peak {torch.cuda.max_memory_allocated(device) / 2**30:.1f})", flush=True)
 
+    # HSDP: cvlab21's sockets talk at ~1 GB/s vs ~5 GB/s inside one, so parameters are gathered
+    # inside a socket and gradients cross it once per step (set_requires_all_reduce below)
+    mesh = None
+    if args.shard_group:
+        mesh = init_device_mesh("cuda", (world // args.shard_group, args.shard_group),
+                                mesh_dim_names=("replicate", "shard"))
     teacher = t_step = None
     if not args.teacher_targets:
-        teacher = load_teacher(device)  # one model on host at a time
+        teacher = load_teacher(device, mesh)  # one model on host at a time
         mem("teacher sharded")
-    student = load_student(args.student, device, offload=args.cpu_offload)
+    student = load_student(args.student, device, offload=args.cpu_offload, mesh=mesh)
     mem("student sharded")
     # one FSDP root per model above all shard units (see TeacherStep)
     if teacher is not None:
         t_step = TeacherStep(teacher)
         fully_shard(t_step, mp_policy=MixedPrecisionPolicy(param_dtype=torch.bfloat16,
-                                                          cast_forward_inputs=False))
+                                                          cast_forward_inputs=False), mesh=mesh)
     # batch building reads tokenizers / action space only, which the student shares
     ref = teacher if teacher is not None else student
     s_step = StudentStep(student)
     fully_shard(s_step, mp_policy=MixedPrecisionPolicy(param_dtype=torch.bfloat16,
                                                       reduce_dtype=torch.float32,
-                                                      cast_forward_inputs=False),
+                                                      cast_forward_inputs=False), mesh=mesh,
                 **({"offload_policy": CPUOffloadPolicy()} if args.cpu_offload else {}))
     processor = helper.get_processor(ref.tokenizer)
     tok = ref.tokenizer
@@ -457,6 +469,7 @@ def main():
             "t_grid": T_GRID, "teacher": "nvidia/Alpamayo-1.5-10B", "revision": MODEL_REV,
             "teacher_mode": "precomputed" if args.teacher_targets else "online",
             "draw": "mt_data.kd_draw(clip, t0, epoch); held-out slot 0",
+            "nccl_env": {k: v for k, v in os.environ.items() if k.startswith("NCCL_")},
             "loss":"KL(p_T||p_S) over CoC+terminals+128 traj tokens + MSE(v_S, v_T); KI",
         }, indent=2))
         print(f"{args.exp_id} | world {world} micro {args.micro_batch} accum {accum} | "
@@ -479,6 +492,8 @@ def main():
             for m, raws in enumerate(batches(mine, args.micro_batch, pool,
                                              tgt_dir=args.teacher_targets)):
                 b = make_batch(ref, processor, tok, raws, args.max_coc, device)
+                if mesh is not None:  # sharded grads accumulate; replicas sync on the last
+                    s_step.set_requires_all_reduce(m == accum - 1)
                 l_kl, l_v = kd_losses(t_step, s_step, b, raws, epoch, train=True)
                 mem(f"step {step} micro {m} after forward")
                 ((l_kl + l_v) / accum).backward()
