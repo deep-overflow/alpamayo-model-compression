@@ -45,11 +45,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", required=True, help="output dir prefix, e.g. minitron/mtw24_zs")
     ap.add_argument("--sets", nargs="+", default=list(SETS))
+    ap.add_argument("--ref", default=None,
+                    help="another arm prefix to pair against too, e.g. minitron/mtw24_zs")
     args = ap.parse_args()
     for s in args.sets:
         suffix, base_d, moop_d = SETS[s]
         arm, base, moop = rows(f"{args.arm}_{suffix}"), rows(base_d), rows(moop_d)
-        ids = sorted(set(arm) & set(base) & set(moop))
+        ref = rows(f"{args.ref}_{suffix}") if args.ref else None
+        ids = sorted(set(arm) & set(base) & set(moop) & (set(ref) if ref else set(arm)))
         if not ids:
             print(f"== {s}: no common clips")
             continue
@@ -58,19 +61,23 @@ def main():
             return np.array([min(rr[c][key][:6]) for c in ids])
 
         a, b, m = at6(arm), at6(base), at6(moop)
+        refs = [("dense", b), ("MoOP zs", m)] + ([("ref", at6(ref))] if ref else [])
         deg = np.mean([bool(arm[c].get("coc_degenerate", False)) for c in ids])
         deg_m = np.mean([bool(moop[c].get("coc_degenerate", False)) for c in ids])
         print(f"== {s}: n={len(ids)} ({args.arm} rows {len(arm)})")
-        for name, x in (("dense", b), ("MoOP zs", m), ("arm", a)):
+        for name, x in refs + [("arm", a)]:
             print(f"  {name:8s} minADE@6 mean {x.mean():.4f} median {np.median(x):.4f}")
-        for name, ref in (("dense", b), ("MoOP zs", m)):
-            d = a - ref
+        for name, x in refs:
+            d = a - x
             lo, hi = boot_ci(d)
             print(f"  arm - {name:8s} mean {d.mean():+.4f} [{lo:+.4f}, {hi:+.4f}] "
                   f"median {np.median(d):+.4f}")
         fde = [at6(r, "fde_rollout_k").mean() for r in (base, moop, arm)]
-        print(f"  minFDE@6 mean: dense {fde[0]:.3f} MoOP {fde[1]:.3f} arm {fde[2]:.3f}")
-        print(f"  CoC degenerate: arm {deg:.1%}  MoOP {deg_m:.1%}")
+        print(f"  minFDE@6 mean: dense {fde[0]:.3f} MoOP {fde[1]:.3f} arm {fde[2]:.3f}"
+              + (f" ref {at6(ref, 'fde_rollout_k').mean():.3f}" if ref else ""))
+        print(f"  CoC degenerate: arm {deg:.1%}  MoOP {deg_m:.1%}"
+              + (f"  ref {np.mean([bool(ref[c].get('coc_degenerate', False)) for c in ids]):.1%}"
+                 if ref else ""))
 
 
 if __name__ == "__main__":
