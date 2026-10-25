@@ -11,8 +11,10 @@ Loss per micro-batch (minitron/plans/2026-10-23_plan.md section 3, decided 2026-
   rescale one tower's AdamW update.
 KI (Alpamayo-R1's own training recipe): the expert reads a student cache computed without
 gradient, so the velocity loss trains the expert and the action projections only and the
-KL trains the VLM only. Teacher = the dense Alpamayo-1.5-10B, frozen and run online: a
-full-vocabulary KL rules out stored top-K logits (2407.14679: K <= 100 hurts).
+KL trains the VLM only. Teacher = the dense Alpamayo-1.5-10B, frozen, run online or -- with
+--teacher-targets -- precomputed once by make_teacher_targets.py: full-vocabulary logits at
+the supervised positions (2407.14679: top-K with K <= 100 hurts) and the velocity at
+mt_data.kd_draw(window, epoch). Both modes query the expert at the same (noise, t).
 
 Context: text = teacher-generated CoC (kd_r1.parquet, R1 windows); trajectory tokens = GT
 discretised by traj_tokenizer. The expert never sees the trajectory tokens: each sample's
@@ -76,6 +78,7 @@ sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 sys.path.insert(0, str(REPO / "experiments" / "recovery"))
 
 import analysis_lib as lib
+import mt_data
 import recover_lib as rl
 import sample_cache as sc
 import slim_lib as sl
@@ -156,14 +159,20 @@ def towers(model):
 # ---------------------------------------------------------------- data
 
 
-def load_raw(row, ns="train"):
-    return sc.load_cached(sc.path_for(ns, row.clip_id, int(row.t0_us))), row.coc
+def load_raw(row, ns="train", tgt_dir=None):
+    """(npz data, CoC text, manifest row, precomputed teacher targets or None)."""
+    data = sc.load_cached(sc.path_for(ns, row.clip_id, int(row.t0_us)))
+    tgt = None
+    if tgt_dir is not None:
+        tgt = torch.load(Path(tgt_dir) / f"{row.clip_id}__t0_{int(row.t0_us)}.pt",
+                         map_location="cpu", weights_only=True)
+    return data, row.coc, row, tgt
 
 
 def make_batch(ref, processor, tok, raws, max_coc, device):
     """Right-padded teacher-forced batch [prompt + CoC + terminals + 128 GT traj tokens]."""
     seqs, offsets, prompt_lens, pvs, thws, x1s = [], [], [], [], [], []
-    for data, coc_text in raws:
+    for data, coc_text, *_ in raws:
         inputs = lib.build_inputs(ref, processor, data, device)
         coc = torch.tensor(rl.coc_ids(tok, coc_text, max_tokens=max_coc), device=device)
         traj = rl.traj_token_ids(ref, data, device)[0]  # (128,)
@@ -190,14 +199,15 @@ def make_batch(ref, processor, tok, raws, max_coc, device):
             "b_idx": torch.cat(b_idx), "h_idx": torch.cat(h_idx), "t_max": t_max}
 
 
-def batches(rows, micro, pool, ns="train"):
-    """Yield raw micro-batches, prefetching the next one's npz files on a thread pool."""
+def batches(rows, micro, pool, ns="train", tgt_dir=None):
+    """Yield raw micro-batches, prefetching the next one's files on a thread pool."""
     chunks = [rows[i : i + micro] for i in range(0, len(rows), micro)]
-    nxt = [pool.submit(load_raw, r, ns) for r in chunks[0].itertuples()] if chunks else []
+    nxt = ([pool.submit(load_raw, r, ns, tgt_dir) for r in chunks[0].itertuples()]
+           if chunks else [])
     for k in range(len(chunks)):
         cur = [f.result() for f in nxt]
         if k + 1 < len(chunks):
-            nxt = [pool.submit(load_raw, r, ns) for r in chunks[k + 1].itertuples()]
+            nxt = [pool.submit(load_raw, r, ns, tgt_dir) for r in chunks[k + 1].itertuples()]
         yield cur
 
 
@@ -217,6 +227,10 @@ def sup_logits(model, out, b):
 def velocity(model, cache, rope_deltas, b, x_t, t):
     """Expert velocity at (x_t, t) reading `cache` up to each sample's CoC end. (B, 64, 2)"""
     bsz = x_t.shape[0]
+    # get_rope_index takes each delta against the padded row length, so a right-padded sample
+    # comes back `pad` short and its expert positions would shift by -pad; the release's
+    # prefill has no padding. Add the padding back (checked against batch-1 passes).
+    rope_deltas = rope_deltas + (b["t_max"] - b["mask"].sum(1, keepdim=True))  # (B, 1)
     pos, att = model._build_expert_pos_ids_and_attn_mask(
         offset=b["offsets"], rope_deltas=rope_deltas, kv_cache_seq_len=b["t_max"],
         n_diffusion_tokens=N_TOK, b_star=bsz, device=x_t.device)
@@ -279,13 +293,29 @@ class StudentStep(nn.Module):
         return l_kl, l_v
 
 
-def kd_losses(t_step, s_step, b, t_idx, noise, train):
-    """(KL, velocity MSE) for one micro-batch; gradient only when `train`."""
-    t = torch.tensor([T_GRID[i] for i in t_idx], device=noise.device).view(-1, 1, 1)
+def kd_losses(t_step, s_step, b, raws, slot, train):
+    """(KL, velocity MSE) for one micro-batch; gradient only when `train`.
+
+    The query (noise, t) comes from mt_data.kd_draw(window, slot) -- slot = epoch in training,
+    0 for the held-out set -- so it is the draw the precomputed teacher velocity was taken at.
+    With precomputed targets (raws[i][3]) the teacher does not run at all (t_step unused).
+    """
+    device = b["x1"].device
+    rows, tgts = [r[2] for r in raws], [r[3] for r in raws]
+    draws = [mt_data.kd_draw(r.clip_id, r.t0_us, slot) for r in rows]
+    noise = torch.stack([d[0] for d in draws]).to(device)  # (B, 64, 2)
+    t_idx = [d[1] for d in draws]
+    t = torch.tensor([T_GRID[i] for i in t_idx], device=device).view(-1, 1, 1)
     x_t = (1.0 - t) * noise + t * b["x1"]  # (B, 64, 2)
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        with torch.no_grad():
-            lg_t, v_t = t_step(b, x_t, t)
+        if tgts[0] is None:
+            with torch.no_grad():
+                lg_t, v_t = t_step(b, x_t, t)
+        else:
+            assert all(int(g["t_idx"][slot]) == i for g, i in zip(tgts, t_idx)), "draw mismatch"
+            lg_t = torch.cat([g["logits"] for g in tgts]).to(device, non_blocking=True)
+            assert lg_t.shape[0] == b["b_idx"].numel(), "supervised positions mismatch"
+            v_t = torch.stack([g["v"][slot] for g in tgts]).to(device)  # (B, 64, 2)
         return s_step(b, x_t, t, lg_t, v_t, train)
 
 
@@ -310,12 +340,9 @@ def heldout_eval(t_step, s_step, rows, args, ref, processor, tok, rank, world, p
     s_step.m.eval()
     mine = rows.iloc[rank::world]
     tot = torch.zeros(3, device=device)
-    for j, raws in enumerate(batches(mine, args.micro_batch, pool)):
+    for raws in batches(mine, args.micro_batch, pool, tgt_dir=args.teacher_targets):
         b = make_batch(ref, processor, tok, raws, args.max_coc, device)
-        g = torch.Generator(device="cpu").manual_seed(10_000 + rank * 1_000 + j)
-        noise = torch.randn((len(raws), N_TOK, 2), generator=g).to(device)
-        t_idx = torch.randint(len(T_GRID), (len(raws),), generator=g).tolist()
-        l_kl, l_v = kd_losses(t_step, s_step, b, t_idx, noise, train=False)
+        l_kl, l_v = kd_losses(t_step, s_step, b, raws, 0, train=False)
         tot += torch.stack([l_kl * len(raws), l_v * len(raws),
                             torch.tensor(float(len(raws)), device=device)])
     dist.all_reduce(tot)
@@ -355,9 +382,15 @@ def main():
     ap.add_argument("--no-save", action="store_true")
     ap.add_argument("--cpu-offload", action="store_true",
                     help="student params / grads / AdamW state on CPU (fits 48 GB cards, slow)")
+    ap.add_argument("--teacher-targets", default=None,
+                    help="dir from make_teacher_targets.py; the teacher is then not loaded")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--gpus", type=int, nargs="*", default=None)
     args = ap.parse_args()
+    if args.teacher_targets:
+        args.teacher_targets = str(REPO / args.teacher_targets)
+        tcfg = json.loads((Path(args.teacher_targets) / "config.json").read_text())
+        assert tcfg["epochs"] >= args.epochs, f"targets hold {tcfg['epochs']} velocity slots"
 
     rank, world, device = dist_init(args.gpus)
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -371,7 +404,11 @@ def main():
     rows = pd.read_parquet(REPO / args.manifest)
     rows = rows[[sc.path_for("train", c, int(t)).exists()
                  for c, t in zip(rows.clip_id, rows.t0_us)]].reset_index(drop=True)
-    perm = np.random.default_rng(args.seed).permutation(len(rows))
+    if args.teacher_targets:
+        absent = [f"{c}__t0_{int(t)}" for c, t in zip(rows.clip_id, rows.t0_us)
+                  if not (Path(args.teacher_targets) / f"{c}__t0_{int(t)}.pt").exists()]
+        assert not absent, f"{len(absent)} windows have no teacher targets, e.g. {absent[:3]}"
+    perm =np.random.default_rng(args.seed).permutation(len(rows))
     held = rows.iloc[perm[: args.heldout]].reset_index(drop=True)
     train = rows.iloc[perm[args.heldout :]].reset_index(drop=True)
     steps_per_epoch = len(train) // args.global_batch
@@ -384,21 +421,26 @@ def main():
             print(f"[mem] {tag}: {torch.cuda.memory_allocated(device) / 2**30:.1f} GiB "
                   f"(peak {torch.cuda.max_memory_allocated(device) / 2**30:.1f})", flush=True)
 
-    teacher = load_teacher(device)  # one model on host at a time
-    mem("teacher sharded")
+    teacher = t_step = None
+    if not args.teacher_targets:
+        teacher = load_teacher(device)  # one model on host at a time
+        mem("teacher sharded")
     student = load_student(args.student, device, offload=args.cpu_offload)
     mem("student sharded")
     # one FSDP root per model above all shard units (see TeacherStep)
-    t_step = TeacherStep(teacher)
-    fully_shard(t_step, mp_policy=MixedPrecisionPolicy(param_dtype=torch.bfloat16,
-                                                      cast_forward_inputs=False))
+    if teacher is not None:
+        t_step = TeacherStep(teacher)
+        fully_shard(t_step, mp_policy=MixedPrecisionPolicy(param_dtype=torch.bfloat16,
+                                                          cast_forward_inputs=False))
+    # batch building reads tokenizers / action space only, which the student shares
+    ref = teacher if teacher is not None else student
     s_step = StudentStep(student)
     fully_shard(s_step, mp_policy=MixedPrecisionPolicy(param_dtype=torch.bfloat16,
                                                       reduce_dtype=torch.float32,
                                                       cast_forward_inputs=False),
                 **({"offload_policy": CPUOffloadPolicy()} if args.cpu_offload else {}))
-    processor = helper.get_processor(teacher.tokenizer)
-    tok = teacher.tokenizer
+    processor = helper.get_processor(ref.tokenizer)
+    tok = ref.tokenizer
     vlm_p, act_p = towers(student)
     # foreach=False: the multi-tensor path allocates temporaries for every parameter at
     # once (+16 GiB peak per rank in the smoke run); per-parameter updates do not
@@ -413,7 +455,9 @@ def main():
             "steps_per_epoch": steps_per_epoch, "total_steps": total,
             "student_params": n_student, "gpu": torch.cuda.get_device_name(device),
             "t_grid": T_GRID, "teacher": "nvidia/Alpamayo-1.5-10B", "revision": MODEL_REV,
-            "loss": "KL(p_T||p_S) over CoC+terminals+128 traj tokens + MSE(v_S, v_T); KI",
+            "teacher_mode": "precomputed" if args.teacher_targets else "online",
+            "draw": "mt_data.kd_draw(clip, t0, epoch); held-out slot 0",
+            "loss":"KL(p_T||p_S) over CoC+terminals+128 traj tokens + MSE(v_S, v_T); KI",
         }, indent=2))
         print(f"{args.exp_id} | world {world} micro {args.micro_batch} accum {accum} | "
               f"train {len(train)} held {len(held)} | {total} steps | "
@@ -432,13 +476,10 @@ def main():
                 pg["lr"] = lr_at(step, total, args)
             t0 = time.time()
             sums = torch.zeros(2, device=device)
-            for m, raws in enumerate(batches(mine, args.micro_batch, pool)):
-                b = make_batch(teacher, processor, tok, raws, args.max_coc, device)
-                gen = torch.Generator(device="cpu").manual_seed(
-                    args.seed * 1_000_003 + step * 997 + rank * 31 + m)
-                noise = torch.randn((len(raws), N_TOK, 2), generator=gen).to(device)
-                t_idx = torch.randint(len(T_GRID), (len(raws),), generator=gen).tolist()
-                l_kl, l_v = kd_losses(t_step, s_step, b, t_idx, noise, train=True)
+            for m, raws in enumerate(batches(mine, args.micro_batch, pool,
+                                             tgt_dir=args.teacher_targets)):
+                b = make_batch(ref, processor, tok, raws, args.max_coc, device)
+                l_kl, l_v = kd_losses(t_step, s_step, b, raws, epoch, train=True)
                 mem(f"step {step} micro {m} after forward")
                 ((l_kl + l_v) / accum).backward()
                 mem(f"step {step} micro {m} after backward")
@@ -457,8 +498,7 @@ def main():
                    "peak_gb": torch.cuda.max_memory_allocated(device) / 2**30}
             if step % args.eval_every == 0 or step == total:
                 rec["held_kl"], rec["held_v_mse"] = heldout_eval(
-                    t_step, s_step, held, args, teacher, processor, tok, rank, world, pool,
-                    device)
+                    t_step, s_step, held, args, ref, processor, tok, rank, world, pool, device)
             log.append(rec)
             if rank == 0:
                 print(json.dumps({k: round(v, 5) if isinstance(v, float) else v

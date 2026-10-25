@@ -50,7 +50,7 @@ MoOP 행과 같은 코드로 비교되도록 다음은 원래 위치에서 가�
 | 4 | 증류 캐시 보충 (약 9,200 샘플) | 완료 — 9,905/9,905, 오류 0 |
 | 5 | 중요도 측정 (1,024 샘플) | 완료 — `outputs/minitron/slim_mtw24` |
 | 6 | MT-W zs 평가 | 완료 — test500 minADE@6 1.413 (dense 0.842, MoOP 0.950), CoC 퇴화 24.2% |
-| 7 | `train_kd.py` smoke (G0d, GPU당 배치) | 이 박스에서 통과 (GPU당 1샘플); A100에서 배치 크기 결정 필요 |
-| 8 | MT-W + KD 학습 (NEURON A100 × 4) | |
+| 7 | `train_kd.py` smoke (G0d, GPU당 배치) | 통과 — teacher 사전 계산 모드(검증 완료), world 8에서 GPU당 4샘플 |
+| 8 | MT-W + KD 학습 (cvlab21 8장, teacher 사전 계산) | |
 | 9 | 평가 (test500 / val500 / OOD-Val262, LingoQA, 지연시간) | |
 | 10 | 리포트 | |

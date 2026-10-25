@@ -6,12 +6,18 @@ or CoC accelerate while GT stops. Heads that map to no bucket ("Keep distance", 
 speed", "Nudge ..."; 54% of windows) are kept: R1 drops confirmed contradictions only.
 Measured on coc_train x bucket_pool_full: 90.5% of windows and 9,905 of 9,917 clips pass,
 with the GT bucket mix of one window per clip essentially unchanged.
+
+kd_draw: the flow-matching query (noise, Euler-grid index) of one KD window in one epoch
+slot, derived from the window alone, so the teacher precompute and the student step draw
+the same x_t without sharing any state (plan D1-2, D10-5).
 """
 
+import hashlib
 import sys
 from pathlib import Path
 
 import pandas as pd
+import torch
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
@@ -35,3 +41,11 @@ def r1_windows():
                 | ((m["coc_bucket"] == "accel") & (m["gt_bucket"] == "decel_stop")))
     cols = ["clip_id", "t0_us", "chunk", "coc", "minADE", "gt_bucket", "coc_bucket"]
     return m.loc[~opposite, cols].reset_index(drop=True)
+
+
+def kd_draw(clip_id, t0_us, slot, n_tok=64, n_grid=10):
+    """(noise (64, 2), Euler-grid index) for one window in epoch slot `slot`."""
+    key = f"kd:{clip_id}:{int(t0_us)}:{int(slot)}".encode()
+    g = torch.Generator().manual_seed(int.from_bytes(hashlib.sha256(key).digest()[:8], "big"))
+    noise = torch.randn((n_tok, 2), generator=g)  # (64, 2)
+    return noise, int(torch.randint(n_grid, (1,), generator=g))
