@@ -192,6 +192,41 @@
 - 24% 예산은 Offline HSD에서 이득이 없던 구간이다.
 - 전 층·전 위치 teacher KV는 window당 약 472 MB다(36층 × K/V 2 × 8 head × 128 × 약 3,200 위치 × bf16). 사전 계산은 불가능하고(9,905개 ≈ 4.7 TB), 온라인 teacher가 필요하다.
 
+## 2b. VLM 복구 연구 모음 (사용자 질문 "VLM에서 복구하는 연구는 없어?"에 대한 답)
+
+복구까지 다룬 VLM 연구는 있다. 세 부류로 나뉜다.
+
+**(1) 프루닝한 VLM을 복구한 연구**
+
+| 논문 | 무엇을 잘랐나 | 복구 방법 | 결과 |
+|---|---|---|---|
+| Huang (IJCV 2026, 2604.24380) | LLaVA·InternVL·Bunny LLM의 head·뉴런 또는 층 | projector만 SFT / LoRA / logit KD / hidden L2 비교 | 저비율 손상은 비전-언어 정렬에 몰리고 projector만 SFT로 대부분 회복. SFT + hidden L2 최선, logit KD만으로는 고비율에서 SFT 미만. 데이터 5%로 90% 이상 |
+| Nemotron 3.5 Bolt (NVIDIA, 2026) | 텍스트 탑(Minitron 계열) | logit KL → **adapter만 학습 → 비전 중심 SFT** | 비전 벤치마크 복구에 "결정적"인 것은 뒤의 두 단계(카드 서술). 수치 없음 |
+| INTERLACE (2511.19676) | Qwen3-VL-8B/4B 층 25% | CE 미세조정, FineVision 1%, 약 6시간 | 긴 CoT 86.1% / 81.7%, 짧은 CoT 88.9%(SLEB 60.5%) |
+| Eddy-VL (2607.16316) | Qwen3-VL-Embedding-2B 층 28 → 24 | 층별 KD: 중간층 attention(1−CKA) + 최종층 MSE/cosine | 잃은 12.1점 중 6.4점 회복(56.8 → 63.2, teacher 68.9) |
+| HiPP-Prune (2603.06270) | LLaVA·Qwen2.5-VL MLP(층별 배분) | LM head·norm·projector + 마지막 층 LoRA, 800 step | POPE 72.89(dense 82.43), SQA 39(dense 64) — 복구는 약함 |
+| MoP (2602.06127) | LLaVA-1.5-7B depth + width | **텍스트만** LoRA(Alpaca) | 시각 벤치마크 4개 평균 46.70 / 44.61 / 40.86(20/30/40%) vs dense 52.44 |
+| UKMP (AAAI 2025) | BLIP-2 ViT + LLM | LoRA 점진 증류 + 잘린 가중치 "recall" | 수치 [미확인] |
+| Short-LVLM (2507.23362) | LLaVA 등 층 | 학습 없는 SVD 보정 | LLaVA-7B 30%: 70.1 → 68.4 |
+
+**(2) 작은 VLM 학생으로 증류한 연구** — 프루닝 후손은 아니지만 손실 설계 근거로 쓸 수 있다.
+- LLaVA-KD / LLaVA-MoD / LLaVADI(기존 조사): 응답 토큰 KL이 최선이고, projector만 증류하는 단계가 +0.9.
+- DistiLLM-2: 대조형 KD로 GKD보다 +2.1.
+- CompoDistill: 중간층 attention 증류.
+- Drive-KD: 주행 출력에 KL을 걸면 CE보다 나쁘고, attention 증류가 나음.
+
+**(3) VLA 복구** — Offline HSD, Shallow-π, SPAR, RLRC, CLP(대부분 기존 조사). 이 가운데 Offline HSD만 구조적
+프루닝 뒤 hidden 증류를 썼다.
+
+**우리 복구에 주는 새 시사점 — C3 모달리티 단계 복구.**
+- Huang, LLaVA-KD, Bolt 세 곳이 독립적으로 같은 결론을 낸다: **비전-언어 접점(projector/adapter)을 먼저 복구하는
+  단계**가 효과가 크다.
+- MT-W는 merger와 DeepStack 출력까지 hidden 축으로 잘랐으므로 이 접점을 직접 손상시킨다.
+- D4에서는 Minitron 재현을 위해 "projector 워밍업 없음"으로 정했다. Minitron을 넘는 방법의 후보로는 이것이 자연스럽다:
+  1. merger·DeepStack(+필요하면 첫 층들)만 먼저 짧게 증류한다.
+  2. 그다음 전체 KD를 한다.
+- 비용이 작다. teacher target을 그대로 재사용하고, KD 앞에 짧은 단계 하나만 붙으면 된다.
+
 ## 3. 문헌의 공백 (세 갈래 공통)
 
 - VLM width 프루닝에서 활성(Minitron) vs 출력 기반 Taylor vs 토큰 종류 한정 통계를, 같은 예산과 같은 KD로 비교한 연구는 없다.
