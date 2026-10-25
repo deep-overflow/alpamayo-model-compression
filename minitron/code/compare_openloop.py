@@ -15,23 +15,29 @@ import json
 import numpy as np
 
 OUT = "/mnt/nvme1n1/ad_vla/outputs/chan"
-# set -> (arm suffix, dense dir, MoOP dir)
-SETS = {"test": ("test", "baseline_ada_ps_test", "dual_u40_v2_ps_test"),
-        "indist": ("indist", "baseline_ada_ps_indist", "dual_u40_v2_ps_indist"),
-        "oodval": ("oodval", "baseline_ada_ps_oodval", "dual_u40_v2_ps_ood")}
+# set -> (arm suffix, dense dirs, MoOP dirs). "test" is test500 (the stored rows cover only
+# those clips, so a 2,000-row arm is cut to them by the pairing); "test2000" adds the 1,500
+# clips of eval_sets/test_2000_ext1500, run for the reference arms into minitron/test2000x_*
+EXT = "minitron/test2000x_"
+SETS = {"test": ("test", ("baseline_ada_ps_test",), ("dual_u40_v2_ps_test",)),
+        "test2000": ("test", ("baseline_ada_ps_test", f"{EXT}dense"),
+                     ("dual_u40_v2_ps_test", f"{EXT}moop")),
+        "indist": ("indist", ("baseline_ada_ps_indist",), ("dual_u40_v2_ps_indist",)),
+        "oodval": ("oodval", ("baseline_ada_ps_oodval",), ("dual_u40_v2_ps_ood",))}
 
 
-def rows(d):
+def rows(*dirs):
     out = {}
-    for f in glob.glob(f"{OUT}/{d}/*.json"):
-        if f.endswith(("config.json", "metrics.json")):
-            continue
-        with open(f) as fh:
-            data = json.load(fh)
-        if isinstance(data, list):
-            for r in data:
-                if "ade_rollout_k" in r:
-                    out[r["clip_id"]] = r
+    for d in dirs:
+        for f in glob.glob(f"{OUT}/{d}/*.json"):
+            if f.endswith(("config.json", "metrics.json")):
+                continue
+            with open(f) as fh:
+                data = json.load(fh)
+            if isinstance(data, list):
+                for r in data:
+                    if "ade_rollout_k" in r:
+                        out[r["clip_id"]] = r
     return out
 
 
@@ -50,8 +56,9 @@ def main():
     args = ap.parse_args()
     for s in args.sets:
         suffix, base_d, moop_d = SETS[s]
-        arm, base, moop = rows(f"{args.arm}_{suffix}"), rows(base_d), rows(moop_d)
-        ref = rows(f"{args.ref}_{suffix}") if args.ref else None
+        arm, base, moop = rows(f"{args.arm}_{suffix}"), rows(*base_d), rows(*moop_d)
+        ext = [f"{EXT}{args.ref.split('/')[-1]}"] if args.ref and s == "test2000" else []
+        ref = rows(f"{args.ref}_{suffix}", *ext) if args.ref else None
         ids = sorted(set(arm) & set(base) & set(moop) & (set(ref) if ref else set(arm)))
         if not ids:
             print(f"== {s}: no common clips")
