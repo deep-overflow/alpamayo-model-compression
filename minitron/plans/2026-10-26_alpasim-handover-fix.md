@@ -136,6 +136,10 @@
 | G4 rollout 완료 | | **20/20** | PASS |
 
 - **본 런.** `STAGE=main`을 02:20 UTC에 시작했다. 150개 장면 × 2, dense → MoOP → MT-W + KD → MT-W zs 순서다.
+- **2026-10-26 사용자 결정: "나머지 arm은 안 해도 될 것 같아."** dense만 돌린다.
+  - 04:20 UTC에 상위 스크립트를 멈췄고, dense 런처는 계속 돈다.
+  - 병합과 컨테이너 정리는 `finish_dense.sh`가 맡는다. 결과는 `alpasim-runs/hofix_merged_baseline`에 들어가고, 완료 표시는
+    `outputs/minitron/closedloop_hofix_main.DONE`이다.
 
 ## 7. 결정 필요
 
