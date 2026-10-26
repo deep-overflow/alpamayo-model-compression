@@ -77,6 +77,31 @@ Scenery train은 QA 148k개, 세그먼트 3.5k개다.
 - 파라미터 메모리: BF16 약 22 GB, FP8 약 11 GB(2.00×), AutoQuant 6.5 bits 약 9 GB(2.44×).
 - 평가 지표는 minADE다.
 
+## 4b. Alpamayo 1.5 학습 데이터
+
+출처는 HF 모델 카드다(revision `7aba8293`, 로컬 `cache/hub/models--nvidia--Alpamayo-1.5-10B/.../README.md`의
+§Training Dataset). 카드는 데이터 묶음을 단계(SFT, RL)별로 나누지 않는다.
+
+- **초기화**: Cosmos-Reason2-8B(VLM backbone).
+- **구성**: CoC 추론 trace, Cosmos-Reason Physical AI 데이터셋, NVIDIA 내부 자율주행 데이터, 공개 주행 데이터.
+- **주행 데이터**:
+  - 다중 카메라 영상 80,000시간(이미지 10억 장 이상). 카메라는 차량당 RGB 2–6대이고 IMU와 GPS가 있다.
+  - egomotion과 궤적(미래 waypoint)은 10 Hz다.
+- **CoC trace 300만 개**(영어, 구조화 형식). 사람이 단 구조화 CoC와, VLM 자동 라벨·휴리스틱으로 만든 것이 섞여 있다.
+- **텍스트**: 10억 토큰 미만이다(CoC trace, Cosmos-Reason 학습 데이터, 공개 데이터셋).
+- **공개 데이터셋 17개**: CODA-LM, Drive-Action, DriveGPT4, DriveLM, **LingoQA**, MapLM, MM-AU, NAVSIM-ReCogDrive,
+  NAVSIM-Traj, nuInstruct, nuScenesQA, Omnidrive, Roadwork, Senna, SUTD, Talk2Car, W3DA.
+- **HF 메타데이터의 datasets**: `nvidia/PhysicalAI-Autonomous-Vehicles`, `nvidia/PhysicalAI-Autonomous-Vehicles-NuRec`.
+- **보고 벤치마크**:
+  - LingoQA Lingo-Judge 74.2.
+  - AlpaSim 913개 장면(PhysicalAI-AV-NuRec) 1.37 ± 0.10.
+  - PhysicalAI-AV의 어려운 샘플 1,434개에서 개루프 minADE_6(6.4 s) 0.916 m.
+- **레시피 레포의 데이터 파일**(`data/`):
+  - `0417_5k_train_set_for_calibration_25.10.parquet`: 5,000개 클립, 모두 공식 train split. quant 레시피의
+    calibration용이다.
+  - `1005_7cam_gold_eval_metadb_public.parquet`: 644개 클립, 이벤트 t0 667개, quant 평가용이다. 공식 split이
+    train 325 / val 179 / test 140으로 섞여 있다. 따라서 PAI의 split 라벨만으로는 학습 사용 여부를 알 수 없다.
+
 ## 5. 우리 KD 레시피(`mtw24_kd`)와 다른 점
 
 | 항목 | 공식 레시피 | 우리 KD | 시사점 |
