@@ -51,6 +51,6 @@ MoOP 행과 같은 코드로 비교되도록 다음은 원래 위치에서 가�
 | 5 | 중요도 측정 (1,024 샘플) | 완료 — `outputs/minitron/slim_mtw24` |
 | 6 | MT-W zs 평가 | 완료 — test500 minADE@6 1.413 (dense 0.842, MoOP 0.950), CoC 퇴화 24.2% |
 | 7 | `train_kd.py` smoke (G0d, GPU당 배치) | 통과 — teacher 사전 계산 모드(검증 완료), world 8에서 GPU당 4샘플 |
-| 8 | MT-W + KD 학습 (cvlab21 8장 HSDP, teacher 사전 계산) | 진행 중 — `mtw24_kd`, 459 step, 약 71 s/step |
-| 9 | 평가 (probe 선택 → test500 / val500 / OOD-Val262, LingoQA, 지연시간) | `eval_kd.sh`가 학습 종료 대기 중 |
+| 8 | MT-W + KD 학습 (cvlab21 8장 HSDP, teacher 사전 계산) | 완료 — `mtw24_kd`, 459 step, 9.2시간, val500으로 epoch 3 선택 |
+| 9 | 평가 (val500 선택 → test_2000 / OOD-Val262, LingoQA, 폐루프 Origin150, 지연시간) | 개루프·LingoQA 완료(plan §9 ⑨). 폐루프는 AlpaSim 인계 버그 수정 후 진행 중 |
 | 10 | 리포트 | |
