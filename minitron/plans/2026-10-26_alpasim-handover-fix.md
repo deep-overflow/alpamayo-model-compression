@@ -110,6 +110,22 @@
   - dense와 MoOP는 수정 전 런과도 비교해, 버그가 서열에 준 영향을 잰다.
 - **정리.** 런이 끝나면 우리 docker 컨테이너와 네트워크를 정리한다(사용자 규칙).
 
+## 6b. 진행 기록 (2026-10-26)
+
+- **업스트림 수정 이식 완료.**
+  - 패치는 `minitron/alpasim/handover_fix.patch`이고, 원본은 `outputs/minitron/alpasim_patch/orig/`에 백업했다.
+  - 업스트림은 가속도 덮어쓰기에 더해 **강제 GT 기준 궤적을 인계 뒤 5초까지 연장**했다(`event_loop.py`의 `reference_end_us`).
+    둘 다 이식했다.
+  - alpasim 테스트는 controller 52개, runtime 464개가 모두 통과했다.
+- **driver 로더.**
+  - `slice_hidden`을 추가했다. `mtw24_kd/ckpt_epoch3`가 `slim_lib`과 텐서 1,159개 모두 같다.
+  - MT-W zs는 `slim_state.pt`가 없었다. 그래서 고정 revision으로 `outputs/minitron/slim_mtw24_state/`를 만들었다.
+  - driver 폴더에 `slim_mtw24`(zs)와 `slim_mtw24_kd`를 하드링크했다.
+- **게이트 판정 스크립트** `minitron/code/hofix_gates.py`.
+  - 수정 전 런으로 시험한 결과, 게이트 20개 장면의 움직이며 시작한 36개 rollout에서 인계 직후 차 −1.058 m/s,
+    사람 +0.005 m/s였다. 인계 시점 가속도는 중앙값 −8.00 m/s², 포화 72%로 10월 분석이 재현됐다.
+- **게이트 실행.** `STAGE=gate minitron/code/closedloop_hofix.sh`. 개루프 평가가 끝나고 Ada 4–7이 비면 시작한다.
+
 ## 7. 결정 필요
 
 1. A안(업스트림 수정만 이식)으로 진행할지.
