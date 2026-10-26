@@ -42,12 +42,12 @@ until [ "$idle" -ge 3 ]; do
 done
 stamp "Ada $GPUS idle -- stage $STAGE: $CFGS, $N_SCENES scenes x $N_ROLLOUTS rollouts"
 
-cleanup() {
-  for c in $(docker ps -a --format '{{.Names}}' | grep "a15_${PREFIX}"); do docker rm -f "$c" > /dev/null; done
-  for n in $(docker network ls --format '{{.Name}}' | grep "${PREFIX}"); do
+cleanup() {  # compose names containers after the log dir: <PREFIX><cfg>_sh<i>-<service>-0-1
+  for c in $(docker ps -a --format '{{.Names}}' | grep "^${PREFIX}"); do docker rm -f "$c" > /dev/null; done
+  for n in $(docker network ls --format '{{.Name}}' | grep "^${PREFIX}"); do
     [ "$(docker network inspect -f '{{len .Containers}}' "$n")" = 0 ] && docker network rm "$n" > /dev/null
   done
-  stamp "cleanup: containers left $(docker ps -a --format '{{.Names}}' | grep -c "a15_${PREFIX}"), networks left $(docker network ls --format '{{.Name}}' | grep -c "${PREFIX}")"
+  stamp "cleanup: containers left $(docker ps -a --format '{{.Names}}' | grep -c "^${PREFIX}"), networks left $(docker network ls --format '{{.Name}}' | grep -c "^${PREFIX}")"
 }
 
 for cfg in $CFGS; do
