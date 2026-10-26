@@ -124,7 +124,18 @@
 - **게이트 판정 스크립트** `minitron/code/hofix_gates.py`.
   - 수정 전 런으로 시험한 결과, 게이트 20개 장면의 움직이며 시작한 36개 rollout에서 인계 직후 차 −1.058 m/s,
     사람 +0.005 m/s였다. 인계 시점 가속도는 중앙값 −8.00 m/s², 포화 72%로 10월 분석이 재현됐다.
-- **게이트 실행.** `STAGE=gate minitron/code/closedloop_hofix.sh`. 개루프 평가가 끝나고 Ada 4–7이 비면 시작한다.
+- **게이트 실행.** `STAGE=gate minitron/code/closedloop_hofix.sh`로 01:42–02:16 UTC에 돌렸다. 대상은 Origin150 앞 20개
+  장면 × rollout 1개, dense다. 결과는 `outputs/minitron/hofix_gates/`.
+
+| 게이트 | 수정 전 (`m2601_merged_baseline`, 움직이며 시작한 36개) | 수정 후 (`hofix_gate_merged_baseline`, 18개) | 판정 |
+|---|---|---|---|
+| 인계 직후 첫 스텝: 차 / 사람 | −1.058 / +0.005 m/s | +0.003 / +0.005 m/s | |
+| G1 \|차 − 사람\| 중앙값 < 0.1 m/s | 1.055 | **0.015** | PASS |
+| G2 인계 시점 가속도 포화(≤ −7.9) < 5% | 72% (중앙값 −8.00) | **0%** (중앙값 +0.05) | PASS |
+| G3 강제 GT 구간 자세 차이 < 1 cm | | **0.0000 m** (20개 장면) | PASS |
+| G4 rollout 완료 | | **20/20** | PASS |
+
+- **본 런.** `STAGE=main`을 02:20 UTC에 시작했다. 150개 장면 × 2, dense → MoOP → MT-W + KD → MT-W zs 순서다.
 
 ## 7. 결정 필요
 
