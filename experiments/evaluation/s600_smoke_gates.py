@@ -10,9 +10,13 @@ Also records each shard's driver throughput (seconds per 100 inference batches, 
 against hofix_baseline_sh0-3, the same harness on four Ada cards, so the CPU cost of eight stacks shows.
 Reads rollout.asl, so run it with alpasim's venv:
   /mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python experiments/evaluation/s600_smoke_gates.py
-Writes outputs/alpasim_dense_s600/smoke/{metrics.json, summary.txt}.
+Writes outputs/alpasim_dense_s600/smoke/{metrics.json, summary.txt}. Another arm's smoke run is judged the same
+way by passing --run / --scenes / --logs / --out, e.g. MoOP (plans/2026-10-28_dual-closedloop-s600.md):
+  ... s600_smoke_gates.py --run d600smoke_merged_slim_dual_u40_v2 --logs d600smoke_slim_dual_u40_v2 \
+      --scenes outputs/alpasim_dual_s600/scenes_smoke8.csv --out outputs/alpasim_dual_s600/smoke
 """
 
+import argparse
 import json
 import re
 from datetime import datetime
@@ -23,9 +27,6 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
-RUN = RUNS / "s600smoke_merged_baseline"
-SCENES = REPO / "outputs" / "alpasim_dense_s600" / "scenes_smoke16.csv"
-OUT = REPO / "outputs" / "alpasim_dense_s600" / "smoke"
 MOVING, SAT = 2.0, -7.9
 BATCH = re.compile(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),\d+\].*Inference batches: (\d+) processed")
 
@@ -41,7 +42,14 @@ def batch_rate(log):
 
 
 def main():
-    scenes = sorted(pd.read_csv(SCENES)["scene_id"])
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", default="s600smoke_merged_baseline", help="merged smoke run under alpasim-runs")
+    ap.add_argument("--logs", default="s600smoke_baseline", help="shard launch logs: <logs>_sh<i>.launch.log")
+    ap.add_argument("--scenes", type=Path, default=REPO / "outputs" / "alpasim_dense_s600" / "scenes_smoke16.csv")
+    ap.add_argument("--out", type=Path, default=REPO / "outputs" / "alpasim_dense_s600" / "smoke")
+    args = ap.parse_args()
+    RUN, OUT = RUNS / args.run, args.out
+    scenes = sorted(pd.read_csv(args.scenes)["scene_id"])
     summ = json.loads((RUN / "aggregate" / "results-summary.json").read_text())["rollouts"]
     scored = {r["clipgt_id"] for r in summ if r.get("score") is not None}
     bad = [(r["clipgt_id"], r.get("failure_reason")) for r in summ
@@ -59,7 +67,7 @@ def main():
     r = pd.DataFrame(rows)
     mv = r[r["v0"] >= MOVING]
 
-    rate = {f"s600smoke_sh{i}": batch_rate(RUNS / f"s600smoke_baseline_sh{i}.launch.log") for i in range(8)}
+    rate = {f"new_sh{i}": batch_rate(RUNS / f"{args.logs}_sh{i}.launch.log") for i in range(8)}
     rate.update({f"hofix_sh{i}": batch_rate(RUNS / f"hofix_baseline_sh{i}.launch.log") for i in range(4)})
 
     gates = {
@@ -72,8 +80,8 @@ def main():
            "sec_per_100_batches": rate, "gates": gates}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "metrics.json").write_text(json.dumps(res, indent=2, default=str))
-    bw = [v for k, v in rate.items() if k.startswith("s600") and int(k[-1]) < 4 and v]
-    ada = [v for k, v in rate.items() if k.startswith("s600") and int(k[-1]) >= 4 and v]
+    bw = [v for k, v in rate.items() if k.startswith("new") and int(k[-1]) < 4 and v]
+    ada = [v for k, v in rate.items() if k.startswith("new") and int(k[-1]) >= 4 and v]
     ref = [v for k, v in rate.items() if k.startswith("hofix") and v]
     lines = [f"scenes {len(scenes)}, scored {res['scored']}, non-gate failures {len(bad)} {bad}",
              (f"moving starts {len(mv)}: median |dv_car - dv_human| {res['median_abs_dv_minus_human']:.3f} m/s, "
