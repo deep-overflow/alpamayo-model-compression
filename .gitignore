@@ -245,3 +245,6 @@ open-loop-viz/
 
 # Minitron baseline results: a symlink to /mnt/nvme1n1/ad_vla/outputs/chan/minitron.
 /minitron/outputs
+
+# CVPR 2027 track results: a symlink to /mnt/nvme1n1/ad_vla/outputs/chan/cvpr27.
+/cvpr27/outputs
