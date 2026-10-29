@@ -1,6 +1,6 @@
 """A100 (KISTI NEURON) open-loop track: the gate, then the A100 table.
 
-Plan and gates: plans/2026-10-29_kisti-a100-openloop.md.
+Plan and gates: cvpr27/plans/2026-10-29_kisti-a100-openloop.md.
 
 Every arm of an A100 table is measured on A100. Same-card reruns are bitwise identical, but
 A100 vs Ada moves dense by <=0.003 m and MoOP by up to 0.018 m minADE@6, and ~5% of clips
@@ -13,9 +13,9 @@ change CoC text (2026-10-29), so these rows are never paired with, or merged int
   G2  dense test2000 on A100 vs the stored Ada dense: |mean delta minADE@6| <= 0.005 m and
       the same CoC text on >= 95% of clips. A version/cache check, not a pairing.
 
-Usage (after experiments/transfer/a100_pull.sh):
-  python experiments/evaluation/analyze_a100.py --stage gate
-  python experiments/evaluation/analyze_a100.py --stage table
+Usage (after cvpr27/code/a100_pull.sh):
+  python cvpr27/code/analyze_a100.py --stage gate
+  python cvpr27/code/analyze_a100.py --stage table
 """
 
 import argparse
@@ -311,7 +311,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", required=True, choices=["gate", "table"])
     ap.add_argument("--outputs", type=Path, default=REPO / "outputs")
-    ap.add_argument("--a100", default="a100", help="track dir under --outputs")
+    ap.add_argument("--a100", default="cvpr27/a100", help="track dir under --outputs")
     args = ap.parse_args()
     a100 = args.outputs / args.a100
     if args.stage == "gate":

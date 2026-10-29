@@ -8,16 +8,16 @@
 #SBATCH --comment=field=efficientai;appl=pytorch
 #SBATCH --output=logs/%x-%j.out
 #
-# The A100 open-loop track (plans/2026-10-29_kisti-a100-openloop.md): hold four
+# The A100 open-loop track (cvpr27/plans/2026-10-29_kisti-a100-openloop.md): hold four
 # A100s and drain a task queue, so the stages after the gate start without a second queue wait.
 #
-#   /bin/bash experiments/transfer/a100_queue.sh gate     # fill the queue (Datamover is fine)
-#   sbatch experiments/transfer/eval_a100.sbatch          # login node
-#   /bin/bash experiments/transfer/a100_queue.sh refs     # later, while the job still runs
+#   /bin/bash cvpr27/code/a100_queue.sh gate     # fill the queue (Datamover is fine)
+#   sbatch cvpr27/code/eval_a100.sbatch          # login node
+#   /bin/bash cvpr27/code/a100_queue.sh refs     # later, while the job still runs
 #
-# One worker per card claims lines of outputs/a100/queue/tasks.txt:
-#   ol <arm> <set> <shard> <n_shards> [rerun]   rollout rows -> outputs/a100/<arm>_<set>[_rerun]
-#   lingo <arm>                                 LingoQA + Lingo-Judge -> outputs/a100/lingo_vqa[_scores]_<arm>
+# One worker per card claims lines of outputs/cvpr27/a100/queue/tasks.txt:
+#   ol <arm> <set> <shard> <n_shards> [rerun]   rollout rows -> outputs/cvpr27/a100/<arm>_<set>[_rerun]
+#   lingo <arm>                                 LingoQA + Lingo-Judge -> outputs/cvpr27/a100/lingo_vqa[_scores]_<arm>
 # A line is claimed by mkdir of queue/claimed/<line number> -- atomic on Lustre across nodes,
 # which flock is not guaranteed to be (it depends on the mount's flock/localflock option), and
 # the queue is written from the Datamover while the workers read it on the compute node.
@@ -48,7 +48,7 @@ declare -A MODEL=(
   [moop]=outputs/slim_dual_u40_v2
   [moop_l0keep]=outputs/slim_dual_u40_l0keep_v2
 )
-Q=$ALPAMAYO_REPO/outputs/a100/queue
+Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
 # Worker k runs on the k-th card SLURM granted. Indexing 0..3 directly would land on cards
 # outside the allocation whenever the node does not renumber them (no device cgroup).
@@ -115,7 +115,7 @@ run_task() {  # <device> <kind> <args...>
     ol)
       local arm=$1 set_name=$2 shard=$3 n=$4 suffix=${5:-}
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=a100/${arm}_${set_name}${suffix:+_$suffix} set_args tag
+      local exp=cvpr27/a100/${arm}_${set_name}${suffix:+_$suffix} set_args tag
       case $set_name in
         test2000) set_args=(--set test --n-indist 2000) ;;
         oodval) set_args=(--set ood --manifest ood_val) ;;
@@ -134,14 +134,14 @@ run_task() {  # <device> <kind> <args...>
     lingo)
       local arm=$1
       local model=${MODEL[$arm]:?unknown arm $arm}
-      if [ ! -f "outputs/a100/lingo_vqa_$arm/rows.json" ]; then
+      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_$arm/rows.json" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/run_lingo_vqa.py \
-            --arm "$model" --exp-id "a100/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
+            --arm "$model" --exp-id "cvpr27/a100/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
             > "logs/a100_lingo_${arm}_answer.log" 2>&1
       fi
-      if [ ! -f "outputs/a100/lingo_vqa_scores_$arm/metrics.json" ]; then
+      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_scores_$arm/metrics.json" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/score_lingo_vqa.py \
-            --runs "a100/lingo_vqa_$arm" --exp-id "a100/lingo_vqa_scores_$arm" --gpu 0 \
+            --runs "cvpr27/a100/lingo_vqa_$arm" --exp-id "cvpr27/a100/lingo_vqa_scores_$arm" --gpu 0 \
             > "logs/a100_lingo_${arm}_score.log" 2>&1
       fi
       ;;

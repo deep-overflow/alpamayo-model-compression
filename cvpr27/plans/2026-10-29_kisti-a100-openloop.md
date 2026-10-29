@@ -1,6 +1,6 @@
 # KISTI(NEURON) A100 개루프 평가 트랙: 게이트 런과 기준 arm 재측정
 
-날짜: 2026-10-29. 상태: **승인됨(사용자 결정 2026-10-29), 구현 중.** 브랜치 `worktree-kisti-a100-eval`.
+날짜: 2026-10-29. 상태: **승인됨(사용자 결정 2026-10-29), 구현 중.** 브랜치 `worktree-kisti-a100-eval`. 위치는 `cvpr27/`(2026-10-29 규칙)이다.
 
 ## 1. 목적
 
@@ -51,14 +51,14 @@ val500(체크포인트 선택)은 이번에 하지 않는다.
 
 ### 이름 규칙
 
-`--exp-id a100/<arm>_<set>` 형식이다(예: `outputs/a100/moop_l0keep_test2000/`). LingoQA는 `a100/lingo_vqa_<arm>`,
-`a100/lingo_vqa_scores_<arm>`이다. GPU 종류는 경로의 첫 단에만 쓴다. `a100/` 아래에 두므로 `collect_results.py`의
+`--exp-id cvpr27/a100/<arm>_<set>` 형식이다(예: `outputs/cvpr27/a100/moop_l0keep_test2000/`). LingoQA는 `cvpr27/a100/lingo_vqa_<arm>`,
+`cvpr27/a100/lingo_vqa_scores_<arm>`이다. GPU 종류는 경로의 첫 단에만 쓴다. `cvpr27/a100/` 아래에 두므로 `collect_results.py`의
 Ada 시트에도 섞이지 않는다.
 
 ## 4. 실행 방식: 4장을 붙잡아 두는 잡 + 작업 큐 (사용자 제안 2026-10-29)
 
 `eval_a100.sbatch`는 A100 4장짜리 잡 하나로 시작해, 카드마다 워커 하나를 띄운다.
-워커는 `/scratch/<user>/outputs/a100/queue/tasks.txt`에서 `flock`으로 한 줄씩 꺼내 실행한다.
+워커는 `/scratch/<user>/outputs/cvpr27/a100/queue/tasks.txt`에서 한 줄씩 꺼내 실행한다.
 작업 줄은 다음 두 형식이다.
 
 ```
@@ -68,15 +68,20 @@ lingo <arm>
 
 - **작업 추가:** 잡이 도는 중에 `a100_queue.sh <stage>`가 다음 작업을 큐에 붙인다(Datamover에서 실행 가능).
   그래서 게이트 결과를 본 뒤 다음 단계를 넣을 때 SLURM 대기열을 다시 타지 않는다.
-- **자동 종료:** 큐가 비고 실행 중인 작업이 없는 상태가 `IDLE_MAX`(기본 45분) 이어지면 워커가 모두 끝난다.
-  `queue/STOP` 파일을 만들면 그 즉시 끝난다.
+- **선점:** 줄 번호로 `queue/claimed/<n>` 디렉토리를 만들어 작업을 선점한다(`mkdir`은 Lustre에서 노드를 넘어서도
+  원자적이다). 선점 디렉토리에는 소유 잡 ID를 남긴다.
+- **홀더 여러 개(사용자 요청 2026-10-29):** 백필을 노리는 작은 잡(예: GPU 2장, 3시간)이 같은 큐를 함께 읽을 수 있다.
+  잡은 시작할 때와 대기 중 10분마다 `squeue`로 확인해, 이미 끝난 잡의 미완료 선점만 풀어 다시 돌린다.
+  시간 상한까지 75분이 안 남으면 새 작업을 집지 않는다(가장 긴 작업은 test_2000 shard 하나, 약 1시간).
+- **자동 종료:** 집을 작업이 없고 그 잡이 아무것도 돌리지 않은 상태가 `IDLE_MAX`(기본 45분) 이어지면 끝난다.
+  `queue/STOP`을 만들면, 그보다 먼저 시작한 잡들이 돌던 작업을 마치고 끝난다.
 - **건너뛰기:** 출력 JSON이 이미 있는 작업은 건너뛴다. 같은 단계를 다시 넣어도 안전하다.
 - **환경 기록:** 시작할 때 `queue/env_<jobid>.txt`에 G0용 정보를 남긴다
   (노드, `nvidia-smi -L`, 드라이버, torch·CUDA 버전, `alpamayo1_5` direct_url).
 - **`salloc`을 쓰지 않는 이유:** 대화형 할당은 상한이 8시간이고, OTP 소켓이 끊기면 할당도 같이 죽는다.
 - **대가:** 잡이 도는 동안 계정 상한 4장을 다 쓰므로 KISTI 학습 잡과 동시에 돌 수 없다.
   단계 사이의 빈 시간도 사용량으로 잡힌다.
-- **시간 상한:** `--time=10:00:00`이다. 짧게 잡아야 백필이 잘 붙는다.
+- **시간 상한:** 4장 잡은 `--time=07:00:00`, 백필용 2장 잡은 `--time=03:00:00`으로 제출한다. 짧게 잡아야 백필이 잘 붙는다.
 
 ## 5. 전송 (`push_neuron.sh <user> a100eval lingoqa weights`)
 
@@ -124,10 +129,10 @@ dense의 OOD-Val과 LingoQA는 게이트 판정과 상관없이 표에 필요하
 | 파일 | 역할 |
 |---|---|
 | `experiments/transfer/push_neuron.sh` | 새 티어 `a100eval`(§5). 기존 티어는 바꾸지 않음 |
-| `experiments/transfer/eval_a100.sbatch` | 4장 홀더 잡, 카드별 워커, flock 큐, 유휴 자동 종료 |
-| `experiments/transfer/a100_queue.sh` | `gate` / `refs` 단계 작업 추가(긴 작업 먼저, 중복 방지), `status`, `stop` |
-| `experiments/transfer/a100_pull.sh` | `outputs/a100/`를 cvlab21로 회수 |
-| `experiments/evaluation/analyze_a100.py` | `--stage gate`(G0–G2), `--stage table`(A100 표·그림). 출력은 `outputs/a100/{gate,table}/` |
+| `cvpr27/code/eval_a100.sbatch` | 홀더 잡(카드별 워커), `mkdir` 선점 큐, 여러 잡 공유, 유휴·시간 상한 처리 |
+| `cvpr27/code/a100_queue.sh` | `gate` / `refs` 단계 작업 추가(긴 작업 먼저, 중복 방지), `status`, `stop` |
+| `cvpr27/code/a100_pull.sh` | `outputs/cvpr27/a100/`를 cvlab21로 회수 |
+| `cvpr27/code/analyze_a100.py` | `--stage gate`(G0–G2), `--stage table`(A100 표·그림). 출력은 `outputs/cvpr27/a100/{gate,table}/` |
 
 ## 9. 하지 않는 것
 

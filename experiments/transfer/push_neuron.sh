@@ -24,7 +24,7 @@
 #                    (plans/2026-08-31_znorm11-neuron-eval.md).
 #           a100eval the A100 open-loop track: test_2000 + OOD-val 262 caches, their
 #                    manifests, the $A100_RECIPES recipes and the track's own scripts --
-#                    not the code tree (plans/2026-10-29_kisti-a100-openloop.md).
+#                    not the code tree (cvpr27/plans/2026-10-29_kisti-a100-openloop.md).
 #                    Pair with `lingoqa weights` for the LingoQA arm and the base model.
 #   LIST_ONLY=1 prints what would move, with byte totals, contacting nothing.
 #
@@ -215,7 +215,7 @@ if has a100eval; then
       "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
 
   step "manifests + recipes ($A100_RECIPES) -> $SCRATCH/outputs"
-  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/outputs/eval_sets $SCRATCH/outputs/a100/queue"
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/outputs/eval_sets $SCRATCH/outputs/cvpr27/a100/queue"
   run "${RSYNC[@]}" "$OUT/eval_sets/test_2000.parquet" "$OUT/eval_sets/ood_val.parquet" \
       "$HOST:$SCRATCH/outputs/eval_sets/"
   # selection-only recipes: load_slim rebuilds the weights from the base checkpoint
@@ -226,8 +226,8 @@ if has a100eval; then
 
   step "A100 track scripts -> $SCRATCH/project/alpamayo-model-compression"
   REPO_WT=$(cd "$HERE/../.." && pwd)
-  ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative ./experiments/transfer/eval_a100.sbatch \
-      ./experiments/transfer/a100_queue.sh "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
+  ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative ./cvpr27/code/eval_a100.sbatch \
+      ./cvpr27/code/a100_queue.sh "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
 fi
 
 if has lingoqa; then

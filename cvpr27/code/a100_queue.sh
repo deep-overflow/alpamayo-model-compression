@@ -2,18 +2,18 @@
 # Fill, inspect or stop the queue that eval_a100.sbatch drains. Runs on NEURON (the Datamover
 # is fine: it only touches files under /scratch), from the repo root or anywhere else.
 #
-#   /bin/bash experiments/transfer/a100_queue.sh gate     # dense test2000 x4 + shard-0 rerun,
+#   /bin/bash cvpr27/code/a100_queue.sh gate     # dense test2000 x4 + shard-0 rerun,
 #                                                         # dense OOD-val x2, LingoQA dense
-#   /bin/bash experiments/transfer/a100_queue.sh refs     # both MoOP arms, after the gate passes
-#   /bin/bash experiments/transfer/a100_queue.sh status
-#   /bin/bash experiments/transfer/a100_queue.sh stop     # workers exit after their current task
+#   /bin/bash cvpr27/code/a100_queue.sh refs     # both MoOP arms, after the gate passes
+#   /bin/bash cvpr27/code/a100_queue.sh status
+#   /bin/bash cvpr27/code/a100_queue.sh stop     # workers exit after their current task
 #
 # Lines are appended longest first, so four cards finish close together. A line already in
 # the queue is not appended twice: two copies could be claimed at once and write one rows file
 # from two processes.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-Q=$REPO/outputs/a100/queue
+Q=$REPO/outputs/cvpr27/a100/queue
 mkdir -p "$Q/claimed" "$Q/running"
 touch "$Q/tasks.txt" "$Q/done.log" "$Q/failed.log"
 
