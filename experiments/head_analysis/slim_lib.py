@@ -18,6 +18,10 @@ producing k/v for the expert -> kvonly_layer_forward (bias-free projections make
 masked layer's residual contributions exactly zero, so passthrough is the faithful
 physical equivalent).
 
+The Minitron width baseline (minitron/) also narrows the VLM residual stream:
+slice_hidden(), recorded as `vlm_hidden` in the meta. Checkpoints without that key are
+untouched by it.
+
 Checkpoints are torch.save state_dicts + a meta.json of kept indices; save_pretrained
 cannot round-trip non-uniform layer shapes.
 """
@@ -150,8 +154,60 @@ def make_kvonly(layer):
 KVONLY_EXTRA = {"q_norm", "post_attention_layernorm"}  # removed beyond the mask accounting
 
 
-def apply_surgery(model, vlm_q, vlm_mlp, exp_q, exp_mlp, kvonly_layers=()):
-    """Apply keep-masks ((L,H)/(L,I) 0/1 arrays, mask_lib semantics) as real removal."""
+def _keep_rows(linear, idx):
+    """Output-row slice of a Linear, bias included."""
+    _swap(linear, linear.weight.data[idx])
+    if linear.bias is not None:
+        linear.bias = nn.Parameter(linear.bias.data[idx].contiguous(), requires_grad=False)
+
+
+def _keep_norm(norm, idx):
+    norm.weight = nn.Parameter(norm.weight.data[idx].contiguous(), requires_grad=False)
+
+
+def slice_hidden(model, kept_h):
+    """Narrow the VLM text tower's residual stream to `kept_h` (ascending channel ids).
+
+    One kept set for every layer -- the residual carries it between layers (Minitron,
+    Sheared-LLaMA). Sliced: embed_tokens and lm_head columns, every RMSNorm weight, q/k/v
+    and gate/up input columns, o/down output rows, the final norm, and the output rows of
+    the vision merger and the DeepStack mergers, which write straight into the residual.
+    k/v_proj keep their 8x128 outputs, so the cache layout the expert reads is unchanged;
+    its values are not. RMSNorm is not rescaled -- it now averages over the kept channels,
+    and Minitron leaves that shift to distillation. The ViT is untouched.
+    """
+    lm = model.vlm.model.language_model
+    h = torch.as_tensor(kept_h, dtype=torch.long, device=lm.embed_tokens.weight.device)
+    lm.embed_tokens.weight = nn.Parameter(
+        lm.embed_tokens.weight.data[:, h].contiguous(), requires_grad=False)
+    lm.embed_tokens.embedding_dim = h.numel()
+    _swap(model.vlm.lm_head, model.vlm.lm_head.weight.data[:, h])
+    for layer in lm.layers:
+        attn = layer.self_attn
+        _keep_norm(layer.input_layernorm, h)
+        for proj in (attn.q_proj, attn.k_proj, attn.v_proj):
+            if proj is not None:
+                _swap(proj, proj.weight.data[:, h])
+        if attn.o_proj is not None:
+            _keep_rows(attn.o_proj, h)
+        if layer.mlp is not None:  # None on kv-only layers
+            _keep_norm(layer.post_attention_layernorm, h)
+            _swap(layer.mlp.gate_proj, layer.mlp.gate_proj.weight.data[:, h])
+            _swap(layer.mlp.up_proj, layer.mlp.up_proj.weight.data[:, h])
+            _keep_rows(layer.mlp.down_proj, h)
+    _keep_norm(lm.norm, h)
+    vis = model.vlm.model.visual
+    for merger in (vis.merger, *vis.deepstack_merger_list):
+        _keep_rows(merger.linear_fc2, h)
+    model.vlm.config.text_config.hidden_size = h.numel()
+    model.vlm.config.vision_config.out_hidden_size = h.numel()
+
+
+def apply_surgery(model, vlm_q, vlm_mlp, exp_q, exp_mlp, kvonly_layers=(), vlm_hidden=None):
+    """Apply keep-masks ((L,H)/(L,I) 0/1 arrays, mask_lib semantics) as real removal.
+
+    `vlm_hidden` (ascending kept residual channels) additionally runs slice_hidden().
+    """
     meta = {"vlm": [], "expert": [], "kvonly_layers": list(kvonly_layers)}
     tc = model.vlm.config.text_config
     for li, layer in enumerate(model.vlm.model.language_model.layers):
@@ -173,6 +229,9 @@ def apply_surgery(model, vlm_q, vlm_mlp, exp_q, exp_mlp, kvonly_layers=()):
         slice_layer(layer, kq, km, ec.head_dim)
         bind_slim_attention(layer.self_attn, kq, ec.num_attention_heads,
                             ec.num_key_value_heads)
+    if vlm_hidden is not None:
+        slice_hidden(model, vlm_hidden)
+        meta["vlm_hidden"] = [int(i) for i in vlm_hidden]
     return meta
 
 
@@ -247,7 +306,8 @@ def load_slim(ckpt_dir, device="cuda", revision=MODEL_REV):
     for li, m in enumerate(meta["expert"]):
         eq[li, m["q"]] = 1.0
         em[li, m["mlp"]] = 1.0
-    apply_surgery(model, vq, vm, eq, em, kvonly_layers=tuple(meta["kvonly_layers"]))
+    apply_surgery(model, vq, vm, eq, em, kvonly_layers=tuple(meta["kvonly_layers"]),
+                  vlm_hidden=meta.get("vlm_hidden"))
     state = ckpt_dir / "slim_state.pt"
     if state.exists():
         sd = torch.load(state, map_location="cpu", weights_only=True)

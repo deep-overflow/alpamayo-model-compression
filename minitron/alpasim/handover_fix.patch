@@ -1,0 +1,615 @@
+--- a/src/controller/alpasim_controller/system.py
++++ b/src/controller/alpasim_controller/system.py
+@@ -154,7 +154,12 @@
+         # Reinitialize the state
+         if request.coerce_dynamic_state:
+             velocity_cg = self._dynamic_state_to_cg_velocity(request.state.state)
+-            self._vehicle_model.set_velocity(velocity_cg[0], velocity_cg[1])
++            self._vehicle_model.coerce_dynamic_state(
++                v_cg_x=velocity_cg[0],
++                v_cg_y=velocity_cg[1],
++                yaw_rate=request.state.state.angular_velocity.z,
++                longitudinal_acceleration=request.state.state.linear_acceleration.x,
++            )
+ 
+         # Determine intermediate reporting timestamps
+         if request.pose_reporting_interval_us > 0:
+--- a/src/controller/alpasim_controller/vehicle_model.py
++++ b/src/controller/alpasim_controller/vehicle_model.py
+@@ -126,6 +126,33 @@
+         """
+         self._state[3] = v_cg_x
+         self._state[4] = v_cg_y
++
++    # Ported from NVlabs/alpasim main (Aug 2026 sync): force-GT steps and the hand-over
++    # also overwrite yaw rate, steering and the longitudinal-acceleration state, so the
++    # car is not released with the braking the MPC accumulated during force-GT.
++    def coerce_dynamic_state(
++        self,
++        v_cg_x: float,
++        v_cg_y: float,
++        yaw_rate: float,
++        longitudinal_acceleration: float,
++    ) -> None:
++        """Replace dynamic state with values estimated from ground truth.
++
++        Args:
++            v_cg_x: Longitudinal velocity of the CG [m/s]
++            v_cg_y: Lateral velocity of the CG [m/s]
++            yaw_rate: Angular velocity in the body frame [rad/s]
++            longitudinal_acceleration: Longitudinal acceleration [m/s²]
++        """
++        self._state[3] = v_cg_x
++        self._state[4] = v_cg_y
++        self._state[5] = yaw_rate
++        if v_cg_x > 0.25:
++            self._state[6] = math.atan(yaw_rate / v_cg_x * self._parameters.wheelbase)
++        else:
++            self._state[6] = 0.0
++        self._state[7] = longitudinal_acceleration
+ 
+     def advance(self, u: np.ndarray, dt: float) -> Pose:
+         """Advance the vehicle model by dt seconds.
+--- a/src/controller/tests/test_vehicle_model.py
++++ b/src/controller/tests/test_vehicle_model.py
+@@ -134,14 +134,32 @@
+         # Velocity should be preserved
+         assert model.state[3] != 0.0
+ 
+-    def test_set_velocity(self):
+-        """set_velocity updates vx and vy."""
+-        model = VehicleModel(np.array([0.0, 0.0]), 0.0)
+-
+-        model.set_velocity(15.0, 0.5)
+-
+-        assert model.state[3] == 15.0
+-        assert model.state[4] == 0.5
++    def test_coerce_dynamic_state(self):
++        """Coercion replaces the full dynamic state with GT-derived values."""
++        model = VehicleModel(np.array([10.0, 0.0]), 0.5)
++        for _ in range(5):
++            model.advance(np.array([0.2, -8.0]), 0.1)
++
++        x_before = model.state[0]
++        y_before = model.state[1]
++        yaw_before = model.state[2]
++
++        model.coerce_dynamic_state(
++            v_cg_x=12.0,
++            v_cg_y=0.4,
++            yaw_rate=0.6,
++            longitudinal_acceleration=2.0,
++        )
++
++        expected_steering = math.atan(0.6 / 12.0 * model.parameters.wheelbase)
++        assert model.state[3] == 12.0
++        assert model.state[4] == 0.4
++        assert model.state[5] == 0.6
++        assert model.state[6] == pytest.approx(expected_steering)
++        assert model.state[7] == 2.0
++        assert model.state[0] == x_before
++        assert model.state[1] == y_before
++        assert model.state[2] == yaw_before
+ 
+ 
+ class TestVehicleModelAdvance:
+--- a/src/driver/src/alpasim_driver/models/alpamayo1_5_slim.py
++++ b/src/driver/src/alpasim_driver/models/alpamayo1_5_slim.py
+@@ -136,8 +136,58 @@
+     layer.forward = types.MethodType(kvonly_layer_forward, layer)
+ 
+ 
+-def apply_surgery(model, vlm_q, vlm_mlp, exp_q, exp_mlp, kvonly_layers=()):
+-    """Apply keep-masks ((L,H)/(L,I) 0/1 arrays) as real weight removal."""
++def _keep_rows(linear, idx):
++    """Output-row slice of a Linear, bias included."""
++    _swap(linear, linear.weight.data[idx])
++    if linear.bias is not None:
++        linear.bias = nn.Parameter(linear.bias.data[idx].contiguous(), requires_grad=False)
++
++
++def _keep_norm(norm, idx):
++    norm.weight = nn.Parameter(norm.weight.data[idx].contiguous(), requires_grad=False)
++
++
++def slice_hidden(model, kept_h):
++    """Narrow the VLM text tower's residual stream to `kept_h` (ascending channel ids).
++
++    Vendored with the Minitron-width checkpoints (slim_meta.json key ``vlm_hidden``). One
++    kept set for every layer. Sliced: embed_tokens and lm_head columns, every RMSNorm
++    weight, q/k/v and gate/up input columns, o/down output rows, the final norm, and the
++    output rows of the vision merger and the DeepStack mergers. k/v_proj keep their 8x128
++    outputs, so the cache layout the expert reads is unchanged. The ViT is untouched.
++    """
++    lm = model.vlm.model.language_model
++    h = torch.as_tensor(kept_h, dtype=torch.long, device=lm.embed_tokens.weight.device)
++    lm.embed_tokens.weight = nn.Parameter(
++        lm.embed_tokens.weight.data[:, h].contiguous(), requires_grad=False)
++    lm.embed_tokens.embedding_dim = h.numel()
++    _swap(model.vlm.lm_head, model.vlm.lm_head.weight.data[:, h])
++    for layer in lm.layers:
++        attn = layer.self_attn
++        _keep_norm(layer.input_layernorm, h)
++        for proj in (attn.q_proj, attn.k_proj, attn.v_proj):
++            if proj is not None:
++                _swap(proj, proj.weight.data[:, h])
++        if attn.o_proj is not None:
++            _keep_rows(attn.o_proj, h)
++        if layer.mlp is not None:  # None on kv-only layers
++            _keep_norm(layer.post_attention_layernorm, h)
++            _swap(layer.mlp.gate_proj, layer.mlp.gate_proj.weight.data[:, h])
++            _swap(layer.mlp.up_proj, layer.mlp.up_proj.weight.data[:, h])
++            _keep_rows(layer.mlp.down_proj, h)
++    _keep_norm(lm.norm, h)
++    vis = model.vlm.model.visual
++    for merger in (vis.merger, *vis.deepstack_merger_list):
++        _keep_rows(merger.linear_fc2, h)
++    model.vlm.config.text_config.hidden_size = h.numel()
++    model.vlm.config.vision_config.out_hidden_size = h.numel()
++
++
++def apply_surgery(model, vlm_q, vlm_mlp, exp_q, exp_mlp, kvonly_layers=(), vlm_hidden=None):
++    """Apply keep-masks ((L,H)/(L,I) 0/1 arrays) as real weight removal.
++
++    `vlm_hidden` (ascending kept residual channels) additionally runs slice_hidden().
++    """
+     meta = {"vlm": [], "expert": [], "kvonly_layers": list(kvonly_layers)}
+     tc = model.vlm.config.text_config
+     for li, layer in enumerate(model.vlm.model.language_model.layers):
+@@ -159,6 +209,9 @@
+         slice_layer(layer, kq, km, ec.head_dim)
+         bind_slim_attention(layer.self_attn, kq, ec.num_attention_heads,
+                             ec.num_key_value_heads)
++    if vlm_hidden is not None:
++        slice_hidden(model, vlm_hidden)
++        meta["vlm_hidden"] = [int(i) for i in vlm_hidden]
+     return meta
+ 
+ 
+@@ -195,7 +248,8 @@
+     for li, m in enumerate(meta["expert"]):
+         eq[li, m["q"]] = 1.0
+         em[li, m["mlp"]] = 1.0
+-    apply_surgery(model, vq, vm, eq, em, kvonly_layers=tuple(meta["kvonly_layers"]))
++    apply_surgery(model, vq, vm, eq, em, kvonly_layers=tuple(meta["kvonly_layers"]),
++                  vlm_hidden=meta.get("vlm_hidden"))
+     sd = torch.load(ckpt_dir / "slim_state.pt", map_location="cpu", weights_only=True)
+     model.load_state_dict(sd, strict=True)
+     check_slim(model)
+--- a/src/runtime/alpasim_runtime/event_loop.py
++++ b/src/runtime/alpasim_runtime/event_loop.py
+@@ -29,6 +29,10 @@
+     SimulationEndEvent,
+ )
+ from alpasim_runtime.events.controller import ControllerEvent
++from alpasim_runtime.events.force_gt_utils import (
++    FORCE_GT_REFERENCE_HORIZON_US,
++    force_gt_dynamic_trajectory,
++)
+ from alpasim_runtime.events.physics import PhysicsEvent, PhysicsTarget
+ from alpasim_runtime.events.policy import PolicyEvent
+ from alpasim_runtime.events.state import RolloutState, ServiceBundle, StepContext
+@@ -266,13 +270,21 @@
+         return corrected_aabb.transform(aabb_to_ds, is_relative=True)
+ 
+     async def _build_force_gt_physics_blend_trajectory(self) -> geometry.Trajectory:
+-        """Build force-GT fallback that eases from recorded GT to physics."""
++        """Build force-GT fallback and the post-handover controller lookahead."""
+         unbound = self.unbound
+         gt_hold_end_us = force_gt_physics_blend_hold_end_us(unbound)
+         configured_blend_end_us = (
+             unbound.render_start_timestamp_us + unbound.force_gt_duration_us
+         )
+         blend_end_us = min(configured_blend_end_us, unbound.end_timestamp_us)
++        # Ported from NVlabs/alpasim main (Aug 2026 sync): extend past the hand-over so
++        # the force-GT controller reference does not end there (the MPC clamps the
++        # horizon to the last pose and brakes to -8 m/s^2 toward it).
++        reference_end_us = min(
++            blend_end_us + FORCE_GT_REFERENCE_HORIZON_US,
++            unbound.end_timestamp_us,
++            unbound.gt_ego_trajectory.time_range_us.stop - 1,
++        )
+ 
+         if blend_end_us <= gt_hold_end_us:
+             return unbound.gt_ego_trajectory.clip(
+@@ -283,19 +295,20 @@
+         dt_us = unbound.control_timestep_us
+         clipped_gt_timestamps = unbound.gt_ego_trajectory.clip(
+             unbound.egomotion_context_start_us,
+-            blend_end_us + 1,
++            reference_end_us + 1,
+         ).timestamps_us
+         timestamps = list(
+-            range(unbound.first_policy_timestamp_us, blend_end_us + 1, dt_us)
+-        )
+-        if not timestamps or timestamps[-1] != blend_end_us:
+-            timestamps.append(blend_end_us)
++            range(unbound.first_policy_timestamp_us, reference_end_us + 1, dt_us)
++        )
++        if not timestamps or timestamps[-1] != reference_end_us:
++            timestamps.append(reference_end_us)
+         timestamps = sorted(
+             set(
+                 [
+                     unbound.egomotion_context_start_us,
+                     gt_hold_end_us,
+                     blend_end_us,
++                    reference_end_us,
+                     *clipped_gt_timestamps.tolist(),
+                     *timestamps,
+                 ]
+@@ -336,12 +349,16 @@
+ 
+     def _create_rollout_state(self) -> RolloutState:
+         """Create the RolloutState from the current rollout."""
++        force_gt_trajectory = self.force_gt_ego_trajectory
++        if force_gt_trajectory is None:
++            force_gt_trajectory = self.unbound.gt_ego_trajectory
+         return RolloutState(
+             unbound=self.unbound,
+             ego_trajectory=self.ego_trajectory,
+             ego_trajectory_estimate=self.ego_trajectory_estimate,
+             traffic_objs=self.traffic_objs,
+             force_gt_ego_trajectory=self.force_gt_ego_trajectory,
++            force_gt_dynamics=force_gt_dynamic_trajectory(force_gt_trajectory),
+             step_context=StepContext(),
+             last_egopose_update_us=None,
+         )
+--- a/src/runtime/alpasim_runtime/events/controller.py
++++ b/src/runtime/alpasim_runtime/events/controller.py
+@@ -61,6 +61,14 @@
+         step_start_us = ctx.step_start_us
+         target_time_us = ctx.target_time_us
+         force_gt = ctx.force_gt
++        # Ported from NVlabs/alpasim main (Aug 2026 sync): coerce GT dynamics (incl.
++        # acceleration) at force-GT steps and at the hand-over step as well.
++        handoff = (
++            not force_gt
++            and state.unbound.force_gt_duration_us > 0
++            and step_start_us == state.unbound.closed_loop_start_us
++        )
++        coerce_dynamic_state = force_gt or handoff
+         reference_trajectory_of_rig_in_local = ctx.driver_trajectory
+         assert reference_trajectory_of_rig_in_local is not None
+ 
+@@ -85,14 +93,18 @@
+             reference_trajectory_of_rig_in_local = controller_reference_trajectory(
+                 state.force_gt_trajectory, step_start_us
+             )
++        else:
++            fallback_trajectory_local_to_rig = reference_trajectory_of_rig_in_local
+ 
+-            dt = (target_time_us - step_start_us) / 1e6
+-            pose_local_to_rig_t0 = state.force_gt_trajectory.interpolate_pose(
+-                step_start_us
+-            )
+-            pose_local_to_rig_t1 = state.force_gt_trajectory.interpolate_pose(
+-                target_time_us
+-            )
++        if coerce_dynamic_state:
++            if state.force_gt_dynamics is None:
++                raise RuntimeError("force-GT dynamics were not initialized")
++            gt_dynamics = state.force_gt_dynamics.interpolate_dynamics(
++                np.array([step_start_us], dtype=np.uint64)
++            )[0]
++            rig_linear_velocity_in_rig = gt_dynamics[0:3]
++            rig_angular_velocity_in_rig = gt_dynamics[3:6]
++            rig_linear_acceleration_in_rig = gt_dynamics[6:9]
+         else:
+             assert len(state.ego_trajectory.timestamps_us) >= 2, (
+                 "ego_trajectory must have at least 2 entries by the time the "
+@@ -105,7 +117,10 @@
+             pose_local_to_rig_t0 = state.ego_trajectory.get_pose(-2)
+             pose_local_to_rig_t1 = state.ego_trajectory.last_pose
+ 
+-            fallback_trajectory_local_to_rig = reference_trajectory_of_rig_in_local
++            pose_rig0_to_rig1 = pose_local_to_rig_t0.inverse() @ pose_local_to_rig_t1
++            rig_linear_velocity_in_rig = pose_rig0_to_rig1.vec3 / dt
++            rig_angular_velocity_in_rig = 2.0 * pose_rig0_to_rig1.quat[0:3] / dt
++            rig_linear_acceleration_in_rig = np.zeros(3, dtype=np.float64)
+ 
+         planner_delay_buffer.add(
+             reference_trajectory_of_rig_in_local.transform(pose_local_to_rig.inverse()),
+@@ -113,18 +128,16 @@
+         )
+         rig_reference_trajectory = planner_delay_buffer.at(step_start_us)
+ 
+-        pose_rig0_to_rig1 = pose_local_to_rig_t0.inverse() @ pose_local_to_rig_t1
+-        rig_linear_velocity_in_rig = pose_rig0_to_rig1.vec3 / dt
+-        rig_angular_velocity_in_rig = 2.0 * pose_rig0_to_rig1.quat[0:3] / dt
+-
+         propagated_states = await controller.run_controller_and_vehicle(
+             now_us=step_start_us,
+             pose_local_to_rig=pose_local_to_rig,
+             rig_linear_velocity_in_rig=rig_linear_velocity_in_rig,
+             rig_angular_velocity_in_rig=rig_angular_velocity_in_rig,
++            rig_linear_acceleration_in_rig=rig_linear_acceleration_in_rig,
+             rig_reference_trajectory_in_rig=rig_reference_trajectory,
+             future_us=target_time_us,
+             force_gt=force_gt,
++            coerce_dynamic_state=coerce_dynamic_state,
+             fallback_trajectory_local_to_rig=fallback_trajectory_local_to_rig,
+             pose_reporting_interval_us=state.unbound.pose_reporting_interval_us
+             or state.unbound.control_timestep_us,
+--- a/src/runtime/alpasim_runtime/events/force_gt_utils.py
++++ b/src/runtime/alpasim_runtime/events/force_gt_utils.py
+@@ -5,9 +5,48 @@
+ 
+ from __future__ import annotations
+ 
++import numpy as np
+ from alpasim_utils import geometry
+ 
+ FORCE_GT_REFERENCE_HORIZON_US = 5_000_000
++# Ported from NVlabs/alpasim main (Aug 2026 sync), with force_gt_dynamic_trajectory below:
++# GT dynamics (incl. acceleration) that force-GT steps and the hand-over coerce into the
++# vehicle model.
++_FORCE_GT_DYNAMICS_SMOOTHING_FACTOR = 0.9
++
++
++def force_gt_dynamic_trajectory(
++    trajectory: geometry.Trajectory,
++) -> geometry.DynamicTrajectory:
++    """Estimate smooth rig-frame dynamics from a force-GT pose trajectory."""
++    velocities_local = geometry.trajectory_velocities_cubic(
++        trajectory, _FORCE_GT_DYNAMICS_SMOOTHING_FACTOR
++    )
++    accelerations_local = geometry.trajectory_accelerations_cubic(
++        trajectory, _FORCE_GT_DYNAMICS_SMOOTHING_FACTOR
++    )
++    yaw_rates = geometry.trajectory_yaw_rates_cubic(
++        trajectory, _FORCE_GT_DYNAMICS_SMOOTHING_FACTOR
++    )
++    yaws = trajectory.yaws
++
++    cos_yaw = np.cos(yaws)
++    sin_yaw = np.sin(yaws)
++    dynamics = np.zeros((len(trajectory), 12), dtype=np.float64)
++    dynamics[:, 0] = cos_yaw * velocities_local[:, 0] + sin_yaw * velocities_local[:, 1]
++    dynamics[:, 1] = (
++        -sin_yaw * velocities_local[:, 0] + cos_yaw * velocities_local[:, 1]
++    )
++    dynamics[:, 2] = velocities_local[:, 2]
++    dynamics[:, 5] = yaw_rates
++    dynamics[:, 6] = (
++        cos_yaw * accelerations_local[:, 0] + sin_yaw * accelerations_local[:, 1]
++    )
++    dynamics[:, 7] = (
++        -sin_yaw * accelerations_local[:, 0] + cos_yaw * accelerations_local[:, 1]
++    )
++    dynamics[:, 8] = accelerations_local[:, 2]
++    return geometry.DynamicTrajectory.from_trajectory_and_dynamics(trajectory, dynamics)
+ 
+ 
+ def controller_reference_trajectory(
+--- a/src/runtime/alpasim_runtime/events/state.py
++++ b/src/runtime/alpasim_runtime/events/state.py
+@@ -115,6 +115,9 @@
+     ego_trajectory_estimate: geometry.DynamicTrajectory
+     traffic_objs: TrafficObjects
+     force_gt_ego_trajectory: geometry.Trajectory | None = None
++    # GT dynamics coerced into the vehicle model at force-GT steps and the hand-over
++    # (ported from NVlabs/alpasim main, Aug 2026 sync)
++    force_gt_dynamics: geometry.DynamicTrajectory | None = None
+ 
+     @property
+     def force_gt_trajectory(self) -> geometry.Trajectory:
+--- a/src/runtime/alpasim_runtime/services/controller_service.py
++++ b/src/runtime/alpasim_runtime/services/controller_service.py
+@@ -58,9 +58,10 @@
+         pose_local_to_rig: Pose,
+         rig_linear_velocity_in_rig: np.ndarray,
+         rig_angular_velocity_in_rig: np.ndarray,
++        rig_linear_acceleration_in_rig: np.ndarray,
+         rig_reference_trajectory_in_rig: Trajectory,
+         future_us: int,
+-        force_gt: bool,
++        coerce_dynamic_state: bool,
+         pose_reporting_interval_us: int = 0,
+     ) -> RunControllerAndVehicleModelRequest:
+         """
+@@ -85,6 +86,14 @@
+                 z=rig_angular_velocity_in_rig[2],
+             )
+         )
++        # ported from NVlabs/alpasim main (Aug 2026 sync): GT acceleration for coercion
++        request.state.state.linear_acceleration.CopyFrom(
++            Vec3(
++                x=rig_linear_acceleration_in_rig[0],
++                y=rig_linear_acceleration_in_rig[1],
++                z=rig_linear_acceleration_in_rig[2],
++            )
++        )
+ 
+         request.planned_trajectory_in_rig.CopyFrom(
+             trajectory_to_grpc(rig_reference_trajectory_in_rig)
+@@ -92,7 +101,7 @@
+ 
+         request.future_time_us = future_us
+ 
+-        request.coerce_dynamic_state = force_gt
++        request.coerce_dynamic_state = coerce_dynamic_state
+         request.pose_reporting_interval_us = pose_reporting_interval_us
+         return request
+ 
+@@ -188,9 +197,11 @@
+         pose_local_to_rig: Pose,
+         rig_linear_velocity_in_rig: np.ndarray,
+         rig_angular_velocity_in_rig: np.ndarray,
++        rig_linear_acceleration_in_rig: np.ndarray,
+         rig_reference_trajectory_in_rig: Trajectory,
+         future_us: int,
+         force_gt: bool,
++        coerce_dynamic_state: bool,
+         fallback_trajectory_local_to_rig: Trajectory,
+         pose_reporting_interval_us: int = 0,
+     ) -> list[PropagatedPosesAtTime]:
+@@ -201,9 +212,12 @@
+             pose_local_to_rig: Current ego pose in local frame.
+             rig_linear_velocity_in_rig: Linear velocity vector in rig frame.
+             rig_angular_velocity_in_rig: Angular velocity vector in rig frame.
++            rig_linear_acceleration_in_rig: Linear acceleration vector in rig frame.
+             rig_reference_trajectory_in_rig: Planned reference trajectory in rig frame.
+             future_us: Target timestamp to propagate to.
+-            force_gt: If True, coerce the vehicle model to use ground-truth state.
++            force_gt: If True, replace propagated poses with the ground-truth fallback.
++            coerce_dynamic_state: If True, initialize controller dynamics from the
++                supplied state before propagation.
+             fallback_trajectory_local_to_rig: Trajectory used in skip mode or
+                 force_gt mode; interpolated at future_us to produce the fallback pose.
+             pose_reporting_interval_us: Interval for intermediate state reporting.
+@@ -244,9 +258,10 @@
+             pose_local_to_rig=pose_local_to_rig,
+             rig_linear_velocity_in_rig=rig_linear_velocity_in_rig,
+             rig_angular_velocity_in_rig=rig_angular_velocity_in_rig,
++            rig_linear_acceleration_in_rig=rig_linear_acceleration_in_rig,
+             rig_reference_trajectory_in_rig=rig_reference_trajectory_in_rig,
+             future_us=future_us,
+-            force_gt=force_gt,
++            coerce_dynamic_state=coerce_dynamic_state,
+             pose_reporting_interval_us=pose_reporting_interval_us,
+         )
+ 
+--- a/src/runtime/tests/conftest.py
++++ b/src/runtime/tests/conftest.py
+@@ -15,6 +15,7 @@
+ from alpasim_runtime.broadcaster import MessageBroadcaster
+ from alpasim_runtime.config import PhysicsUpdateMode, RenderBundling
+ from alpasim_runtime.delay_buffer import DelayBuffer
++from alpasim_runtime.events.force_gt_utils import force_gt_dynamic_trajectory
+ from alpasim_runtime.events.state import RolloutState, ServiceBundle, StepContext
+ from alpasim_runtime.services.controller_service import (
+     ControllerService,
+@@ -244,6 +245,7 @@
+             ego_traj_estimate, zero_dynamics
+         ),
+         traffic_objs=mock_traffic_objs,
++        force_gt_dynamics=force_gt_dynamic_trajectory(mock_unbound.gt_ego_trajectory),
+     )
+     state.step_context = StepContext()
+     return state
+--- a/src/runtime/tests/services/test_controller_api.py
++++ b/src/runtime/tests/services/test_controller_api.py
+@@ -47,10 +47,12 @@
+         "pose_local_to_rig": _pose_at(1.0),
+         "rig_linear_velocity_in_rig": np.array([1.0, 0.0, 0.0]),
+         "rig_angular_velocity_in_rig": np.array([0.0, 0.0, 0.0]),
++        "rig_linear_acceleration_in_rig": np.array([2.0, 0.0, 0.0]),
+         "rig_reference_trajectory_in_rig": trajectory,
+         "future_us": future_us,
+         "fallback_trajectory_local_to_rig": fallback_trajectory_local_to_rig,
+         "force_gt": False,
++        "coerce_dynamic_state": False,
+     }
+     return args
+ 
+@@ -59,6 +61,7 @@
+     # Remove fields not needed for request creation
+     args_for_request = default_args.copy()
+     del args_for_request["fallback_trajectory_local_to_rig"]
++    del args_for_request["force_gt"]
+ 
+     request = ControllerService.create_run_controller_and_vehicle_request(
+         **args_for_request
+@@ -66,6 +69,7 @@
+     # spot check
+     assert request.session_uuid == default_args["session_uuid"]
+     assert request.state.timestamp_us == default_args["now_us"]
++    assert request.state.state.linear_acceleration.x == 2.0
+ 
+ 
+ async def test_skip_controller_instance_run_controller_and_vehicle(default_args):
+--- a/src/runtime/tests/test_event_parity.py
++++ b/src/runtime/tests/test_event_parity.py
+@@ -359,6 +359,14 @@
+         await event.run(rollout_state, EventQueue())
+ 
+         call_kwargs = mock_controller.run_controller_and_vehicle.call_args.kwargs
++        assert rollout_state.force_gt_dynamics is not None
++        expected_dynamics = rollout_state.force_gt_dynamics.interpolate_dynamics(
++            np.array([100_000], dtype=np.uint64)
++        )[0]
++        np.testing.assert_allclose(
++            call_kwargs["rig_linear_acceleration_in_rig"],
++            expected_dynamics[6:9],
++        )
+         assert (
+             call_kwargs["fallback_trajectory_local_to_rig"]
+             is rollout_state.unbound.gt_ego_trajectory
+@@ -412,6 +420,76 @@
+         clip_start, clip_end = force_gt_trajectory.clip.call_args.args
+         assert clip_start == 200_000
+         assert clip_end <= force_gt_trajectory.time_range_us.stop
++
++    @pytest.mark.asyncio
++    async def test_controller_event_recoerces_gt_speed_at_handoff(
++        self,
++        rollout_state: RolloutState,
++        service_bundle: ServiceBundle,
++        mock_controller: AsyncMock,
++        simple_trajectory: Trajectory,
++    ) -> None:
++        """The force-GT to policy transition should initialize from GT dynamics."""
++        handoff_us = 100_000
++        rollout_state.unbound.closed_loop_start_us = handoff_us
++        rollout_state.unbound.force_gt_duration_us = handoff_us
++
++        rollout_state.step_context = StepContext(
++            step_start_us=0,
++            target_time_us=handoff_us,
++            force_gt=True,
++            driver_trajectory=simple_trajectory,
++        )
++        await ControllerEvent(
++            timestamp_us=0,
++            control_timestep_us=handoff_us,
++            services=service_bundle,
++        ).run(rollout_state, EventQueue())
++        force_gt_call = mock_controller.run_controller_and_vehicle.call_args.kwargs
++        assert force_gt_call["force_gt"] is True
++        assert force_gt_call["coerce_dynamic_state"] is True
++
++        mock_controller.run_controller_and_vehicle.reset_mock()
++        rollout_state.step_context = StepContext(
++            step_start_us=handoff_us,
++            target_time_us=2 * handoff_us,
++            force_gt=False,
++            driver_trajectory=simple_trajectory,
++        )
++        await ControllerEvent(
++            timestamp_us=handoff_us,
++            control_timestep_us=handoff_us,
++            services=service_bundle,
++        ).run(rollout_state, EventQueue())
++
++        handoff_call = mock_controller.run_controller_and_vehicle.call_args.kwargs
++        assert handoff_call["force_gt"] is False
++        assert handoff_call["coerce_dynamic_state"] is True
++        assert rollout_state.force_gt_dynamics is not None
++        expected_handoff_dynamics = (
++            rollout_state.force_gt_dynamics.interpolate_dynamics(
++                np.array([handoff_us], dtype=np.uint64)
++            )[0]
++        )
++        np.testing.assert_allclose(
++            handoff_call["rig_linear_velocity_in_rig"],
++            expected_handoff_dynamics[0:3],
++        )
++
++        mock_controller.run_controller_and_vehicle.reset_mock()
++        rollout_state.step_context = StepContext(
++            step_start_us=2 * handoff_us,
++            target_time_us=3 * handoff_us,
++            force_gt=False,
++            driver_trajectory=simple_trajectory,
++        )
++        await ControllerEvent(
++            timestamp_us=2 * handoff_us,
++            control_timestep_us=handoff_us,
++            services=service_bundle,
++        ).run(rollout_state, EventQueue())
++        post_handoff_call = mock_controller.run_controller_and_vehicle.call_args.kwargs
++        assert post_handoff_call["coerce_dynamic_state"] is False
+ 
+     @pytest.mark.asyncio
+     async def test_controller_event_rejects_force_gt_trajectory_outside_step(
