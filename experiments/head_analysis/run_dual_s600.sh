@@ -19,6 +19,8 @@
 # Another slim arm on the same pinned scene lists: set CFG (a folder under the alpasim drivers dir), TAG (log
 # prefix) and OUT, e.g. the layer-0-keeping MoOP (plans/2026-10-29_l0keep-closedloop-s600.md):
 #   CFG=slim_dual_u40_l0keep_v2 TAG=l600 OUT=$PWD/outputs/alpasim_l0keep_s600 STAGE=smoke bash ...
+# On fewer cards, pass GPUS and lists whose `shard` column indexes that GPU list (SMOKE_CSV, MAIN_CSV), e.g. the
+# FM-only arm on GPUs 0-3 (plans/2026-10-29_traj-closedloop-s600.md).
 set -u
 STAGE=${STAGE:-smoke}
 CFG=${CFG:-slim_dual_u40_v2}
@@ -29,14 +31,17 @@ MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
 RUNS=/home/cvlab21/project/chan/alpasim-runs
 OUT=${OUT:-$REPO/outputs/alpasim_dual_s600}
 SCENES=$REPO/outputs/alpasim_dual_s600   # the shard-pinned scene lists, shared by every arm
-GPUS="0 1 2 3 4 5 6 7"
+GPUS=${GPUS:-0 1 2 3 4 5 6 7}
+SMOKE_CSV=${SMOKE_CSV:-$SCENES/scenes_smoke8.csv}
+MAIN_CSV=${MAIN_CSV:-$SCENES/scenes_d600.csv}
+N_SMOKE=$(($(wc -l < "$SMOKE_CSV") - 1))
 stamp() { echo "$(date -u '+%F %T') UTC $*"; }
 mkdir -p "$OUT"
 
 if [ "$STAGE" = smoke ]; then
-  PREFIX=${TAG}smoke_ CSV=$SCENES/scenes_smoke8.csv N=8 DONE="" EXTRA_SHARDS="" EXPECT=8
+  PREFIX=${TAG}smoke_ CSV=$SMOKE_CSV N=$N_SMOKE DONE="" EXTRA_SHARDS="" EXPECT=$N_SMOKE
 else
-  PREFIX=${TAG}_ CSV=$SCENES/scenes_d600.csv N=600 DONE=$RUNS/${TAG}smoke_merged_$CFG
+  PREFIX=${TAG}_ CSV=$MAIN_CSV N=600 DONE=$RUNS/${TAG}smoke_merged_$CFG
   EXTRA_SHARDS=${TAG}smoke_merged_$CFG EXPECT=600
   [ -f "$OUT/smoke.DONE" ] || { stamp "smoke stage not done"; exit 1; }
 fi
@@ -61,7 +66,7 @@ kill "$sampler"
 
 merged=${PREFIX}merged_$CFG
 "$REPO/.venv/bin/python" "$MERGE" --runs-root "$RUNS" \
-  --shards $(for i in 0 1 2 3 4 5 6 7; do echo "${PREFIX}${CFG}_sh$i"; done) $EXTRA_SHARDS \
+  --shards $(i=0; for g in $GPUS; do echo "${PREFIX}${CFG}_sh$i"; i=$((i + 1)); done) $EXTRA_SHARDS \
   --out "$merged" --expect-scenes "$EXPECT"
 rc=$?
 stamp "merged -> $RUNS/$merged (exit $rc)"
