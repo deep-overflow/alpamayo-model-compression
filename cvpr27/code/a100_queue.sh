@@ -5,6 +5,8 @@
 #   /bin/bash cvpr27/code/a100_queue.sh gate     # dense test2000 x4 + shard-0 rerun,
 #                                                         # dense OOD-val x2, LingoQA dense
 #   /bin/bash cvpr27/code/a100_queue.sh refs     # both MoOP arms, after the gate passes
+#   /bin/bash cvpr27/code/a100_queue.sh arm [--lingo] <arm> ...   # any arm in eval_a100.sbatch's
+#                                                         # MODEL table: test2000 x4 + OOD-val x2
 #   /bin/bash cvpr27/code/a100_queue.sh status
 #   /bin/bash cvpr27/code/a100_queue.sh stop     # workers exit after their current task
 #
@@ -44,6 +46,21 @@ case ${1:-status} in
     done
     for arm in moop moop_l0keep; do add lingo "$arm"; done
     ;;
+  arm)
+    shift
+    lingo=0
+    if [ "${1:-}" = "--lingo" ]; then lingo=1; shift; fi
+    [ $# -gt 0 ] || { echo "usage: a100_queue.sh arm [--lingo] <arm> ..." >&2; exit 2; }
+    for arm in "$@"; do
+      for s in 0 1 2 3; do add ol "$arm" test2000 "$s" 4; done
+    done
+    for arm in "$@"; do
+      for s in 0 1; do add ol "$arm" oodval "$s" 2; done
+    done
+    if [ "$lingo" = 1 ]; then
+      for arm in "$@"; do add lingo "$arm"; done
+    fi
+    ;;
   status)
     total=$(grep -cvE '^(#|$)' "$Q/tasks.txt" || true)
     claimed=$(find "$Q/claimed" -mindepth 1 -maxdepth 1 -type d | wc -l)
@@ -68,7 +85,7 @@ case ${1:-status} in
     echo "STOP set: every job started before now exits after its current tasks"
     ;;
   *)
-    echo "usage: a100_queue.sh gate|refs|status|stop" >&2
+    echo "usage: a100_queue.sh gate|refs|arm [--lingo] <arm>...|status|stop" >&2
     exit 2
     ;;
 esac
