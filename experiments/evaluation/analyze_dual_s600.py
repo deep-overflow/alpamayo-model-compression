@@ -17,8 +17,13 @@ rollout per scene, every scene on the same card in both arms:
 Reads rollout.asl for the CoC, so run it with alpasim's venv:
   /mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python experiments/evaluation/analyze_dual_s600.py
 Writes outputs/alpasim_dual_s600/{config.json, metrics.json, summary.txt, rollouts.parquet, *.png}.
+Any other pair of runs on the same pinned s600 lists takes --base/--arm (run names) with labels and --out; the
+before-the-fix reference only exists for dense vs MoOP, so other pairs pass --no-pre-fix, e.g.
+  ... --arm l600_merged_slim_dual_u40_l0keep_v2 --arm-label "MoOP l0keep" --out outputs/alpasim_l0keep_s600 \
+      --no-pre-fix
 """
 
+import argparse
 import asyncio
 import json
 import sys
@@ -37,8 +42,7 @@ sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
 import analyze_alpasim as AA
 
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
-BASE, DUAL = RUNS / "s600_merged_baseline", RUNS / "d600_merged_slim_dual_u40_v2"
-BOUT, OUT = REPO / "outputs" / "alpasim_dense_s600", REPO / "outputs" / "alpasim_dual_s600"
+BOUT = REPO / "outputs" / "alpasim_dense_s600"   # scene list, sampling cells and card per scene
 PRE = [("origin150", "m2601_merged_baseline", "m2601_merged_slim_dual_u40_v2"),
        ("hard100", "h100_merged_baseline", "h100_merged_slim_dual_u40_v2")]
 COLS = ["score", "score_dev", "passed", "progress_clipped_rel", "collision_any", "collision_at_fault", "offroad",
@@ -86,6 +90,16 @@ def pre_fix(rng, scenes):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", default="s600_merged_baseline")
+    ap.add_argument("--base-label", default="dense")
+    ap.add_argument("--arm", default="d600_merged_slim_dual_u40_v2")
+    ap.add_argument("--arm-label", default="MoOP")
+    ap.add_argument("--out", type=Path, default=REPO / "outputs" / "alpasim_dual_s600")
+    ap.add_argument("--no-pre-fix", action="store_true", help="skip the dense-vs-MoOP before-the-fix reference")
+    args = ap.parse_args()
+    BASE, ARM, OUT, A, B = RUNS / args.base, RUNS / args.arm, args.out, args.base_label, args.arm_label
+    OUT.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(0)
     sc = pd.read_csv(BOUT / "scenes_s600.csv")
     sc["cell"] = sc.sg_level.astype(str) + "/" + sc.hs_tertile
@@ -95,8 +109,8 @@ def main():
     sc = sc.merge(pd.read_csv(BOUT / "scene_gpu.csv")[["scene_id", "gpu", "arch"]], on="scene_id")
 
     print("reading rollouts", flush=True)
-    b, g0b = arm(BASE, "dense")
-    m, g0m = arm(DUAL, "MoOP")
+    b, g0b = arm(BASE, A)
+    m, g0m = arm(ARM, B)
     b.add_prefix("b_").join(m.add_prefix("m_")).to_parquet(OUT / "rollouts.parquet")
     d = sc.set_index("scene_id")
     for c in COLS + ["aborted"]:
@@ -107,16 +121,16 @@ def main():
 
     ab_b, ab_m = set(d.scene_id[d.b_aborted == True]), set(d.scene_id[d.m_aborted == True])
     res = {"n_scenes": len(d), "n_paired": int(d.d_score.notna().sum()), "G0_max": max(g0b, g0m),
-           "aborted_dense": sorted(ab_b), "aborted_moop": sorted(ab_m)}
+           "aborted_base": sorted(ab_b), "aborted_arm": sorted(ab_m)}
 
     est = {}
     for c in COLS:
         dd = d.dropna(subset=["d_" + c])
-        est[c] = {"dense": D.strat_boot(d, "b_" + c, rng), "moop": D.strat_boot(d, "m_" + c, rng),
+        est[c] = {"base": D.strat_boot(d, "b_" + c, rng), "arm": D.strat_boot(d, "m_" + c, rng),
                   "diff": D.strat_boot(d, "d_" + c, rng),
                   "wilcoxon_p": float(wilcoxon(dd["d_" + c]).pvalue) if (dd["d_" + c] != 0).any() else 1.0}
     keep = d[~d.scene_id.isin(ab_b | ab_m)]
-    est["score_no_aborted"] = {"dense": D.strat_boot(keep, "b_score", rng), "moop": D.strat_boot(keep, "m_score", rng),
+    est["score_no_aborted"] = {"base": D.strat_boot(keep, "b_score", rng), "arm": D.strat_boot(keep, "m_score", rng),
                                "diff": D.strat_boot(keep, "d_score", rng), "n": len(keep)}
     res["estimates"] = est
 
@@ -124,38 +138,39 @@ def main():
     for name, msk in (("origin150", d.origin150), ("hard100", d.hard100), ("rest", ~d.origin150 & ~d.hard100),
                       ("blackwell", d.arch == "Blackwell"), ("ada", d.arch == "Ada")):
         g = d[msk]
-        sub[name] = {"n": len(g), "dense": float(g.b_score.mean()), "moop": float(g.m_score.mean()),
+        sub[name] = {"n": len(g), "base": float(g.b_score.mean()), "arm": float(g.m_score.mean()),
                      "diff": D.boot(g.d_score, rng), "diff_progress": D.boot(g.d_progress_clipped_rel, rng)}
     res["subsets"] = sub
     res["arch_diff_of_diffs"] = (sub["blackwell"]["diff"][0] - sub["ada"]["diff"][0])
 
-    pf = pre_fix(rng, {"origin150": set(d.scene_id[d.origin150]), "hard100": set(d.scene_id[d.hard100])})
+    pf = {} if args.no_pre_fix else pre_fix(rng, {"origin150": set(d.scene_id[d.origin150]),
+                                                  "hard100": set(d.scene_id[d.hard100])})
     for name, v in pf.items():
         g = d.set_index("scene_id").loc[v.pop("scenes")]
         v["post_fix_same_scenes"] = {"dense": float(g.b_score.mean()), "moop": float(g.m_score.mean()),
                                      "diff": D.boot(g.d_score, rng)}
     res["pre_fix_reference"] = pf
 
-    cfg = {"dense": str(BASE), "moop": str(DUAL), "checkpoint": "slim_dual_u40_v2 (VLM -24.0%, layer 0 cut)",
+    cfg = {"base": str(BASE), "base_label": A, "arm": str(ARM), "arm_label": B,
            "scenes": str(BOUT / "scenes_s600.csv"), "rollouts_per_scene": 1,
            "cards": "each scene on the same card in both arms (outputs/alpasim_dense_s600/scene_gpu.csv)",
-           "bootstrap": D.NB, "plan": "plans/2026-10-28_dual-closedloop-s600.md"}
+           "bootstrap": D.NB}
     (OUT / "config.json").write_text(json.dumps(cfg, indent=1))
     (OUT / "metrics.json").write_text(json.dumps(res, indent=1, default=float))
 
     f = D.fmt
-    L = [f"MoOP vs dense, paired per scene: {res['n_paired']}/{res['n_scenes']} scenes; G0 max {res['G0_max']:.1e}",
-         (f"aborted dense {len(ab_b)}, MoOP {len(ab_m)}, both {len(ab_b & ab_m)}; MoOP only "
-         f"{sorted(s[7:15] for s in ab_m - ab_b)}; dense only {sorted(s[7:15] for s in ab_b - ab_m)}"),
-         "", "stratified over 912 scenes [95% CI]:       dense | MoOP | MoOP - dense (Wilcoxon p)",
-         *[f"  {k:22s} {f(v['dense'])} | {f(v['moop'])} | {f(v['diff'], sign=True)} (p={v['wilcoxon_p']:.2g})"
+    L = [f"{B} vs {A}, paired per scene: {res['n_paired']}/{res['n_scenes']} scenes; G0 max {res['G0_max']:.1e}",
+         (f"aborted {A} {len(ab_b)}, {B} {len(ab_m)}, both {len(ab_b & ab_m)}; {B} only "
+         f"{sorted(s[7:15] for s in ab_m - ab_b)}; {A} only {sorted(s[7:15] for s in ab_b - ab_m)}"),
+         "", f"stratified over 912 scenes [95% CI]:       {A} | {B} | {B} - {A} (Wilcoxon p)",
+         *[f"  {k:22s} {f(v['base'])} | {f(v['arm'])} | {f(v['diff'], sign=True)} (p={v['wilcoxon_p']:.2g})"
            for k, v in est.items() if "wilcoxon_p" in v],
-         (f"  {'score w/o aborted':22s} {f(est['score_no_aborted']['dense'])} | {f(est['score_no_aborted']['moop'])}"
+         (f"  {'score w/o aborted':22s} {f(est['score_no_aborted']['base'])} | {f(est['score_no_aborted']['arm'])}"
           f" | {f(est['score_no_aborted']['diff'], sign=True)} (n={est['score_no_aborted']['n']})"),
-         "", "subsets (plain means): dense | MoOP | score diff | progress diff",
-         *[f"  {k:10s} n={v['n']:3d}  {v['dense']:.3f} | {v['moop']:.3f} | {f(v['diff'], sign=True)} | "
+         "", f"subsets (plain means): {A} | {B} | score diff | progress diff",
+         *[f"  {k:10s} n={v['n']:3d}  {v['base']:.3f} | {v['arm']:.3f} | {f(v['diff'], sign=True)} | "
            f"{f(v['diff_progress'], sign=True)}" for k, v in sub.items()],
-         "", "before the hand-over fix (2 rollouts each) vs this run, same scenes: MoOP - dense",
+         *(["", "before the hand-over fix (2 rollouts each) vs this run, same scenes: MoOP - dense"] if pf else []),
          *[f"  {k:10s} n={v['n']:3d}  before {v['dense']:.3f} -> {v['moop']:.3f} {f(v['diff'], sign=True)} | after "
            f"{v['post_fix_same_scenes']['dense']:.3f} -> {v['post_fix_same_scenes']['moop']:.3f} "
            f"{f(v['post_fix_same_scenes']['diff'], sign=True)}" for k, v in pf.items()]]
@@ -177,7 +192,7 @@ def main():
         ax.text(c[2] + 0.005, y, f"{c[0]:+.3f}", va="center", fontsize=9, color=G.INK)
     ax.axvline(0, color=G.MUTED, linewidth=1)
     ax.set_yticks(range(len(rows)), [r[0] for r in rows][::-1])
-    ax.set_xlabel("closed-loop score, MoOP - dense (paired per scene, 95% CI)")
+    ax.set_xlabel(f"closed-loop score, {B} - {A} (paired per scene, 95% CI)")
     ax.grid(axis="x", color=G.GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     fig.tight_layout()

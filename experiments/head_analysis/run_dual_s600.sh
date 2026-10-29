@@ -15,22 +15,29 @@
 # removes this stage's containers and compose networks (user rule, 2026-10-19).
 #
 #   STAGE=smoke bash experiments/head_analysis/run_dual_s600.sh > outputs/alpasim_dual_s600/smoke.log 2>&1
+#
+# Another slim arm on the same pinned scene lists: set CFG (a folder under the alpasim drivers dir), TAG (log
+# prefix) and OUT, e.g. the layer-0-keeping MoOP (plans/2026-10-29_l0keep-closedloop-s600.md):
+#   CFG=slim_dual_u40_l0keep_v2 TAG=l600 OUT=$PWD/outputs/alpasim_l0keep_s600 STAGE=smoke bash ...
 set -u
 STAGE=${STAGE:-smoke}
-CFG=slim_dual_u40_v2
+CFG=${CFG:-slim_dual_u40_v2}
+TAG=${TAG:-d600}
 REPO=/home/cvlab21/project/chan/alpamayo-model-compression
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
 RUNS=/home/cvlab21/project/chan/alpasim-runs
-OUT=$REPO/outputs/alpasim_dual_s600
+OUT=${OUT:-$REPO/outputs/alpasim_dual_s600}
+SCENES=$REPO/outputs/alpasim_dual_s600   # the shard-pinned scene lists, shared by every arm
 GPUS="0 1 2 3 4 5 6 7"
 stamp() { echo "$(date -u '+%F %T') UTC $*"; }
+mkdir -p "$OUT"
 
 if [ "$STAGE" = smoke ]; then
-  PREFIX=d600smoke_ CSV=$OUT/scenes_smoke8.csv N=8 DONE="" EXTRA_SHARDS="" EXPECT=8
+  PREFIX=${TAG}smoke_ CSV=$SCENES/scenes_smoke8.csv N=8 DONE="" EXTRA_SHARDS="" EXPECT=8
 else
-  PREFIX=d600_ CSV=$OUT/scenes_d600.csv N=600 DONE=$RUNS/d600smoke_merged_$CFG
-  EXTRA_SHARDS=d600smoke_merged_$CFG EXPECT=600
+  PREFIX=${TAG}_ CSV=$SCENES/scenes_d600.csv N=600 DONE=$RUNS/${TAG}smoke_merged_$CFG
+  EXTRA_SHARDS=${TAG}smoke_merged_$CFG EXPECT=600
   [ -f "$OUT/smoke.DONE" ] || { stamp "smoke stage not done"; exit 1; }
 fi
 
