@@ -56,3 +56,24 @@
 - 브랜치 `traj-closedloop-s600` (main 기준)
 - 커밋 대상: `make_slim.py` trajfix, 실행 스크립트 GPU 인자, 게이트 스크립트(shard 수 가변), 계획서, 리포트
 - 끝나면 PR을 연다.
+
+## 6. 변경 (2026-10-29, 사용자 결정): 0번 층 보존 + 35번 층 가드
+
+- **바꾼 이유.** 위 판(`trajfix_u40_v2`)은 0번 층을 출하본처럼 자른다. 0번 층 Q head 선택은 기준과 무관하게 결과를 흔든다(10-13: 같은 레시피
+  8 arm의 test500 SD 0.337 → 0.015). FM-only와 MoOP의 기준 차이만 보려면 두 arm의 0번 층이 같아야 한다.
+  - 짝 비교 대상은 이미 돌린 MoOP 0번 층 보존판(`l600_merged_slim_dual_u40_l0keep_v2`)이다.
+  - 그러면 두 arm은 0번 층(둘 다 보존)과 35번 층(둘 다 CoC 기준)이 같고, 1–34번 층의 기준만 다르다.
+- **중단한 런.** `trajfix_u40_v2` 본 런은 12:47 UTC에 시작해 약 20분 만에 멈췄다.
+  - smoke 4씬과 본 런 shard 로그 폴더(`t600*_slim_trajfix_u40_v2*`)는 버린다. 레시피가 달라서다.
+- **체크포인트.** `make_slim.py --config trajfix_u40_l0keep_v2 --importance importance_v2` → `outputs/slim_trajfix_u40_l0keep_v2`.
+  - `traj_u40_l0keep_v2`(기존 FM-only 0번 층 보존 레시피)와 36개 층 중 35개가 같고, 35번 층만 다르다.
+  - 0번 층 Q는 32/32를 유지한다. 제거량은 2,657,447,936개로, MoOP 0번 층 보존판과 같다.
+  - 빌드 smoke 클립 CoC NLL: `traj_u40_l0keep_v2` 0.700 → 가드판 0.418.
+- **실행.**
+  - `CFG=slim_trajfix_u40_l0keep_v2 TAG=f600 OUT=outputs/alpasim_trajl0_s600`
+  - 씬 목록과 카드 배정은 위와 같다(GPU 0–3, 카드 종류 불일치 300씬).
+  - smoke → 게이트 → 본 런을 자동으로 이어 돌린다.
+- **분석.**
+  1. 주 비교: − MoOP 0번 층 보존판 (600씬, 같은 카드 300씬)
+  2. − dense
+  3. − 출하본 MoOP
