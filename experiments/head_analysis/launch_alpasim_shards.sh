@@ -28,7 +28,8 @@
 # Env:
 #   SUITE=public_2601        which suite the uuids must belong to
 #   PREFIX=m2601_            log-dir prefix, so a new scene set does not collide with the matrix
-#   SCENES_CSV=<path>        run an explicit (scene_id, uuid) list instead of the suite's first N
+#   SCENES_CSV=<path>        run an explicit (scene_id, uuid) list instead of the suite's first N;
+#                            an optional `shard` column (0..k-1) fixes each scene's card
 #   DRIVER_OMP_THREADS=8     worth 2.3x wall-clock; must not be mixed within one comparison
 #   ONLY_SHARDS="0 2"        run a subset while keeping the same k-way split
 #   DRY_RUN=1                write the shard suites and print the plan, launch nothing
@@ -106,11 +107,15 @@ if done_dir:
     for p in Path(done_dir, "rollouts").glob("*/*/metrics.parquet"):
         done.add(p.parent.parent.name)
 todo = rows[~rows.scene_id.isin(done)].reset_index(drop=True)
-# round-robin rather than contiguous blocks: scene cost varies with route length, so
-# interleaving keeps the shards equal in wall-clock, not just in count
+# A `shard` column pins each scene to the i-th card of the GPU list, so an arm can run every scene
+# on the same card as the run it is paired against. Without it: round-robin rather than contiguous
+# blocks, since scene cost varies with route length and interleaving keeps the shards equal in
+# wall-clock, not just in count.
+if "shard" in todo.columns and not todo["shard"].between(0, k - 1).all():
+    sys.exit(f"FATAL {scenes_csv}: shard 열은 0..{k - 1} 이어야 합니다 (GPU {k}장)")
 out, names = [], []
 for i in range(k):
-    part = todo.iloc[i::k].copy()
+    part = todo[todo["shard"] == i].copy() if "shard" in todo.columns else todo.iloc[i::k].copy()
     name = f"{suite}_{cfg}_sh{i}"
     part["test_suite_id"] = name
     out.append(part)
