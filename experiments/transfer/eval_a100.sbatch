@@ -22,9 +22,15 @@
 # which flock is not guaranteed to be (it depends on the mount's flock/localflock option), and
 # the queue is written from the Datamover while the workers read it on the compute node.
 #
-# The job ends once the queue has been empty with nothing running for IDLE_MAX seconds, or as
-# soon as queue/STOP exists. It holds the account's whole A100 quota while it runs, so no KISTI
-# training job can start -- `a100_queue.sh stop` when done rather than waiting out IDLE_MAX.
+# Several holders may drain one queue at once -- e.g. a short 2-card job submitted to catch a
+# backfill window next to the 4-card one (`sbatch --gres=gpu:2 --cpus-per-task=16 --mem=120G
+# --time=03:00:00 ...`). So everything per-run is keyed by job id: a claim records its owner,
+# and at start a job releases only claims whose owner is no longer running.
+#
+# A job ends once no line is left to claim and it has run nothing for IDLE_MAX seconds, or after
+# its current tasks once queue/STOP is newer than the job's start. It holds part or all of the
+# account's 4-A100 quota while it runs, so no KISTI training job can start -- `a100_queue.sh
+# stop` when done rather than waiting out IDLE_MAX.
 #
 # WHY every arm of an A100 table is measured here: same-card reruns are bit-identical, but A100
 # vs Ada moves dense by <=0.003 m and MoOP by up to 0.018 m minADE@6, and ~5% of clips change
@@ -50,16 +56,39 @@ IFS=, read -ra DEVS <<< "${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 
 stamp() { echo "$(date '+%F %T') $*"; }
 
-mkdir -p "$Q/claimed" "$Q/running"
-touch "$Q/tasks.txt" "$Q/done.log" "$Q/failed.log"
-rm -f "$Q/running/"* "$Q/STOP"
-# A claim without an `ok` line is from a job that died or a task that failed: release it, so
-# this job retries it (finished shards are skipped by their rows file anyway).
-for d in "$Q"/claimed/*; do
-  [ -d "$d" ] || continue
-  grep -q "ok   \[${d##*/}\]" "$Q/done.log" || rmdir "$d"
-done
-touch "$Q/heartbeat"
+JOB=${SLURM_JOB_ID:-local}
+RUN=$Q/running/$JOB
+HB=$Q/heartbeat_$JOB
+mkdir -p "$Q/claimed" "$RUN"
+touch "$Q/tasks.txt" "$Q/done.log" "$Q/failed.log" "$Q/started_$JOB" "$HB"
+# A claim without an `ok` line whose owner is not running is from a job that died (walltime, node
+# failure) or a task that failed: release it, so it is retried (finished shards are skipped by
+# their rows file anyway). Run at start and every 10 min while idle, so a sibling holder's dead
+# claims are picked up without waiting for a new job. A claim younger than 10 min with no owner
+# yet may be one another job is writing -- keep it. Without squeue, release nothing.
+release_stale() {
+  local live d owner
+  live=$(squeue -h -u "$USER" -t R -o %i 2>/dev/null) || return 1
+  for d in "$Q"/claimed/*; do
+    [ -d "$d" ] || continue
+    grep -q "ok   \[${d##*/}\]" "$Q/done.log" && continue
+    owner=$(cat "$d/job" 2>/dev/null || true)
+    if [ -z "$owner" ] && [ $(($(date +%s) - $(stat -c %Y "$d" 2>/dev/null || date +%s))) -lt 600 ]; then
+      continue
+    fi
+    if [ -z "$owner" ] || ! grep -qx "$owner" <<< "$live"; then
+      rm -f "$d/job"
+      rmdir "$d" 2>/dev/null || true
+    fi
+  done
+}
+release_stale || echo "squeue unavailable: stale claims are not released"
+
+# Stop claiming when less than CLAIM_MARGIN is left before the walltime: the longest task, one
+# 500-clip test2000 shard, takes ~1 h on A100. A task the walltime kills is released and retried.
+END_EPOCH=$(date -d "$(squeue -h -j "$JOB" -o %e 2>/dev/null)" +%s 2>/dev/null || echo 0)
+CLAIM_MARGIN=${CLAIM_MARGIN:-4500}
+near_end() { [ "$END_EPOCH" -gt 0 ] && [ $(($(date +%s) + CLAIM_MARGIN)) -gt "$END_EPOCH" ]; }
 
 {
   echo "job ${SLURM_JOB_ID:-?} on $(hostname) $(date -Is)"
@@ -75,9 +104,9 @@ print("torch", torch.__version__, "cuda", torch.version.cuda, "cudnn", torch.bac
 d = m.distribution("alpamayo1_5")
 print("alpamayo1_5", d.version, d.read_text("direct_url.json"))
 PY
-} > "$Q/env_${SLURM_JOB_ID:-local}.txt" 2>&1
-stamp "cards ${DEVS[*]} | idle exit ${IDLE_MAX}s | queue $Q"
-cat "$Q/env_${SLURM_JOB_ID:-local}.txt"
+} > "$Q/env_$JOB.txt" 2>&1
+stamp "job $JOB | cards ${DEVS[*]} | idle exit ${IDLE_MAX}s | queue $Q"
+cat "$Q/env_$JOB.txt"
 
 run_task() {  # <device> <kind> <args...>
   local dev=$1 kind=$2
@@ -126,6 +155,7 @@ claim_next() {  # prints "<line number> <task>" of the first unclaimed line, hav
     i=$((i + 1))
     case $line in '' | \#*) continue ;; esac
     if mkdir "$Q/claimed/$i" 2>/dev/null; then
+      echo "$JOB" > "$Q/claimed/$i/job"
       echo "$i $line"
       return 0
     fi
@@ -133,32 +163,40 @@ claim_next() {  # prints "<line number> <task>" of the first unclaimed line, hav
   return 1
 }
 
+# STOP applies to jobs that started before it was set, so a stale one cannot stop a new job
+stopped() { [ -e "$Q/STOP" ] && [ "$Q/STOP" -nt "$Q/started_$JOB" ]; }
+
 worker() {  # <k>
-  local k=$1 dev=${DEVS[$1]} got i task
-  while [ ! -e "$Q/STOP" ]; do
+  local k=$1 dev=${DEVS[$1]} got i task polls=0
+  while ! stopped; do
+    if near_end; then
+      stamp "card $k: under ${CLAIM_MARGIN}s to the walltime -- not claiming more"
+      return 0
+    fi
     if got=$(claim_next); then
       i=${got%% *}
       task=${got#* }
-      echo "$task" > "$Q/running/$k"
-      touch "$Q/heartbeat"
+      echo "$task" > "$RUN/$k"
+      touch "$HB"
       stamp "card $k (dev $dev) start [$i] $task"
       # shellcheck disable=SC2086  # the task line is split into words on purpose
       if run_task "$dev" $task; then
-        echo "$(date -Is) ok   [$i] card $k $task" >> "$Q/done.log"
+        echo "$(date -Is) ok   [$i] job $JOB card $k $task" >> "$Q/done.log"
         stamp "card $k done [$i] $task"
       else
-        echo "$(date -Is) FAIL [$i] card $k $task" >> "$Q/failed.log"
+        echo "$(date -Is) FAIL [$i] job $JOB card $k $task" >> "$Q/failed.log"
         stamp "card $k FAILED [$i] $task"
       fi
-      rm -f "$Q/running/$k"
-      touch "$Q/heartbeat"
+      rm -f "$RUN/$k"
+      touch "$HB"
       continue
     fi
-    if [ -z "$(ls -A "$Q/running")" ] \
-        && [ $(($(date +%s) - $(stat -c %Y "$Q/heartbeat"))) -ge "$IDLE_MAX" ]; then
-      stamp "card $k: queue empty and nothing running for ${IDLE_MAX}s -- exiting"
+    if [ -z "$(ls -A "$RUN")" ] && [ $(($(date +%s) - $(stat -c %Y "$HB"))) -ge "$IDLE_MAX" ]; then
+      stamp "card $k: nothing to claim and this job idle for ${IDLE_MAX}s -- exiting"
       return 0
     fi
+    polls=$((polls + 1))
+    if [ $((polls % 20)) -eq 0 ]; then release_stale || true; fi
     sleep 30
   done
   stamp "card $k: STOP"
@@ -166,4 +204,5 @@ worker() {  # <k>
 
 for k in "${!DEVS[@]}"; do worker "$k" & done
 wait
+rmdir "$RUN" 2>/dev/null || true
 stamp "done"

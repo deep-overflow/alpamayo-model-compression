@@ -49,17 +49,23 @@ case ${1:-status} in
     claimed=$(find "$Q/claimed" -mindepth 1 -maxdepth 1 -type d | wc -l)
     echo "tasks $total | claimed $claimed | ok $(grep -c ' ok ' "$Q/done.log" || true)" \
          "| failed $(grep -c FAIL "$Q/failed.log" || true)"
-    echo "running:"
-    for f in "$Q"/running/*; do [ -f "$f" ] && echo "  card ${f##*/}: $(cat "$f")"; done
+    echo "running (per job; a dead job's leftovers stay until cleaned):"
+    for f in "$Q"/running/*/*; do
+      [ -f "$f" ] || continue
+      j=${f%/*}
+      echo "  job ${j##*/} card ${f##*/}: $(cat "$f")"
+    done
     echo "last done:"
     tail -n 5 "$Q/done.log" | sed 's/^/  /'
     if [ -s "$Q/failed.log" ]; then echo "failed:"; sed 's/^/  /' "$Q/failed.log"; fi
-    [ -e "$Q/STOP" ] && echo "STOP is set"
-    echo "heartbeat $(date -r "$Q/heartbeat" '+%F %T' 2>/dev/null || echo none)"
+    [ -e "$Q/STOP" ] && echo "STOP set $(date -r "$Q/STOP" '+%F %T') (stops jobs started before it)"
+    for h in "$Q"/heartbeat_*; do
+      [ -e "$h" ] && echo "heartbeat ${h##*/heartbeat_}: $(date -r "$h" '+%F %T')"
+    done
     ;;
   stop)
     touch "$Q/STOP"
-    echo "STOP set: workers exit after their current task"
+    echo "STOP set: every job started before now exits after its current tasks"
     ;;
   *)
     echo "usage: a100_queue.sh gate|refs|status|stop" >&2
