@@ -97,6 +97,9 @@ def main():
     ap.add_argument("--arm-label", default="MoOP")
     ap.add_argument("--out", type=Path, default=REPO / "outputs" / "alpasim_dual_s600")
     ap.add_argument("--no-pre-fix", action="store_true", help="skip the dense-vs-MoOP before-the-fix reference")
+    ap.add_argument("--exclude", type=Path, default=None,
+                    help="CSV with a scene_id column: scenes left out of every estimate (e.g. ones the two arms "
+                         "ran on different card types)")
     args = ap.parse_args()
     BASE, ARM, OUT, A, B = RUNS / args.base, RUNS / args.arm, args.out, args.base_label, args.arm_label
     OUT.mkdir(parents=True, exist_ok=True)
@@ -118,6 +121,8 @@ def main():
     for c in COLS:
         d["d_" + c] = d["m_" + c] - d["b_" + c]
     d = d.reset_index()
+    excluded = set(pd.read_csv(args.exclude).scene_id) if args.exclude else set()
+    d = d[~d.scene_id.isin(excluded)].reset_index(drop=True)
 
     ab_b, ab_m = set(d.scene_id[d.b_aborted == True]), set(d.scene_id[d.m_aborted == True])
     res = {"n_scenes": len(d), "n_paired": int(d.d_score.notna().sum()), "G0_max": max(g0b, g0m),
@@ -154,7 +159,7 @@ def main():
     cfg = {"base": str(BASE), "base_label": A, "arm": str(ARM), "arm_label": B,
            "scenes": str(BOUT / "scenes_s600.csv"), "rollouts_per_scene": 1,
            "cards": "each scene on the same card in both arms (outputs/alpasim_dense_s600/scene_gpu.csv)",
-           "bootstrap": D.NB}
+           "bootstrap": D.NB, "excluded_scenes": sorted(excluded)}
     (OUT / "config.json").write_text(json.dumps(cfg, indent=1))
     (OUT / "metrics.json").write_text(json.dumps(res, indent=1, default=float))
 
