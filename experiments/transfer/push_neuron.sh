@@ -10,6 +10,8 @@
 #           resume   the whole run dir of $RESUME_RUNS, to continue an interrupted run
 #           minitron the Minitron KD set (train samples of kd_r1.parquet, ~55 GB), its
 #                    manifests and the width student's recipe (minitron/README.md)
+#           kd2      mtw24_kd2: train samples of kd_r5.parquet (~265 GB), the kd_sets manifests,
+#                    the width student's recipe and the LingoQA train images (7.9 GB)
 #           cosmos   the Cosmos-Reason2-8B safetensors, which `weights` skips
 #           oodval   the 262 OOD-val clips (1.5 GB). The `data` tier ships the whole
 #                    8.5 GB ood namespace because training needs its other half; this
@@ -22,6 +24,10 @@
 #                    this ONLY for a self-contained comparison whose reference arms are
 #                    re-measured on the same NEURON cards
 #                    (plans/2026-08-31_znorm11-neuron-eval.md).
+#           a100eval the A100 open-loop track: test_2000 + OOD-val 262 caches, their
+#                    manifests, the $A100_RECIPES recipes and the track's own scripts --
+#                    not the code tree (cvpr27/plans/2026-10-29_kisti-a100-openloop.md).
+#                    Pair with `lingoqa weights` for the LingoQA arm and the base model.
 #   LIST_ONLY=1 prints what would move, with byte totals, contacting nothing.
 #
 # NEURON authenticates with OTP, so open ONE multiplexed connection first and every
@@ -64,6 +70,7 @@ RESUME_RUNS=${RESUME_RUNS-recover_coc_u55}
 LINGO_DATA=${LINGO_DATA-$SRC/data/lingoqa}
 LINGO_BENCH=${LINGO_BENCH-/home/cvlab21/project/chan/LingoQA/benchmark}
 TRAIN_CONFIGS=${TRAIN_CONFIGS-}   # empty = every slim_* recipe (51 of them, 160 MB)
+A100_RECIPES=${A100_RECIPES-slim_dual_u40_v2 slim_dual_u40_l0keep_v2}
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -195,6 +202,36 @@ if has oodval; then
       "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
 fi
 
+if has a100eval; then
+  # Every arm of an A100 table is measured on NEURON, so the reported sets travel. The code tree
+  # does not: NEURON keeps the tree the last `code` push left (the kd2 run's), which KD jobs rely
+  # on, and run_baseline / LingoQA are the same there -- only this track's scripts are overlaid.
+  step "test_2000 + OOD-val 262 caches -> $SCRATCH/datasets/physicalai_av/pre_processed"
+  # namespaces follow run_baseline: `test` for --set test, `ood` for --set ood
+  : > "$TMP/a100.txt"
+  sample_list test "$OUT/eval_sets/test_2000.parquet" >> "$TMP/a100.txt"
+  sample_list ood "$OUT/eval_sets/ood_val.parquet" >> "$TMP/a100.txt"
+  echo "  $(wc -l < "$TMP/a100.txt") files, $(total_of "$PRE" "$TMP/a100.txt")"
+  # --ignore-existing: an npz never changes under its name, and test_500 may already be there
+  run "${RSYNC[@]}" --ignore-existing --files-from="$TMP/a100.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+
+  step "manifests + recipes ($A100_RECIPES) -> $SCRATCH/outputs"
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/outputs/eval_sets $SCRATCH/outputs/cvpr27/a100/queue"
+  run "${RSYNC[@]}" "$OUT/eval_sets/test_2000.parquet" "$OUT/eval_sets/ood_val.parquet" \
+      "$HOST:$SCRATCH/outputs/eval_sets/"
+  # selection-only recipes: load_slim rebuilds the weights from the base checkpoint
+  # shellcheck disable=SC2086
+  recipe_list $A100_RECIPES > "$TMP/a100_recipes.txt"
+  echo "  $(grep -c 'slim_meta.json$' "$TMP/a100_recipes.txt") recipes, $(total_of "$OUT" "$TMP/a100_recipes.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/a100_recipes.txt" "$OUT/" "$HOST:$SCRATCH/outputs/"
+
+  step "A100 track scripts -> $SCRATCH/project/alpamayo-model-compression"
+  REPO_WT=$(cd "$HERE/../.." && pwd)
+  ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative ./cvpr27/code/eval_a100.sbatch \
+      ./cvpr27/code/a100_queue.sh "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
+fi
+
 if has lingoqa; then
   step "LingoQA val set -> $SCRATCH/datasets/lingoqa"
   # images/ is the unpacked images.zip; sending both would double the volume for
@@ -248,6 +285,28 @@ if has minitron; then
   run "${RSYNC[@]}" "$OUT/minitron/kd_sets" "$HOST:$SCRATCH/outputs/minitron/"
   run "${RSYNC[@]}" "$OUT/minitron/slim_mtw24/slim_meta.json" \
       "$HOST:$SCRATCH/outputs/minitron/slim_mtw24/"
+fi
+
+if has kd2; then
+  # mtw24_kd2 (minitron/plans/2026-10-26_kisti-training-plan.md): every kd_r5 window's sample,
+  # the kd_sets manifests (kd_r5, held-out clips, LingoQA QA), the width student's recipe, and
+  # the LingoQA train images the VQA half reads -- the whole image tree (3,508 segments,
+  # 7.9 GB) rather than a list, so the held-out segments come along too.
+  step "mtw24_kd2 set -> $SCRATCH/datasets/physicalai_av/pre_processed + outputs/minitron"
+  # --ignore-existing: an npz never changes under its name, and NEURON already holds about half of
+  # kd_r5 from an earlier set -- same bytes, other mtimes, which plain -a would re-checksum
+  sample_list train "$OUT/minitron/kd_sets/kd_r5.parquet" > "$TMP/kd5.txt"
+  echo "  $(wc -l < "$TMP/kd5.txt") samples, $(total_of "$PRE" "$TMP/kd5.txt")"
+  run "${RSYNC[@]}" --ignore-existing --files-from="$TMP/kd5.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+  run ssh "${SSH_OPTS[@]}" "$HOST" \
+      "mkdir -p $SCRATCH/outputs/minitron/slim_mtw24 $SCRATCH/datasets/lingoqa/train/images"
+  run "${RSYNC[@]}" "$OUT/minitron/kd_sets" "$HOST:$SCRATCH/outputs/minitron/"
+  run "${RSYNC[@]}" "$OUT/minitron/slim_mtw24/slim_meta.json" \
+      "$HOST:$SCRATCH/outputs/minitron/slim_mtw24/"
+  step "LingoQA train images -> $SCRATCH/datasets/lingoqa/train/images/train"
+  echo "  $(du -sh --apparent-size "$LINGO_DATA/train/images/train" | cut -f1)"
+  run "${RSYNC[@]}" "$LINGO_DATA/train/images/train" "$HOST:$SCRATCH/datasets/lingoqa/train/images/"
 fi
 
 if has resume; then

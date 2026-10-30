@@ -50,6 +50,9 @@ Configs:
                       losses, each z-scored within a layer and averaged (1/11 each). Needs
                       --stepvlm (per-step VLM gradients). Kept set overlaps dual's by
                       87-88%. plans/2026-08-31_znorm11-criterion.md.
+  trajfix_u40_v2   -- FM-only (traj_u40_v2) except in a layer whose I_traj is constant -- the last
+                      one, which has no path to the expert's KV cache -- where I_CoC decides
+                      instead of argsort's tie order. plans/2026-10-29_traj-closedloop-s600.md.
   dualv3_u40_v2    -- depth-aware dual: max(rank I_traj, rank I_CoC) in layers 0-21, rank
                       I_CoC ALONE in layers 22-35 (plans/2026-09-25_depth-aware-dual.md).
                       Same budget, allocation, expert and KV as dual_u40_v2; its late
@@ -817,7 +820,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
                  "dualprod": ("traj", "coc"),
-                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(
+                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",), "trajfix": ("traj",)}.get(
                      "dual" if fm else stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
@@ -868,6 +871,19 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             cq, cm = half("coc")
             sq[DEPTH_CUT:] = rank(cq)[DEPTH_CUT:]
             sm[DEPTH_CUT:] = rank(cm)[DEPTH_CUT:]
+        if stem == "trajfix":
+            # FM-only with the degenerate-layer guard (plans/2026-10-29_traj-closedloop-s600.md): the
+            # trajectory score alone, except in a layer where it is constant -- the VLM's last layer,
+            # whose o_proj / down_proj never reach the KV cache the expert reads -- where traj_u40_v2
+            # keeps whatever argsort's tie order leaves (Q heads 13-31). There the CoC score decides.
+            # Every other layer is traj_u40_v2's unit for unit.
+            cq, cm = half("coc")
+            flat_q, flat_m = np.ptp(sq, axis=1) == 0, np.ptp(sm, axis=1) == 0
+            sq, sm = sq.copy(), sm.copy()
+            sq[flat_q] = rank(cq)[flat_q]
+            sm[flat_m] = rank(cm)[flat_m]
+            print(f"trajfix: CoC score decides layers Q {np.flatnonzero(flat_q).tolist()} "
+                  f"MLP {np.flatnonzero(flat_m).tolist()}")
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)
