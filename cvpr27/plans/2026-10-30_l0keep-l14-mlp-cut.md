@@ -1,6 +1,6 @@
 # MoOP l0keep + VLM 1–4번 층 MLP channel 추가 제거
 
-날짜: 2026-10-30. 상태: **승인됨(2026-10-30): 추가 제거, 층별 질량 기준 95 / 90 / 80% 유지(`dual_u40_l0keep_l14m{95,90,80}_v2`), test_2000 + OOD-Val262 + LingoQA, MoOP l0keep과 짝 비교.** 브랜치 `cvpr27-l0keep-l14-mlp`(PR #96 브랜치에서 분기).
+날짜: 2026-10-30. 상태: **완료(2026-10-30 20:39 KST, 리포트 `cvpr27/reports/2026-10-30_l0keep-l14-mlp-cut.md`). 승인 내용: 추가 제거, 층별 질량 기준 95 / 90 / 80% 유지(`dual_u40_l0keep_l14m{95,90,80}_v2`), test_2000 + OOD-Val262 + LingoQA, MoOP l0keep과 짝 비교.** 브랜치 `cvpr27-l0keep-l14-mlp`(PR #96 브랜치에서 분기).
 근거 보고서: `cvpr27/reports/2026-10-29_vlm-mlp-layer-concentration.md`.
 
 ## 1. 목적과 가설

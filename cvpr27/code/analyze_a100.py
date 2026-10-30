@@ -340,7 +340,8 @@ def table(out, a100):
         arms = [a for a in ARMS if f"{a}/{set_name}" in res["open_loop"]]
         vals = [res["open_loop"][f"{a}/{set_name}"]["minADE6_6.4s"] for a in arms]
         ax.bar(range(len(arms)), vals, color=[COLORS[a] for a in arms], width=0.6)
-        ax.set_xticks(range(len(arms)), [a.replace("_l0keep", "\nl0keep") for a in arms])
+        ax.set_xticks(range(len(arms)), [a.replace("l0keep_", "l0keep\n").replace("_l0keep", "\nl0keep")
+                                         for a in arms])
         for i, v in enumerate(vals):
             ax.text(i, v, f"{v:.3f}", ha="center", va="bottom", fontsize=9)
         ax.set_title(f"{set_name} (A100)")

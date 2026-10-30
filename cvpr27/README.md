@@ -40,6 +40,7 @@ ln -s /mnt/nvme1n1/ad_vla/outputs/chan/cvpr27 cvpr27/outputs
 | 날짜 | 주제 | 리포트 | 코드 | 상태 |
 |---|---|---|---|---|
 | 2026-10-29 | VLM MLP 중요도 편중의 층별 분해 — 1–4번 층만 expert처럼 편중, 나머지는 평평 | [리포트](reports/2026-10-29_vlm-mlp-layer-concentration.md) | `code/analyze_layer_concentration.py` | 완료 (CPU, 저장된 중요도) |
+| 2026-10-30 | MoOP l0keep + VLM 1–4번 층 MLP 추가 제거(층별 질량 95/90/80%, A100) — 주행 +0.006/+0.010/+0.016, LingoQA −3.6/−4.0/−6.0 pp(MoOP l0keep 대비) → 사전 등록 기준 "공짜" 아님 | [리포트](reports/2026-10-30_l0keep-l14-mlp-cut.md) · [계획](plans/2026-10-30_l0keep-l14-mlp-cut.md) | `experiments/head_analysis/make_slim.py`(`_l14m<XX>`) | 완료 (약 15 A100-시간) |
 | 2026-10-30 | A100 FM-only·CE-only(0번 층 Q 보존) — test_2000에서 MoOP l0keep 대비 FM-only +0.034*, CE-only +0.085*; LingoQA FM-only −27.2 pp*, CE-only −5.0 pp* | [리포트](reports/2026-10-30_a100-fm-ce-only.md) · [계획](plans/2026-10-29_a100-fm-ce-only.md) | `experiments/head_analysis/make_slim.py`(`trajlastcoc`), `code/a100_queue.sh arm` | 완료 (약 10 A100-시간) |
 | 2026-10-29 | KISTI A100 개루프 트랙 — dense·MoOP·MoOP l0keep을 A100에서 test_2000·OOD-Val·LingoQA로 재측정(Ada 표와 섞지 않음) | [리포트](reports/2026-10-29_kisti-a100-openloop.md) · [계획](plans/2026-10-29_kisti-a100-openloop.md) | `code/eval_a100.sbatch`, `code/a100_queue.sh`, `code/a100_pull.sh`, `code/analyze_a100.py` | 완료 (게이트 PASS, 18 A100-시간) |
 | 2026-10-29 | VLM MLP 1–4번 층 추가 절단 (l0keep 위 +2.7%p) — 손실 검증 → 개루프 → 폐루프 | [계획서](plans/2026-10-29_early-mlp-cut.md) | `code/make_early_mlp_masks.py` 외 | ① 완료 (FM FREE, NLL INCONCLUSIVE), ② 이 서버에서 중단 — 개루프·폐루프는 다른 세션에서 |
