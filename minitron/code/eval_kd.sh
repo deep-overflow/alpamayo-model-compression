@@ -1,8 +1,9 @@
 #!/bin/bash
 # Evaluate a train_kd run once it finishes (plan section 5, D10-2), all on Ada 4-7:
-#   1. val500 (the selection set, not reported) for every epoch checkpoint; epoch 0 = the
-#      zero-shot MT-W rows already stored
-#   2. select_ckpt.py: lowest val500 mean minADE@6 among the epoch checkpoints
+#   1. val500 (the selection set, not reported) for every checkpoint in $CKPTS (default the three
+#      epoch checkpoints; mtw24_kd2 saves ckpt_q25 .. ckpt_q100); the zero-shot MT-W rows already
+#      stored are the reference
+#   2. select_ckpt.py: lowest val500 mean minADE@6 among those checkpoints
 #   3. one queue per card, card k running shard k/4 of: the selected checkpoint on test_2000
 #      and OOD-Val262 (the reported sets), then the reference arms (dense, MoOP, zero-shot
 #      MT-W) on the 1,500 test clips added to test500 -- skipped where their rows already
@@ -11,8 +12,12 @@
 #   4. LingoQA judge, paired readouts -> outputs/minitron/<exp>_eval/
 #
 #   nohup bash minitron/code/eval_kd.sh [exp] > outputs/minitron/<exp>_eval.log 2>&1 &
+#   CKPTS="ckpt_q25 ckpt_q50 ckpt_q75 ckpt_q100" nohup bash minitron/code/eval_kd.sh mtw24_kd2 ...
+# A run trained on NEURON is pulled back (checkpoints + summary.txt) before this starts.
 set -u
 EXP=${1:-mtw24_kd}
+CKPTS=${CKPTS:-ckpt_epoch1 ckpt_epoch2 ckpt_epoch3}
+TRIES=${TRIES:-3}  # launcher attempts per run, 60 s apart: raise it when the Ada cards are shared
 ZS=${ZS:-outputs/minitron/slim_mtw24}
 ZS_ARM=${ZS_ARM:-mtw24_zs}
 MOOP=${MOOP:-outputs/slim_dual_u40_v2}
@@ -46,19 +51,22 @@ ol() {  # <card k> <model> <exp-id> <rows tag> <log name> <run_baseline args...>
     stamp "skip $exp shard $k (rows exist)"
     return
   fi
-  bash "$RETRY" 3 experiments/evaluation/run_baseline.py --model "$model" --exp-id "$exp" \
+  bash "$RETRY" "$TRIES" experiments/evaluation/run_baseline.py --model "$model" --exp-id "$exp" \
     --shard "$k" --n-shards 4 --gpu $((4 + k)) "$@" > "$LOG/${name}_s${k}.log" 2>&1
 }
 select_queue() {  # <card k>
-  for e in 1 2 3; do
-    ol "$1" "outputs/minitron/$EXP/ckpt_epoch$e" "minitron/${EXP}_val_e$e" "ckpt_epoch$e" "val_e$e" \
-      --set indist
+  local c s
+  for c in $CKPTS; do
+    s=${c#ckpt_}
+    s=${s/epoch/e}  # ckpt_epoch1 -> e1 (the stored mtw24_kd runs), ckpt_q25 -> q25
+    ol "$1" "outputs/minitron/$EXP/$c" "minitron/${EXP}_val_$s" "$c" "val_$s" --set indist
   done
 }
 for k in 0 1 2 3; do select_queue "$k" & done
 wait
-stamp "val500 for every epoch done"
-$PY minitron/code/select_ckpt.py --exp "$EXP" --zs-arm "$ZS_ARM" > "$LOG/select.txt" 2>&1 \
+stamp "val500 for every checkpoint done"
+# shellcheck disable=SC2086
+$PY minitron/code/select_ckpt.py --exp "$EXP" --zs-arm "$ZS_ARM" --ckpts $CKPTS > "$LOG/select.txt" 2>&1 \
   || { cat "$LOG/select.txt"; exit 1; }
 SEL=$(cat "outputs/minitron/${EXP}_select/selected.txt")
 stamp "selected $SEL"
@@ -67,10 +75,10 @@ queue() {  # <card k>
   local k=$1 sel_tag
   sel_tag=$(basename "$SEL")
   if [ "$k" = 3 ]; then
-    bash "$RETRY" 3 experiments/lingoqa/run_lingo_vqa.py --arm "$SEL" \
+    bash "$RETRY" "$TRIES" experiments/lingoqa/run_lingo_vqa.py --arm "$SEL" \
       --exp-id "minitron/lingo_vqa_$EXP" --gpu 7 > "$LOG/lingo_$EXP.log" 2>&1
     [ -f "outputs/minitron/lingo_vqa_$ZS_ARM/rows.json" ] \
-      || bash "$RETRY" 3 experiments/lingoqa/run_lingo_vqa.py --arm "$ZS" \
+      || bash "$RETRY" "$TRIES" experiments/lingoqa/run_lingo_vqa.py --arm "$ZS" \
            --exp-id "minitron/lingo_vqa_$ZS_ARM" --gpu 7 > "$LOG/lingo_$ZS_ARM.log" 2>&1
   fi
   ol "$k" "$SEL" "minitron/${EXP}_test" "$sel_tag" test --set test --n-indist 2000
@@ -83,7 +91,7 @@ for k in 0 1 2 3; do queue "$k" & done
 wait
 stamp "open loop + LingoQA answers done"
 
-bash "$RETRY" 3 experiments/lingoqa/score_lingo_vqa.py \
+bash "$RETRY" "$TRIES" experiments/lingoqa/score_lingo_vqa.py \
   --runs "minitron/lingo_vqa_$EXP" "minitron/lingo_vqa_$ZS_ARM" \
   --exp-id "minitron/lingo_vqa_scores_$EXP" --gpu 4,5,6,7 > "$LOG/lingo_score.log" 2>&1
 $PY experiments/lingoqa/analyze_lingo.py \

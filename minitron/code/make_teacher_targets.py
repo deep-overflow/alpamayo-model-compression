@@ -118,7 +118,7 @@ def main():
 
     pool = ThreadPoolExecutor(4)
     t0 = time.time()
-    for k, raws in enumerate(tk.batches(rows, args.batch, pool)):
+    for k, raws in enumerate(tk.batches(rows, args.batch, pool, tk.load_raw)):
         chunk = rows.iloc[k * args.batch : (k + 1) * args.batch]
         run(teacher, processor, tok, list(chunk.itertuples()), raws, args.epochs, args.max_coc)
         done = min((k + 1) * args.batch, len(rows))
