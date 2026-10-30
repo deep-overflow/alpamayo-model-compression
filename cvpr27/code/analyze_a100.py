@@ -35,7 +35,8 @@ REPO = Path(__file__).resolve().parents[2]
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
           "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100",
-          "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e"}
+          "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e",
+          "lp_m24": "#8a5cc2", "lp_r50": "#c2a5e6"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -50,10 +51,16 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         "ce_only_l0keep": "slim_coc_u40_l0keep_v2",
         "l0keep_l14m95": "slim_dual_u40_l0keep_l14m95_v2",
         "l0keep_l14m90": "slim_dual_u40_l0keep_l14m90_v2",
-        "l0keep_l14m80": "slim_dual_u40_l0keep_l14m80_v2"}
-# arms built on moop_l0keep are also paired with it
-REFS = {"fm_only_l0keep": "moop_l0keep", "ce_only_l0keep": "moop_l0keep",
-        "l0keep_l14m95": "moop_l0keep", "l0keep_l14m90": "moop_l0keep", "l0keep_l14m80": "moop_l0keep"}
+        "l0keep_l14m80": "slim_dual_u40_l0keep_l14m80_v2",
+        # LLM-Pruner: budget matched to MoOP exactly, and soowon's original 24.99% arm
+        # (cvpr27/plans/2026-10-30_llm-pruner-budget-matched.md)
+        "lp_m24": "slim_lp_m24",
+        "lp_r50": "slim_lp_r50"}
+# arms are also paired with the MoOP(s) they are built on or compared against
+REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
+        "l0keep_l14m95": ["moop_l0keep"], "l0keep_l14m90": ["moop_l0keep"],
+        "l0keep_l14m80": ["moop_l0keep"],
+        "lp_m24": ["moop", "moop_l0keep"], "lp_r50": ["moop", "moop_l0keep"]}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]
@@ -254,10 +261,11 @@ def table(out, a100):
             if arm == "dense" or base is None or (arm, set_name) not in rows:
                 continue
             res["paired_vs_dense"][f"{arm}/{set_name}"] = paired(rows[(arm, set_name)], base, ids)
-        for arm, ref in REFS.items():
-            if (arm, set_name) in rows and (ref, set_name) in rows:
-                p = paired(rows[(arm, set_name)], rows[(ref, set_name)], ids)
-                res["paired_vs_ref"][f"{arm}/{set_name}"] = {"ref": ref, **p}
+        for arm, refs in REFS.items():
+            for ref in refs:
+                if (arm, set_name) in rows and (ref, set_name) in rows:
+                    p = paired(rows[(arm, set_name)], rows[(ref, set_name)], ids)
+                    res["paired_vs_ref"][f"{arm}/{set_name}/{ref}"] = {"ref": ref, **p}
 
     def lingo_delta(v, base):
         """Paired accuracy difference per question, CI resampling the 100 segments."""
@@ -274,10 +282,11 @@ def table(out, a100):
         if arm != "dense" and lq["dense"] is not None:
             n, dm, dci = lingo_delta(v, lq["dense"])
             e.update({"n_paired": n, "delta": dm, "delta_ci": dci})
-        ref = REFS.get(arm)
-        if ref is not None and lq.get(ref) is not None:
-            _, dm, dci = lingo_delta(v, lq[ref])
-            e.update({"ref": ref, "delta_ref": dm, "delta_ref_ci": dci})
+        e["vs_ref"] = {}
+        for ref in REFS.get(arm, []):
+            if lq.get(ref) is not None:
+                _, dm, dci = lingo_delta(v, lq[ref])
+                e["vs_ref"][ref] = {"delta": dm, "delta_ci": dci}
         res["lingoqa"][arm] = e
 
     md = ["# A100 (KISTI NEURON) open-loop table", "",
@@ -307,7 +316,7 @@ def table(out, a100):
                "| set | arm | vs | n | delta minADE@6 | median | delta minFDE@6 | median |",
                "|---|---|---|---|---|---|---|---|"]
         for key, p in res["paired_vs_ref"].items():
-            arm, set_name = key.split("/")
+            arm, set_name, _ = key.split("/")
             a_lo, a_hi = p["delta_minADE6_ci"]
             f_lo, f_hi = p["delta_minFDE6_ci"]
             md.append(f"| {set_name} | {arm} | {p['ref']} | {p['n']} | {p['delta_minADE6']:+.3f} "
@@ -322,7 +331,7 @@ def table(out, a100):
 
         for arm, e in res["lingoqa"].items():
             dlt = pp(e["delta"], e["delta_ci"]) if "delta" in e else "--"
-            dref = f"{pp(e['delta_ref'], e['delta_ref_ci'])} vs {e['ref']}" if "delta_ref" in e else "--"
+            dref = "; ".join(f"{pp(d['delta'], d['delta_ci'])} vs {r}" for r, d in e["vs_ref"].items()) or "--"
             md.append(f"| {arm} | {e['accuracy']:.1%} | {dlt} | {dref} |")
 
     dst = a100 / "table"

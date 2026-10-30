@@ -502,5 +502,7 @@ def summary_text(cfg, meta):
         f"{p['pct_of_text_layers']:.2f}% of text layers)\n"
         f"per layer: -{plan['heads_dropped_per_layer']} heads, "
         f"-{plan['mlp_dropped_per_layer']} mlp channels\n"
-        f"smoke coc_len={meta['smoke']['coc_len']}\n"
+        + (f"plus 1 mlp channel in layers {plan['mlp_extra_layers']}\n"
+           if plan.get("mlp_extra_layers") else "")
+        + f"smoke coc_len={meta['smoke']['coc_len']}\n"
     )

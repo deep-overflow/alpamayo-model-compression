@@ -90,6 +90,17 @@ def main():
     ap.add_argument("--reserve-gb", type=float, default=30.0)
     ap.add_argument("--gpu", default=None)
     ap.add_argument("--no-save", action="store_true", help="build and smoke only")
+    # PORT: budget matching and selection-only output (cvpr27/plans/2026-10-30_llm-pruner-budget-matched.md)
+    ap.add_argument("--mlp-extra-layers", type=int, default=0,
+                    help="drop ONE more MLP channel -- the next by score -- in the first K layers of "
+                         "the scope. Uniform per-layer counts move the total in steps of "
+                         "layers x 12,288 params; this hits a target in between (e.g. MoOP's exact "
+                         "2,657,452,032 = qhead:15,mlp:5928 + 24 extra)")
+    ap.add_argument("--expect-removed", type=int, default=None,
+                    help="refuse to build unless the planned removal equals this many params")
+    ap.add_argument("--no-state", action="store_true",
+                    help="write slim_meta.json only (load_slim rebuilds the weights from the base "
+                         "checkpoint); skips the 16.6 GB slim_state.pt")
     args = ap.parse_args()
 
     if (args.ratio is None) == (args.units is None):
@@ -156,6 +167,19 @@ def main():
     else:
         vq, vm, plan = lp.keep_masks_for_ratio(q_scores, mlp_scores, args.ratio, scope, geom)
     expected = lp.removed_params(plan, geom)
+    if args.mlp_extra_layers:
+        # PORT: one more channel in the first K scope layers, taken from the same stable order
+        # keep_masks_for_units used, so each of those layers drops exactly its next-lowest unit
+        if not 0 < args.mlp_extra_layers <= len(scope):
+            raise SystemExit(f"--mlp-extra-layers must be in 1..{len(scope)}")
+        n_mlp = plan["mlp_dropped_per_layer"]
+        extra = list(scope)[:args.mlp_extra_layers]
+        for li in extra:
+            vm[li, np.argsort(mlp_scores[li], kind="stable")[n_mlp]] = 0.0
+        plan["mlp_extra_layers"] = [int(li) for li in extra]
+        expected += len(extra) * lp.group_param_cost(geom)["mlp"]
+    if args.expect_removed is not None and expected != args.expect_removed:
+        raise SystemExit(f"planned removal {expected:,} != --expect-removed {args.expect_removed:,}")
     print(f"budget={args.units or f'ratio={args.ratio}'}: "
           f"{plan['heads_dropped_per_layer']}/{geom['n_heads']} heads and "
           f"{plan['mlp_dropped_per_layer']}/{geom['intermediate']} MLP ch per layer "
@@ -197,7 +221,7 @@ def main():
         return
     out_dir.mkdir(parents=True, exist_ok=True)
     t1 = time.time()
-    sl.save_slim(model, meta, out_dir)
+    sl.save_slim(model, meta, out_dir, write_state=not args.no_state)
     (out_dir / "config.json").write_text(json.dumps(meta["config"] | meta["params"], indent=2))
     # interpolate from meta["params"] rather than recomputing: the two drifted apart once
     # already (lp_r10/r20/r24/r50 shipped a summary.txt whose text-layer denominator

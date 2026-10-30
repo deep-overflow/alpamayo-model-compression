@@ -54,6 +54,9 @@ declare -A MODEL=(
   [l0keep_l14m95]=outputs/cvpr27/slim_dual_u40_l0keep_l14m95_v2
   [l0keep_l14m90]=outputs/cvpr27/slim_dual_u40_l0keep_l14m90_v2
   [l0keep_l14m80]=outputs/cvpr27/slim_dual_u40_l0keep_l14m80_v2
+  # LLM-Pruner (cvpr27/plans/2026-10-30_llm-pruner-budget-matched.md): MoOP-matched and original r=0.5
+  [lp_m24]=outputs/cvpr27/slim_lp_m24
+  [lp_r50]=outputs/cvpr27/slim_lp_r50
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
