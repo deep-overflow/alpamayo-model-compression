@@ -122,15 +122,16 @@ run_task() {  # <device> <kind> <args...>
     ol)
       local arm=$1 set_name=$2 shard=$3 n=$4 suffix=${5:-}
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=cvpr27/a100/${arm}_${set_name}${suffix:+_$suffix} set_args tag
+      local exp=cvpr27/a100/${arm}_${set_name}${suffix:+_$suffix} set_args
       case $set_name in
         test2000) set_args=(--set test --n-indist 2000) ;;
         oodval) set_args=(--set ood --manifest ood_val) ;;
         *) echo "unknown set $set_name"; return 2 ;;
       esac
-      tag=$([ "$model" = baseline ] && echo baseline || basename "$model")
-      if [ -f "outputs/$exp/${tag}_s${shard}of${n}.json" ]; then
-        stamp "skip: outputs/$exp/${tag}_s${shard}of${n}.json exists"
+      # run_baseline rewrites its rows file every 10 clips, so a killed task leaves a partial
+      # one; only the summary file, written once at the very end, means the shard is done
+      if [ -f "outputs/$exp/summary_s${shard}of${n}.txt" ]; then
+        stamp "skip: outputs/$exp/summary_s${shard}of${n}.txt exists"
         return 0
       fi
       CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/evaluation/run_baseline.py \
@@ -141,7 +142,8 @@ run_task() {  # <device> <kind> <args...>
     lingo)
       local arm=$1
       local model=${MODEL[$arm]:?unknown arm $arm}
-      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_$arm/rows.json" ]; then
+      # rows.json is rewritten every 25 answers; predictions.csv is written once at the end
+      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_$arm/predictions.csv" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/run_lingo_vqa.py \
             --arm "$model" --exp-id "cvpr27/a100/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
             > "logs/a100_lingo_${arm}_answer.log" 2>&1
