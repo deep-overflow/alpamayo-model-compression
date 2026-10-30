@@ -67,7 +67,8 @@ def main():
     r = pd.DataFrame(rows)
     mv = r[r["v0"] >= MOVING]
 
-    rate = {f"new_sh{i}": batch_rate(RUNS / f"{args.logs}_sh{i}.launch.log") for i in range(8)}
+    rate = {f"new_sh{i}": batch_rate(RUNS / f"{args.logs}_sh{i}.launch.log") for i in range(8)
+            if (RUNS / f"{args.logs}_sh{i}.launch.log").exists()}   # a run on fewer cards has fewer shards
     rate.update({f"hofix_sh{i}": batch_rate(RUNS / f"hofix_baseline_sh{i}.launch.log") for i in range(4)})
 
     gates = {
