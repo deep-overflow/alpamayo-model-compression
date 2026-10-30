@@ -316,11 +316,13 @@ def table(out, a100):
     (dst / "summary.txt").write_text("\n".join(md) + "\n")
     (dst / "table.md").write_text("\n".join(md) + "\n")
 
-    fig, axes = plt.subplots(1, len(SETS), figsize=(4.2 * len(SETS), 3.4))
+    width = max(4.2, 1.2 * len(ARMS))
+    fig, axes = plt.subplots(1, len(SETS), figsize=(width * len(SETS), 3.6))
     for ax, set_name in zip(np.atleast_1d(axes), SETS):
         arms = [a for a in ARMS if f"{a}/{set_name}" in res["open_loop"]]
         vals = [res["open_loop"][f"{a}/{set_name}"]["minADE6_6.4s"] for a in arms]
-        ax.bar(arms, vals, color=[COLORS[a] for a in arms], width=0.6)
+        ax.bar(range(len(arms)), vals, color=[COLORS[a] for a in arms], width=0.6)
+        ax.set_xticks(range(len(arms)), [a.replace("_l0keep", "\nl0keep") for a in arms])
         for i, v in enumerate(vals):
             ax.text(i, v, f"{v:.3f}", ha="center", va="bottom", fontsize=9)
         ax.set_title(f"{set_name} (A100)")
