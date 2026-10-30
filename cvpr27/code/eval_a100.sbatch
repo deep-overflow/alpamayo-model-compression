@@ -47,6 +47,9 @@ declare -A MODEL=(
   [dense]=baseline
   [moop]=outputs/slim_dual_u40_v2
   [moop_l0keep]=outputs/slim_dual_u40_l0keep_v2
+  # single-criterion controls, layer 0 kept (cvpr27/plans/2026-10-29_a100-fm-ce-only.md)
+  [fm_only_l0keep]=outputs/cvpr27/slim_trajlastcoc_u40_l0keep_v2
+  [ce_only_l0keep]=outputs/slim_coc_u40_l0keep_v2
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}

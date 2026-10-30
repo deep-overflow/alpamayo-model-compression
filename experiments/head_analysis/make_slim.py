@@ -65,6 +65,11 @@ Configs:
                       The per-layer ratio of the halves steps at layer 22, so the first two
                       are depth-switched (trunk mostly I_traj, late band mostly I_CoC).
                       plans/2026-10-14_raw-max-criterion.md.
+  trajlastcoc_u40[_l0keep]_v2 -- the FM-only control with its LAST layer scored by I_CoC: the
+                      last layer's trajectory importance is structurally zero, so plain `traj`
+                      keeps the highest-numbered units there (index order). Layers 0-34 are
+                      traj_u40's unit for unit and layer 35 is coc_u40's.
+                      cvpr27/plans/2026-10-29_a100-fm-ce-only.md.
   dualfix_u40_v2   -- dual with the degenerate-layer guard: a layer whose half is constant
                       (the last layer's trajectory importance is structurally zero) no
                       longer contributes its INDEX ORDER to max(rank, rank).
@@ -819,7 +824,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                  "dual2nd": ("traj2", "coc2"),
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
-                 "dualprod": ("traj", "coc"),
+                 "dualprod": ("traj", "coc"), "trajlastcoc": ("traj",),
                  "cachedual": ("cache", "coc"), "cacheonly": ("cache",), "trajfix": ("traj",)}.get(
                      "dual" if fm else stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
@@ -871,6 +876,19 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             cq, cm = half("coc")
             sq[DEPTH_CUT:] = rank(cq)[DEPTH_CUT:]
             sm[DEPTH_CUT:] = rank(cm)[DEPTH_CUT:]
+        if stem == "trajlastcoc":
+            # The last layer's I_traj is identically zero (its outputs never reach the KV cache
+            # the expert reads), so `traj` would keep that layer's highest-numbered units. Score
+            # it by I_CoC instead; within-layer selection makes the swap exact, as in dualv3.
+            # Raw scores on both sides, so layers 0-34 are exactly traj's input and layer 35
+            # exactly coc's (no re-ranking that could break ties differently). Same selection as
+            # `trajfix` below: trajlastcoc_u40_l0keep_v2 == trajfix_u40_l0keep_v2 unit for unit
+            # (checked 2026-10-30), so A100 open-loop and s600 closed-loop rows are one arm.
+            cq, cm = half("coc")
+            assert np.ptp(sq[-1]) == 0 and np.ptp(sm[-1]) == 0, "last-layer I_traj is not flat"
+            sq, sm = sq.copy(), sm.copy()
+            sq[-1] = cq[-1]
+            sm[-1] = cm[-1]
         if stem == "trajfix":
             # FM-only with the degenerate-layer guard (plans/2026-10-29_traj-closedloop-s600.md): the
             # trajectory score alone, except in a layer where it is constant -- the VLM's last layer,

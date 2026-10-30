@@ -33,7 +33,8 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[2]
 
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
-COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300"}
+COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
+          "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -43,7 +44,11 @@ plt.rcParams.update({
 
 # arm -> rows-file tag (run_baseline names rows after the model dir)
 ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
-        "moop_l0keep": "slim_dual_u40_l0keep_v2"}
+        "moop_l0keep": "slim_dual_u40_l0keep_v2",
+        "fm_only_l0keep": "slim_trajlastcoc_u40_l0keep_v2",
+        "ce_only_l0keep": "slim_coc_u40_l0keep_v2"}
+# single-criterion arms are also paired with the MoOP that shares their layer-0 rule
+REFS = {"fm_only_l0keep": "moop_l0keep", "ce_only_l0keep": "moop_l0keep"}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]
@@ -208,8 +213,20 @@ def lingo(a100, arm):
     return {"accuracy": float(acc), "rows": rows}
 
 
+def paired(r, base, ids):
+    """Per-clip arm - base at 6.4 s on the clips both have: mean, bootstrap CI, median."""
+    both = [c for c in ids if c in base and c in r]
+    p = {"n": len(both)}
+    for kind in ("ade", "fde"):
+        d = np.array([metric(r[c], kind) - metric(base[c], kind) for c in both])
+        p[f"delta_min{kind.upper()}6"] = float(d.mean())
+        p[f"delta_min{kind.upper()}6_ci"] = boot_ci(d)
+        p[f"delta_min{kind.upper()}6_median"] = float(np.median(d))
+    return p
+
+
 def table(out, a100):
-    res = {"open_loop": {}, "paired_vs_dense": {}, "lingoqa": {}}
+    res = {"open_loop": {}, "paired_vs_dense": {}, "paired_vs_ref": {}, "lingoqa": {}}
     rows = {}
     for set_name, (_, n_exp) in SETS.items():
         ids = manifest_ids(out, set_name)
@@ -231,15 +248,18 @@ def table(out, a100):
         for arm in ARMS:
             if arm == "dense" or base is None or (arm, set_name) not in rows:
                 continue
-            r = rows[(arm, set_name)]
-            both = [c for c in ids if c in base and c in r]
-            p = {"n": len(both)}
-            for kind in ("ade", "fde"):
-                d = np.array([metric(r[c], kind) - metric(base[c], kind) for c in both])
-                p[f"delta_min{kind.upper()}6"] = float(d.mean())
-                p[f"delta_min{kind.upper()}6_ci"] = boot_ci(d)
-                p[f"delta_min{kind.upper()}6_median"] = float(np.median(d))
-            res["paired_vs_dense"][f"{arm}/{set_name}"] = p
+            res["paired_vs_dense"][f"{arm}/{set_name}"] = paired(rows[(arm, set_name)], base, ids)
+        for arm, ref in REFS.items():
+            if (arm, set_name) in rows and (ref, set_name) in rows:
+                p = paired(rows[(arm, set_name)], rows[(ref, set_name)], ids)
+                res["paired_vs_ref"][f"{arm}/{set_name}"] = {"ref": ref, **p}
+
+    def lingo_delta(v, base):
+        """Paired accuracy difference per question, CI resampling the 100 segments."""
+        qs = sorted(set(v["rows"]) & set(base["rows"]))
+        d = [float(v["rows"][q]["correct"]) - float(base["rows"][q]["correct"]) for q in qs]
+        seg = [v["rows"][q]["segment_id"] for q in qs]
+        return len(qs), float(np.mean(d)), cluster_boot_ci(d, seg)
 
     lq = {arm: lingo(a100, arm) for arm in ARMS}
     for arm, v in lq.items():
@@ -247,10 +267,12 @@ def table(out, a100):
             continue
         e = {"accuracy": v["accuracy"]}
         if arm != "dense" and lq["dense"] is not None:
-            qs = sorted(set(v["rows"]) & set(lq["dense"]["rows"]))
-            d = [float(v["rows"][q]["correct"]) - float(lq["dense"]["rows"][q]["correct"]) for q in qs]
-            seg = [v["rows"][q]["segment_id"] for q in qs]
-            e.update({"n_paired": len(qs), "delta": float(np.mean(d)), "delta_ci": cluster_boot_ci(d, seg)})
+            n, dm, dci = lingo_delta(v, lq["dense"])
+            e.update({"n_paired": n, "delta": dm, "delta_ci": dci})
+        ref = REFS.get(arm)
+        if ref is not None and lq.get(ref) is not None:
+            _, dm, dci = lingo_delta(v, lq[ref])
+            e.update({"ref": ref, "delta_ref": dm, "delta_ref_ci": dci})
         res["lingoqa"][arm] = e
 
     md = ["# A100 (KISTI NEURON) open-loop table", "",
@@ -275,13 +297,28 @@ def table(out, a100):
             md.append(f"| {set_name} | {arm} | {p['n']} | {p['delta_minADE6']:+.3f} [{a_lo:+.3f}, {a_hi:+.3f}] | "
                       f"{p['delta_minADE6_median']:+.3f} | {p['delta_minFDE6']:+.3f} [{f_lo:+.3f}, {f_hi:+.3f}] | "
                       f"{p['delta_minFDE6_median']:+.3f} |")
+    if res["paired_vs_ref"]:
+        md += ["", "Paired difference vs the matching MoOP (6.4 s, mean [95% bootstrap CI], median):", "",
+               "| set | arm | vs | n | delta minADE@6 | median | delta minFDE@6 | median |",
+               "|---|---|---|---|---|---|---|---|"]
+        for key, p in res["paired_vs_ref"].items():
+            arm, set_name = key.split("/")
+            a_lo, a_hi = p["delta_minADE6_ci"]
+            f_lo, f_hi = p["delta_minFDE6_ci"]
+            md.append(f"| {set_name} | {arm} | {p['ref']} | {p['n']} | {p['delta_minADE6']:+.3f} "
+                      f"[{a_lo:+.3f}, {a_hi:+.3f}] | {p['delta_minADE6_median']:+.3f} | "
+                      f"{p['delta_minFDE6']:+.3f} [{f_lo:+.3f}, {f_hi:+.3f}] | {p['delta_minFDE6_median']:+.3f} |")
     if res["lingoqa"]:
-        md += ["", "LingoQA (500 questions, Lingo-Judge; delta vs dense with a segment-clustered CI):", "",
-               "| arm | accuracy | delta vs dense |", "|---|---|---|"]
+        md += ["", "LingoQA (500 questions, Lingo-Judge; paired deltas with a segment-clustered CI):", "",
+               "| arm | accuracy | delta vs dense | delta vs matching MoOP |", "|---|---|---|---|"]
+
+        def pp(m, c):
+            return f"{m * 100:+.1f} pp [{c[0] * 100:+.1f}, {c[1] * 100:+.1f}]"
+
         for arm, e in res["lingoqa"].items():
-            dlt = (f"{e['delta'] * 100:+.1f} pp [{e['delta_ci'][0] * 100:+.1f}, {e['delta_ci'][1] * 100:+.1f}]"
-                   if "delta" in e else "--")
-            md.append(f"| {arm} | {e['accuracy']:.1%} | {dlt} |")
+            dlt = pp(e["delta"], e["delta_ci"]) if "delta" in e else "--"
+            dref = f"{pp(e['delta_ref'], e['delta_ref_ci'])} vs {e['ref']}" if "delta_ref" in e else "--"
+            md.append(f"| {arm} | {e['accuracy']:.1%} | {dlt} | {dref} |")
 
     dst = a100 / "table"
     dst.mkdir(parents=True, exist_ok=True)
@@ -292,11 +329,13 @@ def table(out, a100):
     (dst / "summary.txt").write_text("\n".join(md) + "\n")
     (dst / "table.md").write_text("\n".join(md) + "\n")
 
-    fig, axes = plt.subplots(1, len(SETS), figsize=(4.2 * len(SETS), 3.4))
+    width = max(4.2, 1.2 * len(ARMS))
+    fig, axes = plt.subplots(1, len(SETS), figsize=(width * len(SETS), 3.6))
     for ax, set_name in zip(np.atleast_1d(axes), SETS):
         arms = [a for a in ARMS if f"{a}/{set_name}" in res["open_loop"]]
         vals = [res["open_loop"][f"{a}/{set_name}"]["minADE6_6.4s"] for a in arms]
-        ax.bar(arms, vals, color=[COLORS[a] for a in arms], width=0.6)
+        ax.bar(range(len(arms)), vals, color=[COLORS[a] for a in arms], width=0.6)
+        ax.set_xticks(range(len(arms)), [a.replace("_l0keep", "\nl0keep") for a in arms])
         for i, v in enumerate(vals):
             ax.text(i, v, f"{v:.3f}", ha="center", va="bottom", fontsize=9)
         ax.set_title(f"{set_name} (A100)")
