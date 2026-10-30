@@ -50,6 +50,10 @@ declare -A MODEL=(
   # single-criterion controls, layer 0 kept (cvpr27/plans/2026-10-29_a100-fm-ce-only.md)
   [fm_only_l0keep]=outputs/cvpr27/slim_trajlastcoc_u40_l0keep_v2
   [ce_only_l0keep]=outputs/slim_coc_u40_l0keep_v2
+  # moop_l0keep + layers 1-4 MLP cut to XX% of their mass (cvpr27/plans/2026-10-30_l0keep-l14-mlp-cut.md)
+  [l0keep_l14m95]=outputs/cvpr27/slim_dual_u40_l0keep_l14m95_v2
+  [l0keep_l14m90]=outputs/cvpr27/slim_dual_u40_l0keep_l14m90_v2
+  [l0keep_l14m80]=outputs/cvpr27/slim_dual_u40_l0keep_l14m80_v2
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}

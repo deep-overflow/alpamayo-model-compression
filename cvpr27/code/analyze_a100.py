@@ -34,7 +34,8 @@ REPO = Path(__file__).resolve().parents[2]
 
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
-          "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100"}
+          "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100",
+          "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -46,9 +47,13 @@ plt.rcParams.update({
 ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         "moop_l0keep": "slim_dual_u40_l0keep_v2",
         "fm_only_l0keep": "slim_trajlastcoc_u40_l0keep_v2",
-        "ce_only_l0keep": "slim_coc_u40_l0keep_v2"}
-# single-criterion arms are also paired with the MoOP that shares their layer-0 rule
-REFS = {"fm_only_l0keep": "moop_l0keep", "ce_only_l0keep": "moop_l0keep"}
+        "ce_only_l0keep": "slim_coc_u40_l0keep_v2",
+        "l0keep_l14m95": "slim_dual_u40_l0keep_l14m95_v2",
+        "l0keep_l14m90": "slim_dual_u40_l0keep_l14m90_v2",
+        "l0keep_l14m80": "slim_dual_u40_l0keep_l14m80_v2"}
+# arms built on moop_l0keep are also paired with it
+REFS = {"fm_only_l0keep": "moop_l0keep", "ce_only_l0keep": "moop_l0keep",
+        "l0keep_l14m95": "moop_l0keep", "l0keep_l14m90": "moop_l0keep", "l0keep_l14m80": "moop_l0keep"}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]

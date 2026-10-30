@@ -62,6 +62,10 @@ Configs:
                       The per-layer ratio of the halves steps at layer 22, so the first two
                       are depth-switched (trunk mostly I_traj, late band mostly I_CoC).
                       plans/2026-10-14_raw-max-criterion.md.
+  <crit>_u<N>[_l0keep]_l14m<XX>_v2 -- the same arm with layers 1-4's MLP cut further: each of
+                      those layers keeps the smallest set, in the arm's own order, holding
+                      >= XX% of both I_traj and I_CoC mass. Extra removal (other layers
+                      untouched). cvpr27/plans/2026-10-30_l0keep-l14-mlp-cut.md.
   trajlastcoc_u40[_l0keep]_v2 -- the FM-only control with its LAST layer scored by I_CoC: the
                       last layer's trajectory importance is structurally zero, so plain `traj`
                       keeps the highest-numbered units there (index order). Layers 0-34 are
@@ -203,8 +207,9 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     # budget: maxstep11_u40_qcut4_v2 cuts 4 heads per layer instead of 13 and puts
     # the difference into channels (plans/2026-09-05_axis-allocation.md)
     # the optional _l0keep exempts layer 0's Q heads from the cut and pays the budget back
-    # in MLP channels (see the block below)
-    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?(_l0keep)?_v2$", cfg_name)
+    # in MLP channels (see the block below); the optional _l14m<XX> then cuts layers 1-4's
+    # MLP further, keeping XX% of their importance mass (block before the selection)
+    uni = re.match(r"^(.+)_u(\d+)(?:_qcut(\d+))?(_l0keep)?(?:_l14m(\d+))?_v2$", cfg_name)
     # `_q<N>m<M>` sets BOTH axis counts explicitly: cut N Q heads and M MLP channels per
     # layer. `_qcut<N>` cannot express this -- it pins N and solves for M so the budget is
     # unchanged -- and holding the budget is exactly what has to be given up to ask which
@@ -884,6 +889,30 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             sq, sm = sq.copy(), sm.copy()
             sq[-1] = cq[-1]
             sm[-1] = cm[-1]
+        if uni is not None and uni.group(5) is not None:
+            # Layers 1-4 are the only VLM layers whose MLP importance is concentrated (Gini
+            # 0.89-0.97; 40-151 of 12,288 channels hold half the mass), so the uniform cut
+            # removes only 0.1-1.9% of their mass there (cvpr27/reports/2026-10-29_vlm-mlp-
+            # layer-concentration.md). Keep, per layer, the smallest set -- in this arm's own
+            # selection order -- that holds >= XX% of BOTH the I_traj and the I_CoC mass. The
+            # set is the tail of the same argsort select_mask_ratios takes, so the kept channels
+            # are exactly the ones measured, and it only ever cuts more than the base arm.
+            # Extra removal, not a reallocation: the other layers are untouched.
+            # cvpr27/plans/2026-10-30_l0keep-l14-mlp-cut.md.
+            keep_mass = int(uni.group(5)) / 100
+            assert 0 < keep_mass < 1, keep_mass
+            n_mlp = tc.intermediate_size
+            rm = np.array(rm, dtype=float)
+            for li in (1, 2, 3, 4):
+                desc = np.argsort(sm[li])[::-1]
+                t_m, c_m = imp["traj_vlm_mlp"][li], imp["coc_vlm_mlp"][li]
+                ok = ((np.cumsum(t_m[desc]) >= keep_mass * t_m.sum())
+                      & (np.cumsum(c_m[desc]) >= keep_mass * c_m.sum()))
+                k = min(int(np.argmax(ok)) + 1, n_mlp - round(rm[li] * n_mlp))
+                rm[li] = (n_mlp - k) / n_mlp
+                print(f"l14m{uni.group(5)}: layer {li} keeps {k}/{n_mlp} MLP channels "
+                      f"(traj {t_m[desc[:k]].sum() / t_m.sum():.4f}, "
+                      f"coc {c_m[desc[:k]].sum() / c_m.sum():.4f} of the mass)", flush=True)
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)
