@@ -160,4 +160,14 @@
 
 ## 9. 진행 기록
 
-(구현 승인 후 기록)
+- **2026-10-29 승인.** 사용자가 "4번 GPU만 사용"을 지시했다. 그래서 ①은 GPU 4 한 장, 샤드 1개로 돈다.
+  이후 단계도 따로 말이 없으면 4번만 쓴다. ③(8장)은 그 전에 다시 묻는다.
+- **마스크.** `make_early_mlp_masks.py` → `outputs/cvpr27/early_mlp/m_*/masks.npz` 10세트를 만들었다.
+  추가 제거 수가 §2 표와 정확히 같고, 1–4번 층 밖은 B0와 같으며, 모두 B0의 부분집합이다.
+- **① 실행.** `run_token_ablation.py --arm-masks ... --manifest calib_rd100_a --cache calib_rd_a --num-clips 100 --k 8 --gpu 4`
+  → `outputs/cvpr27/early_mlp/gate_loss/`. 클립당 약 49초, 100클립에 약 82분이다.
+- **G2 규칙 보완 (5클립 점검 때, 최종 데이터를 보기 전).**
+  - 비례 문턱은 "기존 절단의 평균 단가"라서, B0가 그 손실에서 비용을 낼 때(B0 − dense > 0)만 정의된다.
+  - 5클립에서 FM 손실의 B0 − dense가 −0.0024로 음수였다.
+  - 그래서 B0 − dense ≤ 0인 손실은 판정을 UNDEFINED로 두고 CI만 보고한다. UNDEFINED는 ②로 가는 것을 막지 않는다(막는 것은 REJECT뿐).
+  - 5클립 값으로는 아무 판정도 내리지 않는다.
