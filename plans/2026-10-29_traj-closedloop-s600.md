@@ -77,3 +77,15 @@
   1. 주 비교: − MoOP 0번 층 보존판 (600씬, 같은 카드 300씬)
   2. − dense
   3. − 출하본 MoOP
+
+## 7. 결과 (2026-10-30)
+
+- 본 런: 2026-10-29 13:24 UTC – 10-30 02:53 UTC (13.5시간), 600/600 씬, 중단 8씬(자른 arm들과 같은 씬), 정리 완료.
+- smoke 4씬: G1·G2 통과.
+- 분석: `experiments/head_analysis/finish_traj_s600.sh` → `outputs/alpasim_trajl0_s600/vs_*`
+  - 계획의 4개에 더해 MoOP 0번 층 보존판 대비 2개(600씬, 같은 카드 429씬)를 냈다.
+- 결과 요약
+  - − MoOP 0번 층 보존판: score −0.024 [−0.049, +0.000] (같은 카드 −0.014 n.s.), progress 동일, 충돌 +0.032, CoC 퇴화 3.6% → 9.9%
+  - − dense: +0.020 [−0.005, +0.046] (Wilcoxon p=0.0097), progress +4.0 pp
+  - − 출하본 MoOP: −0.016 n.s.
+- 리포트: `reports/evaluation/2026-10-30_traj-closedloop-s600.md`
