@@ -6,7 +6,8 @@ the test-split evaluation set, whose camera chunks were never downloaded.
 
 Clips are fetched one at a time over the wire: `open_file(maybe_stream=True)` hands
 zipfile a seekable HfFileSystem object, so only that clip's members move, not the 5 GB
-chunk that contains it. Storage is ~6 MB/clip against ~57 MB of mp4.
+chunk that contains it. Storage is ~6 MB/clip against ~57 MB of mp4. Windows of the same clip
+(several t0 per clip) share one download and one dataset interface per worker.
 
 The npz schema matches `pre_processed/eval`, so `sample_cache.load_cached` reads either.
 
@@ -44,9 +45,33 @@ def _avdi(local_dir):
     return _AVDI
 
 
+class _ClipFeatures:
+    """The worker's interface with get_clip_feature memoised, so the windows of one clip decode
+    their frames from a single download of its videos instead of streaming them once each."""
+
+    def __init__(self, avdi):
+        self._avdi, self._memo = avdi, {}
+
+    def __getattr__(self, name):
+        return getattr(self._avdi, name)
+
+    def get_clip_feature(self, clip_id, feature, maybe_stream=False):
+        if (clip_id, feature) not in self._memo:
+            self._memo[clip_id, feature] = self._avdi.get_clip_feature(
+                clip_id, feature, maybe_stream=maybe_stream)
+        return self._memo[clip_id, feature]
+
+
+def build_clip(task):
+    """Every window of one clip. Returns one status dict per window."""
+    clip_id, t0s, chunk, out_root, local_dir = task
+    avdi = _ClipFeatures(_avdi(local_dir))
+    return [build_one((clip_id, t0, chunk, out_root, avdi)) for t0 in t0s]
+
+
 def build_one(task):
     """Load one clip at its t0 and write the npz. Returns a status dict."""
-    clip_id, t0_us, chunk, out_root, local_dir = task
+    clip_id, t0_us, chunk, out_root, avdi = task
     out = Path(out_root) / "samples" / f"{clip_id}__t0_{t0_us}.npz"
     if out.exists():
         return {"clip_id": clip_id, "status": "skip", "bytes": out.stat().st_size}
@@ -56,8 +81,7 @@ def build_one(task):
 
     t = time.time()
     try:
-        d = load_physical_aiavdataset(clip_id, t0_us=t0_us, maybe_stream=True,
-                                      avdi=_avdi(local_dir) if local_dir else None)
+        d = load_physical_aiavdataset(clip_id, t0_us=t0_us, maybe_stream=True, avdi=avdi)
     except Exception as e:  # noqa: BLE001  per-clip failures are recorded, not fatal
         return {"clip_id": clip_id, "status": "error",
                 "error": f"{type(e).__name__}: {str(e)[:200]}"}
@@ -111,19 +135,21 @@ def main():
         man = man.head(args.limit)
     print(f"{len(man)} clips -> {out_root}", flush=True)
 
-    tasks = [(r.clip_id, int(r.t0_us), int(r.chunk), str(out_root), args.local_dir)
-             for r in man.itertuples()]
+    tasks = [(c, [int(t) for t in g.t0_us], int(g.chunk.iloc[0]), str(out_root), args.local_dir)
+             for c, g in man.groupby("clip_id", sort=False)]
     done, errors, t0 = [], [], time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
-        futs = [ex.submit(build_one, t) for t in tasks]
-        for i, fut in enumerate(as_completed(futs), 1):
-            r = fut.result()
-            (errors if r["status"] == "error" else done).append(r)
-            if i % 25 == 0 or i == len(tasks):
+        futs = [ex.submit(build_clip, t) for t in tasks]
+        for k, fut in enumerate(as_completed(futs), 1):
+            for r in fut.result():
+                (errors if r["status"] == "error" else done).append(r)
+            if k % 25 == 0 or k == len(tasks):
                 el = time.time() - t0
                 gb = sum(x.get("bytes", 0) for x in done) / 2**30
-                print(f"[{i}/{len(tasks)}] ok={len(done)} err={len(errors)} {gb:.2f} GB "
-                      f"elapsed {el / 60:.1f}m eta {el / i * (len(tasks) - i) / 60:.1f}m",
+                new = sum(x["status"] == "ok" for x in done)
+                print(f"[{len(done) + len(errors)}/{len(man)} windows, {k}/{len(tasks)} clips] "
+                      f"ok={len(done)} (new {new}) err={len(errors)} {gb:.2f} GB "
+                      f"elapsed {el / 60:.1f}m eta {el / k * (len(tasks) - k) / 60:.1f}m",
                       flush=True)
 
     index = sorted(p.stem for p in (out_root / "samples").glob("*.npz"))

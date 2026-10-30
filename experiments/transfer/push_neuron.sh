@@ -10,6 +10,8 @@
 #           resume   the whole run dir of $RESUME_RUNS, to continue an interrupted run
 #           minitron the Minitron KD set (train samples of kd_r1.parquet, ~55 GB), its
 #                    manifests and the width student's recipe (minitron/README.md)
+#           kd2      mtw24_kd2: train samples of kd_r5.parquet (~265 GB), the kd_sets manifests,
+#                    the width student's recipe and the LingoQA train images (7.9 GB)
 #           cosmos   the Cosmos-Reason2-8B safetensors, which `weights` skips
 #           oodval   the 262 OOD-val clips (1.5 GB). The `data` tier ships the whole
 #                    8.5 GB ood namespace because training needs its other half; this
@@ -248,6 +250,28 @@ if has minitron; then
   run "${RSYNC[@]}" "$OUT/minitron/kd_sets" "$HOST:$SCRATCH/outputs/minitron/"
   run "${RSYNC[@]}" "$OUT/minitron/slim_mtw24/slim_meta.json" \
       "$HOST:$SCRATCH/outputs/minitron/slim_mtw24/"
+fi
+
+if has kd2; then
+  # mtw24_kd2 (minitron/plans/2026-10-26_kisti-training-plan.md): every kd_r5 window's sample,
+  # the kd_sets manifests (kd_r5, held-out clips, LingoQA QA), the width student's recipe, and
+  # the LingoQA train images the VQA half reads -- the whole image tree (3,508 segments,
+  # 7.9 GB) rather than a list, so the held-out segments come along too.
+  step "mtw24_kd2 set -> $SCRATCH/datasets/physicalai_av/pre_processed + outputs/minitron"
+  # --ignore-existing: an npz never changes under its name, and NEURON already holds about half of
+  # kd_r5 from an earlier set -- same bytes, other mtimes, which plain -a would re-checksum
+  sample_list train "$OUT/minitron/kd_sets/kd_r5.parquet" > "$TMP/kd5.txt"
+  echo "  $(wc -l < "$TMP/kd5.txt") samples, $(total_of "$PRE" "$TMP/kd5.txt")"
+  run "${RSYNC[@]}" --ignore-existing --files-from="$TMP/kd5.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+  run ssh "${SSH_OPTS[@]}" "$HOST" \
+      "mkdir -p $SCRATCH/outputs/minitron/slim_mtw24 $SCRATCH/datasets/lingoqa/train/images"
+  run "${RSYNC[@]}" "$OUT/minitron/kd_sets" "$HOST:$SCRATCH/outputs/minitron/"
+  run "${RSYNC[@]}" "$OUT/minitron/slim_mtw24/slim_meta.json" \
+      "$HOST:$SCRATCH/outputs/minitron/slim_mtw24/"
+  step "LingoQA train images -> $SCRATCH/datasets/lingoqa/train/images/train"
+  echo "  $(du -sh --apparent-size "$LINGO_DATA/train/images/train" | cut -f1)"
+  run "${RSYNC[@]}" "$LINGO_DATA/train/images/train" "$HOST:$SCRATCH/datasets/lingoqa/train/images/"
 fi
 
 if has resume; then
