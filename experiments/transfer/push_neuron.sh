@@ -22,6 +22,10 @@
 #                    this ONLY for a self-contained comparison whose reference arms are
 #                    re-measured on the same NEURON cards
 #                    (plans/2026-08-31_znorm11-neuron-eval.md).
+#           a100eval the A100 open-loop track: test_2000 + OOD-val 262 caches, their
+#                    manifests, the $A100_RECIPES recipes and the track's own scripts --
+#                    not the code tree (cvpr27/plans/2026-10-29_kisti-a100-openloop.md).
+#                    Pair with `lingoqa weights` for the LingoQA arm and the base model.
 #   LIST_ONLY=1 prints what would move, with byte totals, contacting nothing.
 #
 # NEURON authenticates with OTP, so open ONE multiplexed connection first and every
@@ -64,6 +68,7 @@ RESUME_RUNS=${RESUME_RUNS-recover_coc_u55}
 LINGO_DATA=${LINGO_DATA-$SRC/data/lingoqa}
 LINGO_BENCH=${LINGO_BENCH-/home/cvlab21/project/chan/LingoQA/benchmark}
 TRAIN_CONFIGS=${TRAIN_CONFIGS-}   # empty = every slim_* recipe (51 of them, 160 MB)
+A100_RECIPES=${A100_RECIPES-slim_dual_u40_v2 slim_dual_u40_l0keep_v2}
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -193,6 +198,36 @@ if has oodval; then
   echo "  $(wc -l < "$TMP/oodval.txt") files, $(total_of "$PRE" "$TMP/oodval.txt")"
   run "${RSYNC[@]}" --files-from="$TMP/oodval.txt" "$PRE/" \
       "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+fi
+
+if has a100eval; then
+  # Every arm of an A100 table is measured on NEURON, so the reported sets travel. The code tree
+  # does not: NEURON keeps the tree the last `code` push left (the kd2 run's), which KD jobs rely
+  # on, and run_baseline / LingoQA are the same there -- only this track's scripts are overlaid.
+  step "test_2000 + OOD-val 262 caches -> $SCRATCH/datasets/physicalai_av/pre_processed"
+  # namespaces follow run_baseline: `test` for --set test, `ood` for --set ood
+  : > "$TMP/a100.txt"
+  sample_list test "$OUT/eval_sets/test_2000.parquet" >> "$TMP/a100.txt"
+  sample_list ood "$OUT/eval_sets/ood_val.parquet" >> "$TMP/a100.txt"
+  echo "  $(wc -l < "$TMP/a100.txt") files, $(total_of "$PRE" "$TMP/a100.txt")"
+  # --ignore-existing: an npz never changes under its name, and test_500 may already be there
+  run "${RSYNC[@]}" --ignore-existing --files-from="$TMP/a100.txt" "$PRE/" \
+      "$HOST:$SCRATCH/datasets/physicalai_av/pre_processed/"
+
+  step "manifests + recipes ($A100_RECIPES) -> $SCRATCH/outputs"
+  run ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p $SCRATCH/outputs/eval_sets $SCRATCH/outputs/cvpr27/a100/queue"
+  run "${RSYNC[@]}" "$OUT/eval_sets/test_2000.parquet" "$OUT/eval_sets/ood_val.parquet" \
+      "$HOST:$SCRATCH/outputs/eval_sets/"
+  # selection-only recipes: load_slim rebuilds the weights from the base checkpoint
+  # shellcheck disable=SC2086
+  recipe_list $A100_RECIPES > "$TMP/a100_recipes.txt"
+  echo "  $(grep -c 'slim_meta.json$' "$TMP/a100_recipes.txt") recipes, $(total_of "$OUT" "$TMP/a100_recipes.txt")"
+  run "${RSYNC[@]}" --files-from="$TMP/a100_recipes.txt" "$OUT/" "$HOST:$SCRATCH/outputs/"
+
+  step "A100 track scripts -> $SCRATCH/project/alpamayo-model-compression"
+  REPO_WT=$(cd "$HERE/../.." && pwd)
+  ( cd "$REPO_WT" && run "${CODE_RSYNC[@]}" --relative ./cvpr27/code/eval_a100.sbatch \
+      ./cvpr27/code/a100_queue.sh "$HOST:$SCRATCH/project/alpamayo-model-compression/" )
 fi
 
 if has lingoqa; then
