@@ -50,6 +50,9 @@ Configs:
                       losses, each z-scored within a layer and averaged (1/11 each). Needs
                       --stepvlm (per-step VLM gradients). Kept set overlaps dual's by
                       87-88%. plans/2026-08-31_znorm11-criterion.md.
+  trajfix_u40_v2   -- FM-only (traj_u40_v2) except in a layer whose I_traj is constant -- the last
+                      one, which has no path to the expert's KV cache -- where I_CoC decides
+                      instead of argsort's tie order. plans/2026-10-29_traj-closedloop-s600.md.
   dualv3_u40_v2    -- depth-aware dual: max(rank I_traj, rank I_CoC) in layers 0-21, rank
                       I_CoC ALONE in layers 22-35 (plans/2026-09-25_depth-aware-dual.md).
                       Same budget, allocation, expert and KV as dual_u40_v2; its late
@@ -822,7 +825,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                  "j_traj": ("traj", "j"),
                  "trajvqa": ("traj", "vqa"), "dualsum": ("traj", "coc"),
                  "dualprod": ("traj", "coc"), "trajlastcoc": ("traj",),
-                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",)}.get(
+                 "cachedual": ("cache", "coc"), "cacheonly": ("cache",), "trajfix": ("traj",)}.get(
                      "dual" if fm else stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
@@ -878,12 +881,27 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             # the expert reads), so `traj` would keep that layer's highest-numbered units. Score
             # it by I_CoC instead; within-layer selection makes the swap exact, as in dualv3.
             # Raw scores on both sides, so layers 0-34 are exactly traj's input and layer 35
-            # exactly coc's (no re-ranking that could break ties differently).
+            # exactly coc's (no re-ranking that could break ties differently). Same selection as
+            # `trajfix` below: trajlastcoc_u40_l0keep_v2 == trajfix_u40_l0keep_v2 unit for unit
+            # (checked 2026-10-30), so A100 open-loop and s600 closed-loop rows are one arm.
             cq, cm = half("coc")
             assert np.ptp(sq[-1]) == 0 and np.ptp(sm[-1]) == 0, "last-layer I_traj is not flat"
             sq, sm = sq.copy(), sm.copy()
             sq[-1] = cq[-1]
             sm[-1] = cm[-1]
+        if stem == "trajfix":
+            # FM-only with the degenerate-layer guard (plans/2026-10-29_traj-closedloop-s600.md): the
+            # trajectory score alone, except in a layer where it is constant -- the VLM's last layer,
+            # whose o_proj / down_proj never reach the KV cache the expert reads -- where traj_u40_v2
+            # keeps whatever argsort's tie order leaves (Q heads 13-31). There the CoC score decides.
+            # Every other layer is traj_u40_v2's unit for unit.
+            cq, cm = half("coc")
+            flat_q, flat_m = np.ptp(sq, axis=1) == 0, np.ptp(sm, axis=1) == 0
+            sq, sm = sq.copy(), sm.copy()
+            sq[flat_q] = rank(cq)[flat_q]
+            sm[flat_m] = rank(cm)[flat_m]
+            print(f"trajfix: CoC score decides layers Q {np.flatnonzero(flat_q).tolist()} "
+                  f"MLP {np.flatnonzero(flat_m).tolist()}")
         vq = ml.select_mask_ratios(sq, rq)
         vm = ml.select_mask_ratios(sm, rm)
         eq, em = np.ones_like(eq), np.ones_like(em)
