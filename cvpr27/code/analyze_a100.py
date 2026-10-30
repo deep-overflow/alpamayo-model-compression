@@ -254,16 +254,25 @@ def table(out, a100):
                 p = paired(rows[(arm, set_name)], rows[(ref, set_name)], ids)
                 res["paired_vs_ref"][f"{arm}/{set_name}"] = {"ref": ref, **p}
 
+    def lingo_delta(v, base):
+        """Paired accuracy difference per question, CI resampling the 100 segments."""
+        qs = sorted(set(v["rows"]) & set(base["rows"]))
+        d = [float(v["rows"][q]["correct"]) - float(base["rows"][q]["correct"]) for q in qs]
+        seg = [v["rows"][q]["segment_id"] for q in qs]
+        return len(qs), float(np.mean(d)), cluster_boot_ci(d, seg)
+
     lq = {arm: lingo(a100, arm) for arm in ARMS}
     for arm, v in lq.items():
         if v is None:
             continue
         e = {"accuracy": v["accuracy"]}
         if arm != "dense" and lq["dense"] is not None:
-            qs = sorted(set(v["rows"]) & set(lq["dense"]["rows"]))
-            d = [float(v["rows"][q]["correct"]) - float(lq["dense"]["rows"][q]["correct"]) for q in qs]
-            seg = [v["rows"][q]["segment_id"] for q in qs]
-            e.update({"n_paired": len(qs), "delta": float(np.mean(d)), "delta_ci": cluster_boot_ci(d, seg)})
+            n, dm, dci = lingo_delta(v, lq["dense"])
+            e.update({"n_paired": n, "delta": dm, "delta_ci": dci})
+        ref = REFS.get(arm)
+        if ref is not None and lq.get(ref) is not None:
+            _, dm, dci = lingo_delta(v, lq[ref])
+            e.update({"ref": ref, "delta_ref": dm, "delta_ref_ci": dci})
         res["lingoqa"][arm] = e
 
     md = ["# A100 (KISTI NEURON) open-loop table", "",
@@ -300,12 +309,16 @@ def table(out, a100):
                       f"[{a_lo:+.3f}, {a_hi:+.3f}] | {p['delta_minADE6_median']:+.3f} | "
                       f"{p['delta_minFDE6']:+.3f} [{f_lo:+.3f}, {f_hi:+.3f}] | {p['delta_minFDE6_median']:+.3f} |")
     if res["lingoqa"]:
-        md += ["", "LingoQA (500 questions, Lingo-Judge; delta vs dense with a segment-clustered CI):", "",
-               "| arm | accuracy | delta vs dense |", "|---|---|---|"]
+        md += ["", "LingoQA (500 questions, Lingo-Judge; paired deltas with a segment-clustered CI):", "",
+               "| arm | accuracy | delta vs dense | delta vs matching MoOP |", "|---|---|---|---|"]
+
+        def pp(m, c):
+            return f"{m * 100:+.1f} pp [{c[0] * 100:+.1f}, {c[1] * 100:+.1f}]"
+
         for arm, e in res["lingoqa"].items():
-            dlt = (f"{e['delta'] * 100:+.1f} pp [{e['delta_ci'][0] * 100:+.1f}, {e['delta_ci'][1] * 100:+.1f}]"
-                   if "delta" in e else "--")
-            md.append(f"| {arm} | {e['accuracy']:.1%} | {dlt} |")
+            dlt = pp(e["delta"], e["delta_ci"]) if "delta" in e else "--"
+            dref = f"{pp(e['delta_ref'], e['delta_ref_ci'])} vs {e['ref']}" if "delta_ref" in e else "--"
+            md.append(f"| {arm} | {e['accuracy']:.1%} | {dlt} | {dref} |")
 
     dst = a100 / "table"
     dst.mkdir(parents=True, exist_ok=True)
