@@ -87,3 +87,16 @@
 - **시간:** 카드당 약 150씬이다.
   - Ada 절반은 11-01 오후에 끝난다.
   - Blackwell 절반은 03시에 시작하면 11-01 저녁(약 20시 KST)에 끝난다.
+
+## 6. 사고와 조치 (2026-10-31 21:30 KST): 포트 충돌
+
+- **무슨 일.** 두 판의 Ada 본 런이 거의 동시에 떴다. 그 순간 lp_r50 shard 1과 lp_m24 shard 0의 wizard가 1초 차이로 같은 호스트 포트(6006)를 골랐다. lp_r50 shard 1의 runtime이 "port is already allocated"로 뜨지 못했다.
+  - 나머지 세 shard는 정상이다.
+  - 실패한 shard의 컨테이너 일부(렌더러, 드라이버, physics)가 GPU 7에 남아 있어서 지웠다.
+- **조치 1.** 그 shard의 148씬(`main_ada296_sh1_r50c.csv`)을 prefix `r50c_`로 GPU 7에서 다시 돌린다. 로그는 `outputs/cvpr27/alpasim_lp_r50_s600/r50c.log`다.
+- **조치 2.** Blackwell 절반에서 같은 충돌이 다시 나지 않게 한다.
+  - pair 스크립트의 lp_r50 Blackwell 대기 서브셸을 종료했다.
+  - 그 일은 `cvpr27/code/finish_lp_r50_s600.sh`가 맡는다. GPU 2, 3이 빈 뒤 5분을 더 기다려 lp_m24보다 늦게 띄운다.
+  - 이 스크립트는 lp_r50의 600씬 병합(smoke + r50a sh0 + r50c + r50b), 짝 분석, lp_r50 − lp_m24까지 이어서 한다.
+  - pair 스크립트의 lp_r50 병합은 r50a sh1이 비어서 실패한다. 이건 예상한 동작이다.
+- lp_m24는 pair 스크립트가 그대로 끝까지 처리한다.
