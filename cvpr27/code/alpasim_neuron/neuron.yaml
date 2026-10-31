@@ -1,0 +1,15 @@
+# @package _global_
+# Deploy target: KISTI NEURON (no docker; pyxis + enroot through AlpaSim's SLURM backend).
+# Copied into the NEURON AlpaSim tree as src/wizard/configs/deploy/neuron.yaml.
+#   alpasim_wizard deploy=neuron topology=pair_a15 driver=alpamayo1_5 wizard.log_dir=...
+defines:
+  filesystem: /scratch/e1997a06/alpasim
+  # hub/ with nvidia/Alpamayo-1.5-10B and its processors; the driver runs with HF_HUB_OFFLINE=1
+  hf_cache: /scratch/e1997a06/checkpoints
+
+wizard:
+  run_method: SLURM
+  sqshcaches:
+    - /scratch/e1997a06/alpasim/sqsh
+  # every container first unpacks its image (11-20 GB squashfs) into the node's /tmp
+  timeout: 3600
