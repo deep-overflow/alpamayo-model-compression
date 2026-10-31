@@ -57,6 +57,9 @@ declare -A MODEL=(
   # LLM-Pruner (cvpr27/plans/2026-10-30_llm-pruner-budget-matched.md): MoOP-matched and original r=0.5
   [lp_m24]=outputs/cvpr27/slim_lp_m24
   [lp_r50]=outputs/cvpr27/slim_lp_r50
+  # Tyr-the-Pruner, official procedure (cvpr27/plans/2026-10-31_tyr-a100.md); rewrites o_proj/down_proj,
+  # so the recipe carries slim_state.pt
+  [tyr_off]=outputs/cvpr27/slim_tyr_off
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}

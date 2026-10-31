@@ -36,7 +36,7 @@ BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
           "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100",
           "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e",
-          "lp_m24": "#8a5cc2", "lp_r50": "#c2a5e6"}
+          "lp_m24": "#8a5cc2", "lp_r50": "#c2a5e6", "tyr_off": "#d0632c"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -55,12 +55,15 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         # LLM-Pruner: budget matched to MoOP exactly, and soowon's original 24.99% arm
         # (cvpr27/plans/2026-10-30_llm-pruner-budget-matched.md)
         "lp_m24": "slim_lp_m24",
-        "lp_r50": "slim_lp_r50"}
+        "lp_r50": "slim_lp_r50",
+        # Tyr-the-Pruner, official procedure (cvpr27/plans/2026-10-31_tyr-a100.md)
+        "tyr_off": "slim_tyr_off"}
 # arms are also paired with the MoOP(s) they are built on or compared against
 REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
         "l0keep_l14m95": ["moop_l0keep"], "l0keep_l14m90": ["moop_l0keep"],
         "l0keep_l14m80": ["moop_l0keep"],
-        "lp_m24": ["moop", "moop_l0keep"], "lp_r50": ["moop", "moop_l0keep"]}
+        "lp_m24": ["moop", "moop_l0keep"], "lp_r50": ["moop", "moop_l0keep"],
+        "tyr_off": ["moop", "moop_l0keep"]}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]

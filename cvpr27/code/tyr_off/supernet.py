@@ -59,6 +59,37 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 
+class StopForward(Exception):
+    """Raised right after the block being calibrated (the official ForwardInterrupt idea)."""
+
+
+def _raise_stop(_module, _args, _out):
+    raise StopForward
+
+
+def collect_hessians(model, store, layer, o_proj, down, early_stop):
+    """H = sum x x^T at o_proj / down_proj inputs of one block over every calib clip.
+
+    Block i's inputs depend only on blocks < i, so the prefill can stop right after block i:
+    same Hessians, ~half the forward time over a 36-block run (checked against a full prefill at
+    block 0 of every run).
+    """
+    hooks = {"o": tyr.HessianHook(o_proj), "m": tyr.HessianHook(down)}
+    stop = layer.register_forward_hook(_raise_stop) if early_stop else None
+    try:
+        for item in store:
+            try:
+                prefill(model, item)
+            except StopForward:
+                pass
+    finally:
+        if stop is not None:
+            stop.remove()
+        for h in hooks.values():
+            h.remove()
+    return hooks
+
+
 def level_grid(s, delta, half):
     """pruner.py _prune_group: {level: sparsity} around centre s."""
     lo = min(int(s // delta), half)
@@ -106,6 +137,9 @@ def main():
     ap.add_argument("--calib-manifest", default="calib_100")
     ap.add_argument("--cache", default="calib")
     ap.add_argument("--blocks", type=int, default=None, help="first N blocks only (smoke)")
+    ap.add_argument("--full-prefill", action="store_true",
+                    help="run every calibration prefill through all blocks (R=1 was built this way); "
+                         "default stops right after the block being calibrated")
     ap.add_argument("--reserve-gb", type=float, default=40.0)
     ap.add_argument("--gpu", type=str, default=None)
     args = ap.parse_args()
@@ -182,6 +216,8 @@ def main():
         "levels": {n: {str(lv): v for lv, v in g.items()} for n, g in grids.items()},
         "centre_keep_heads": keep0_q, "centre_keep_channels": keep0_m, "centre_removed": removed0,
         "hessian_tokens": "full fused prompt prefill, no labels (calib_100)",
+        "hessian_forward": ("full prefill" if args.full_prefill else
+                            "prefill stopped after the calibrated block (same inputs; checked at block 0)"),
         "error_accumulation": "paper Eq. 5: (1 - S_e)-weighted mean of all level weights, fp32",
     }
     (out_dir / "metadata.json").write_text(json.dumps(meta, indent=1))
@@ -193,12 +229,16 @@ def main():
     for i in range(n_blocks):
         t0 = time.time()
         o_proj, down = layers[i].self_attn.o_proj, layers[i].mlp.down_proj
-        hooks = {"o": tyr.HessianHook(o_proj), "m": tyr.HessianHook(down)}
-        for item in store:
-            prefill(model, item)
-        for h in hooks.values():
-            h.remove()
+        hooks = collect_hessians(model, store, layers[i], o_proj, down, early_stop=not args.full_prefill)
         t_fwd = time.time() - t0
+        if i == 0 and not args.full_prefill:
+            full = collect_hessians(model, store, layers[i], o_proj, down, early_stop=False)
+            for k in hooks:
+                rel = float((hooks[k].H - full[k].H).abs().max() / full[k].H.abs().max())
+                print(f"early-stop check block 0 {k}: max rel diff {rel:.3e} "
+                      f"(tokens {hooks[k].n_tokens} vs {full[k].n_tokens})", flush=True)
+                assert rel <= 1e-6 and hooks[k].n_tokens == full[k].n_tokens, (k, rel)
+            del full
         for mod, hook, suffix, n_groups, upd in (
                 (o_proj, hooks["o"], "self_attn.o_proj", tc.num_attention_heads, 1),
                 (down, hooks["m"], "mlp.down_proj", tc.intermediate_size, 16)):
