@@ -13,6 +13,8 @@
 # one rollout, every service on this job's one A100. The wizard runs here in the batch step and starts each
 # service as its own `srun --overlap --container-image=<sqsh>` step on this node (AlpaSim's SLURM backend).
 # Overrides mirror experiments/head_analysis/launch_alpasim_shards.sh so the run matches the local s600 runs.
+# HOME/HF_HOME for the driver: pyxis runs services as the user (remap_root defaults to false), so HOME is not /root
+# as under docker and the HF cache mounted at /root/.cache/huggingface is not found without them.
 set -euo pipefail
 cd /scratch/e1997a06/project/alpasim
 D=/scratch/e1997a06/alpasim
@@ -28,7 +30,7 @@ mkdir -p "$D/drivers"
   "services.physics.gpus=[0]" \
   "services.trafficsim.gpus=[0]" \
   "services.driver.gpus=[0]" \
-  "services.driver.environments=['HF_HUB_OFFLINE=1','OMP_NUM_THREADS=8','MKL_NUM_THREADS=8']" \
+  "services.driver.environments=['HF_HUB_OFFLINE=1','OMP_NUM_THREADS=8','MKL_NUM_THREADS=8','HOME=/root','HF_HOME=/root/.cache/huggingface']" \
   "services.runtime.environments=['ALPASIM_ASL_SKIP_IMAGES=1']" \
   scenes.scene_ids=null \
   scenes.test_suite_id=neuron_smoke1 \
