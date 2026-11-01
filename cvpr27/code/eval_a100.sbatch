@@ -62,6 +62,10 @@ declare -A MODEL=(
   [tyr_off]=outputs/cvpr27/slim_tyr_off
   # the paper's Tyr row (simplified port, Ada-built 2026-08-21), measured here for a same-hardware comparison
   [tyr_u40_r]=outputs/slim_tyr_u40_r
+  # MoOP l0keep at other ratios (cvpr27/plans/2026-11-01_l0keep-ratio-sweep.md)
+  [l0keep_u35]=outputs/cvpr27/slim_dual_u35_l0keep_v2
+  [l0keep_u45]=outputs/cvpr27/slim_dual_u45_l0keep_v2
+  [l0keep_u50]=outputs/cvpr27/slim_dual_u50_l0keep_v2
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
