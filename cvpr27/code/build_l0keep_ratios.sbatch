@@ -23,7 +23,9 @@ for N in 40 35 45 50; do
   [ "$N" = 40 ] && out=outputs/cvpr27/check_dual_u40_l0keep_v2
   if [ -f "$out/slim_meta.json" ]; then echo "skip $out"; continue; fi
   # the trailing smoke rollout may need a cache this node lacks; the recipe is written before it
-  "$PY" experiments/head_analysis/make_slim.py --config "dual_u${N}_l0keep_v2" --out "$out" --no-state --gpu 0 \
+  # --importance must be named: make_slim defaults to importance_v1, MoOP is built from importance_v2
+  "$PY" experiments/head_analysis/make_slim.py --config "dual_u${N}_l0keep_v2" --importance importance_v2 \
+    --out "$out" --no-state --gpu 0 \
     > "logs/build_l0k_u${N}.log" 2>&1 || echo "make_slim u${N} exited non-zero (see log)"
   grep -E "l0keep:|surgery|saved" "logs/build_l0k_u${N}.log" | sed "s/^/u${N}: /"
 done
