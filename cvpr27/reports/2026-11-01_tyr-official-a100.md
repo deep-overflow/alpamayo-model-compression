@@ -116,7 +116,11 @@
 traj = FM, coc = CoC CE다. Tyr는 Taylor를 쓰지 않는다(선택은 OSSCAR 헤시안, 배분은 텍스트 KL 탐색).
 traj 통계에서 35번 층은 제외했다(점수가 구조적으로 0).
 
-![tyr_off vs Taylor 배분](figures/2026-11-01_tyr-allocation-vs-taylor.png)
+![tyr_off 층별 유지 비율 vs 같은 총량의 Taylor 배분](figures/2026-11-01_tyr-allocation-profile.png)
+
+![층별 Taylor 질량 몫 vs tyr_off 절단 비율](figures/2026-11-01_tyr-allocation-vs-taylor-mass.png)
+
+그림은 `cvpr27/code/plot_tyr_allocation.py`로 그렸다(`outputs/cvpr27/tyr_off_allocation/`).
 
 ### Facts
 
