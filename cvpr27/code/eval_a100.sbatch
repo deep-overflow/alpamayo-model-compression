@@ -60,6 +60,8 @@ declare -A MODEL=(
   # Tyr-the-Pruner, official procedure (cvpr27/plans/2026-10-31_tyr-a100.md); rewrites o_proj/down_proj,
   # so the recipe carries slim_state.pt
   [tyr_off]=outputs/cvpr27/slim_tyr_off
+  # the paper's Tyr row (simplified port, Ada-built 2026-08-21), measured here for a same-hardware comparison
+  [tyr_u40_r]=outputs/slim_tyr_u40_r
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
