@@ -43,3 +43,16 @@
 ## 4. git
 
 - 기존 Tyr 기준선 라인의 후속이라 main에 바로 커밋한다.
+
+## 5. 변경 (2026-11-01, 사용자 지시): LLM-Pruner가 끝나면 8장으로
+
+- **스크립트:** `cvpr27/code/resume_tyr_off_8gpu.sh`. 다음 순서로 진행한다.
+  1. LLM-Pruner Blackwell 런처 4개가 끝나고 GPU 0–3이 빌 때까지 기다린다.
+  2. 4장 런(`run_tyr_off_s600.sh`)을 멈추고 `tyo_` 컨테이너와 네트워크를 지운다.
+  3. 멈춘 shard 4개에서 끝난 rollout을 `alpasim-aggregation`으로 채점한다. 진행 중이던 rollout은 버리고, 그 씬은 다시 돈다.
+  4. 남은 씬(`scenes_resume_8gpu.csv`)을 GPU 0–7에서 prefix `tyb_`로 돌린다. 각 씬은 **dense 기준선의 카드**에 놓는다.
+     - 아직 안 돈 기준선 Blackwell 씬은 Blackwell로 돌아간다. 그래서 카드 종류 불일치는 4장 단계에서 Ada로 돈 씬만 남는다.
+  5. smoke, tyo sh0–3, tyb sh0–7을 600씬으로 병합한다.
+  6. 실제로 쓴 카드로 불일치 목록(`card_mismatch_vs_{dense,l0keep}.csv`)을 다시 만들고 짝 분석을 낸다.
+     - 비교 대상: MoOP, MoOP l0keep, dense, lp_m24. 각각 600씬과 같은 카드 결과를 낸다.
+- 리포트는 분석이 끝나면 쓴다(사용자 요청).
