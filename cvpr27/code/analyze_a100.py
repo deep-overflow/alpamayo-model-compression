@@ -80,7 +80,8 @@ REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
         "l0keep_u35": ["moop_l0keep"], "l0keep_u45": ["moop_l0keep"], "l0keep_u50": ["moop_l0keep"],
         "tyr_vt": ["moop", "moop_l0keep", "tyr_off"],
         "wandasp": ["moop", "moop_l0keep"]}
-SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
+SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262),
+        "oodtrain": ("ood_train.parquet", 1271)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]
 GPU = "NVIDIA A100-SXM4-80GB"

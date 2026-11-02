@@ -18,6 +18,9 @@
 # One worker per card claims lines of outputs/cvpr27/a100/queue/tasks.txt:
 #   ol <arm> <set> <shard> <n_shards> [rerun]   rollout rows -> outputs/cvpr27/a100/<arm>_<set>[_rerun]
 #   lingo <arm>                                 LingoQA + Lingo-Judge -> outputs/cvpr27/a100/lingo_vqa[_scores]_<arm>
+#   nll <arm> <oodval|oodtrain> <shard> <n>     reference-CoC NLL -> outputs/cvpr27/a100/nll_<arm>_<set>
+# A100_QUEUE=<dir> (sbatch --export) points a holder at another queue, so holders submitted with an
+# older copy of this script never claim task kinds or sets they do not know.
 # A line is claimed by mkdir of queue/claimed/<line number> -- atomic on Lustre across nodes,
 # which flock is not guaranteed to be (it depends on the mount's flock/localflock option), and
 # the queue is written from the Datamover while the workers read it on the compute node.
@@ -71,7 +74,7 @@ declare -A MODEL=(
   # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut (cvpr27/wandasp_v1)
   [wandasp]=outputs/cvpr27/slim_wandasp_u40
 )
-Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
+Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
 IDLE_MAX=${IDLE_MAX:-2700}
 # Worker k runs on the k-th card SLURM granted. Indexing 0..3 directly would land on cards
 # outside the allocation whenever the node does not renumber them (no device cgroup).
@@ -142,6 +145,7 @@ run_task() {  # <device> <kind> <args...>
       case $set_name in
         test2000) set_args=(--set test --n-indist 2000) ;;
         oodval) set_args=(--set ood --manifest ood_val) ;;
+        oodtrain) set_args=(--set ood --manifest ood_train) ;;
         *) echo "unknown set $set_name"; return 2 ;;
       esac
       # run_baseline rewrites its rows file every 10 clips, so a killed task leaves a partial
@@ -169,6 +173,23 @@ run_task() {  # <device> <kind> <args...>
             --runs "cvpr27/a100/lingo_vqa_$arm" --exp-id "cvpr27/a100/lingo_vqa_scores_$arm" --gpu 0 \
             > "logs/a100_lingo_${arm}_score.log" 2>&1
       fi
+      ;;
+    nll)
+      local arm=$1 set_name=$2 shard=$3 n=$4 manifest
+      local model=${MODEL[$arm]:?unknown arm $arm}
+      local exp=cvpr27/a100/nll_${arm}_${set_name}
+      case $set_name in
+        oodval) manifest=ood_val ;;
+        oodtrain) manifest=ood_train ;;
+        *) echo "unknown set $set_name"; return 2 ;;
+      esac
+      if [ -f "outputs/$exp/summary_s${shard}of${n}.txt" ]; then
+        stamp "skip: outputs/$exp/summary_s${shard}of${n}.txt exists"
+        return 0
+      fi
+      CUDA_VISIBLE_DEVICES=$dev "$PY" cvpr27/code/run_nll_gtcoc.py --manifest "$manifest" \
+          --model "$model" --exp-id "$exp" --shard "$shard" --n-shards "$n" --gpu 0 --reserve-gb 40 \
+          > "logs/a100_nll_${arm}_${set_name}_s${shard}of${n}.log" 2>&1
       ;;
     *) echo "unknown task kind $kind"; return 2 ;;
   esac
