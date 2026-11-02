@@ -3,7 +3,7 @@
 모델 `nvidia/Alpamayo-1.5-10B`(rev `7aba829`) · KISTI NEURON A100-SXM4-80GB · 분석 `cvpr27/code/analyze_a100.py --stage table`
 (`outputs/cvpr27/a100/table/`). 개별 리포트: `2026-10-29_kisti-a100-openloop.md`, `2026-10-30_a100-fm-ce-only.md`,
 `2026-10-30_l0keep-l14-mlp-cut.md`, `2026-10-31_llm-pruner-budget-matched.md`, `2026-11-01_tyr-official-a100.md`,
-`2026-11-02_wandasp-a100-openloop.md`, `2026-11-02_tyr-vt-equal-hessian.md`.
+`2026-11-02_wandasp-a100-openloop.md`, `2026-11-02_tyr-vt-equal-hessian.md`, `2026-11-03_oodtrain-coc-quality.md`.
 
 ## Purpose
 - A100 한 종류의 하드웨어에서 잰 모든 arm을 한 표에 모은다(A100 행끼리는 노드·날짜가 달라도 비트 동일, Ada 표와는 섞지 않음).
@@ -85,6 +85,33 @@ OOD-Val262:
 | tyr_vt | 0.080 | 0.302 | 1.113 | 0.212 | 0.791 | 2.748 |
 | wandasp | 0.187 | 0.661 | 2.208 | 0.487 | 1.706 | 5.354 |
 
+OOD-train1271 (7개 arm, `2026-11-03_oodtrain-coc-quality.md`):
+
+| arm | minADE@6 1.6 s | 3.2 s | 6.4 s | minFDE@6 1.6 s | 3.2 s | 6.4 s |
+|---|---|---|---|---|---|---|
+| dense | 0.063 | 0.245 | 0.922 | 0.166 | 0.630 | 2.334 |
+| MoOP | 0.073 | 0.280 | 1.017 | 0.191 | 0.715 | 2.486 |
+| MoOP l0keep | 0.075 | 0.284 | 1.023 | 0.195 | 0.727 | 2.496 |
+| tyr_off | 0.081 | 0.298 | 1.035 | 0.212 | 0.757 | 2.490 |
+| tyr_vt | 0.080 | 0.298 | 1.046 | 0.209 | 0.764 | 2.520 |
+| lp_m24 | 0.135 | 0.471 | 1.526 | 0.347 | 1.180 | 3.583 |
+| wandasp | 0.220 | 0.749 | 2.390 | 0.566 | 1.902 | 5.650 |
+
+### OOD CoC 품질 (Claude 채점 1–5 / 정답 CoC NLL; `2026-11-03_oodtrain-coc-quality.md`)
+
+| arm | 채점 OOD-Val | 채점 OOD-train | MoOP 대비 (OOD-train) | NLL OOD-Val | NLL OOD-train |
+|---|---|---|---|---|---|
+| dense | 3.02 | 3.05 | +0.142* | 3.139 | 2.977 |
+| MoOP | 2.81 | 2.91 | — | 3.185 | 3.007 |
+| MoOP l0keep | 2.79 | 2.94 | +0.027 | 3.157 | 2.979 |
+| tyr_vt | 2.86 | 2.91 | +0.004 | 3.077 | 2.902 |
+| tyr_off | 2.71 | 2.75 | −0.159* | 3.059 | 2.842 |
+| lp_m24 | 2.65 | 2.64 | −0.266* | 3.357 | 3.172 |
+| wandasp | 1.47 | 1.34 | −1.573* | 4.936 | 4.609 |
+| 우연 바닥 | 1.80 | — | — | — | — |
+
+Tyr의 낮은 NLL은 분포가 평평해진 효과다(자기 CoC NLL 0.31 대 dense 0.21). Tyr 행은 채점을 기준으로 읽는다.
+
 ### 짝지은 차이 (6.4 s minADE@6, 평균 [95% CI]; *는 CI가 0 배제)
 
 | arm | 기준 | test2000 | OOD-Val | LingoQA |
@@ -122,6 +149,10 @@ OOD-Val262:
   2–3배로 무너져 0번 층 cruise 붕괴와는 다른 양상이고, CoC가 멀쩡한 클립도 1.50 m다(`2026-11-02_wandasp-a100-openloop.md`).
 - **tyr_vt (헤시안 V:T = 1:1):** LingoQA 38.0% → 62.8%(+24.8 pp*)로 언어가 회복되지만 주행은 tyr_off보다 +0.049 m* 나빠져
   MoOP와 같은 수준이 된다. head가 0–17층에서 18–35층으로 63개 옮겨 간 배분 변화와 맞는다(`2026-11-02_tyr-vt-equal-hessian.md`).
-- **진행 중:** OOD-train(1,271클립) 주행 + OOD CoC 품질(정답 CoC NLL, Claude 채점), 7개 arm
-  (`cvpr27/plans/2026-11-02_oodtrain-coc-quality.md`).
+- **OOD-train + CoC 품질:**
+  - tyr_off의 "주행 = dense"는 in-distribution에서만 성립한다. OOD-train에서는 dense보다 +0.113*, MoOP와 같다(+0.018).
+  - OOD CoC 채점에서 압축 비용이 가장 작은 arm은 MoOP·l0keep·tyr_vt다(dense 대비 −0.12 ~ −0.14). tyr_off(−0.30)는
+    LingoQA만큼은 아니어도 CoC도 나빠진다.
+  - OOD-Val에서 본 l0keep − MoOP +0.063은 OOD-train에서 +0.006 (n.s.)으로 재현되지 않는다.
+  - 자세한 내용은 `2026-11-03_oodtrain-coc-quality.md`.
 - **참고(폐루프 인프라):** KISTI NEURON에서 AlpaSim 폐루프 스모크(dense, 장면 1개) 통과(`2026-10-31_kisti-closedloop-smoke.md`).

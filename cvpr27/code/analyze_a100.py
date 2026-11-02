@@ -71,7 +71,8 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut
         "wandasp": "slim_wandasp_u40"}
 # arms are also paired with the MoOP(s) they are built on or compared against
-REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
+REFS = {"moop_l0keep": ["moop"],
+        "fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
         "l0keep_l14m95": ["moop_l0keep"], "l0keep_l14m90": ["moop_l0keep"],
         "l0keep_l14m80": ["moop_l0keep"],
         "lp_m24": ["moop", "moop_l0keep"], "lp_r50": ["moop", "moop_l0keep"],
