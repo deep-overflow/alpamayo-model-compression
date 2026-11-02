@@ -95,6 +95,7 @@ if [ ! -f "$SLIM/slim_state.pt" ]; then
   stamp "make_slim -> $SLIM"
   "$PY" experiments/head_analysis/make_slim.py --config tyr_u40_r --out "$SLIM" \
     --tyr-supernet "$O/supernet_r4" --tyr-config "$O/search_r4/final_config.json" --gpu 0 \
+    --importance importance_v2 \
     > "$L/make_slim.log" 2>&1
 fi
 stamp "all done"
