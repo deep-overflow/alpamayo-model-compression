@@ -123,7 +123,7 @@ def table(judge_exp):
                "", "| arm | vs | n | d nll_gtcoc | n | d score |", "|---|---|---|---|---|---|"]
         for a in ARMS:
             for ref in REFS:
-                if a == ref:
+                if a == ref or a in REFS[: REFS.index(ref)]:
                     continue
                 row, key = [], f"{s}/{a}/{ref}"
                 res[key] = {}
