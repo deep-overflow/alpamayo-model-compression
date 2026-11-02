@@ -107,7 +107,7 @@ def main():
         acc = {"o": torch.zeros(H * hd, dtype=torch.float32, device="cuda"),
                "m": torch.zeros(inter, dtype=torch.float32, device="cuda"), "n": 0}
 
-        def stat(key):
+        def stat(key, acc=acc):
             def fn(_m, a):
                 x = a[0].reshape(-1, a[0].shape[-1]).float()               # (T, D), before this layer's gate
                 acc[key] += (x * x).sum(0) / (acc["n"] + 1)
