@@ -19,8 +19,14 @@ cd /scratch/e1997a06/project/amc-tyr
 source /scratch/e1997a06/project/alpamayo-model-compression/env.sh
 PY=$ALPAMAYO_REPO/.venv/bin/python
 export OMP_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-O=cvpr27/tyr_off
-L=logs/tyr_off
+# Variants pass these through sbatch --export (defaults = tyr_off). tyr_vt:
+#   TYR_OUT=cvpr27/tyr_vt TYR_SLIM=outputs/cvpr27/slim_tyr_vt TYR_TEACHER=cvpr27/tyr_off/teacher \
+#   TYR_SUPERNET_ARGS="--hessian-mix vt_equal"
+O=${TYR_OUT:-cvpr27/tyr_off}
+SLIM=${TYR_SLIM:-outputs/cvpr27/slim_tyr_off}
+TEACHER=${TYR_TEACHER:-$O/teacher}
+read -ra SUPERNET_ARGS <<< "${TYR_SUPERNET_ARGS:-}"
+L=logs/${O##*/}
 mkdir -p "$L"
 stamp() { echo "$(date '+%F %T') $*"; }
 stamp "job ${SLURM_JOB_ID:-?} on $(hostname), CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
@@ -40,13 +46,13 @@ for R in 1 2 3 4; do
     if [ ! -f "outputs/$O/supernet_r$R/summary.txt" ]; then
       stamp "R=$R supernet (card 0)"
       "$PY" cvpr27/code/tyr_off/supernet.py --exp-id "$O/supernet_r$R" --iteration "$R" \
-        --weights-diff-mha "$WD_MHA" --weights-diff-mlp "$WD_MLP" "${prev[@]}" --gpu 0 \
+        --weights-diff-mha "$WD_MHA" --weights-diff-mlp "$WD_MLP" "${prev[@]}" "${SUPERNET_ARGS[@]}" --gpu 0 \
         > "$L/supernet_r$R.log" 2>&1 &
       pids+=($!)
     fi
     if [ "$R" -eq 1 ]; then
       stamp "teacher (card 1; skips clips already cached)"
-      "$PY" cvpr27/code/tyr_off/search.py --teacher-only --teacher-id "$O/teacher" --gpu 1 \
+      "$PY" cvpr27/code/tyr_off/search.py --teacher-only --teacher-id "$TEACHER" --gpu 1 \
         > "$L/teacher.log" 2>&1 &
       pids+=($!)
     fi
@@ -57,7 +63,7 @@ for R in 1 2 3 4; do
     cp -r "outputs/$O/supernet_r$R/." "$T/"
     stamp "R=$R search (4 workers), supernet staged to $T ($(du -sh "$T" | cut -f1))"
     "$PY" cvpr27/code/tyr_off/search.py --supernet "$O/supernet_r$R" --supernet-path "$T" \
-      --exp-id "$O/search_r$R" --teacher-id "$O/teacher" --workers 4 --gpu 0,1,2,3 \
+      --exp-id "$O/search_r$R" --teacher-id "$TEACHER" --workers 4 --gpu 0,1,2,3 \
       > "$L/search_r$R.log" 2>&1
     rm -rf "$T"
     stamp "R=$R done: $(head -3 "outputs/$O/search_r$R/summary.txt" | tail -1)"
@@ -85,9 +91,9 @@ assert removed == 2_657_452_032, removed
 assert min(q) > 0 and min(m) > 0, "a layer lost every head or channel -- handle before make_slim"
 PY
 
-if [ ! -f "outputs/$O/../slim_tyr_off/slim_state.pt" ]; then
-  stamp "make_slim tyr_off"
-  "$PY" experiments/head_analysis/make_slim.py --config tyr_u40_r --out outputs/cvpr27/slim_tyr_off \
+if [ ! -f "$SLIM/slim_state.pt" ]; then
+  stamp "make_slim -> $SLIM"
+  "$PY" experiments/head_analysis/make_slim.py --config tyr_u40_r --out "$SLIM" \
     --tyr-supernet "$O/supernet_r4" --tyr-config "$O/search_r4/final_config.json" --gpu 0 \
     > "$L/make_slim.log" 2>&1
 fi

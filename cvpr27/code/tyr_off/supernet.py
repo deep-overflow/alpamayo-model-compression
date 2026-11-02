@@ -67,17 +67,27 @@ def _raise_stop(_module, _args, _out):
     raise StopForward
 
 
-def collect_hessians(model, store, layer, o_proj, down, early_stop):
+def collect_hessians(model, store, layer, o_proj, down, early_stop, mix=None):
     """H = sum x x^T at o_proj / down_proj inputs of one block over every calib clip.
 
     Block i's inputs depend only on blocks < i, so the prefill can stop right after block i:
     same Hessians, ~half the forward time over a 36-block run (checked against a full prefill at
     block 0 of every run).
+
+    mix None: every prefill token counts once (tyr_off). mix {stream: weight}: one Hessian per token
+    stream (item["masks"]), combined as sum_s w_s * H_s / N_s, so each stream weighs w_s whatever
+    its token count (tyr_vt: vision side and prompt text at 1/2 each, against 95% / 5% by count).
     """
-    hooks = {"o": tyr.HessianHook(o_proj), "m": tyr.HessianHook(down)}
+    if mix is None:
+        hooks = {"o": tyr.HessianHook(o_proj), "m": tyr.HessianHook(down)}
+    else:
+        hooks = {"o": tyr.StreamHessianHook(o_proj, list(mix)), "m": tyr.StreamHessianHook(down, list(mix))}
     stop = layer.register_forward_hook(_raise_stop) if early_stop else None
     try:
         for item in store:
+            if mix is not None:
+                for h in hooks.values():
+                    h.masks = {s: item["masks"][s] for s in mix}
             try:
                 prefill(model, item)
             except StopForward:
@@ -87,6 +97,10 @@ def collect_hessians(model, store, layer, o_proj, down, early_stop):
             stop.remove()
         for h in hooks.values():
             h.remove()
+    if mix is not None:
+        for h in hooks.values():
+            h.n_tokens = dict(h.n)
+            h.H = tyr.mix_hessians(h.H, h.n, mix)
     return hooks
 
 
@@ -140,6 +154,10 @@ def main():
     ap.add_argument("--full-prefill", action="store_true",
                     help="run every calibration prefill through all blocks (R=1 was built this way); "
                          "default stops right after the block being calibrated")
+    ap.add_argument("--hessian-mix", choices=["tokens", "vt_equal"], default="tokens",
+                    help="tokens: every prefill token once (tyr_off); vt_equal: vision side (vision + "
+                         "trajectory history + sink) and prompt text at 1/2 each after per-stream "
+                         "token normalisation (tyr_vt, cvpr27/plans/2026-11-01_tyr-vt-equal-hessian.md)")
     ap.add_argument("--reserve-gb", type=float, default=40.0)
     ap.add_argument("--gpu", type=str, default=None)
     args = ap.parse_args()
@@ -216,6 +234,8 @@ def main():
         "levels": {n: {str(lv): v for lv, v in g.items()} for n, g in grids.items()},
         "centre_keep_heads": keep0_q, "centre_keep_channels": keep0_m, "centre_removed": removed0,
         "hessian_tokens": "full fused prompt prefill, no labels (calib_100)",
+        "hessian_mix": ("every token once" if args.hessian_mix == "tokens" else
+                        "V (vision + traj history + sink) and T (prompt text) at 1/2 each, per-stream mean"),
         "hessian_forward": ("full prefill" if args.full_prefill else
                             "prefill stopped after the calibrated block (same inputs; checked at block 0)"),
         "error_accumulation": "paper Eq. 5: (1 - S_e)-weighted mean of all level weights, fp32",
@@ -224,15 +244,26 @@ def main():
 
     print(f"preloading {len(calib)} clip inputs...", flush=True)
     store = preload_inputs(model, processor, calib, args.cache)
+    mix = None
+    if args.hessian_mix == "vt_equal":
+        mix = {"V": 0.5, "T": 0.5}
+        n_t = 0
+        for item in store:
+            text = lib.compute_spans(model, item["input_ids"])["text"].cuda()       # (T_prompt,)
+            item["masks"] = {"V": ~text, "T": text}
+            n_t += int(text.sum())
+        print(f"hessian mix V:T = 1:1 after per-stream normalisation; prompt text "
+              f"{n_t / len(store):.0f} tokens/clip", flush=True)
 
     t_all = time.time()
     for i in range(n_blocks):
         t0 = time.time()
         o_proj, down = layers[i].self_attn.o_proj, layers[i].mlp.down_proj
-        hooks = collect_hessians(model, store, layers[i], o_proj, down, early_stop=not args.full_prefill)
+        hooks = collect_hessians(model, store, layers[i], o_proj, down,
+                                 early_stop=not args.full_prefill, mix=mix)
         t_fwd = time.time() - t0
         if i == 0 and not args.full_prefill:
-            full = collect_hessians(model, store, layers[i], o_proj, down, early_stop=False)
+            full = collect_hessians(model, store, layers[i], o_proj, down, early_stop=False, mix=mix)
             for k in hooks:
                 rel = float((hooks[k].H - full[k].H).abs().max() / full[k].H.abs().max())
                 print(f"early-stop check block 0 {k}: max rel diff {rel:.3e} "

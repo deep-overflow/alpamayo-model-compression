@@ -66,6 +66,8 @@ declare -A MODEL=(
   [l0keep_u35]=outputs/cvpr27/slim_dual_u35_l0keep_v2
   [l0keep_u45]=outputs/cvpr27/slim_dual_u45_l0keep_v2
   [l0keep_u50]=outputs/cvpr27/slim_dual_u50_l0keep_v2
+  # tyr_off with the Hessian's vision and text streams at 1:1 (cvpr27/plans/2026-11-01_tyr-vt-equal-hessian.md)
+  [tyr_vt]=outputs/cvpr27/slim_tyr_vt
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
