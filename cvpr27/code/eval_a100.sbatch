@@ -68,6 +68,8 @@ declare -A MODEL=(
   [l0keep_u50]=outputs/cvpr27/slim_dual_u50_l0keep_v2
   # tyr_off with the Hessian's vision and text streams at 1:1 (cvpr27/plans/2026-11-01_tyr-vt-equal-hessian.md)
   [tyr_vt]=outputs/cvpr27/slim_tyr_vt
+  # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut (cvpr27/wandasp_v1)
+  [wandasp]=outputs/cvpr27/slim_wandasp_u40
 )
 Q=$ALPAMAYO_REPO/outputs/cvpr27/a100/queue
 IDLE_MAX=${IDLE_MAX:-2700}
@@ -177,6 +179,14 @@ claim_next() {  # prints "<line number> <task>" of the first unclaimed line, hav
   while IFS= read -r line || [ -n "$line" ]; do
     i=$((i + 1))
     case $line in '' | \#*) continue ;; esac
+    # a line whose recipe is not on disk yet (an arm still being built, e.g. queued ahead of a
+    # build job) is left for later rather than claimed and failed
+    read -r _kind _arm _ <<< "$line"
+    _model=""
+    [ -n "${_arm:-}" ] && _model=${MODEL[$_arm]:-}
+    if [ -n "$_model" ] && [ "$_model" != baseline ] && [ ! -f "$_model/slim_meta.json" ]; then
+      continue
+    fi
     if mkdir "$Q/claimed/$i" 2>/dev/null; then
       echo "$JOB" > "$Q/claimed/$i/job"
       echo "$i $line"

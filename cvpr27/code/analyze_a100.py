@@ -37,7 +37,8 @@ COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
           "fm_only_l0keep": "#e87ba4", "ce_only_l0keep": "#eda100",
           "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e",
           "lp_m24": "#8a5cc2", "lp_r50": "#c2a5e6", "tyr_off": "#d0632c", "tyr_u40_r": "#f0a07a",
-          "l0keep_u35": "#5fb35f", "l0keep_u45": "#0c6a0c", "l0keep_u50": "#064806", "tyr_vt": "#a8441c"}
+          "l0keep_u35": "#5fb35f", "l0keep_u45": "#0c6a0c", "l0keep_u50": "#064806", "tyr_vt": "#a8441c",
+          "wandasp": "#e34948"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -66,7 +67,9 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         "l0keep_u45": "slim_dual_u45_l0keep_v2",
         "l0keep_u50": "slim_dual_u50_l0keep_v2",
         # tyr_off with a 1:1 vision/text Hessian (cvpr27/plans/2026-11-01_tyr-vt-equal-hessian.md)
-        "tyr_vt": "slim_tyr_vt"}
+        "tyr_vt": "slim_tyr_vt",
+        # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut
+        "wandasp": "slim_wandasp_u40"}
 # arms are also paired with the MoOP(s) they are built on or compared against
 REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
         "l0keep_l14m95": ["moop_l0keep"], "l0keep_l14m90": ["moop_l0keep"],
@@ -75,7 +78,8 @@ REFS = {"fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
         "tyr_off": ["moop", "moop_l0keep"],
         "tyr_u40_r": ["moop", "moop_l0keep", "tyr_off"],
         "l0keep_u35": ["moop_l0keep"], "l0keep_u45": ["moop_l0keep"], "l0keep_u50": ["moop_l0keep"],
-        "tyr_vt": ["moop", "moop_l0keep", "tyr_off"]}
+        "tyr_vt": ["moop", "moop_l0keep", "tyr_off"],
+        "wandasp": ["moop", "moop_l0keep"]}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it
 ADA_DENSE = [("baseline_ada_ps_test", "baseline"), ("minitron/test2000x_dense", "baseline")]
