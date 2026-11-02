@@ -208,12 +208,12 @@ def plot(results, path):
         ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
-        ax.legend(loc="lower right", frameon=False, fontsize=9)
+        ax.legend(loc="upper left", bbox_to_anchor=(0, -0.08), frameon=False, fontsize=9)
     axes[0][0].set_yticks(y, arms)
     fig.suptitle("Compression cost on Claude-flagged long-tail vs nominal clips (A100, k=8, seed 42)",
                  x=0.01, ha="left", fontsize=12)
     fig.tight_layout()
-    fig.savefig(path, dpi=150, facecolor="#fcfcfb")
+    fig.savefig(path, dpi=150, facecolor="#fcfcfb", bbox_inches="tight")
 
 
 def main():
@@ -222,10 +222,14 @@ def main():
     ap.add_argument("--out", default="openloop_v1")
     ap.add_argument("--n-boot", type=int, default=100_000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--replot", action="store_true", help="redraw the figure from the saved metrics.json")
     args = ap.parse_args()
 
     out = OUT_ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
+    if args.replot:
+        plot(json.loads((out / "metrics.json").read_text()), out / "d_ade6_longtail_vs_nominal.png")
+        return
     labels = pd.read_parquet(OUT_ROOT / args.labels / "labels.parquet")
     labels = labels[(labels.status == "ok") & (labels.rep == 0)]
     rng = np.random.default_rng(args.seed)

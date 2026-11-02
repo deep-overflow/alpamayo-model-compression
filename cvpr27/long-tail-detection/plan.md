@@ -27,8 +27,8 @@ long-tail의 기동 분포로 가중한 DiD를 함께 보고한다.
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | S0 파일럿 | OOD-val 25(범주 라운드로빈) + test_2000 25, 각 2회 | 완료 — $2.39/100건, 반복 일치 96–100%, OOD long-tail 재현 60% |
-| S1+S2 라벨링 | OOD-val 262 전부 + test_2000 전부, 1회 (`label_v1`) | 진행 |
-| S3 개루프 분석 | 저장된 A100 클립별 결과 15개 arm을 long-tail / NOMINAL로 분할(GPU 없음) | 스크립트 준비 |
+| S1+S2 라벨링 | OOD-val 262 전부 + test_2000 전부, 1회 (`label_v1`) | 완료 — 2,262건 `ok`, $53.59; test long-tail 15.3% |
+| S3 개루프 분석 | 저장된 A100 클립별 결과 15개 arm을 long-tail / NOMINAL로 분할(GPU 없음) | 완료 — [리포트](../reports/2026-11-02_long-tail-openloop.md) |
 | S4 (선택) 확장 | test_2000 long-tail이 너무 적으면 Hub 스트리밍으로 test 분할을 더 훑어 캐시 빌드 후 주요 arm 재평가 | 결과 보고 결정 |
 
 ## 파일럿에서 본 한계
