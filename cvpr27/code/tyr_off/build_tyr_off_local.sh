@@ -83,7 +83,11 @@ print("final kept channels per layer", m, "sum", sum(m))
 removed = (36 * 32 - sum(q)) * 2 * 128 * 4096 + (36 * 12288 - sum(m)) * 3 * 4096
 print("removed", removed)
 assert removed == int(sys.argv[2]), (removed, sys.argv[2])
-assert min(q) > 0 and min(m) > 0, "a layer lost every head or channel -- handle before make_slim"
+zq = [i for i, k in enumerate(q) if k == 0]
+zm = [i for i, k in enumerate(m) if k == 0]
+if zq or zm:
+    # make_slim keeps a zero-output placeholder head (o_proj columns are exact zeros) and removes an empty MLP
+    print("layers with no Q heads (placeholder head in make_slim):", zq, "| no MLP channels:", zm)
 PY
 
 if [ ! -f "$SLIM/slim_state.pt" ]; then

@@ -163,6 +163,8 @@ from run_integrated import expert_masks, vlm_combined_masks  # noqa: E402
 from alpamayo1_5 import helper  # noqa: E402
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5  # noqa: E402
 
+TYR_PLACEHOLDER = []  # tyr layers whose level kept no Q head (see the tyr branch of build_masks)
+
 REPO = Path(__file__).resolve().parents[2]
 # pinned to the blobs every result in this track was produced with, matching run_baseline
 MODEL_REV = sl.MODEL_REV  # single source, so a build and a load can never drift apart
@@ -511,6 +513,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 vm[i] = (col > 0).cpu().numpy().astype(float)
             else:
                 vq[i] = (col.reshape(nh, hd).sum(1) > 0).cpu().numpy().astype(float)
+        # A level that keeps 0 heads (the grid reaches sparsity 1.0; tyr_u50 layer 30) leaves a layer with no
+        # attention output. slice_layer needs >= 1 Q head and the expert still reads the layer's k/v, so head 0
+        # stays as a placeholder: its o_proj columns are the supernet's exact zeros (written above), so the layer
+        # computes the same function. Recorded as attn_placeholder_layers (1,048,576 params kept, not removed).
+        TYR_PLACEHOLDER.clear()
+        for i in np.flatnonzero(vq.sum(1) == 0):
+            assert write_weights and vlayers[i].self_attn.o_proj.weight.data[:, :hd].abs().sum() == 0
+            vq[i, 0] = 1.0
+            TYR_PLACEHOLDER.append(int(i))
+        if TYR_PLACEHOLDER:
+            print(f"tyr: layers {TYR_PLACEHOLDER} keep 0 Q heads -> head 0 kept as a zero-output placeholder",
+                  flush=True)
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
     elif mass:
@@ -1116,6 +1130,8 @@ def main():
     t0 = time.time()
     meta = sl.apply_surgery(model, vq, vm, eq, em, kvonly_layers=kvonly)
     meta["config"] = args.config
+    if TYR_PLACEHOLDER:
+        meta["attn_placeholder_layers"] = list(TYR_PLACEHOLDER)
     meta["importance_from"] = args.importance
     slim_total = sl.n_params(model)
     removed = expected_removed(model, vq, vm, eq, em, kvonly)
