@@ -10,7 +10,13 @@ export HF_HOME=$HOME/.cache/huggingface HF_HUB_CACHE=/mnt/nvme1n1/ad_vla/cache/h
 export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${CARDS:?set CARDS, e.g. 0,1,3}
 export OMP_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=.venv/bin/python
-O=cvpr27/tyr_off
+# Same knobs as build_tyr_off.sbatch (defaults = tyr_off): TYR_OUT, TYR_SLIM, TYR_TEACHER, TYR_SUPERNET_ARGS,
+# TYR_BUDGET (e.g. tyr_u50: TYR_OUT=cvpr27/tyr_u50 TYR_SLIM=outputs/cvpr27/slim_tyr_u50
+#   TYR_TEACHER=cvpr27/tyr_off/teacher TYR_SUPERNET_ARGS="--sparsity 0.50" TYR_BUDGET=3321888768).
+O=${TYR_OUT:-cvpr27/tyr_off}
+SLIM=${TYR_SLIM:-outputs/cvpr27/slim_tyr_off}
+TEACHER=${TYR_TEACHER:-$O/teacher}
+read -ra SUPERNET_ARGS <<< "${TYR_SUPERNET_ARGS:-}"
 L=outputs/$O/logs
 mkdir -p "$L"
 IFS=, read -ra CS <<< "$CARDS"
@@ -39,13 +45,13 @@ for R in 1 2 3 4; do
     if [ ! -f "outputs/$O/supernet_r$R/summary.txt" ]; then
       stamp "R=$R supernet (card ${CS[0]})"
       "$PY" cvpr27/code/tyr_off/supernet.py --exp-id "$O/supernet_r$R" --iteration "$R" \
-        --weights-diff-mha "$WD_MHA" --weights-diff-mlp "$WD_MLP" "${prev[@]}" --gpu 0 \
+        --weights-diff-mha "$WD_MHA" --weights-diff-mlp "$WD_MLP" "${prev[@]}" "${SUPERNET_ARGS[@]}" --gpu 0 \
         > "$L/supernet_r$R.log" 2>&1 &
       pids+=($!)
     fi
     if [ "$R" -eq 1 ]; then
       stamp "teacher (card ${CS[1]}; skips clips already cached)"
-      "$PY" cvpr27/code/tyr_off/search.py --teacher-only --teacher-id "$O/teacher" --gpu 1 \
+      "$PY" cvpr27/code/tyr_off/search.py --teacher-only --teacher-id "$TEACHER" --gpu 1 \
         > "$L/teacher.log" 2>&1 &
       pids+=($!)
     fi
@@ -55,7 +61,7 @@ for R in 1 2 3 4; do
     N=$(tr ',' '\n' <<< "$SC" | wc -l)
     stamp "R=$R search ($N workers on cards $SC)"
     CUDA_VISIBLE_DEVICES=$SC "$PY" cvpr27/code/tyr_off/search.py --supernet "$O/supernet_r$R" \
-      --exp-id "$O/search_r$R" --teacher-id "$O/teacher" --workers "$N" --gpu "$(seq -s, 0 $((N - 1)))" \
+      --exp-id "$O/search_r$R" --teacher-id "$TEACHER" --workers "$N" --gpu "$(seq -s, 0 $((N - 1)))" \
       > "$L/search_r$R.log" 2>&1
     stamp "R=$R done: $(head -3 "outputs/$O/search_r$R/summary.txt" | tail -1)"
   fi
@@ -63,7 +69,7 @@ for R in 1 2 3 4; do
   WD_MLP=$((WD_MLP / 2))
 done
 
-"$PY" - "$O" <<'PY'
+"$PY" - "$O" "${TYR_BUDGET:-2657452032}" <<'PY'
 import json, sys
 from pathlib import Path
 o = Path("outputs") / sys.argv[1]
@@ -76,14 +82,15 @@ print("final kept heads per layer", q, "sum", sum(q))
 print("final kept channels per layer", m, "sum", sum(m))
 removed = (36 * 32 - sum(q)) * 2 * 128 * 4096 + (36 * 12288 - sum(m)) * 3 * 4096
 print("removed", removed)
-assert removed == 2_657_452_032, removed
+assert removed == int(sys.argv[2]), (removed, sys.argv[2])
 assert min(q) > 0 and min(m) > 0, "a layer lost every head or channel -- handle before make_slim"
 PY
 
-if [ ! -f "outputs/cvpr27/slim_tyr_off/slim_state.pt" ]; then
-  stamp "make_slim tyr_off"
-  "$PY" experiments/head_analysis/make_slim.py --config tyr_u40_r --out outputs/cvpr27/slim_tyr_off \
+if [ ! -f "$SLIM/slim_state.pt" ]; then
+  stamp "make_slim -> $SLIM"
+  "$PY" experiments/head_analysis/make_slim.py --config tyr_u40_r --out "$SLIM" \
     --tyr-supernet "$O/supernet_r4" --tyr-config "$O/search_r4/final_config.json" --gpu 0 \
+    --importance importance_v2 \
     > "$L/make_slim.log" 2>&1
 fi
 stamp "all done"

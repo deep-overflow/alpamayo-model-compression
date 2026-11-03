@@ -73,6 +73,13 @@ declare -A MODEL=(
   [tyr_vt]=outputs/cvpr27/slim_tyr_vt
   # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut (cvpr27/wandasp_v1)
   [wandasp]=outputs/cvpr27/slim_wandasp_u40
+  # baselines and FM-/CE-only controls at MoOP u35/u45/u50 budgets (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md)
+  [lp_u35]=outputs/cvpr27/slim_lp_u35 [tyr_u35]=outputs/cvpr27/slim_tyr_u35 [wandasp_u35]=outputs/cvpr27/slim_wandasp_u35
+  [fm_only_u35]=outputs/cvpr27/slim_trajlastcoc_u35_l0keep_v2 [ce_only_u35]=outputs/cvpr27/slim_coc_u35_l0keep_v2
+  [lp_u45]=outputs/cvpr27/slim_lp_u45 [tyr_u45]=outputs/cvpr27/slim_tyr_u45 [wandasp_u45]=outputs/cvpr27/slim_wandasp_u45
+  [fm_only_u45]=outputs/cvpr27/slim_trajlastcoc_u45_l0keep_v2 [ce_only_u45]=outputs/cvpr27/slim_coc_u45_l0keep_v2
+  [lp_u50]=outputs/cvpr27/slim_lp_u50 [tyr_u50]=outputs/cvpr27/slim_tyr_u50 [wandasp_u50]=outputs/cvpr27/slim_wandasp_u50
+  [fm_only_u50]=outputs/cvpr27/slim_trajlastcoc_u50_l0keep_v2 [ce_only_u50]=outputs/cvpr27/slim_coc_u50_l0keep_v2
 )
 Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
 IDLE_MAX=${IDLE_MAX:-2700}

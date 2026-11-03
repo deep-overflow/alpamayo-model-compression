@@ -39,7 +39,7 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 from expert_per_clip import reserve_gpu  # also installs the gated-repo hub patch
 from slim_lib import MODEL_REV
 
-CUT_Q, CUT_MLP = 13, 4898   # MoOP u40_v2 per-layer counts
+CUT_Q, CUT_MLP = 13, 4898   # MoOP u40_v2 per-layer counts (defaults; u35 11/4301, u45 14/5530, u50 16/6144)
 
 
 class Stop(Exception):
@@ -54,6 +54,8 @@ def main():
     ap.add_argument("--cache", default="calib")
     ap.add_argument("--reserve-gb", type=float, default=30.0)
     ap.add_argument("--gpu", type=str, default=None, help="comma-separated card ids to restrict the scan")
+    ap.add_argument("--cut-q", type=int, default=CUT_Q, help="Q heads cut per layer (MoOP u{N} count)")
+    ap.add_argument("--cut-mlp", type=int, default=CUT_MLP, help="MLP channels cut per layer (MoOP u{N} count)")
     args = ap.parse_args()
 
     out_dir = REPO / "outputs" / args.exp_id
@@ -80,7 +82,7 @@ def main():
         "purpose": "Wanda-sp (FLAP prune_wanda_sp), layer-sequential, structured unit scores",
         "metric": "|W| * sqrt(scaler_row), mean over output rows; head = sum of its 128 columns",
         "sequential": "layer L scored with layers 0..L-1 pruned; forward stopped after layer L",
-        "cut_per_layer": {"q_heads": CUT_Q, "mlp_channels": CUT_MLP}, "layers": "all 36 (0..35)",
+        "cut_per_layer": {"q_heads": args.cut_q, "mlp_channels": args.cut_mlp}, "layers": "all 36 (0..35)",
         "num_clips": len(calib), "clip_ids": [c for c, _ in calib],
         "calib_manifest": args.calib_manifest, "cache": args.cache, "tokens": "full fused prompt, prefill only",
         "gpu": torch.cuda.get_device_name(device),
@@ -140,22 +142,22 @@ def main():
         q_w[li] = mo.view(H, hd).sum(1).cpu().numpy()
         mlp_w[li] = md.cpu().numpy()
         sc_o[li], sc_m[li] = acc["o"].cpu().numpy(), acc["m"].cpu().numpy()
-        cut_q = np.argsort(q_w[li], kind="stable")[:CUT_Q]
-        cut_m = np.argsort(mlp_w[li], kind="stable")[:CUT_MLP]
+        cut_q = np.argsort(q_w[li], kind="stable")[:args.cut_q]
+        cut_m = np.argsort(mlp_w[li], kind="stable")[:args.cut_mlp]
         keep_q[li, cut_q] = False
         keep_m[li, cut_m] = False
         gq = torch.ones(H, device="cuda", dtype=torch.bfloat16)
         gq[torch.as_tensor(cut_q, device="cuda")] = 0
         gate_o[li] = gq.repeat_interleave(hd)
         gate_m[li][torch.as_tensor(cut_m, device="cuda")] = 0
-        print(f"layer {li:2d}: cut Q {sorted(cut_q.tolist())} + {CUT_MLP} MLP ch "
+        print(f"layer {li:2d}: cut Q {sorted(cut_q.tolist())} + {args.cut_mlp} MLP ch "
               f"({time.time() - t0:.0f}s, total {(time.time() - t_all) / 60:.1f} min)", flush=True)
 
     np.savez(out_dir / "wanda.npz", q_w=q_w, mlp_w=mlp_w, keep_q=keep_q, keep_mlp=keep_m,
              scaler_o=sc_o, scaler_m=sc_m)
     finite = all(np.isfinite(a).all() for a in (q_w, mlp_w))
     (out_dir / "summary.txt").write_text(
-        f"Wanda-sp (sequential) over {len(calib)} clips, all {L} layers, cut {CUT_Q} Q heads + {CUT_MLP} MLP ch "
+        f"Wanda-sp (sequential) over {len(calib)} clips, all {L} layers, cut {args.cut_q} Q heads + {args.cut_mlp} MLP ch "
         f"per layer\nfinite: {finite}\nkept Q {int(keep_q.sum())}, kept MLP {int(keep_m.sum())}\n"
         f"time {(time.time() - t_all) / 60:.1f} min\n")
     print(f"saved -> {out_dir} | finite={finite}", flush=True)

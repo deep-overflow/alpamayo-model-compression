@@ -22,6 +22,8 @@ export OMP_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Variants pass these through sbatch --export (defaults = tyr_off). tyr_vt:
 #   TYR_OUT=cvpr27/tyr_vt TYR_SLIM=outputs/cvpr27/slim_tyr_vt TYR_TEACHER=cvpr27/tyr_off/teacher \
 #   TYR_SUPERNET_ARGS="--hessian-mix vt_equal"
+# Other budgets (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md): TYR_SUPERNET_ARGS="--sparsity 0.35" with
+#   TYR_BUDGET=<MoOP u{N} removed params>; the final-config check below asserts it (default u40).
 O=${TYR_OUT:-cvpr27/tyr_off}
 SLIM=${TYR_SLIM:-outputs/cvpr27/slim_tyr_off}
 TEACHER=${TYR_TEACHER:-$O/teacher}
@@ -74,7 +76,7 @@ done
 
 # a level can leave a layer with no heads or no channels (the grid stops short of 1.0 only by the
 # centre's fraction); the slim surgery is not set up for that, so stop and look before building
-"$PY" - "$O" <<'PY'
+"$PY" - "$O" "${TYR_BUDGET:-2657452032}" <<'PY'
 import json, sys
 from pathlib import Path
 o = Path("outputs") / sys.argv[1]
@@ -87,7 +89,7 @@ print("final kept heads per layer", q, "sum", sum(q))
 print("final kept channels per layer", m, "sum", sum(m))
 removed = (36 * 32 - sum(q)) * 2 * 128 * 4096 + (36 * 12288 - sum(m)) * 3 * 4096
 print("removed", removed)
-assert removed == 2_657_452_032, removed
+assert removed == int(sys.argv[2]), (removed, sys.argv[2])
 assert min(q) > 0 and min(m) > 0, "a layer lost every head or channel -- handle before make_slim"
 PY
 

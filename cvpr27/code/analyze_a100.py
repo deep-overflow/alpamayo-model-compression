@@ -38,7 +38,13 @@ COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
           "l0keep_l14m95": "#7fb77e", "l0keep_l14m90": "#4f9a4e", "l0keep_l14m80": "#1f5f1e",
           "lp_m24": "#8a5cc2", "lp_r50": "#c2a5e6", "tyr_off": "#d0632c", "tyr_u40_r": "#f0a07a",
           "l0keep_u35": "#5fb35f", "l0keep_u45": "#0c6a0c", "l0keep_u50": "#064806", "tyr_vt": "#a8441c",
-          "wandasp": "#e34948"}
+          "wandasp": "#e34948",
+          # ratio sweep (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md): lighter = u35, darker = u50
+          "lp_u35": "#b393dd", "lp_u45": "#6a3fa3", "lp_u50": "#4b2678",
+          "tyr_u35": "#e8956a", "tyr_u45": "#a84a1b", "tyr_u50": "#7a3310",
+          "wandasp_u35": "#f08583", "wandasp_u45": "#b8302f", "wandasp_u50": "#8a1d1c",
+          "fm_only_u35": "#f2a9c4", "fm_only_u45": "#c95a85", "fm_only_u50": "#9c3c62",
+          "ce_only_u35": "#f6c75a", "ce_only_u45": "#c08300", "ce_only_u50": "#8f6100"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -69,7 +75,15 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         # tyr_off with a 1:1 vision/text Hessian (cvpr27/plans/2026-11-01_tyr-vt-equal-hessian.md)
         "tyr_vt": "slim_tyr_vt",
         # Wanda-sp (FLAP prune_wanda_sp, layer-sequential), MoOP's budget, layer 0 cut
-        "wandasp": "slim_wandasp_u40"}
+        "wandasp": "slim_wandasp_u40",
+        # the same baselines and single-criterion controls at MoOP u35/u45/u50 budgets
+        # (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md)
+        "lp_u35": "slim_lp_u35", "tyr_u35": "slim_tyr_u35", "wandasp_u35": "slim_wandasp_u35",
+        "fm_only_u35": "slim_trajlastcoc_u35_l0keep_v2", "ce_only_u35": "slim_coc_u35_l0keep_v2",
+        "lp_u45": "slim_lp_u45", "tyr_u45": "slim_tyr_u45", "wandasp_u45": "slim_wandasp_u45",
+        "fm_only_u45": "slim_trajlastcoc_u45_l0keep_v2", "ce_only_u45": "slim_coc_u45_l0keep_v2",
+        "lp_u50": "slim_lp_u50", "tyr_u50": "slim_tyr_u50", "wandasp_u50": "slim_wandasp_u50",
+        "fm_only_u50": "slim_trajlastcoc_u50_l0keep_v2", "ce_only_u50": "slim_coc_u50_l0keep_v2"}
 # arms are also paired with the MoOP(s) they are built on or compared against
 REFS = {"moop_l0keep": ["moop"],
         "fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
@@ -80,7 +94,10 @@ REFS = {"moop_l0keep": ["moop"],
         "tyr_u40_r": ["moop", "moop_l0keep", "tyr_off"],
         "l0keep_u35": ["moop_l0keep"], "l0keep_u45": ["moop_l0keep"], "l0keep_u50": ["moop_l0keep"],
         "tyr_vt": ["moop", "moop_l0keep", "tyr_off"],
-        "wandasp": ["moop", "moop_l0keep"]}
+        "wandasp": ["moop", "moop_l0keep"],
+        **{f"{m}_u35": ["l0keep_u35"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")},
+        **{f"{m}_u45": ["l0keep_u45"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")},
+        **{f"{m}_u50": ["l0keep_u50"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")}}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262),
         "oodtrain": ("ood_train.parquet", 1271)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it

@@ -140,6 +140,11 @@ def main():
     ap.add_argument("--sparsity", type=float, default=0.39856,
                     help="uniform start (R=1); 0.39856 cuts 13/32 heads and 4898/12288 channels "
                          "per layer = MoOP's 2,657,452,032 removed parameters")
+    ap.add_argument("--sparsity-mha", type=float, default=None,
+                    help="R=1 start for o_proj only (default --sparsity). One s cannot hit MoOP u35/u45's "
+                         "per-layer head AND channel counts under keep = int(n * (1 - s)); (cut - 0.5) / n per "
+                         "type does (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md)")
+    ap.add_argument("--sparsity-mlp", type=float, default=None, help="R=1 start for down_proj only")
     ap.add_argument("--weights-diff-mha", type=int, default=2097152,
                     help="12.5%% of o_proj (example.sh's value is 12.5%% of Llama-2-7B's)")
     ap.add_argument("--weights-diff-mlp", type=int, default=6291456,
@@ -191,8 +196,8 @@ def main():
     wd_mlp = max(args.weights_diff_mlp, 32 * tc.hidden_size)
 
     if args.prev_supernet is None:
-        mha_sp = [args.sparsity] * n_layers
-        ffn_sp = [args.sparsity] * n_layers
+        mha_sp = [args.sparsity if args.sparsity_mha is None else args.sparsity_mha] * n_layers
+        ffn_sp = [args.sparsity if args.sparsity_mlp is None else args.sparsity_mlp] * n_layers
     else:
         pmeta = json.loads((REPO / "outputs" / args.prev_supernet / "metadata.json").read_text())
         pcfg = json.loads((REPO / "outputs" / args.prev_config).read_text())
@@ -226,6 +231,7 @@ def main():
 
     meta = {
         "model_revision": MODEL_REV, "iteration": args.iteration, "sparsity": args.sparsity,
+        "sparsity_mha": args.sparsity_mha, "sparsity_mlp": args.sparsity_mlp,
         "mha_sparsity": mha_sp, "ffn_sparsity": ffn_sp,
         "weights_diff_mha": wd_mha, "weights_diff_mlp": wd_mlp, "num_levels": args.num_levels,
         "prev_supernet": args.prev_supernet, "prev_config": args.prev_config,
