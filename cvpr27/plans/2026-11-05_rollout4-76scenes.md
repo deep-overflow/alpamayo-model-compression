@@ -42,3 +42,14 @@
 ## 3. git
 
 - 폐루프 비교 라인의 후속이라 main에 바로 커밋한다.
+
+## 4. 변경 (2026-11-05 02:5x KST, 사용자 지시): tyr_off는 GPU 4–7에서 동시에
+
+- GPU 4–7이 비어서, tyr_off를 그쪽에서 바로 돌린다. 나머지 arm은 GPU 0–3에서 차례로 돈다.
+- **진행 스크립트 교체.** `cvpr27/code/run_rollout4_76_split.sh`가 이어받는다.
+  - 기존 큐(`run_rollout4_76.sh`)의 bash만 멈췄다. 그 큐가 띄운 MoOP l0keep 런처는 GPU 0–3에서 계속 돈다.
+  - 새 스크립트가 그 런처가 끝나기를 기다렸다가, 정리·병합을 하고 lp_m24 → dense를 GPU 0–3에서 잇는다.
+- **씬 배정.** 같은 `scenes76_gpu0-3.csv`를 쓴다. shard i는 GPU 4+i가 되어, 씬이 같은 자리를 지킨다.
+- **카드 종류 차이.** tyr_off만 Ada에서 돌고 나머지 세 arm은 Blackwell이다.
+  - s600에서는 카드 종류가 결론을 바꾸지 않았다. 다만 이 비교에서는 tyr_off − MoOP l0keep에 카드 종류가 섞인다. 리포트에 적는다.
+- **예상 종료.** GPU 0–3 쪽(MoOP l0keep → lp_m24 → dense)이 마지막이다. 약 08:10 + 9 h + 6.5 h로, 11-05 23:40 KST 전후다.
