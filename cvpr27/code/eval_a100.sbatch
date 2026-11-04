@@ -83,6 +83,10 @@ declare -A MODEL=(
   # combination-rule ablation at MoOP l0keep's budget (cvpr27/plans/2026-11-04_combination-rule-ablation.md)
   [rank_mean]=outputs/cvpr27/slim_dualsum_u40_l0keep_v2 [raw_mean]=outputs/cvpr27/slim_rawabsavg_u40_l0keep_v2
   [raw_max]=outputs/cvpr27/slim_rawabsmean_u40_l0keep_v2
+  # MoOP l0keep + expert MLP-only (cvpr27/plans/2026-11-05_moop-l0keep-expert-mlp.md)
+  [l0keep_em75]=outputs/cvpr27/slim_dualexp_u40_l0keep_em75
+  [l0keep_em87p5]=outputs/cvpr27/slim_dualexp_u40_l0keep_em87p5
+  [l0keep_em93p75]=outputs/cvpr27/slim_dualexp_u40_l0keep_em93p75
 )
 Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
 IDLE_MAX=${IDLE_MAX:-2700}
