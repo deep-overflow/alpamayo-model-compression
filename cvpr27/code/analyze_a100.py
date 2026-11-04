@@ -44,7 +44,9 @@ COLORS = {"dense": "#6B6555", "moop": "#2a78d6", "moop_l0keep": "#008300",
           "tyr_u35": "#e8956a", "tyr_u45": "#a84a1b", "tyr_u50": "#7a3310",
           "wandasp_u35": "#f08583", "wandasp_u45": "#b8302f", "wandasp_u50": "#8a1d1c",
           "fm_only_u35": "#f2a9c4", "fm_only_u45": "#c95a85", "fm_only_u50": "#9c3c62",
-          "ce_only_u35": "#f6c75a", "ce_only_u45": "#c08300", "ce_only_u50": "#8f6100"}
+          "ce_only_u35": "#f6c75a", "ce_only_u45": "#c08300", "ce_only_u50": "#8f6100",
+          # combination-rule ablation (cvpr27/plans/2026-11-04_combination-rule-ablation.md)
+          "rank_mean": "#3a9fb5", "raw_mean": "#7a8fa6", "raw_max": "#4a5a6a"}
 plt.rcParams.update({
     "figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG,
     "text.color": INK, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
@@ -83,7 +85,10 @@ ARMS = {"dense": "baseline", "moop": "slim_dual_u40_v2",
         "lp_u45": "slim_lp_u45", "tyr_u45": "slim_tyr_u45", "wandasp_u45": "slim_wandasp_u45",
         "fm_only_u45": "slim_trajlastcoc_u45_l0keep_v2", "ce_only_u45": "slim_coc_u45_l0keep_v2",
         "lp_u50": "slim_lp_u50", "tyr_u50": "slim_tyr_u50", "wandasp_u50": "slim_wandasp_u50",
-        "fm_only_u50": "slim_trajlastcoc_u50_l0keep_v2", "ce_only_u50": "slim_coc_u50_l0keep_v2"}
+        "fm_only_u50": "slim_trajlastcoc_u50_l0keep_v2", "ce_only_u50": "slim_coc_u50_l0keep_v2",
+        # combination-rule ablation: same halves / budget / allocation as moop_l0keep, other operator
+        "rank_mean": "slim_dualsum_u40_l0keep_v2", "raw_mean": "slim_rawabsavg_u40_l0keep_v2",
+        "raw_max": "slim_rawabsmean_u40_l0keep_v2"}
 # arms are also paired with the MoOP(s) they are built on or compared against
 REFS = {"moop_l0keep": ["moop"],
         "fm_only_l0keep": ["moop_l0keep"], "ce_only_l0keep": ["moop_l0keep"],
@@ -97,7 +102,8 @@ REFS = {"moop_l0keep": ["moop"],
         "wandasp": ["moop", "moop_l0keep"],
         **{f"{m}_u35": ["l0keep_u35"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")},
         **{f"{m}_u45": ["l0keep_u45"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")},
-        **{f"{m}_u50": ["l0keep_u50"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")}}
+        **{f"{m}_u50": ["l0keep_u50"] for m in ("lp", "tyr", "wandasp", "fm_only", "ce_only")},
+        "rank_mean": ["moop_l0keep"], "raw_mean": ["moop_l0keep"], "raw_max": ["moop_l0keep"]}
 SETS = {"test2000": ("test_2000.parquet", 2000), "oodval": ("ood_val.parquet", 262),
         "oodtrain": ("ood_train.parquet", 1271)}
 # the stored Ada dense test2000: test500 + the 1,500 clips added to it

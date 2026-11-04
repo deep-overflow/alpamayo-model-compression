@@ -65,6 +65,8 @@ Configs:
                       The per-layer ratio of the halves steps at layer 22, so the first two
                       are depth-switched (trunk mostly I_traj, late band mostly I_CoC).
                       plans/2026-10-14_raw-max-criterion.md.
+  rawabsavg_u40_v2 -- rawabsmean's halves (mean_s |g_s| FM, raw I_CoC) combined by the raw-value MEAN
+                      instead of max (cvpr27/plans/2026-11-04_combination-rule-ablation.md).
   <crit>_u<N>[_l0keep]_l14m<XX>_v2 -- the same arm with layers 1-4's MLP cut further: each of
                       those layers keeps the smallest set, in the arm's own order, holding
                       >= XX% of both I_traj and I_CoC mass. Extra removal (other layers
@@ -837,6 +839,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
         parts = {"dual": ("traj", "coc"), "dualfix": ("traj", "coc"),
                  "dualv3": ("traj", "coc"),
                  "rawmean": ("trajmean", "coc"), "rawabsmean": ("trajabs", "coc"),
+                 "rawabsavg": ("trajabs", "coc"),
                  "lnorm": ("traj", "coc"),
                  "dualsafe": ("trajsafe", "coc"),
                  "maxstep11": ("max11",),
@@ -848,7 +851,9 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                      "dual" if fm else stem, (stem,))
         # dualsum/dualprod are the operator ablation: same halves as dual, only the
         # combination differs (plans/2026-08-20_combination-operator-ablation.md)
-        op = {"dualsum": np.add, "dualprod": np.multiply}.get(stem, np.maximum)
+        # rawabsavg: the raw-value MEAN of rawabsmean's halves (sum; /2 does not change the order)
+        # -- cvpr27/plans/2026-11-04_combination-rule-ablation.md
+        op = {"dualsum": np.add, "dualprod": np.multiply, "rawabsavg": np.add}.get(stem, np.maximum)
         # select_mask_ratios ranks within a layer, so rank_norm is a no-op for a single
         # criterion -- it only matters when two scores have to share one scale
         def rank_or_nan(x):
@@ -876,7 +881,7 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
             # decides there.
             return x / np.maximum(x.mean(1, keepdims=True), 1e-30)
 
-        rank = {"rawmean": raw, "rawabsmean": raw, "lnorm": layer_mean}.get(
+        rank = {"rawmean": raw, "rawabsmean": raw, "rawabsavg": raw, "lnorm": layer_mean}.get(
             stem, rank_or_nan if stem.startswith("dualfix") else rank_norm)
         sq, sm = half(parts[0])
         for p in parts[1:]:

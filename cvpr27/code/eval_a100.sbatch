@@ -80,6 +80,9 @@ declare -A MODEL=(
   [fm_only_u45]=outputs/cvpr27/slim_trajlastcoc_u45_l0keep_v2 [ce_only_u45]=outputs/cvpr27/slim_coc_u45_l0keep_v2
   [lp_u50]=outputs/cvpr27/slim_lp_u50 [tyr_u50]=outputs/cvpr27/slim_tyr_u50 [wandasp_u50]=outputs/cvpr27/slim_wandasp_u50
   [fm_only_u50]=outputs/cvpr27/slim_trajlastcoc_u50_l0keep_v2 [ce_only_u50]=outputs/cvpr27/slim_coc_u50_l0keep_v2
+  # combination-rule ablation at MoOP l0keep's budget (cvpr27/plans/2026-11-04_combination-rule-ablation.md)
+  [rank_mean]=outputs/cvpr27/slim_dualsum_u40_l0keep_v2 [raw_mean]=outputs/cvpr27/slim_rawabsavg_u40_l0keep_v2
+  [raw_max]=outputs/cvpr27/slim_rawabsmean_u40_l0keep_v2
 )
 Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
 IDLE_MAX=${IDLE_MAX:-2700}
