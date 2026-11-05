@@ -1,20 +1,17 @@
 #!/bin/bash
 #SBATCH --job-name=build_fa
-#SBATCH --partition=normal
+#SBATCH --partition=5thEx
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=72
-#SBATCH --mem=200G
 #SBATCH --time=03:00:00
 #SBATCH --comment=field=efficientai;appl=pytorch
 #SBATCH --output=logs/%x-%j.out
 #
 # Compile flash-attn 2.8.3 for the Hangang venv (cvpr27/plans/2026-11-05_kisti6-gh200-site.md §2.4): no aarch64
 # wheel exists, and model config.json asks for flash_attention_2, so from_pretrained needs the package even
-# though evaluation switches to sdpa. Run after build_venv_kisti6.sh, from the repo on /scratch (glogin):
-#
-#   sbatch experiments/transfer/build_flash_attn_kisti6.sbatch
-#
+# though evaluation switches to sdpa. Submit it after build_venv_kisti6.sh, from the repo on /scratch (glogin).
+# Hangang's submit filter rejects --cpus-per-task / --mem on single-node GPU jobs (they follow the GPU count)
+# unless the job is --exclusive, so this one asks for one GPU and nothing else.
 # sm_90 only (GH200) and nvcc 12.9 to match torch 2.8.0+cu129. The wheel is kept in $SCRATCH/wheels.
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
