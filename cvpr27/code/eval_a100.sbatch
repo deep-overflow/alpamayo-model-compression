@@ -92,7 +92,10 @@ declare -A MODEL=(
   [lp_m24_em87p5]=outputs/cvpr27/slim_lp_m24_em87p5 [tyr_off_em87p5]=outputs/cvpr27/slim_tyr_off_em87p5
   [lp_m24_em93p75]=outputs/cvpr27/slim_lp_m24_em93p75 [tyr_off_em93p75]=outputs/cvpr27/slim_tyr_off_em93p75
 )
-Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
+# OUT_SITE=gh200 (sbatch --export) on KISTI Hangang keeps that site's rows, queues and logs apart from the A100
+# ones (cvpr27/plans/2026-11-05_kisti6-gh200-site.md §2.5): one GPU type per table.
+SITE=${OUT_SITE:-a100}
+Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/$SITE/queue}
 IDLE_MAX=${IDLE_MAX:-2700}
 # Worker k runs on the k-th card SLURM granted. Indexing 0..3 directly would land on cards
 # outside the allocation whenever the node does not renumber them (no device cgroup).
@@ -159,7 +162,7 @@ run_task() {  # <device> <kind> <args...>
     ol)
       local arm=$1 set_name=$2 shard=$3 n=$4 suffix=${5:-}
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=cvpr27/a100/${arm}_${set_name}${suffix:+_$suffix} set_args
+      local exp=cvpr27/$SITE/${arm}_${set_name}${suffix:+_$suffix} set_args
       case $set_name in
         test2000) set_args=(--set test --n-indist 2000) ;;
         oodval) set_args=(--set ood --manifest ood_val) ;;
@@ -175,27 +178,27 @@ run_task() {  # <device> <kind> <args...>
       CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/evaluation/run_baseline.py \
           "${set_args[@]}" --model "$model" --exp-id "$exp" \
           --shard "$shard" --n-shards "$n" --no-tf --gpu 0 --reserve-gb 40 \
-          > "logs/a100_${arm}_${set_name}${suffix:+_$suffix}_s${shard}of${n}.log" 2>&1
+          > "logs/${SITE}_${arm}_${set_name}${suffix:+_$suffix}_s${shard}of${n}.log" 2>&1
       ;;
     lingo)
       local arm=$1
       local model=${MODEL[$arm]:?unknown arm $arm}
       # rows.json is rewritten every 25 answers; predictions.csv is written once at the end
-      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_$arm/predictions.csv" ]; then
+      if [ ! -f "outputs/cvpr27/$SITE/lingo_vqa_$arm/predictions.csv" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/run_lingo_vqa.py \
-            --arm "$model" --exp-id "cvpr27/a100/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
-            > "logs/a100_lingo_${arm}_answer.log" 2>&1
+            --arm "$model" --exp-id "cvpr27/$SITE/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
+            > "logs/${SITE}_lingo_${arm}_answer.log" 2>&1
       fi
-      if [ ! -f "outputs/cvpr27/a100/lingo_vqa_scores_$arm/metrics.json" ]; then
+      if [ ! -f "outputs/cvpr27/$SITE/lingo_vqa_scores_$arm/metrics.json" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/score_lingo_vqa.py \
-            --runs "cvpr27/a100/lingo_vqa_$arm" --exp-id "cvpr27/a100/lingo_vqa_scores_$arm" --gpu 0 \
-            > "logs/a100_lingo_${arm}_score.log" 2>&1
+            --runs "cvpr27/$SITE/lingo_vqa_$arm" --exp-id "cvpr27/$SITE/lingo_vqa_scores_$arm" --gpu 0 \
+            > "logs/${SITE}_lingo_${arm}_score.log" 2>&1
       fi
       ;;
     nll)
       local arm=$1 set_name=$2 shard=$3 n=$4 manifest
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=cvpr27/a100/nll_${arm}_${set_name}
+      local exp=cvpr27/$SITE/nll_${arm}_${set_name}
       case $set_name in
         oodval) manifest=ood_val ;;
         oodtrain) manifest=ood_train ;;
@@ -207,7 +210,7 @@ run_task() {  # <device> <kind> <args...>
       fi
       CUDA_VISIBLE_DEVICES=$dev "$PY" cvpr27/code/run_nll_gtcoc.py --manifest "$manifest" \
           --model "$model" --exp-id "$exp" --shard "$shard" --n-shards "$n" --gpu 0 --reserve-gb 40 \
-          > "logs/a100_nll_${arm}_${set_name}_s${shard}of${n}.log" 2>&1
+          > "logs/${SITE}_nll_${arm}_${set_name}_s${shard}of${n}.log" 2>&1
       ;;
     *) echo "unknown task kind $kind"; return 2 ;;
   esac
