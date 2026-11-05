@@ -1,5 +1,7 @@
 # Experiment: KISTI A100 개루프 트랙 결과 모음 (2026-10-29 – 11-02)
 
+> **대체됨:** 최신 정리는 `2026-11-05_a100-results-summary.md`(모든 arm, 6개 지표, 비율 곡선)를 본다.
+
 모델 `nvidia/Alpamayo-1.5-10B`(rev `7aba829`) · KISTI NEURON A100-SXM4-80GB · 분석 `cvpr27/code/analyze_a100.py --stage table`
 (`outputs/cvpr27/a100/table/`). 개별 리포트: `2026-10-29_kisti-a100-openloop.md`, `2026-10-30_a100-fm-ce-only.md`,
 `2026-10-30_l0keep-l14-mlp-cut.md`, `2026-10-31_llm-pruner-budget-matched.md`, `2026-11-01_tyr-official-a100.md`,
