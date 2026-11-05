@@ -45,6 +45,7 @@ sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 
 import analysis_lib as lib  # noqa: E402
 import lp_core as lp  # noqa: E402
+import mask_lib as ml  # noqa: E402
 import sample_cache as sc  # noqa: E402
 import slim_lib as sl  # noqa: E402
 from expert_per_clip import reserve_gpu  # noqa: E402  also installs the gated-repo hub patch
@@ -98,6 +99,12 @@ def main():
                          "2,657,452,032 = qhead:15,mlp:5928 + 24 extra)")
     ap.add_argument("--expect-removed", type=int, default=None,
                     help="refuse to build unless the planned removal equals this many params")
+    # expert MLP-only cut stacked on the LLM-Pruner VLM (cvpr27/plans/2026-11-05_baselines-expert-mlp.md): the same
+    # selection as make_slim dualexp_u40_em<M> -- importance_stepexp_znorm, uniform pct per layer, Q heads/KV kept
+    ap.add_argument("--expert-mlp-cut", type=float, default=None,
+                    help="cut this %% of every expert layer's MLP channels (default: expert untouched)")
+    ap.add_argument("--expert-importance", default="importance_stepexp_znorm",
+                    help="outputs/<run>/importance.npz supplying traj_exp_mlp for --expert-mlp-cut")
     ap.add_argument("--no-state", action="store_true",
                     help="write slim_meta.json only (load_slim rebuilds the weights from the base "
                          "checkpoint); skips the 16.6 GB slim_state.pt")
@@ -178,6 +185,17 @@ def main():
             vm[li, np.argsort(mlp_scores[li], kind="stable")[n_mlp]] = 0.0
         plan["mlp_extra_layers"] = [int(li) for li in extra]
         expected += len(extra) * lp.group_param_cost(geom)["mlp"]
+    # expert tower: untouched unless --expert-mlp-cut (then MLP channels only)
+    ec = model.expert.config
+    eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads), dtype=np.float32)
+    em = np.ones((ec.num_hidden_layers, ec.intermediate_size), dtype=np.float32)
+    if args.expert_mlp_cut is not None:
+        ez = np.load(REPO / "outputs" / args.expert_importance / "importance.npz")
+        em = ml.select_mask(ez["traj_exp_mlp"], args.expert_mlp_cut / 100,
+                            list(range(ec.num_hidden_layers))).astype(np.float32)  # (36, 8256)
+        expected += int((em == 0).sum()) * 3 * ec.hidden_size  # gate/up rows + down col
+        print(f"expert MLP cut {args.expert_mlp_cut}%: {int((em == 0).sum(1)[0])}/{ec.intermediate_size} "
+              f"channels per layer", flush=True)
     if args.expect_removed is not None and expected != args.expect_removed:
         raise SystemExit(f"planned removal {expected:,} != --expect-removed {args.expect_removed:,}")
     print(f"budget={args.units or f'ratio={args.ratio}'}: "
@@ -185,11 +203,6 @@ def main():
           f"{plan['mlp_dropped_per_layer']}/{geom['intermediate']} MLP ch per layer "
           f"x {plan['layers']} layers -> {expected:,} params "
           f"({100 * expected / full_total:.2f}% of the model)", flush=True)
-
-    # expert tower is out of scope for this study -> all ones
-    ec = model.expert.config
-    eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads), dtype=np.float32)
-    em = np.ones((ec.num_hidden_layers, ec.intermediate_size), dtype=np.float32)
 
     meta = sl.apply_surgery(model, vq, vm, eq, em, kvonly_layers=())
     sl.check_slim(model)
@@ -205,6 +218,8 @@ def main():
         "method": "LLM-Pruner block-wise, grouped Taylor",
         "importance_from": args.importance, "arm": args.arm, "ratio": args.ratio,
         "units": args.units,
+        "expert_mlp_cut": args.expert_mlp_cut,
+        "expert_importance": args.expert_importance if args.expert_mlp_cut is not None else None,
         "layer_scope": [args.layer_start, args.layer_end], "plan": plan,
         "importance_scope": sorted(imp_scope),   # so the scope guard is auditable after the fact
         "model_revision": MODEL_REV,

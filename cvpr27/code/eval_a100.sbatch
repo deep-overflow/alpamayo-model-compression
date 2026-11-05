@@ -87,6 +87,10 @@ declare -A MODEL=(
   [l0keep_em75]=outputs/cvpr27/slim_dualexp_u40_l0keep_em75
   [l0keep_em87p5]=outputs/cvpr27/slim_dualexp_u40_l0keep_em87p5
   [l0keep_em93p75]=outputs/cvpr27/slim_dualexp_u40_l0keep_em93p75
+  # LLM-Pruner / Tyr + the same expert MLP cut (cvpr27/plans/2026-11-05_baselines-expert-mlp.md)
+  [lp_m24_em75]=outputs/cvpr27/slim_lp_m24_em75 [tyr_off_em75]=outputs/cvpr27/slim_tyr_off_em75
+  [lp_m24_em87p5]=outputs/cvpr27/slim_lp_m24_em87p5 [tyr_off_em87p5]=outputs/cvpr27/slim_tyr_off_em87p5
+  [lp_m24_em93p75]=outputs/cvpr27/slim_lp_m24_em93p75 [tyr_off_em93p75]=outputs/cvpr27/slim_tyr_off_em93p75
 )
 Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/a100/queue}
 IDLE_MAX=${IDLE_MAX:-2700}

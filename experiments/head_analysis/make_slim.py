@@ -1099,6 +1099,9 @@ def main():
                          "--block_attention_layer_start)")
     ap.add_argument("--scope-end", type=int, default=34,
                     help="dualscope_u40: one past the last layer that may be cut")
+    ap.add_argument("--expert-mlp-cut", type=float, default=None,
+                    help="also cut this %% of every expert layer's MLP channels (expert Q/KV kept), "
+                         "for configs that leave the expert untouched")
     ap.add_argument("--tyr-supernet", type=str, default="tyr_supernet_u40",
                     help="supernet dir for the tyr configs")
     ap.add_argument("--tyr-config", type=str,
@@ -1144,11 +1147,21 @@ def main():
                                          args.importance, args.cache_importance,
                                          args.expert_importance,
                                          args.clearance, args.safe_tau)
+    if args.expert_mlp_cut is not None:
+        # expert MLP-only cut stacked on any config whose expert is untouched (tyr_u40_r for tyr_off_em<M>):
+        # the dualexp_u40_em<M> selection. cvpr27/plans/2026-11-05_baselines-expert-mlp.md
+        if not (em.all() and eq.all()):
+            raise SystemExit(f"{args.config} already cuts the expert; --expert-mlp-cut would stack two cuts")
+        ez = dict(np.load(REPO / "outputs" / args.expert_importance / "importance.npz"))
+        em = ml.select_mask(ez["traj_exp_mlp"], args.expert_mlp_cut / 100,
+                            list(range(model.expert.config.num_hidden_layers)))  # (36, 8256)
 
     full_total = sl.n_params(model)
     t0 = time.time()
     meta = sl.apply_surgery(model, vq, vm, eq, em, kvonly_layers=kvonly)
     meta["config"] = args.config
+    if args.expert_mlp_cut is not None:
+        meta["expert_mlp_cut"] = args.expert_mlp_cut
     if TYR_PLACEHOLDER:
         meta["attn_placeholder_layers"] = list(TYR_PLACEHOLDER)
     meta["importance_from"] = args.importance
