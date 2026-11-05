@@ -28,12 +28,18 @@ def load(run):
     for r in json.loads((RUNS / run / "aggregate" / "results-summary.json").read_text())["rollouts"]:
         m = r.get("metrics") or {}
         ok = m.get("collision_any") is not None
-        hit = {k: ok and float(m.get(k) or 0) > 0 for k in ("collision_at_fault", "offroad", "collision_rear")}
+        hit = {k: ok and float(m.get(k) or 0) > 0
+               for k in ("collision_at_fault", "offroad", "collision_rear", "wrong_lane")}
+        num = {k: float(m.get(k) or 0) if ok else np.nan
+               for k in ("progress_clipped_rel", "open_loop_collision", "dist_traveled_m")}
         rows.append({"scene": r["clipgt_id"], "rollout": r["rollout_id"], "aborted": not ok, "score": r["score"],
                      "at_fault": hit["collision_at_fault"], "offroad": hit["offroad"], "rear": hit["collision_rear"],
-                     "progress": float(m["progress_clipped_rel"]) if ok else np.nan})
+                     "wrong_lane": hit["wrong_lane"], "progress": num["progress_clipped_rel"],
+                     "olc": num["open_loop_collision"], "dist": num["dist_traveled_m"]})
     d = pd.DataFrame(rows)
     d["event"] = d.at_fault | d.offroad
+    coc = OUT / f"coc_{run}.csv"   # written by coc_rollout4_76.py (alpasim venv), NaN until then
+    d = d.merge(pd.read_csv(coc), on=["scene", "rollout"], how="left") if coc.exists() else d.assign(coc_degenerate=np.nan)
     return d
 
 
@@ -63,8 +69,15 @@ def main():
         e = {"rollouts": len(d), "aborted": int(d.aborted.sum()), "event_rate": float(v.event.mean()),
              "at_fault_rate": float(v.at_fault.mean()), "offroad_rate": float(v.offroad.mean()),
              "rear_rate": float(v.rear.mean()), "score": float(d.score.mean()),
+             "progress": float(v.progress.mean()), "wrong_lane_rate": float(v.wrong_lane.mean()),
+             "open_loop_collision": float(v.olc.mean()), "coc_degenerate": float(v.coc_degenerate.mean()),
              "scenes_with_any_event": int((per[per.arm == lab].events > 0).sum()),
              "scenes_all_clean": int((per[per.arm == lab].events == 0).sum())}
+        km = v.groupby("scene").agg(dist=("dist", "sum"), ev=("event", "sum"))   # AlpaSim score (at-fault), km/event
+        ii = rng.integers(0, len(km), (B, len(km)))
+        e["alpasim_at_fault_km"] = {
+            "score": float(km.dist.sum() / km.ev.sum() / 1000), "events": int(km.ev.sum()),
+            "ci": np.percentile(km.dist.to_numpy()[ii].sum(1) / km.ev.to_numpy()[ii].sum(1) / 1000, [2.5, 97.5]).tolist()}
         if lab != REF and REF in rate:
             for name, tab in (("event_rate", rate), ("score", score)):
                 x = (tab[lab] - tab[REF]).dropna().to_numpy()
@@ -75,8 +88,12 @@ def main():
                 x = (rate.loc[idx, lab] - rate.loc[idx, REF]).dropna().to_numpy()
                 e[f"event_rate_minus_{REF}_{grp}_scenes"] = float(x.mean()) if len(x) else None
         res["arms"][lab] = e
+        a = e["alpasim_at_fault_km"]
         line = (f"{lab:12s} event {e['event_rate']:.3f} (at-fault {e['at_fault_rate']:.3f}, offroad {e['offroad_rate']:.3f}"
-                f", rear {e['rear_rate']:.3f}) | score {e['score']:.3f} | scenes clean in all 4: "
+                f", rear {e['rear_rate']:.3f}) | score {e['score']:.3f} | progress {e['progress']:.3f}"
+                f" | AlpaSim at-fault {a['score']:.3f} km [{a['ci'][0]:.3f}, {a['ci'][1]:.3f}]"
+                f" | wrong lane {e['wrong_lane_rate']:.3f} | OLC {e['open_loop_collision']:.3f}"
+                f" | CoC degen {e['coc_degenerate']:.3f} | scenes clean in all 4: "
                 f"{e['scenes_all_clean']}/{len(rate)} | aborted {e['aborted']}")
         if f"event_rate_minus_{REF}" in e:
             dd, sd = e[f"event_rate_minus_{REF}"], e[f"score_minus_{REF}"]
