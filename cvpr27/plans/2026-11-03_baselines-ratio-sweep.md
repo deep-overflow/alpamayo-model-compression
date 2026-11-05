@@ -136,3 +136,14 @@ l0keep 레시피는 0번 층 Q head를 남기고 MLP 채널로 갚는다. 그래
   - MoOP 쪽 비율 점은 이미 A100에 있는 MoOP l0keep u35/u40/u45/u50을 쓴다(사용자: "MoOP는 이미 한거 아니야?").
   - CLAUDE.md도 dual 계열 arm을 `_l0keep`으로 만들라고 한다(0번 층 head 선택 = 붕괴·추출 분산).
   - u40에서만 출하 방식 MoOP가 함께 있다.
+
+## 8. 추가: OOD-train1271 (사용자, 2026-11-05)
+
+- 사용자 요청: "OOD train에 대해서 u35, u40, u45, u50을 테스트 진행해줘". 6개 방법 전부를 대상으로 한다.
+- 새로 잴 arm은 20개다.
+  - u35/u45/u50 × {MoOP l0keep, FM-only, CE-only, Tyr, LLM-Pruner, Wanda-sp} = 18개
+  - u40의 FM-only, CE-only = 2개
+  - u40의 MoOP l0keep, tyr_off, lp_m24, wandasp는 이미 OOD-train 행이 있다.
+- 프로토콜은 OOD-Val과 같다(`--set ood --manifest ood_train --no-tf`, k=8, seed 42, 4샤드). 작업은 80개다.
+- 큐 `queue_ratio_oodtrain`, 홀더 4장·2장 각 1개(10시간)다. 비용은 약 70 A100-시간이다.
+- 비교: 같은 비율의 MoOP l0keep 대비 짝지은 Δ를 6개 지표(minADE@6·minFDE@6 × 1.6/3.2/6.4 s) 모두에 대해 낸다.
