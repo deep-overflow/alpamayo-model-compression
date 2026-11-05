@@ -33,7 +33,9 @@ fi
 echo "uv $(uv --version)"
 
 P=$REPO/.venv/bin/python
-[ -x "$P" ] || uv venv --python 3.12 "$REPO/.venv"
+# only-managed: glogin has a system /usr/bin/python3.12 without its headers (no Python.h), which uv would otherwise
+# pick, and flash-attn's build then fails (job 1221303).
+[ -x "$P" ] || uv venv --python-preference only-managed --python 3.12 "$REPO/.venv"
 
 echo "=== 1/5  torch 2.8.0+cu129 stack (aarch64) ==="
 # --extra-index-url outranks the default index in uv, and the first index that has a name serves it,

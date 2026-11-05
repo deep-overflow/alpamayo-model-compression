@@ -23,8 +23,12 @@ SCRATCH=/scratch/$USER
 P=$SLURM_SUBMIT_DIR/.venv/bin/python
 export PATH=$HOME/.local/bin:$PATH UV_CACHE_DIR=$SCRATCH/.uv-cache
 export CUDA_HOME=${CUDA_HOME:?cuda module did not set CUDA_HOME}
+# gcc-native/13 provides gcc/g++ but leaves c++/cc on the system's gcc 7.5, which torch's headers reject
+export CC=gcc CXX=g++
 export TORCH_CUDA_ARCH_LIST=9.0 FLASH_ATTN_CUDA_ARCHS=90 FLASH_ATTENTION_FORCE_BUILD=TRUE
-export MAX_JOBS=${MAX_JOBS:-36} NVCC_THREADS=2
+# A 1-GPU job gets 195 GB; 36 parallel nvcc jobs peaked at 199.5 GB and were OOM-killed (job 1221236, 36/73 objects),
+# so ~5.5 GB each -> 16 stays near 90 GB.
+export MAX_JOBS=${MAX_JOBS:-16} NVCC_THREADS=2
 echo "node $(hostname) $(uname -m), nvcc: $(nvcc --version | tail -1), gcc: $(gcc --version | head -1)"
 echo "compute-node internet: github $(curl -s -o /dev/null -m 10 -w '%{http_code}' https://github.com || echo FAIL)," \
      "hf $(curl -s -o /dev/null -m 10 -w '%{http_code}' https://huggingface.co || echo FAIL)"
