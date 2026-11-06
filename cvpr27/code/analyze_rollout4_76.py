@@ -4,7 +4,7 @@ The scenes were picked on one s600 rollout per arm: MoOP l0keep had no at-fault 
 offroad, tyr_off or lp_m24 had one. Picking on a single noisy rollout favours the reference, so the s600 rollouts are
 not reused here: only the four fresh rollouts per scene per arm count. Per rollout, event = at-fault collision or
 offroad (rear-end ignored, user rule 2026-11-04).
-Writes outputs/cvpr27/rollout4_76/{per_scene.csv, metrics.json, summary.txt, event_rate.png}.
+Writes outputs/cvpr27/rollout4_76/{per_scene.csv, metrics.json, summary.txt, paired.txt, event_rate.png}.
 
   python3 cvpr27/code/analyze_rollout4_76.py
 """
@@ -19,13 +19,19 @@ REPO = Path(__file__).resolve().parents[2]
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
 OUT = REPO / "outputs" / "cvpr27" / "rollout4_76"
 ARMS = [("r4l0_merged_slim_dual_u40_l0keep_v2", "MoOP_l0keep"), ("r4ty_merged_slim_tyr_off", "tyr_off"),
-        ("r4lp_merged_slim_lp_m24", "lp_m24"), ("r4dn_merged_baseline", "dense")]
+        ("r4lp_merged_slim_lp_m24", "lp_m24"), ("r4dn_merged_baseline", "dense"),
+        ("r4fm_merged_slim_trajfix_u40_l0keep_v2", "FM_only_l0keep"), ("r4ce_merged_slim_coc_u40_l0keep_v2", "CE_only_l0keep")]
 REF, B = "MoOP_l0keep", 20000
+# finished, then reported FAILED by the runtime (RPC CANCELLED 45 s after the session completed) and retried: the
+# retry 6b47ce26 is that job's rollout, so this one would be a fifth rollout for scene e37aa159 in lp_m24
+EXCLUDE = {"31d24a5c-d8f7-11f1-b9dd-eb48654dacdd"}
 
 
 def load(run):
     rows = []
     for r in json.loads((RUNS / run / "aggregate" / "results-summary.json").read_text())["rollouts"]:
+        if r["rollout_id"] in EXCLUDE:
+            continue
         m = r.get("metrics") or {}
         ok = m.get("collision_any") is not None
         hit = {k: ok and float(m.get(k) or 0) > 0
@@ -43,6 +49,36 @@ def load(run):
     return d
 
 
+PAIR_METRICS = ["event", "at_fault", "offroad", "progress", "wrong_lane", "olc", "coc_degenerate"]
+
+
+def scene_table(d):   # per-scene means over the scene's rollouts; score counts aborted rollouts as 0
+    v = d[~d.aborted]
+    g = v.groupby("scene")[PAIR_METRICS].mean().astype(float)
+    g["score"] = d.groupby("scene").score.mean()
+    g["dist"] = v.groupby("scene").dist.sum()
+    g["ev"] = v.groupby("scene").event.sum()
+    return g
+
+
+def paired(ta, tr, rng):   # arm - ref per scene, scene bootstrap (same draws for every metric)
+    idx = ta.index.intersection(tr.index)
+    ta, tr = ta.loc[idx], tr.loc[idx]
+    ii = rng.integers(0, len(idx), (B, len(idx)))
+    out = {}
+    for k in PAIR_METRICS + ["score"]:
+        x = (ta[k] - tr[k]).to_numpy()
+        out[k] = {"ref": float(tr[k].mean()), "arm": float(ta[k].mean()), "delta": float(np.nanmean(x)),
+                  "ci": np.percentile(np.nanmean(x[ii], 1), [2.5, 97.5]).tolist()}
+
+    def km(t):
+        return t.dist.to_numpy()[ii].sum(1) / t.ev.to_numpy()[ii].sum(1) / 1000
+    a, r = ta.dist.sum() / ta.ev.sum() / 1000, tr.dist.sum() / tr.ev.sum() / 1000
+    out["alpasim_at_fault_km"] = {"ref": float(r), "arm": float(a), "delta": float(a - r),
+                                  "ci": np.percentile(km(ta) - km(tr), [2.5, 97.5]).tolist()}
+    return out
+
+
 def main():
     sel = pd.read_csv(REPO / "outputs/cvpr27/moop_clean_scenes/selected76_tyroff_lpm24.csv", keep_default_na=False)
     group = dict(zip(sel.scene, sel.which))
@@ -51,7 +87,8 @@ def main():
     for lab, d in D.items():
         v = d[~d.aborted]
         g = v.groupby("scene").agg(n=("event", "size"), events=("event", "sum"), at_fault=("at_fault", "sum"),
-                                   offroad=("offroad", "sum"), rear=("rear", "sum"), score=("score", "mean"))
+                                   offroad=("offroad", "sum"), rear=("rear", "sum"))
+        g["score"] = d.groupby("scene").score.mean()   # aborted rollouts score 0 and count here, as in the arm mean
         g["arm"] = lab
         g["aborted"] = d[d.aborted].groupby("scene").size().reindex(g.index).fillna(0).astype(int)
         per.append(g.reset_index())
@@ -100,6 +137,23 @@ def main():
             line += (f" | event - {REF} {dd['delta']:+.3f} [{dd['ci'][0]:+.3f}, {dd['ci'][1]:+.3f}]"
                      f" | score - {REF} {sd['delta']:+.3f} [{sd['ci'][0]:+.3f}, {sd['ci'][1]:+.3f}]")
         lines.append(line)
+    tabs = {lab: scene_table(d) for lab, d in D.items()}
+    plines = []
+    for ref in (REF, "dense"):
+        if ref not in tabs:
+            continue
+        plines.append(f"paired vs {ref} (arm - ref, per-scene means, 95% scene-bootstrap CI)")
+        for lab, tab in tabs.items():
+            if lab == ref:
+                continue
+            pr = paired(tab, tabs[ref], rng)
+            res["arms"][lab][f"paired_vs_{ref}"] = pr
+            plines.append(f"  {lab}")
+            for k, v in pr.items():
+                sig = "*" if v["ci"][0] > 0 or v["ci"][1] < 0 else " "
+                plines.append(f"    {k:20s} {v['ref']:.3f} -> {v['arm']:.3f}  {v['delta']:+.3f} "
+                              f"[{v['ci'][0]:+.3f}, {v['ci'][1]:+.3f}]{sig}")
+    (OUT / "paired.txt").write_text("\n".join(plines) + "\n")
     (OUT / "metrics.json").write_text(json.dumps(res, indent=1))
     (OUT / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

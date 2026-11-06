@@ -53,3 +53,28 @@
 - **카드 종류 차이.** tyr_off만 Ada에서 돌고 나머지 세 arm은 Blackwell이다.
   - s600에서는 카드 종류가 결론을 바꾸지 않았다. 다만 이 비교에서는 tyr_off − MoOP l0keep에 카드 종류가 섞인다. 리포트에 적는다.
 - **예상 종료.** GPU 0–3 쪽(MoOP l0keep → lp_m24 → dense)이 마지막이다. 약 08:10 + 9 h + 6.5 h로, 11-05 23:40 KST 전후다.
+
+## 5. 경위 (2026-11-05 23:10 – 11-06 11:01 KST)
+
+- **lp_m24.** 23:10 KST에 끝났다(GPU 0–3).
+  - 실행 중 rollout 103회가 드라이버 RPC CANCELLED로 실패했고, 런타임이 자동으로 다시 돌렸다(`max_rollout_retries=2`).
+  - 실패는 14–16시, 18–19시 KST에만 몰렸다. 서버가 다른 작업으로 붐빈 시간대다. MoOP l0keep·tyr_off 런에서는 0회였다.
+  - 완료 뒤 실패로 처리돼 다시 돌려진 1회(`31d24a5c`)가 그 씬의 다섯 번째 rollout으로 남았다. 분석에서는 뺀다(`EXCLUDE`).
+- **dense.** 23:10부터 대기했다. 다른 사용자의 작업이 GPU 0·2·3에 올라와 있었다.
+  - 11-06 10:51 KST에 서버가 재부팅되면서(커널 5.15.0-198 → 202) 큐가 꺼졌다.
+  - 재부팅 직후 GPU 0–3이 모두 비어 있어 11:01 KST에 `cvpr27/code/run_rollout4_76_dense.sh`로 다시 띄웠다. 설정은 같다.
+  - 큐는 `setsid`로 띄워 세션이 끝나도 남는다. 로그는 `outputs/cvpr27/rollout4_76/queue_dense.log`.
+
+## 6. 추가 arm (2026-11-06 사용자 지시): FM-only·CE-only, 둘 다 0번 층 Q head 보존판
+
+- **드라이버.** 둘 다 s600에서 돌린 것과 같다.
+  - FM-only: `slim_trajfix_u40_l0keep_v2` (s600 런 `f600_merged_…`)
+  - CE-only: `slim_coc_u40_l0keep_v2` (s600 런 `c600_merged_…`)
+  - prefix는 `r4fm_`, `r4ce_`.
+- **실행.** `cvpr27/code/run_rollout4_76_fmce.sh`. dense 큐가 끝나기를 기다렸다가 GPU 0–3에서 FM-only → CE-only 순으로 돈다.
+  - MoOP l0keep·lp_m24·dense와 같은 Blackwell 카드, 같은 씬 배정이다.
+  - arm마다 CoC 퇴화율을 계산하고, 마지막에 분석을 다시 돌린다.
+- **예상.** arm당 약 6.5시간. dense가 11-06 18:30 KST쯤 끝나면 FM-only는 11-07 01:00, CE-only는 07:30 KST 전후다.
+- **분석.** `analyze_rollout4_76.py`의 ARMS에 두 arm을 추가했다. 기준은 그대로 MoOP l0keep이다.
+  - MoOP l0keep − FM-only, MoOP l0keep − CE-only를 짝 비교한다.
+  - s600에서 본 "합집합이 두 반쪽보다 낫다"가 rollout을 반복해도 유지되는지를 본다.

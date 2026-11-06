@@ -20,7 +20,7 @@ import analyze_alpasim as AA
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
 OUT = REPO / "outputs" / "cvpr27" / "rollout4_76"
 DEFAULT = ["r4l0_merged_slim_dual_u40_l0keep_v2", "r4ty_merged_slim_tyr_off", "r4lp_merged_slim_lp_m24",
-           "r4dn_merged_baseline"]
+           "r4dn_merged_baseline", "r4fm_merged_slim_trajfix_u40_l0keep_v2", "r4ce_merged_slim_coc_u40_l0keep_v2"]
 
 
 def coc(asl):
@@ -29,7 +29,8 @@ def coc(asl):
 
 def main():
     for run in sys.argv[1:] or DEFAULT:
-        asls = sorted((RUNS / run / "rollouts").glob("*/*/rollout.asl"))
+        # only finished rollouts: the runtime retries a failed attempt and leaves its partial rollout.asl behind
+        asls = sorted(a for a in (RUNS / run / "rollouts").glob("*/*/rollout.asl") if (a.parent / "_complete").exists())
         if not asls:
             print(f"{run}: no rollouts yet")
             continue
