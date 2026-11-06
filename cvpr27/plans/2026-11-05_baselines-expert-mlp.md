@@ -1,6 +1,6 @@
 # 외부 기준선 + expert MLP 절단: LLM-Pruner·Tyr (A100 개루프)
 
-날짜: 2026-11-05. 상태: 계획 (승인 대기).
+날짜: 2026-11-05. 상태: 완료 (2026-11-06, 리포트 `cvpr27/reports/2026-11-06_baselines-expert-mlp.md`).
 
 ## 0. 목적
 
