@@ -241,8 +241,9 @@ if has lingoqa; then
   step "LingoQA val set -> $SCRATCH/datasets/lingoqa"
   # images/ is the unpacked images.zip; sending both would double the volume for
   # nothing, and lingo_lib reads the directory.
-  echo "  $(du -shL --exclude=images.zip "$LINGO_DATA" | cut -f1) (images.zip excluded)"
-  run "${RSYNC[@]}" --exclude images.zip "$LINGO_DATA/" \
+  # train/ (7.9 GB of LingoQA train images, added for kd2) is the `kd2` tier's; the val arm reads none of it
+  echo "  $(du -shL --exclude=images.zip --exclude=train "$LINGO_DATA" | cut -f1) (images.zip, train/ excluded)"
+  run "${RSYNC[@]}" --exclude images.zip --exclude /train "$LINGO_DATA/" \
       "$HOST:$SCRATCH/datasets/lingoqa/"
 
   step "LingoQA benchmark package -> $SCRATCH/project/LingoQA/benchmark"
