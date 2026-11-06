@@ -1,6 +1,7 @@
-"""Ratio sweep (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md), A100 rows.
+"""Ratio sweep (cvpr27/plans/2026-11-03_baselines-ratio-sweep.md, OOD-train in §8), A100 rows.
 
-Absolute minADE@6 / minFDE@6 at 1.6 / 3.2 / 6.4 s, CoC-degenerate share and LingoQA for every method at u35/u40/u45/u50,
+Absolute minADE@6 / minFDE@6 at 1.6 / 3.2 / 6.4 s on test_2000, OOD-Val and OOD-train, CoC-degenerate share and LingoQA
+for every method at u35/u40/u45/u50,
 and paired deltas vs MoOP l0keep at the same budget for all six metrics (bootstrap 200k; LingoQA resamples the 100
 segments). The u40 column uses the arms already on the A100 table (lp_m24, tyr_off, wandasp, fm/ce_only_l0keep).
 Writes outputs/cvpr27/ratio_sweep/{metrics.json, table.md, config.json} and the curve figure.
@@ -36,7 +37,7 @@ def star(lo, hi):
 
 def main():
     res = {}
-    for s in ("test2000", "oodval"):
+    for s in ("test2000", "oodval", "oodtrain"):
         ids = az.manifest_ids(az.REPO / "outputs", s)
         for r in RATIOS:
             ref = az.load_rows(A / f"{METHODS['MoOP l0keep'][r]}_{s}", az.ARMS[METHODS["MoOP l0keep"][r]])
@@ -67,7 +68,10 @@ def main():
             res[f"lingoqa/u{r}/{m}"] = e
 
     md = ["# Ratio sweep (A100): MoOP l0keep vs FM-only / CE-only / Tyr / LLM-Pruner / Wanda-sp", ""]
-    for s, n in (("test2000", 2000), ("oodval", 262)):
+    for s, n in (("test2000", 2000), ("oodval", 262), ("oodtrain", 1271)):
+        short = sorted({res[f"{s}/u{r}/{m}"]["n"] for r in RATIOS for m in METHODS} - {n})
+        if short:  # an arm with missing rows is compared on the clips it has; say so instead of hiding it
+            md += [f"> {s}: some arms have fewer than {n} clips (n = {short}); see metrics.json", ""]
         md += [f"## {s} (n={n}) -- absolute", "",
                "| ratio (removed) | method | minADE@6 1.6 s | 3.2 s | 6.4 s | minFDE@6 1.6 s | 3.2 s | 6.4 s | CoC degenerate |",
                "|---|---|---|---|---|---|---|---|---|"]
