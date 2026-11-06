@@ -80,16 +80,21 @@ step() { echo; echo "=== $* ==="; }
 # shellcheck source=lists.sh
 . "$HERE/lists.sh"
 
+# With a socket, every ssh is BatchMode and keyboard-interactive only: if the master dies mid-run (it did on
+# 2026-11-06 when the link to KISTI collapsed), a plain ControlPath ssh falls back to a fresh login, sends empty
+# passwords and the local keys, and KISTI logs failed logins (it locks accounts on repeated failures).
+SAFE="-o BatchMode=yes -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive"
 SSH_OPTS=()
-[ -S "$CM" ] && SSH_OPTS=(-o ControlPath="$CM")
+# shellcheck disable=SC2206  # SAFE is split into options on purpose
+[ -S "$CM" ] && SSH_OPTS=(-o ControlPath="$CM" $SAFE)
 RSYNC=(rsync -aL --info=progress2 --partial --human-readable)
 # The code tree keeps -a WITHOUT -L: `outputs` and `.venv` are symlinks onto the data
 # mount, and dereferencing them would pull 513 GB of checkpoints through the exclude
 # rules. They are excluded anyway; not following links makes that belt and braces.
 CODE_RSYNC=(rsync -a --info=progress2 --partial --human-readable)
 if [ ${#SSH_OPTS[@]} -gt 0 ]; then
-  RSYNC+=(-e "ssh -o ControlPath=$CM")
-  CODE_RSYNC+=(-e "ssh -o ControlPath=$CM")
+  RSYNC+=(-e "ssh -o ControlPath=$CM $SAFE")
+  CODE_RSYNC+=(-e "ssh -o ControlPath=$CM $SAFE")
 fi
 if [ -n "${DRY_RUN-}" ]; then
   RSYNC+=(--dry-run)

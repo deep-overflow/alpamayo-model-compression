@@ -3,6 +3,7 @@
 # to NEURON (slim_meta.json last), drop rounds 1-3, and make sure an A100 holder will claim its 7 queue lines.
 # Stops with a message instead of retrying when a NEURON socket is down (the user reopens it with an OTP).
 set -uo pipefail
+export RSYNC_RSH="ssh -o BatchMode=yes"  # a dead socket must fail, not send an empty password (KISTI locks accounts)
 cd "$(dirname "$0")/../.."
 F='Deprecation|Redirecting'
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }

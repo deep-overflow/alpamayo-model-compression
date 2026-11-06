@@ -3,6 +3,7 @@
 # A recipe goes only when its summary.txt exists (the builder's last write) and slim_meta.json removes exactly the MoOP
 # u{N} budget. slim_meta.json is sent LAST: the A100 holders claim an arm's lines once that file is on /scratch.
 set -uo pipefail
+export RSYNC_RSH="ssh -o BatchMode=yes"  # a dead socket must fail, not send an empty password (KISTI locks accounts)
 cd "$(dirname "$0")/../.."
 DST=neuron-dm:/scratch/e1997a06/outputs/cvpr27
 declare -A BUDGET=([35]=2317860864 [45]=2974777344 [50]=3321888768)

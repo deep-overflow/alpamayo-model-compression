@@ -11,15 +11,17 @@ stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
 ssh -O check kisti6-dm > /dev/null 2>&1 || { stamp "kisti6-dm socket down"; exit 2; }
 CM=$HOME/.ssh/cm-kisti6
 H=e1997a06@hangang-dm.ksc.re.kr
+# never a fresh login if the socket dies mid-run: BatchMode + keyboard-interactive only (no keys, no empty passwords)
+SAFE="-o BatchMode=yes -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive"
 S=/scratch/e1997a06
 SRC=/mnt/nvme1n1/ad_vla
 OUT=$(readlink -f outputs)
 LOGD=${LOGD:-/tmp/push_kisti6_$$}
 mkdir -p "$LOGD"
-R=(rsync -aL --partial --info=stats1 -e "ssh -o ControlPath=$CM")
+R=(rsync -aL --partial --info=stats1 -e "ssh -o ControlPath=$CM $SAFE")
 pushn() { NEURON_DM=hangang-dm.ksc.re.kr NEURON_CM=$CM CODE_SRC=$PWD PUSH_PY=$SRC/venvs/alpamayo-mc/bin/python \
   bash experiments/transfer/push_neuron.sh e1997a06 "$@"; }
-ssh -o ControlPath=$CM $H "mkdir -p $S/outputs/cvpr27 $S/outputs/eval_sets $S/datasets/physicalai_av/pre_processed" || exit 1
+ssh -o ControlPath=$CM $SAFE $H "mkdir -p $S/outputs/cvpr27 $S/outputs/eval_sets $S/datasets/physicalai_av/pre_processed" || exit 1
 stamp "logs in $LOGD"
 [ -n "${TIERS_CODE:-}" ] && { pushn code > "$LOGD/code.log" 2>&1 || stamp "code tier failed"; }
 pushn weights > "$LOGD/weights.log" 2>&1 & P1=$!
@@ -36,10 +38,10 @@ for p in "weights $P1" "a100eval $P2" "lingoqa $P3" "ood $P4" "tyr_off $P5"; do
   if wait "$2"; then stamp "$1 ok"; else stamp "$1 FAILED (see $LOGD/$1.log)"; rc=1; fi
 done
 L=$(stat -c %s "$OUT/cvpr27/slim_tyr_off/slim_state.pt")
-RS=$(ssh -o ControlPath=$CM $H "stat -c %s $S/outputs/cvpr27/slim_tyr_off/slim_state.pt")
+RS=$(ssh -o ControlPath=$CM $SAFE $H "stat -c %s $S/outputs/cvpr27/slim_tyr_off/slim_state.pt")
 [ "$L" = "$RS" ] || { stamp "tyr_off slim_state size mismatch local $L remote $RS"; rc=1; }
 stamp "remote sizes:"
-ssh -o ControlPath=$CM $H "du -sh --apparent-size $S/datasets/physicalai_av/pre_processed/* $S/datasets/lingoqa \
+ssh -o ControlPath=$CM $SAFE $H "du -sh --apparent-size $S/datasets/physicalai_av/pre_processed/* $S/datasets/lingoqa \
   $S/checkpoints/hub $S/outputs; ls $S/datasets/physicalai_av/pre_processed/test/samples | wc -l; \
   ls $S/datasets/physicalai_av/pre_processed/ood/samples | wc -l"
 stamp "done rc=$rc"

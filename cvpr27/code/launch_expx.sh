@@ -3,6 +3,7 @@
 # queue_expx (60 lines), two holders, then the three Tyr recipes (weights, ~13 GB each; slim_meta.json last so a holder
 # only claims a complete recipe).
 cd "$(dirname "$0")/../.." || exit 1
+export RSYNC_RSH="ssh -o BatchMode=yes"  # a dead socket must fail, not send an empty password (KISTI locks accounts)
 F='Deprecation|Redirecting'
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
 ssh -O check neuron-dm > /dev/null 2>&1 || { stamp "datamover socket down"; exit 2; }

@@ -7,6 +7,7 @@
 # intermediates, ~110 GB each, and the mount cannot hold three full builds (373 GB free at start). supernet_r4 and
 # the search configs stay, so make_slim can be rerun.
 set -uo pipefail
+export RSYNC_RSH="ssh -o BatchMode=yes"  # a dead socket must fail, not send an empty password (KISTI locks accounts)
 cd "$(dirname "$0")/../.."
 L=outputs/cvpr27/ratio_sweep/logs
 F='Deprecation|Redirecting'
