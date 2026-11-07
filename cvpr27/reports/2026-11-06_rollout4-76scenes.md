@@ -204,4 +204,7 @@
 ### 다음 단계
 
 - **그림.** 논문용 재현성 그림으로는 그룹별 사고 비율(표 4)과 실패 모드 분리(offroad 계열 vs 과실 충돌 계열)가 가장 직접적이다.
-- **LLM-Pruner `dual_param_first` 확인.** 같은 LLM-Pruner 구조에 MoOP식 결합을 넣은 arm이다. 과실 충돌 실패가 사라지는지 보면, "CE형 실패는 기준 탓"이라는 해석을 직접 확인할 수 있다. 빌드는 아직 하지 않았다(`cvpr27/reports/2026-10-31_llm-pruner-budget-matched.md`의 후속 후보 1).
+- **LLM-Pruner `dual_param_first` 확인.** 같은 LLM-Pruner 구조에 MoOP식 결합(층마다 `max(rank(traj), rank(coc))`)을 넣은 arm이다. 과실 충돌 실패가 사라지는지 보면, "CE형 실패는 기준 탓"이라는 해석을 직접 확인할 수 있다.
+  - soowon이 08-18에 만든 `lp_r50_dual`이 이미 있다(`data/alpasim/drivers/lp_r50_dual`, 24.99% 제거, `lp_r50`과 같은 구조).
+  - 다만 인계 수정 전 하네스의 Origin150에서만 돌았고(0.8162), s600·이 76씬에서는 돌린 적이 없다.
+  - MoOP과 제거량을 맞춘 판(m24)은 아직 없다.
