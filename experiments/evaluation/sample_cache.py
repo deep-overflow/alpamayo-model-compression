@@ -124,3 +124,46 @@ def load_cached(path, device=None):
         for k in KEYS:
             out[k] = out[k].to(device)
     return out
+
+
+def pick_timed_frames(path, camera_indices, requested):
+    """Frames out of a `build_timing_cache.py` window, closest at or before each time.
+
+    That is the loader's own rule, so requesting t0-0.3 .. t0 returns the frames
+    `load_cached` would. requested: (n_cam, n_frame) us, rows in `camera_indices` order.
+    Returns frames (n_cam, n_frame, 3, H, W) uint8 and the picked capture times
+    (n_cam, n_frame) us.
+    """
+    z = np.load(path, allow_pickle=True)
+    frames, picked = [], []
+    for ci, req in zip(camera_indices, requested):
+        ts = z[f"ts_c{int(ci)}"]                                  # (n_win,) us
+        if req.min() < ts[0]:
+            raise ValueError(f"camera {int(ci)}: request {req.min()} precedes window {ts[0]}")
+        pick = np.searchsorted(ts, req, side="right") - 1         # (n_frame,)
+        jpegs = z[f"jpeg_c{int(ci)}"]
+        frames.append(np.stack([np.transpose(np.asarray(Image.open(io.BytesIO(jpegs[p]))),
+                                             (2, 0, 1)) for p in pick]))  # (n_frame, 3, H, W)
+        picked.append(ts[pick])
+    return torch.from_numpy(np.stack(frames)), np.stack(picked)
+
+
+def jitter_requests(clip_id, t0_us, n_cam, jitter_ms, seed=0, shift=True, stream=""):
+    """Per-frame capture-time jitter: every one of the n_cam x 4 slots gets its own
+    dt ~ U(-jitter_ms, +jitter_ms), drawn from the clip id (not the sampling seed).
+    `stream` names a separate draw (Alpamayo 2's rear cameras), leaving the default
+    stream -- and so the cameras both models share -- unchanged.
+
+    With jitter_ms <= 50 adjacent slots (100 ms apart) can never swap order. A t0 slot
+    with dt > 0 would need a frame from the future; it is flagged in `future` and
+    requested at t0, for the caller to black out, drop or keep. shift=False keeps every
+    request on its nominal slot (same draws, so the same `future` cameras).
+    Returns requested (n_cam, 4) us, dt (n_cam, 4) ms, future (n_cam,) bool.
+    """
+    h = hashlib.sha256(f"jitter:{seed}:{clip_id}{f':{stream}' if stream else ''}".encode()).digest()
+    dt = np.random.default_rng(int.from_bytes(h[:8], "big")).uniform(
+        -jitter_ms, jitter_ms, size=(n_cam, 4))                   # (n_cam, 4) ms
+    future = dt[:, -1] > 0                                        # (n_cam,)
+    nominal = t0_us - (3 - np.arange(4)) * 100_000                # (4,) us
+    shifted = np.where(np.arange(4) == 3, np.minimum(dt, 0), dt) if shift else 0 * dt
+    return (nominal + np.round(shifted * 1000)).astype(np.int64), dt, future
