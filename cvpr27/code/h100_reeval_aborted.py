@@ -5,7 +5,8 @@ route_generator.py), so the ASL up to the abort survives. Every attempt of every
 (aborted + completed, retries included) is copied to a scratch job dir, given a `_complete` tracker,
 run through alpasim `eval.main`, given the all-zero `img_is_black` rows the original runs carry
 (images were skipped, so ImageScorer cannot run), and aggregated with `eval.aggregation.main`
-(4 m truncation included). Writes <out>/reeval_aggregates/<scene>_<cfg>.json.
+(4 m truncation included). Writes <out>/reeval_aggregates/<scene>_<cfg>.json and each attempt's
+per-timestep <out>/parquets/<scene>_<cfg>/<rollout_id>/metrics.parquet.
 
 Usage (repo root):
     set -a; . /home/cvlab21/project/chan/alpasim-runs/.hf_env; set +a   # only if a usdz must be downloaded
@@ -93,6 +94,9 @@ def main():
                                cwd=ALPASIM, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 for p in glob.glob(f'{d}/rollouts/*/*/metrics.parquet'):
                     add_img_is_black(p)
+                    keep = f"{args.out}/parquets/{s}_{cfg}/{p.split('/')[-2]}"  # per-timestep input of closedloop_gap_100.py
+                    os.makedirs(keep, exist_ok=True)
+                    shutil.copy(p, f'{keep}/metrics.parquet')
                 subprocess.run([py, '-m', 'eval.aggregation.main', '--array_job_dir', d,
                                 '--config_path', f'{d}/eval-config.yaml'],
                                cwd=ALPASIM, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
