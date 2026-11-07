@@ -78,3 +78,14 @@
 - **분석.** `analyze_rollout4_76.py`의 ARMS에 두 arm을 추가했다. 기준은 그대로 MoOP l0keep이다.
   - MoOP l0keep − FM-only, MoOP l0keep − CE-only를 짝 비교한다.
   - s600에서 본 "합집합이 두 반쪽보다 낫다"가 rollout을 반복해도 유지되는지를 본다.
+
+## 7. 결과 (2026-11-07)
+
+- 여섯 arm 모두 끝났다. FM-only는 11-07 01:29, CE-only는 10:45 KST에 끝났고, 둘 다 재시도 0회였다.
+- 리포트: `cvpr27/reports/2026-11-06_rollout4-76scenes.md`
+- **요약.**
+  - s600에서 1회 본 실패는 4회 반복해도 재현됐다.
+  - 실패는 두 계열로 나뉜다.
+    - offroad형: dense = tyr_off.
+    - 과실 충돌형: CE-only·lp_m24. 둘 다 CoC NLL 기준이다.
+  - MoOP l0keep은 주행에서 FM-only와 같다(score −0.010 n.s.). CoC 퇴화율은 3.6%로 FM-only 9.6%보다 낮다.
