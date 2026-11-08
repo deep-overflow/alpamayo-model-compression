@@ -1,6 +1,6 @@
 # ICLR27 버전 폐루프 결과 정리 — Origin150 · Hard100 (0번 층 Q head 비보존)
 
-2026-11-08 · 새 실험 없음. 원자료와 계산은 `cvpr27/reports/2026-11-07_closedloop-ci-origin150-hard100.md`
+2026-11-08 · 새 실험 없음. 원자료와 계산은 `iclr27-rebuttal/reports/2026-11-07_closedloop-ci-origin150-hard100.md`
 (출력 `outputs/cvpr27/closedloop_ci_2026-11-07/summary_seed0.txt`, 이 문서의 수치는 그 파일과 대조함).
 
 ## Setup
