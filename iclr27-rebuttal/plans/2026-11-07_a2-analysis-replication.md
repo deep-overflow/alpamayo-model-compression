@@ -80,6 +80,17 @@ are recomputed here from the stored per-clip / per-step gradients:
 - `iclr27-rebuttal/code/a2_fig5_expert.py`: Fig. 5 (a, b) step-pair Spearman averaged over layers, (c) C(r) of
   Eq. 4–5. G8: A1.5 equals the paper (0.668 / 0.874, C(0.9) 68.5% / 1.8%) within 0.0006.
 
+## Amendment after review (2026-11-08, user: "rank correlation 실험 제대로 한 건지 다시 검토")
+
+Post hoc, not pre-registered. The relative-depth late band of A2 (39–62) contains the 12 layers before A2's fitted
+step (τ = 51 Q / 50 MLP), so it averages pre-step agreement into "late". `a2_fig3_token_type.py` now also reports step-aligned bands
+(pre = 0..τ−1, post = τ..last−1). After the step, both models diverge equally:
+- shipped-score Spearman: Q 0.32 vs 0.33, MLP 0.33 vs 0.30
+- corrected All: 0.36 vs 0.37
+
+The "A2 late disagreement is milder" reading in the 09-27 report and the first 11-08 report is withdrawn.
+Review figure: `code/a2_rank_band_review.py`.
+
 ## Not in scope (GPU; needs a separate decision)
 
 Held-out replication on A2 (val100 / OOD100), causal band ablations, pruning A2 with MoOP. ~51 min per 100 clips on

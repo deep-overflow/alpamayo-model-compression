@@ -232,6 +232,18 @@ def main():
                                     for label, s in r["agree"].items()} for (key, axis), r in res.items()}
     trunk_agree = {f"{key}/{axis}": {label: float(np.nanmean(s["corrected"][: LATE[key].start]))
                                      for label, s in r["agree"].items()} for (key, axis), r in res.items()}
+    # step-aligned bands (review 2026-11-08): the relative-depth late band of A2 (39-62) includes the 12 layers
+    # before its step (50/51); pre-step = 0..tau-1, post-step = tau..last-1, tau = the model's fitted step per axis
+    step_agree = {}
+    for (key, axis), r in res.items():
+        tau, last = MODELS[key]["tau"][axis], MODELS[key]["n"] - 1
+        for band, ls in (("pre-step", range(tau)), ("post-step", range(tau, last))):
+            ls = list(ls)
+            step_agree[f"{key}/{axis}/{band}"] = {
+                "layers": [ls[0], ls[-1]],
+                **{label: {"corrected": float(np.nanmean(s["corrected"][ls])), "raw": float(np.nanmean(s["raw"][ls])),
+                           "nan_layers": int(np.isnan(s["corrected"][ls]).sum())}
+                   for label, s in r["agree"].items()}}
     out.mkdir(parents=True, exist_ok=True)
     (out / "config.json").write_text(json.dumps({
         "sources": {k: {"q": str(m["anat_q"]), "mlp": str(m["anat_mlp"])} for k, m in MODELS.items()},
@@ -240,6 +252,7 @@ def main():
         "step_tau": {k: m["tau"] for k, m in MODELS.items()}}, indent=2))
     (out / "metrics.json").write_text(json.dumps({
         "gates": gates, "gates_ok": ok, "late_agreement": late_agree, "trunk_agreement_corrected": trunk_agree,
+        "step_aligned_agreement": step_agree,
         "band_share": band_share,
         "per_layer": {f"{key}/{axis}": {"agreement": {label: {k: v.tolist() for k, v in s.items()}
                                                       for label, s in r["agree"].items()},
@@ -261,6 +274,12 @@ def main():
             L.append(f"{key:<8}{'trunk':<8}" + "".join(f"{trunk_agree[k][lab]:>18.2f}" for lab in COLORS))
             L.append(f"{key:<8}{'late':<8}" + "".join(
                 f"{late_agree[k][lab]['corrected']:>11.2f} ({late_agree[k][lab]['raw']:.2f})" for lab in COLORS))
+        L.append("  step-aligned (pre-step 0..tau-1 / post-step tau..last-1), corrected (raw) [NaN layers]:")
+        for key in MODELS:
+            for band in ("pre-step", "post-step"):
+                v = step_agree[f"{key}/{axis}/{band}"]
+                L.append(f"{key:<8}{band:<10}{v['layers'][0]:>3}-{v['layers'][1]:<3}" + "".join(
+                    f"{v[lab]['corrected']:>9.2f} ({v[lab]['raw']:.2f}) [{v[lab]['nan_layers']}]" for lab in COLORS))
         L += ["", (f"(b, c) token shares, {'Q heads' if axis == 'q' else 'MLP channels'} "
               "(lo = A1.5 6-17 / A2 11-30, hi = A1.5 27-34 / A2 48-60)"),
               f"{'model':<8}{'obj':<6}{'band':<5}{'vision':>8}{'prompt':>8}{'CoC':>8}{'ego':>8}"]

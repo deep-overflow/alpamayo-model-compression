@@ -5,15 +5,42 @@
 결과 `iclr27-rebuttal/outputs/{a2_fig3_token_type,a2_fig5_expert,a2_depth_structure}/` ·
 계획 `iclr27-rebuttal/plans/2026-11-07_a2-analysis-replication.md`
 
-**요약**
+**요약** (2026-11-08 검토 후 정정판. 정정 내용은 아래 "검토 기록")
 - 일반화되는 것
   - Fig. 5(expert MLP의 스텝 안정성과 질량 집중)는 거의 그대로 재현된다.
-  - Fig. 3(a)는 정성적 순서가 같다: late 불일치, 토큰 타입으로 제한하면 회복, CoC 위치에서 가장 낮음.
+  - **Finding 1 / Fig. 3(a)의 깊이별 불일치는 크기까지 재현된다.** 각 모델의 step 이후 층 내 순위 일치가 같다.
+    - 출하 점수 ρ: Q 0.32 vs 0.33, MLP 0.33 vs 0.30
+    - Fig. 3(a) 보정 ρ (모든 토큰, Q head): 0.36 vs 0.37
+  - 토큰 타입 하나로 제한하면 step 이후 일치가 회복된다. 다만 A2의 회복 폭은 작다(Q vision 0.61 vs 0.77, prompt 0.60 vs 0.80).
   - VLM 초기층 MLP 편중이 같은 상대 깊이(≤ 0.11)에 있다.
 - 일반화되지 않는 것
-  - Fig. 3(c)의 "late CE = text"는 약하고 늦게 나타난다(Q text 몫 0.65 vs 0.98, MLP 0.24 vs 0.98).
-  - step 위치가 다르다(상대 깊이 0.80 vs 0.66).
+  - **step 위치**가 다르다(상대 깊이 0.80 vs 0.66).
+  - **CoC 위치 예외:** A1.5에서는 CoC 위치만 회복되지 않았다(0.41). A2에서는 CoC도 vision·prompt만큼 회복된다(0.57).
+  - **Fig. 3(c)의 "late CE = text"**가 약하고 늦게 나타난다(Q text 몫 0.65 vs 0.98, MLP 0.24 vs 0.98).
 - 사전 등록 게이트(G1–G8)는 모두 통과했다.
+
+## 검토 기록 (2026-11-08, 사용자 요청: "rank correlation 실험 제대로 한 건지")
+
+![band review](figures/2026-11-08_a2_rank_band_review.png)
+
+| 점검 | 결과 |
+|---|---|
+| A2 측정이 A1.5와 같은 방식인가 (`a2_grad_lib.py`, `run_importance_a2.py`) | 같다. 세부 항목은 표 아래 |
+| 생성 CoC가 추론 문장인가 | 100/100이 정상 문장이고 `<\|traj_future_start\|>`로 끝난다. NLL 중앙값 0.19, FM 0.21 |
+| 타입별 기록의 합 = 출하 점수 (A2, 같은 run) | 최대 상대 차이 8e-8 |
+| 몇몇 클립의 독점 | traj 상위 5클립 몫 0.30 (A1.5 0.41). A2가 더 고르다 |
+| 보정 ρ 코드가 논문의 A1.5 층별 곡선을 재현하는가 | Pearson 1.000, 최대 차이 0.014 (분할 난수 차이) |
+| **late 구간 정의** | **오류.** 상대 깊이로 옮긴 A2 39–62층에 step 이전 12개 층(39–50, 보정 ρ 0.80)이 섞여 A2 불일치가 약해 보였다. step 기준(pre = 0..τ−1, post = τ..마지막−1)으로 다시 계산해 아래 표에 추가했다 |
+
+측정 방식에서 A1.5와 같은 항목:
+- gate: Q는 `o_proj` 입력, MLP는 `down_proj` 입력
+- CoC NLL shift
+- FM: t = (s+0.5)/10, 스텝마다 새 noise, target x1−ε, 10스텝 합
+- 토큰 타입 규칙: `compute_spans`와 같음
+
+정정된 문장:
+- 이 리포트 첫 판과 9/27 리포트의 "A2는 late 불일치가 약하다(0.58 vs 0.38, Finding 1 0.537 vs 0.335)"는 철회한다.
+- "A2에서도 CoC 위치가 가장 낮다"도 step 이후 기준으로는 맞지 않아 철회한다.
 
 ## Purpose
 
@@ -78,12 +105,14 @@
 | 항목 | A1.5 Q | A2 Q | A1.5 MLP | A2 MLP |
 |---|---:|---:|---:|---:|
 | 층 내 순위 일치 ρ, trunk (A1.5 0–21 / A2 0–38) | 0.782 | 0.873 | 0.753 | 0.687 |
-| 층 내 순위 일치 ρ, late (A1.5 22–34 / A2 39–62) | 0.335 | 0.537 | 0.339 | 0.378 |
-| 천장 보정 late ρ | 0.375 | 0.584 | 0.539 | 0.544 |
+| 층 내 순위 일치 ρ, late (A1.5 22–34 / A2 39–62) ⚠ A2는 step 이전 층 포함 | 0.335 | 0.537 | 0.339 | 0.378 |
+| 천장 보정 late ρ ⚠ 같은 구간 | 0.375 | 0.584 | 0.539 | 0.544 |
+| **층 내 순위 일치 ρ, step 이전 (0..τ−1)** | 0.772 | 0.842 | 0.743 | 0.640 |
+| **층 내 순위 일치 ρ, step 이후 (τ..마지막−1; A1.5 23–34, A2 Q 51–62 / MLP 50–62)** | **0.318** | **0.331** | **0.325** | **0.299** |
 | log(ΣI_traj/ΣI_CoC) step 위치 (상대 깊이) | 23 (0.66) | 51 (0.81) | 23 (0.66) | 50 (0.79) |
 | step 크기 | 4.64× | 3.06× | 4.56× | 3.29× |
-| `I_CoC`의 vision 위치 몫, late | 0.04 | 0.45 | 0.04 | 0.77 |
-| `I_traj`의 vision 위치 몫, late | 0.34 | 0.55 | 0.28 | 0.52 |
+| `I_CoC`의 vision 위치 몫, late ⚠ 상대 깊이 구간 (step 이후에 가까운 hi 구간 값은 1b 아래 표) | 0.04 | 0.45 | 0.04 | 0.77 |
+| `I_traj`의 vision 위치 몫, late ⚠ 같은 구간 | 0.34 | 0.55 | 0.28 | 0.52 |
 
 ### 1b. 논문 Fig. 3 — 토큰 타입별 중요도 분해 (`code/a2_fig3_token_type.py`, 새로 계산)
 
@@ -113,7 +142,23 @@
 | MLP | A2 | trunk | 0.91 | 0.91 | 0.92 | 0.90 | 1.02 |
 | MLP | A2 | late | 0.54 (0.38) | 0.50 (0.37) | 0.73 (0.52) | 0.56 (0.36) | 0.91 (0.48) |
 
-보정 ρ는 cross가 자기 일치보다 큰 층에서 1을 넘을 수 있다(A2 MLP ego trunk 1.02). A1.5에서도 같은 일이 있다.
+⚠ 위 표의 late 행은 상대 깊이 구간이라, A2 행에 step 이전 층(39–50)이 섞여 있다. 두 모델 비교에는 아래 step 기준 표를 쓴다.
+
+**(a) step 기준 구간 평균 보정 ρ (괄호 안은 raw).** pre = 0..τ−1, post = τ..마지막−1이고, τ = A1.5 23, A2 Q 51 / MLP 50이다.
+step 이후 구간에서 보정값이 빈 층(NaN)은 A2 MLP ego 2개뿐이다.
+
+| 축 | 모델 | 구간 | All | Vision | Prompt text | CoC | Ego history |
+|---|---|---|---:|---:|---:|---:|---:|
+| Q | A1.5 | step 이전 0–22 | 0.84 (0.77) | 0.95 (0.89) | 0.87 (0.76) | 0.47 (0.42) | 0.99 (0.96) |
+| Q | A1.5 | **step 이후 23–34** | **0.36** (0.31) | 0.77 (0.71) | 0.80 (0.74) | 0.41 (0.35) | 0.94 (0.85) |
+| Q | A2 | step 이전 0–50 | 0.88 (0.84) | 0.92 (0.88) | 0.93 (0.89) | 0.77 (0.71) | 1.00 (0.89) |
+| Q | A2 | **step 이후 51–62** | **0.37** (0.33) | 0.61 (0.55) | 0.60 (0.55) | 0.57 (0.51) | 0.86 (0.73) |
+| MLP | A1.5 | step 이전 0–22 | 0.91 (0.74) | 0.97 (0.80) | 0.83 (0.68) | 0.76 (0.61) | 0.98 (0.81) |
+| MLP | A1.5 | **step 이후 23–34** | **0.53** (0.33) | 0.70 (0.46) | 0.73 (0.48) | 0.37 (0.24) | 0.82 (0.50) |
+| MLP | A2 | step 이전 0–49 | 0.86 (0.64) | 0.85 (0.65) | 0.90 (0.75) | 0.85 (0.64) | 1.01 (0.67) |
+| MLP | A2 | **step 이후 50–62** | **0.43** (0.30) | 0.40 (0.29) | 0.66 (0.46) | 0.45 (0.31) | 0.84 (0.36) |
+
+보정 ρ는 cross가 자기 일치보다 큰 층에서 1을 넘을 수 있다(A2 MLP ego 1.01–1.02). A1.5에서도 같은 일이 있다.
 
 (b, c) 토큰 타입별 몫, 구간 평균. lo = A1.5 6–17 / A2 11–30, hi = A1.5 27–34 / A2 48–60 (9/27 리포트의 상대 깊이 매핑).
 
@@ -214,11 +259,15 @@
   - Q의 스텝 거리별 감쇠 곡선은 두 모델이 소수 둘째 자리까지 거의 같다(거리 1: 0.88–0.89, 거리 8: 0.29).
   - "expert MLP는 소수 채널로 고정하고 attention은 그대로 둔다"는 설계 근거가 규모 3.4배 모델에서도 성립한다.
   - 차이는 하나다. A2 MLP는 마지막 스텝의 순위가 다른 스텝과 조금 더 다르다(최소 0.66 vs 0.74).
-- **Fig. 3(a)의 정성적 순서가 유지된다.** late 구간에서 한 토큰 타입으로 제한하면 Q head의 순위 일치가 올라간다.
-  - 순서: ego-history > prompt ≈ vision > CoC ≈ All. A2는 0.92 > 0.73 ≈ 0.71 > 0.56 ≈ 0.58, A1.5는 0.94 > 0.81 ≈ 0.79 > 0.41 ≈ 0.38.
-  - 생성 CoC 위치에서 불일치가 가장 오래 남는 것도 같다.
-  - 다만 A2는 pooled late 불일치가 약해서(0.58 vs 0.38) 회복 폭이 작다(+0.13–0.15 vs +0.41–0.43).
-- **Finding 1의 골격도 유지된다.** trunk에서는 같은 unit을 고르고, late에서는 갈라진다(MLP late 구간 중앙값 ρ는 두 모델 모두 0.33). 그 사이에 단일 step이 있다.
+- **Finding 1은 크기까지 재현된다** (step 기준 구간).
+  - step 이전에는 두 목적이 같은 unit을 고른다(출하 점수 ρ: Q 0.77 / 0.84, MLP 0.74 / 0.64).
+  - step 이후에는 두 모델이 같은 정도로 갈라진다(Q 0.32 / 0.33, MLP 0.33 / 0.30).
+  - 다른 것은 step이 놓이는 상대 깊이(0.66 vs 0.80)뿐이다.
+  - 9/27 리포트와 이 리포트 첫 판은 상대 깊이 구간을 써서 A2 불일치를 약하게 보고했다(검토 기록 참고).
+- **Fig. 3(a): step 이후 Q head 일치는 토큰 타입 하나로 제한하면 회복된다.**
+  - A1.5: All 0.36 → vision 0.77 / prompt 0.80 / ego 0.94
+  - A2: All 0.37 → vision 0.61 / prompt 0.60 / ego 0.86
+  - 회복 폭은 A2가 작다(+0.23–0.24 vs +0.41–0.44). 위치를 맞춰도 A2에는 남는 불일치가 더 크다.
 - **VLM 초기층 MLP 편중이 같은 상대 깊이(≤ 0.11)에서 재현된다.** 그 층들에서 두 목적이 일치하고(ρ 0.95) 순위도 상대적으로 안정하다.
   - 서로 다른 크기와 깊이의 두 모델에서 같은 상대 위치에 나타나므로, 특정 체크포인트의 우연이라기보다 구조나 사전학습 쪽 성질로 보인다.
   - 다만 두 모델은 같은 Qwen3-VL 계열이고, 같은 회사가 같은 데이터 계열로 학습했다. 그래서 "계열 내 일반화"로 쓰는 것이 정확하다.
@@ -230,18 +279,24 @@
     late vision 몫이 0.35로 남는다(A1.5는 0.02).
   - A2 MLP의 I_CE는 late에서도 vision 몫이 0.75다(A1.5는 0.02).
   - 그래서 "late 층의 CE 중요도는 거의 전부 text 위치에서 나온다"(논문 본문: 98%)와 "late band는 언어 채널"이라는 해석은 A2로 일반화되지 않는다.
-  - A2 MLP는 late에서 vision 위치로 제한해도 일치가 오르지 않는다(0.50 vs pooled 0.54).
-- **trunk의 CoC 위치 일치가 다르다.** A1.5 Q는 trunk에서도 CoC 위치의 일치가 낮지만(0.47), A2는 높다(0.84).
+  - A2 MLP는 step 이후 vision 위치로 제한해도 일치가 오르지 않는다(0.40 vs pooled 0.43). prompt(0.66)와 ego(0.84)만 오른다.
+- **CoC 위치 예외가 A2에는 없다.**
+  - A1.5 Q는 CoC 위치의 일치가 step 이전에도(0.47) 이후에도(0.41) 낮다. 원인은 CoC를 닫는 경계 토큰 두 개에 FM이 몰리는 토큰 혼합이다(`paper-analysis/2026-09-25_coc_position_note.md`).
+  - A2는 step 이전 0.77, 이후 0.57로 다른 위치 타입과 비슷하다. A2는 CoC를 경계 토큰 하나로 닫는다.
+  - 원인을 확정하려면 A2 CoC 위치별 측정(GPU)이 필요하다.
 - A2에는 A1.5에 없는 중간 편중 층(31층)이 있다. 원인은 이 데이터로 알 수 없다.
   massive-activation 계열의 층일 수 있다는 가설은 activation norm을 재 봐야 확인된다.
 
 **리뷰 답변에 쓸 수 있는 문장 (제안)**
-- "The depth-wise divergence of the two objectives' rankings (Fig. 3a: late-band agreement rises when both scores are
-  restricted to one token type and stays lowest at generated-CoC positions), the step-stability and concentration of
-  expert MLP importance (Fig. 5: step-pair ρ 0.83 vs 0.67 for Q heads; the lowest 90% of MLP channels hold 1.7% of the
-  importance), and the concentration of early VLM MLP layers replicate on Alpamayo 2 Super (34B, 64 layers) with the
-  same estimator and calibration clips. The late-band hand-over of CE importance to text positions (Fig. 3c) is weaker
-  and later there (text share 0.65 vs 0.98 for Q heads)."
+- "On Alpamayo 2 Super (34B, 64 layers), with the same estimator and calibration clips:
+  - The two objectives' within-layer rankings agree up to a single step and diverge after it to the same degree as in
+    Alpamayo 1.5 (Spearman 0.33 vs 0.32 for Q heads), although the step sits deeper (relative depth 0.80 vs 0.66).
+  - Restricting both scores to one token type restores agreement after the step (Fig. 3a).
+  - Expert MLP importance is stable across denoising steps and concentrated (Fig. 5: step-pair ρ 0.83 vs 0.67 for Q
+    heads; the lowest 90% of MLP channels hold 1.7% of the importance).
+  - Early VLM MLP layers are concentrated, as in Alpamayo 1.5.
+  - Two features are specific to Alpamayo 1.5: the persistent disagreement at generated-CoC positions, and the near-complete
+    hand-over of CE importance to text positions (Fig. 3c; text share 0.65 vs 0.98 for Q heads)."
 - 피해야 할 표현: "모든 VLA에서 일반화된다." 지금 근거는 같은 계열의 두 모델뿐이다.
 
 **압축에 대한 함의 (의견)**
