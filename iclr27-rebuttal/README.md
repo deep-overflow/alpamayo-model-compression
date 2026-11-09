@@ -13,6 +13,7 @@ Layout (same as `cvpr27/`):
 
 | date | topic | plan | code | report | outputs |
 |---|---|---|---|---|---|
+| 2026-11-09 | Alpamayo 2 Super + ICLR27 MoOP on test500: dense / MoOP / MoOP l0keep / FM-only / CE-only (34.1% removed). MoOP +11.8%* vs dense, = FM-only, beats CE-only (−0.074*); l0keep no effect; CoC intact | `plans/2026-11-09_a2-moop-test500.md` | `code/make_a2_moop_masks.py`, `code/run_a2_openloop.py`, `code/run_a2_worker.sh`, `code/run_a2_arms.sh`, `code/analyze_a2_test500.py` | `reports/2026-11-09_a2-moop-test500.md` | `outputs/a2_moop/`, `outputs/a2_test500_*/`, `outputs/a2_test500_analysis/` |
 | 2026-11-09 | OOD-train (1,271 clips) open loop + reference-CoC NLL for the 8 ICLR27 arms on KISTI Hangang GH200 — **approved, code ready, waiting for the OTP sockets** | `plans/2026-11-09_oodtrain-iclr27-arms-gh200.md` | `code/push_oodtrain_gh200.sh`, `code/launch_oodtrain_gh200.sh`, `code/pull_oodtrain_gh200.sh`, `code/analyze_oodtrain_gh200.py`; `cvpr27/code/eval_a100.sbatch` (arms + `EXP_ROOT`) | — | `outputs/iclr27-rebuttal/gh200/` |
 | 2026-11-08 | Closed loop, ICLR27 (pre-l0keep) arms on Origin150 / Hard100: MoOP, FM-only, CE-only, Wanda, Tyr, LLM-Pruner (gathered from the 11-07 CI report) | — | — | `reports/2026-11-08_closedloop-iclr27-arms.md` | `outputs/cvpr27/closedloop_ci_2026-11-07/` |
 | 2026-11-08 | Combination-rule ablation, all existing results gathered (l0keep A100/Ada + pre-l0keep, layer-0 confound flagged) | — | — | `reports/2026-11-08_combination-rule-summary.md` | — |
