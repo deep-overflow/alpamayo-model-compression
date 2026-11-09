@@ -1,6 +1,6 @@
 # 계획: ICLR27 arm의 OOD-train 개루프 평가 — KISTI 한강(kisti6, GH200)
 
-2026-11-09 · 상태: **승인됨(2026-11-09)** · 결과는 `iclr27-rebuttal/`에 정리
+2026-11-09 · 상태: **완료(2026-11-09, 48/48 태스크, holder 1243307)** · 보고서 `iclr27-rebuttal/reports/2026-11-09_oodtrain-iclr27-arms-gh200.md` · 결과는 `iclr27-rebuttal/`에 정리
 
 **사용자 결정(11-09):**
 - MoOP + expert 포함(기본값).

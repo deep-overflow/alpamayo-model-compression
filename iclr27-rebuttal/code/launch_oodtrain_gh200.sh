@@ -7,6 +7,8 @@
 #   G0_ONLY=1 bash ...    checks only;   HOLDERS=2 bash ...    fewer holders (5thEx allows 5 running per user)
 #   MIN_FREE_FILES=1000 bash ...   G0's free-file floor on the group /scratch quota (default 20000; the run itself
 #                                  creates ~300 files; 1000 was used on 2026-11-09 with the group at 99.9%)
+#   HOLDER_TIME=10:00:00 bash ...  holder wall limit (default 03:00:00 suits 4 holders; one holder needed 6 h 19 min
+#                                  for the 48 tasks on 2026-11-09, run with 10:00:00)
 #
 # Queue lines (cvpr27/code/eval_a100.sbatch kinds): `ol <arm> oodtrain <s> 4` for the 8 arms, dense first so
 # gate G1 (dense shard 0 vs A100) can be read early, then `nll <arm> oodtrain <s> 2`. Rows land in
@@ -63,12 +65,12 @@ for a in $ARMS; do for s in 0 1 2 3; do add ol "$a" oodtrain "$s" 4; done; done
 for a in dense $ARMS; do for s in 0 1; do add nll "$a" oodtrain "$s" 2; done; done
 echo "queue: $(grep -cvE '^(#|$)' "$Q/tasks.txt") lines"
 for i in $(seq 1 "$HOLDERS"); do
-  sbatch -p 5thEx --exclusive --gres=gpu:4 --time=03:00:00 --job-name=oodtrain_gh200 \
+  sbatch -p 5thEx --exclusive --gres=gpu:4 --time=$HOLDER_TIME --job-name=oodtrain_gh200 \
     --export=ALL,OUT_SITE=gh200,EXP_ROOT=iclr27-rebuttal,A100_QUEUE=$Q,IDLE_MAX=900 cvpr27/code/eval_a100.sbatch
 done
 sleep 5
 squeue -u e1997a06 -o '%.10i %.16j %.9T %.10M %.20S %R'
 EOS
 )
-ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-4} MIN_FREE_FILES=${MIN_FREE_FILES:-20000} bash -s" \
+ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-4} HOLDER_TIME=${HOLDER_TIME:-03:00:00} MIN_FREE_FILES=${MIN_FREE_FILES:-20000} bash -s" \
   <<< "$REMOTE" 2>&1 | grep -vE "$F"
