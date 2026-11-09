@@ -1,0 +1,142 @@
+"""Alpamayo 2 Super on test500: dense vs MoOP (ICLR27 recipe) vs MoOP l0keep, open loop.
+
+Plan: iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md. Rows come from run_a2_openloop.py (alpamayo2_s{0,1}of2.json per arm).
+Readouts per arm: minADE@6 / minFDE@6 (first six of eight samples) at 1.6 / 3.2 / 6.4 s, median minADE@6 6.4 s, CoC
+degeneracy, generated length. Paired deltas (MoOP - dense, l0keep - dense, l0keep - MoOP) with bootstrap 200,000 (95% CI
+of the mean, and of the median for minADE@6 6.4 s) and Wilcoxon p; per-bucket deltas. The A1.5 test500 rows (Ada, single
+card, same clip IDs) are shown as context only — a different model on different hardware.
+
+--partial evaluates on the clips every available arm has so far (progress check); without it all 500 are required.
+
+Usage: .venv/bin/python iclr27-rebuttal/code/analyze_a2_test500.py [--partial] [--exp-id iclr27-rebuttal/a2_test500_analysis]
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import wilcoxon
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "cvpr27" / "code"))
+from analyze_early_mlp_openloop import DRAWS, INK, MUTED, at6, boot, rows
+
+A2_ARMS = {"A2 dense": "iclr27-rebuttal/a2_test500_dense",
+           "A2 + MoOP": "iclr27-rebuttal/a2_test500_moop",
+           "A2 + MoOP l0keep": "iclr27-rebuttal/a2_test500_moop_l0keep"}
+A15_ARMS = {"A1.5 dense": "baseline_ada_ps_test", "A1.5 + MoOP": "dual_u40_v2_ps_test",
+            "A1.5 + MoOP l0keep": "swap_ship_L0fullM_500"}
+PAIRS = [("A2 + MoOP", "A2 dense"), ("A2 + MoOP l0keep", "A2 dense"), ("A2 + MoOP l0keep", "A2 + MoOP"),
+         ("A1.5 + MoOP", "A1.5 dense"), ("A1.5 + MoOP l0keep", "A1.5 dense")]
+HORIZONS = {"1.6s": "_h16", "3.2s": "_h32", "6.4s": ""}
+BUCKETS = ("cruise", "decel_stop", "accel", "turn")
+REMOVED = {"A2 + MoOP": "12.21B / 35.81B (34.1%)", "A2 + MoOP l0keep": "12.21B / 35.81B (34.1%)",
+           "A1.5 + MoOP": "2.66B / 11.08B (24.0%)", "A1.5 + MoOP l0keep": "2.66B / 11.08B (24.0%)"}
+
+
+def readouts(rr, ids):
+    out = {}
+    for h, suf in HORIZONS.items():
+        out[f"ade_{h}"] = at6(rr, ids, "ade_rollout_k" + suf)  # (n,)
+        out[f"fde_{h}"] = at6(rr, ids, "fde_rollout_k" + suf)
+    out["degen"] = np.array([float(rr[c]["coc_degenerate"]) for c in ids])
+    out["gen_len"] = np.array([float(rr[c].get("gen_len", np.nan)) for c in ids])
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--exp-id", default="iclr27-rebuttal/a2_test500_analysis")
+    ap.add_argument("--partial", action="store_true")
+    args = ap.parse_args()
+    out = REPO / "outputs" / args.exp_id
+    out.mkdir(parents=True, exist_ok=True)
+
+    data = {k: rows(v) for k, v in {**A2_ARMS, **A15_ARMS}.items()}
+    data = {k: v for k, v in data.items() if v}
+    a2_present = [k for k in A2_ARMS if k in data]
+    if args.partial:
+        ids = sorted(set.intersection(*(set(data[k]) for k in a2_present)))
+    else:
+        assert all(len(data.get(k, {})) == 500 for k in A2_ARMS), {k: len(data.get(k, {})) for k in A2_ARMS}
+        ids = sorted(data["A2 dense"])
+    for k in A15_ARMS:
+        assert set(ids) <= set(data[k]), k
+    ro = {k: readouts(v, ids) for k, v in data.items()}
+    bucket = {c: data["A2 dense"][c]["bucket"] for c in ids}
+    rng = np.random.default_rng(0)
+
+    res = {"n_clips": len(ids), "partial": args.partial, "arms": {}, "pairs": {}}
+    for k, r in ro.items():
+        res["arms"][k] = {"mean": {m: float(np.nanmean(v)) for m, v in r.items()},
+                          "median_ade_6.4s": float(np.median(r["ade_6.4s"]))}
+    for a, b in PAIRS:
+        if a not in ro or b not in ro:
+            continue
+        e = {}
+        for m in ("ade_1.6s", "ade_3.2s", "ade_6.4s", "fde_1.6s", "fde_3.2s", "fde_6.4s", "degen"):
+            d = ro[a][m] - ro[b][m]
+            e[m] = {"mean": float(d.mean()), "ci": boot(d, rng)}
+        d = ro[a]["ade_6.4s"] - ro[b]["ade_6.4s"]
+        e["ade_6.4s"].update({"median": float(np.median(d)), "median_ci": boot(d, rng, stat=np.median),
+                              "wilcoxon_p": float(wilcoxon(d).pvalue), "rel_mean": float(d.mean() / ro[b]["ade_6.4s"].mean())})
+        e["bucket"] = {bk: {"n": int(sum(bucket[c] == bk for c in ids)),
+                            "mean": float(np.mean([d[i] for i, c in enumerate(ids) if bucket[c] == bk]))}
+                       for bk in BUCKETS}
+        res["pairs"][f"{a} - {b}"] = e
+
+    (out / "config.json").write_text(json.dumps({
+        "a2_arms": A2_ARMS, "a15_context": A15_ARMS, "pairs": PAIRS, "removed": REMOVED,
+        "metric": "minADE@6 / minFDE@6 = min over the first 6 of 8 samples", "bootstrap_draws": DRAWS, "seed": 0,
+        "plan": "iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md"}, indent=2))
+    (out / "metrics.json").write_text(json.dumps(res, indent=2))
+
+    L = [f"Alpamayo 2 Super, test500 open loop ({len(ids)} clips{', PARTIAL' if args.partial else ''})", "",
+         (f"{'arm':<20}{'minADE@6 1.6/3.2/6.4 s':>26}{'minFDE@6 1.6/3.2/6.4 s':>26}{'median':>8}{'degen':>7}"
+          f"{'gen tok':>8}")]
+    for k in [*A2_ARMS, *A15_ARMS]:
+        if k not in ro:
+            continue
+        mm = res["arms"][k]["mean"]
+        L.append(f"{k:<20}{mm['ade_1.6s']:>8.3f}{mm['ade_3.2s']:>9.3f}{mm['ade_6.4s']:>9.3f}{mm['fde_1.6s']:>8.3f}"
+                 f"{mm['fde_3.2s']:>9.3f}{mm['fde_6.4s']:>9.3f}{res['arms'][k]['median_ade_6.4s']:>8.3f}"
+                 f"{mm['degen'] * 100:>6.1f}%{mm['gen_len']:>8.1f}")
+    L += ["", "paired deltas (95% CI, bootstrap 200k), minADE@6 / minFDE@6 at 6.4 s:"]
+    for name, e in res["pairs"].items():
+        a, f = e["ade_6.4s"], e["fde_6.4s"]
+        L.append(f"  {name:<36} dADE {a['mean']:+.3f} [{a['ci'][0]:+.3f}, {a['ci'][1]:+.3f}] ({a['rel_mean']:+.1%}) "
+                 f"median {a['median']:+.3f} [{a['median_ci'][0]:+.3f}, {a['median_ci'][1]:+.3f}] p={a['wilcoxon_p']:.2g} | "
+                 f"dFDE {f['mean']:+.3f} [{f['ci'][0]:+.3f}, {f['ci'][1]:+.3f}] | ddegen {e['degen']['mean'] * 100:+.1f}%p")
+        L.append(f"  {'':<36} 1.6 s dADE {e['ade_1.6s']['mean']:+.3f} [{e['ade_1.6s']['ci'][0]:+.3f}, "
+                 f"{e['ade_1.6s']['ci'][1]:+.3f}]  3.2 s dADE {e['ade_3.2s']['mean']:+.3f} [{e['ade_3.2s']['ci'][0]:+.3f}, "
+                 f"{e['ade_3.2s']['ci'][1]:+.3f}]  buckets " + " ".join(
+                     f"{bk} {v['mean']:+.3f}({v['n']})" for bk, v in e["bucket"].items()))
+    (out / "summary.txt").write_text("\n".join(L) + "\n")
+    print("\n".join(L))
+
+    shown = [p for p in res["pairs"] if p.startswith("A2")]
+    if shown:
+        fig, axes = plt.subplots(1, 2, figsize=(10, 0.8 + 0.6 * len(shown)), sharey=True)
+        for ax, m, lab in ((axes[0], "ade_6.4s", "minADE@6 6.4 s"), (axes[1], "fde_6.4s", "minFDE@6 6.4 s")):
+            for i, p in enumerate(shown):
+                d = res["pairs"][p][m]
+                ax.errorbar(d["mean"], i, xerr=[[d["mean"] - d["ci"][0]], [d["ci"][1] - d["mean"]]], fmt="o",
+                            color=INK, capsize=3)
+            ax.axvline(0, color=MUTED, lw=1)
+            ax.set_xlabel(f"Δ {lab} (m), mean and 95% CI")
+        axes[0].set_yticks(range(len(shown)))
+        axes[0].set_yticklabels(shown)
+        axes[0].invert_yaxis()
+        fig.tight_layout()
+        fig.savefig(out / "deltas.png", dpi=180)
+    print(f"wrote {out}")
+
+
+if __name__ == "__main__":
+    main()
