@@ -8,7 +8,10 @@ card, same clip IDs) are shown as context only — a different model on differen
 
 --partial evaluates on the clips every available arm has so far (progress check); without it all 500 are required.
 
-Usage: .venv/bin/python iclr27-rebuttal/code/analyze_a2_test500.py [--partial] [--exp-id iclr27-rebuttal/a2_test500_analysis]
+--preset u50 (plans/2026-11-09_a2-u50-test500.md): the u50 arms and their own dense, all on Blackwell (GPUs 0-3, `_bw`), with
+the Ada u40 rows as context; the pairs are against Blackwell dense, plus dense_bw - dense Ada as the measured hardware shift.
+
+Usage: .venv/bin/python iclr27-rebuttal/code/analyze_a2_test500.py [--preset u40|u50] [--partial] [--exp-id ...]
 """
 
 import argparse
@@ -45,6 +48,28 @@ BUCKETS = ("cruise", "decel_stop", "accel", "turn")
 REMOVED = {**{k: "12.21B / 35.81B (34.1%)" for k in A2_ARMS if k != "A2 dense"},
            **{k: "2.66B / 11.08B (24.0%)" for k in A15_ARMS if k != "A1.5 dense"}}
 
+U50_ARMS = {"A2 dense (BW)": "iclr27-rebuttal/a2_test500_dense_bw",
+            "A2 + MoOP u50": "iclr27-rebuttal/a2_test500_moop_u50_bw",
+            "A2 + FM-only u50": "iclr27-rebuttal/a2_test500_fm_only_u50_bw",
+            "A2 + CE-only u50": "iclr27-rebuttal/a2_test500_ce_only_u50_bw"}
+U40_ADA = {"A2 dense (Ada)": A2_ARMS["A2 dense"], "A2 + MoOP u40 (Ada)": A2_ARMS["A2 + MoOP"],
+           "A2 + FM-only u40 (Ada)": A2_ARMS["A2 + FM-only"], "A2 + CE-only u40 (Ada)": A2_ARMS["A2 + CE-only"]}
+PRESETS = {
+    "u40": {"arms": A2_ARMS, "context": A15_ARMS, "pairs": PAIRS, "removed": REMOVED,
+            "exp_id": "iclr27-rebuttal/a2_test500_analysis", "plan": "iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md",
+            "title": "Alpamayo 2 Super, test500 open loop"},
+    "u50": {"arms": U50_ARMS, "context": U40_ADA,
+            "pairs": [("A2 + MoOP u50", "A2 dense (BW)"), ("A2 + FM-only u50", "A2 dense (BW)"),
+                      ("A2 + CE-only u50", "A2 dense (BW)"), ("A2 + MoOP u50", "A2 + FM-only u50"),
+                      ("A2 + MoOP u50", "A2 + CE-only u50"), ("A2 dense (BW)", "A2 dense (Ada)"),
+                      ("A2 + MoOP u40 (Ada)", "A2 dense (Ada)"), ("A2 + FM-only u40 (Ada)", "A2 dense (Ada)"),
+                      ("A2 + CE-only u40 (Ada)", "A2 dense (Ada)")],
+            "removed": {**{k: "15.27B / 35.81B (42.6%)" for k in U50_ARMS if "dense" not in k},
+                        **{k: "12.21B / 35.81B (34.1%)" for k in U40_ADA if "dense" not in k}},
+            "exp_id": "iclr27-rebuttal/a2_test500_u50_analysis", "plan": "iclr27-rebuttal/plans/2026-11-09_a2-u50-test500.md",
+            "title": "Alpamayo 2 Super u50 (Blackwell) + u40 (Ada context), test500 open loop"},
+}
+
 
 def readouts(rr, ids):
     """per-clip readouts; a horizon the run did not store (older A1.5 rows: no _h16/_h32) is NaN"""
@@ -61,31 +86,34 @@ def readouts(rr, ids):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exp-id", default="iclr27-rebuttal/a2_test500_analysis")
+    ap.add_argument("--preset", default="u40", choices=sorted(PRESETS))
+    ap.add_argument("--exp-id", default=None, help="default: the preset's")
     ap.add_argument("--partial", action="store_true")
     args = ap.parse_args()
-    out = REPO / "outputs" / args.exp_id
+    P = PRESETS[args.preset]
+    arms, context, pairs = P["arms"], P["context"], P["pairs"]
+    out = REPO / "outputs" / (args.exp_id or P["exp_id"])
     out.mkdir(parents=True, exist_ok=True)
 
-    data = {k: rows(v) for k, v in {**A2_ARMS, **A15_ARMS}.items()}
+    data = {k: rows(v) for k, v in {**arms, **context}.items()}
     data = {k: v for k, v in data.items() if v}
-    a2_present = [k for k in A2_ARMS if k in data]
+    a2_present = [k for k in arms if k in data]
     if args.partial:
         ids = sorted(set.intersection(*(set(data[k]) for k in a2_present)))
     else:
-        assert all(len(data.get(k, {})) == 500 for k in A2_ARMS), {k: len(data.get(k, {})) for k in A2_ARMS}
-        ids = sorted(data["A2 dense"])
-    for k in A15_ARMS:
+        assert all(len(data.get(k, {})) == 500 for k in arms), {k: len(data.get(k, {})) for k in arms}
+        ids = sorted(data[a2_present[0]])
+    for k in context:
         assert set(ids) <= set(data[k]), k
     ro = {k: readouts(v, ids) for k, v in data.items()}
-    bucket = {c: data["A2 dense"][c]["bucket"] for c in ids}
+    bucket = {c: data[a2_present[0]][c]["bucket"] for c in ids}
     rng = np.random.default_rng(0)
 
     res = {"n_clips": len(ids), "partial": args.partial, "arms": {}, "pairs": {}}
     for k, r in ro.items():
         res["arms"][k] = {"mean": {m: float(np.nanmean(v)) for m, v in r.items()},
                           "median_ade_6.4s": float(np.median(r["ade_6.4s"]))}
-    for a, b in PAIRS:
+    for a, b in pairs:
         if a not in ro or b not in ro:
             continue
         e = {}
@@ -102,19 +130,22 @@ def main():
         res["pairs"][f"{a} - {b}"] = e
 
     (out / "config.json").write_text(json.dumps({
-        "a2_arms": A2_ARMS, "a15_context": A15_ARMS, "pairs": PAIRS, "removed": REMOVED,
+        **({"a2_arms": arms, "a15_context": context} if args.preset == "u40" else
+           {"preset": args.preset, "arms": arms, "context": context}),
+        "pairs": pairs, "removed": P["removed"],
         "metric": "minADE@6 / minFDE@6 = min over the first 6 of 8 samples", "bootstrap_draws": DRAWS, "seed": 0,
-        "plan": "iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md"}, indent=2))
+        "plan": P["plan"]}, indent=2))
     (out / "metrics.json").write_text(json.dumps(res, indent=2))
 
-    L = [f"Alpamayo 2 Super, test500 open loop ({len(ids)} clips{', PARTIAL' if args.partial else ''})", "",
-         (f"{'arm':<20}{'minADE@6 1.6/3.2/6.4 s':>26}{'minFDE@6 1.6/3.2/6.4 s':>26}{'median':>8}{'degen':>7}"
+    w = max(20, max(len(k) for k in [*arms, *context]) + 2)
+    L = [f"{P['title']} ({len(ids)} clips{', PARTIAL' if args.partial else ''})", "",
+         (f"{'arm':<{w}}{'minADE@6 1.6/3.2/6.4 s':>26}{'minFDE@6 1.6/3.2/6.4 s':>26}{'median':>8}{'degen':>7}"
           f"{'gen tok':>8}")]
-    for k in [*A2_ARMS, *A15_ARMS]:
+    for k in [*arms, *context]:
         if k not in ro:
             continue
         mm = res["arms"][k]["mean"]
-        L.append(f"{k:<20}{mm['ade_1.6s']:>8.3f}{mm['ade_3.2s']:>9.3f}{mm['ade_6.4s']:>9.3f}{mm['fde_1.6s']:>8.3f}"
+        L.append(f"{k:<{w}}{mm['ade_1.6s']:>8.3f}{mm['ade_3.2s']:>9.3f}{mm['ade_6.4s']:>9.3f}{mm['fde_1.6s']:>8.3f}"
                  f"{mm['fde_3.2s']:>9.3f}{mm['fde_6.4s']:>9.3f}{res['arms'][k]['median_ade_6.4s']:>8.3f}"
                  f"{mm['degen'] * 100:>6.1f}%{mm['gen_len']:>8.1f}")
     L += ["", "paired deltas (95% CI, bootstrap 200k), minADE@6 / minFDE@6 at 6.4 s:"]

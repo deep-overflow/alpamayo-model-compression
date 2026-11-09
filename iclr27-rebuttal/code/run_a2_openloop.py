@@ -122,6 +122,7 @@ def main():
     ap.add_argument("--first-share", type=float, default=0.47)
     ap.add_argument("--tag", default="alpamayo2")
     ap.add_argument("--gate", type=int, default=0, help="G1: run the first N clips as none / ones / masks and compare")
+    ap.add_argument("--plan", default="iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md")
     args = ap.parse_args()
     args.cache = ca.AV / "pre_processed" / args.cache_name
     args.gpus = os.environ["CUDA_VISIBLE_DEVICES"]
@@ -194,7 +195,7 @@ def main():
         "input_profile": "trajectory: cameras [0,1,2,3,5,6] x 4 frames", "masks": args.masks,
         "mask_placement": "forward pre-hooks: o_proj input per Q head, down_proj input per MLP channel (VLM text layers)",
         "shard": [args.shard, args.n_shards], "gpus": args.gpus, "gpu_names": gpu_names, "layers_per_gpu": per_gpu,
-        "plan": "iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md"}, indent=2))
+        "plan": args.plan}, indent=2))
     t_start = time.time()
     for i, m in enumerate(man):
         if m["clip_id"] in done:
