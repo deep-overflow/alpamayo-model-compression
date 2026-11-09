@@ -5,6 +5,8 @@
 #
 #   bash iclr27-rebuttal/code/launch_oodtrain_gh200.sh             # G0, queue, 4 holders
 #   G0_ONLY=1 bash ...    checks only;   HOLDERS=2 bash ...    fewer holders (5thEx allows 5 running per user)
+#   MIN_FREE_FILES=1000 bash ...   G0's free-file floor on the group /scratch quota (default 20000; the run itself
+#                                  creates ~300 files; 1000 was used on 2026-11-09 with the group at 99.9%)
 #
 # Queue lines (cvpr27/code/eval_a100.sbatch kinds): `ol <arm> oodtrain <s> 4` for the 8 arms, dense first so
 # gate G1 (dense shard 0 vs A100) can be read early, then `nll <arm> oodtrain <s> 2`. Rows land in
@@ -20,8 +22,9 @@ Q=$R/outputs/iclr27-rebuttal/gh200/queue_oodtrain
 cd "$R"
 . ./env.sh
 echo "== G0 quota (group sa0713, /scratch)"
-lfs quota -g sa0713 /scratch | tail -1 | awk '{files = $6; flim = $8; free = flim - files
-  printf "  files %d / %d, free %d\n", files, flim, free; if (free < 20000) { print "  FAIL: fewer than 20,000 files free"; exit 1 }}'
+lfs quota -g sa0713 /scratch | tail -1 | awk -v floor="$MIN_FREE_FILES" '{files = $6; flim = $8; free = flim - files
+  printf "  files %d / %d, free %d (floor %d)\n", files, flim, free, floor
+  if (free < floor) { print "  FAIL: fewer free files than the floor"; exit 1 }}'
 echo "== G0 recipes and inputs"
 "$ALPAMAYO_REPO/.venv/bin/python" - <<'PY'
 import json, sys
@@ -67,4 +70,5 @@ sleep 5
 squeue -u e1997a06 -o '%.10i %.16j %.9T %.10M %.20S %R'
 EOS
 )
-ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-4} bash -s" <<< "$REMOTE" 2>&1 | grep -vE "$F"
+ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-4} MIN_FREE_FILES=${MIN_FREE_FILES:-20000} bash -s" \
+  <<< "$REMOTE" 2>&1 | grep -vE "$F"
