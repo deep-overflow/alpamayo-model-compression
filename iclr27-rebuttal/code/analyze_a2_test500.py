@@ -63,7 +63,10 @@ PRESETS = {
                       ("A2 + CE-only u50", "A2 dense (BW)"), ("A2 + MoOP u50", "A2 + FM-only u50"),
                       ("A2 + MoOP u50", "A2 + CE-only u50"), ("A2 dense (BW)", "A2 dense (Ada)"),
                       ("A2 + MoOP u40 (Ada)", "A2 dense (Ada)"), ("A2 + FM-only u40 (Ada)", "A2 dense (Ada)"),
-                      ("A2 + CE-only u40 (Ada)", "A2 dense (Ada)")],
+                      ("A2 + CE-only u40 (Ada)", "A2 dense (Ada)"),
+                      # u50 - u40 of the same criterion: across cards, valid because dense_bw - dense_ada is ~0
+                      ("A2 + MoOP u50", "A2 + MoOP u40 (Ada)"), ("A2 + FM-only u50", "A2 + FM-only u40 (Ada)"),
+                      ("A2 + CE-only u50", "A2 + CE-only u40 (Ada)")],
             "removed": {**{k: "15.27B / 35.81B (42.6%)" for k in U50_ARMS if "dense" not in k},
                         **{k: "12.21B / 35.81B (34.1%)" for k in U40_ADA if "dense" not in k}},
             "exp_id": "iclr27-rebuttal/a2_test500_u50_analysis", "plan": "iclr27-rebuttal/plans/2026-11-09_a2-u50-test500.md",
