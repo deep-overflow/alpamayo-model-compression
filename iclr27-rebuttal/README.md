@@ -13,7 +13,7 @@ Layout (same as `cvpr27/`):
 
 | date | topic | plan | code | report | outputs |
 |---|---|---|---|---|---|
-| 2026-11-09 | OOD-train (1,271 clips) open loop for the 8 ICLR27 arms on KISTI Hangang GH200 — **plan, awaiting approval** | `plans/2026-11-09_oodtrain-iclr27-arms-gh200.md` | — | — | `outputs/iclr27-rebuttal/gh200/` (planned) |
+| 2026-11-09 | OOD-train (1,271 clips) open loop + reference-CoC NLL for the 8 ICLR27 arms on KISTI Hangang GH200 — **approved, code ready, waiting for the OTP sockets** | `plans/2026-11-09_oodtrain-iclr27-arms-gh200.md` | `code/push_oodtrain_gh200.sh`, `code/launch_oodtrain_gh200.sh`, `code/pull_oodtrain_gh200.sh`, `code/analyze_oodtrain_gh200.py`; `cvpr27/code/eval_a100.sbatch` (arms + `EXP_ROOT`) | — | `outputs/iclr27-rebuttal/gh200/` |
 | 2026-11-08 | Closed loop, ICLR27 (pre-l0keep) arms on Origin150 / Hard100: MoOP, FM-only, CE-only, Wanda, Tyr, LLM-Pruner (gathered from the 11-07 CI report) | — | — | `reports/2026-11-08_closedloop-iclr27-arms.md` | `outputs/cvpr27/closedloop_ci_2026-11-07/` |
 | 2026-11-08 | Combination-rule ablation, all existing results gathered (l0keep A100/Ada + pre-l0keep, layer-0 confound flagged) | — | — | `reports/2026-11-08_combination-rule-summary.md` | — |
 | 2026-11-08 | Paper analyses on Alpamayo 2 Super (34B): Finding 1/2, Fig. 3 (token types), Fig. 5 (expert), VLM MLP depth structure | `plans/2026-11-07_a2-analysis-replication.md` | `code/a2_depth_structure.py`, `code/a2_fig3_token_type.py`, `code/a2_fig5_expert.py`, `code/a2_rank_band_review.py` (review: step-aligned bands) | `reports/2026-11-08_a2-analysis-replication.md` | `outputs/a2_depth_structure/`, `outputs/a2_fig3_token_type/`, `outputs/a2_fig5_expert/`, `outputs/a2_rank_band_review/` |

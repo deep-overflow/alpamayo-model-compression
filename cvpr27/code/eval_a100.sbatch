@@ -91,11 +91,17 @@ declare -A MODEL=(
   [lp_m24_em75]=outputs/cvpr27/slim_lp_m24_em75 [tyr_off_em75]=outputs/cvpr27/slim_tyr_off_em75
   [lp_m24_em87p5]=outputs/cvpr27/slim_lp_m24_em87p5 [tyr_off_em87p5]=outputs/cvpr27/slim_tyr_off_em87p5
   [lp_m24_em93p75]=outputs/cvpr27/slim_lp_m24_em93p75 [tyr_off_em93p75]=outputs/cvpr27/slim_tyr_off_em93p75
+  # the ICLR27 paper's arms, layer 0 cut (iclr27-rebuttal/plans/2026-11-09_oodtrain-iclr27-arms-gh200.md);
+  # moop, tyr_u40_r and lp_r50 above are the same paper rows
+  [moop_em93p75]=outputs/slim_dualexp_u40_em93p75
+  [fm_only]=outputs/slim_traj_u40_v2 [ce_only]=outputs/slim_coc_u40_v2 [wanda]=outputs/slim_wanda_u40_v2
 )
 # OUT_SITE=gh200 (sbatch --export) on KISTI Hangang keeps that site's rows, queues and logs apart from the A100
 # ones (cvpr27/plans/2026-11-05_kisti6-gh200-site.md §2.5): one GPU type per table.
 SITE=${OUT_SITE:-a100}
-Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/cvpr27/$SITE/queue}
+# EXP_ROOT=iclr27-rebuttal (sbatch --export) files the rows under outputs/iclr27-rebuttal/<site>/ instead
+ROOT=${EXP_ROOT:-cvpr27}
+Q=${A100_QUEUE:-$ALPAMAYO_REPO/outputs/$ROOT/$SITE/queue}
 IDLE_MAX=${IDLE_MAX:-2700}
 # Worker k runs on the k-th card SLURM granted. Indexing 0..3 directly would land on cards
 # outside the allocation whenever the node does not renumber them (no device cgroup).
@@ -162,7 +168,7 @@ run_task() {  # <device> <kind> <args...>
     ol)
       local arm=$1 set_name=$2 shard=$3 n=$4 suffix=${5:-}
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=cvpr27/$SITE/${arm}_${set_name}${suffix:+_$suffix} set_args
+      local exp=$ROOT/$SITE/${arm}_${set_name}${suffix:+_$suffix} set_args
       case $set_name in
         test2000) set_args=(--set test --n-indist 2000) ;;
         oodval) set_args=(--set ood --manifest ood_val) ;;
@@ -184,21 +190,21 @@ run_task() {  # <device> <kind> <args...>
       local arm=$1
       local model=${MODEL[$arm]:?unknown arm $arm}
       # rows.json is rewritten every 25 answers; predictions.csv is written once at the end
-      if [ ! -f "outputs/cvpr27/$SITE/lingo_vqa_$arm/predictions.csv" ]; then
+      if [ ! -f "outputs/$ROOT/$SITE/lingo_vqa_$arm/predictions.csv" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/run_lingo_vqa.py \
-            --arm "$model" --exp-id "cvpr27/$SITE/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
+            --arm "$model" --exp-id "$ROOT/$SITE/lingo_vqa_$arm" --gpu 0 --reserve-gb 40 \
             > "logs/${SITE}_lingo_${arm}_answer.log" 2>&1
       fi
-      if [ ! -f "outputs/cvpr27/$SITE/lingo_vqa_scores_$arm/metrics.json" ]; then
+      if [ ! -f "outputs/$ROOT/$SITE/lingo_vqa_scores_$arm/metrics.json" ]; then
         CUDA_VISIBLE_DEVICES=$dev "$PY" experiments/lingoqa/score_lingo_vqa.py \
-            --runs "cvpr27/$SITE/lingo_vqa_$arm" --exp-id "cvpr27/$SITE/lingo_vqa_scores_$arm" --gpu 0 \
+            --runs "$ROOT/$SITE/lingo_vqa_$arm" --exp-id "$ROOT/$SITE/lingo_vqa_scores_$arm" --gpu 0 \
             > "logs/${SITE}_lingo_${arm}_score.log" 2>&1
       fi
       ;;
     nll)
       local arm=$1 set_name=$2 shard=$3 n=$4 manifest
       local model=${MODEL[$arm]:?unknown arm $arm}
-      local exp=cvpr27/$SITE/nll_${arm}_${set_name}
+      local exp=$ROOT/$SITE/nll_${arm}_${set_name}
       case $set_name in
         oodval) manifest=ood_val ;;
         oodtrain) manifest=ood_train ;;

@@ -1,6 +1,21 @@
 # 계획: ICLR27 arm의 OOD-train 개루프 평가 — KISTI 한강(kisti6, GH200)
 
-2026-11-09 · 상태: **승인 대기** · 결과는 `iclr27-rebuttal/`에 정리
+2026-11-09 · 상태: **승인됨(2026-11-09)** · 결과는 `iclr27-rebuttal/`에 정리
+
+**사용자 결정(11-09):**
+- MoOP + expert 포함(기본값).
+- OOD CoC 품질은 정답 CoC NLL만 본다(Claude 채점은 하지 않음).
+- 결과 경로는 `outputs/iclr27-rebuttal/gh200/`.
+
+**구현:**
+- `cvpr27/code/eval_a100.sbatch`: arm 4개와 `EXP_ROOT`를 추가했다.
+- `iclr27-rebuttal/code/`에 네 스크립트를 두었다.
+  - `push_oodtrain_gh200.sh`: 전송과 G0 해시 확인
+  - `launch_oodtrain_gh200.sh`: G0 점검, 큐 48줄(주행 32 + NLL 16), holder 제출
+  - `pull_oodtrain_gh200.sh`: 회수
+  - `analyze_oodtrain_gh200.py`: `--stage gate`(G1), `--stage table`
+- 분석 스크립트는 A100 OOD-train 행(dense, MoOP)으로 시험했고, 11-03 A100 보고서 수치를 그대로 재현했다(dense 0.922, MoOP 1.017, Δ +0.095 [+0.043, +0.149]).
+- NLL 태스크는 arm당 2샤드다. 1,271클립을 한 번의 forward로 채점하므로 주행 태스크보다 짧다.
 
 ## 1. 목적
 
