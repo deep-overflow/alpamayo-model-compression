@@ -1,4 +1,5 @@
-"""VLM keep-masks for Alpamayo 2 Super under the ICLR27 MoOP recipe, with and without the layer-0 exemption.
+"""VLM keep-masks for Alpamayo 2 Super under the ICLR27 MoOP recipe (with and without the layer-0 exemption) and the paper's
+single-criterion rows FM-only (`traj_u40_v2`) and CE-only (`coc_u40_v2`), added 2026-11-09 at the user's request.
 
 Plan: iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md (approved 2026-11-09: D1 = same per-layer ratio, D3 = l0keep arm too).
 
@@ -36,11 +37,19 @@ A2 = {"layers": 64, "heads": 64, "inter": 25600, "hidden": 5120, "head_dim": 128
 A15 = {"layers": 36, "heads": 32, "inter": 12288, "hidden": 4096, "head_dim": 128}
 
 
-def moop_masks(imp, dims, l0keep):
+def scores(imp, crit):
+    """make_slim.py stems: dual = max of the two within-layer ranks; traj / coc = one rank alone (FM-only / CE-only;
+    the last layer's all-zero I_traj ranks in index order, as in the shipped traj_u40_v2)."""
+    if crit == "dual":
+        return (np.maximum(rank_norm(imp["traj_vlm_q"]), rank_norm(imp["coc_vlm_q"])),   # (L, H)
+                np.maximum(rank_norm(imp["traj_vlm_mlp"]), rank_norm(imp["coc_vlm_mlp"])))  # (L, I)
+    return rank_norm(imp[f"{crit}_vlm_q"]), rank_norm(imp[f"{crit}_vlm_mlp"])
+
+
+def moop_masks(imp, dims, l0keep, crit="dual"):
     """imp: npz-like with traj/coc_vlm_{q,mlp}; returns q_mask (L, H), mlp_mask (L, I), info dict."""
     L, H, I = dims["layers"], dims["heads"], dims["inter"]
-    sq = np.maximum(rank_norm(imp["traj_vlm_q"]), rank_norm(imp["coc_vlm_q"]))  # (L, H)
-    sm = np.maximum(rank_norm(imp["traj_vlm_mlp"]), rank_norm(imp["coc_vlm_mlp"]))  # (L, I)
+    sq, sm = scores(imp, crit)
     rq, rm = np.full(L, RATIO), np.full(L, RATIO)
     info = {}
     if l0keep:
@@ -70,8 +79,9 @@ def g0_regression():
     """Same code on A1.5 importance_v2 vs the shipped kept sets."""
     imp = np.load(REPO / "outputs" / "importance_v2" / "importance.npz")
     out = {}
-    for l0keep, ref in ((False, "slim_dual_u40_v2"), (True, "slim_dual_u40_l0keep_v2")):
-        q, m, _ = moop_masks(imp, A15, l0keep)
+    for crit, l0keep, ref in (("dual", False, "slim_dual_u40_v2"), ("dual", True, "slim_dual_u40_l0keep_v2"),
+                              ("traj", False, "slim_traj_u40_v2"), ("coc", False, "slim_coc_u40_v2")):
+        q, m, _ = moop_masks(imp, A15, l0keep, crit)
         meta = json.loads((REPO / "outputs" / ref / "slim_meta.json").read_text())
         same_q = all(set(np.flatnonzero(q[li])) == set(meta["vlm"][li]["q"]) for li in range(A15["layers"]))
         same_m = all(set(np.flatnonzero(m[li])) == set(meta["vlm"][li]["mlp"]) for li in range(A15["layers"]))
@@ -90,11 +100,11 @@ def main():
     imp = np.load(A2_IMP)
     total = 35_810_000_000  # A2 Super, safetensors header (alpamayo2-distill plan 2026-10-15)
     cfg = {"ratio": RATIO, "importance": str(A2_IMP), "dims": A2, "g0_regression": g0, "arms": {}}
-    for name, l0keep in (("moop", False), ("moop_l0keep", True)):
-        q, m, info = moop_masks(imp, A2, l0keep)
+    for name, crit, l0keep in (("moop", "dual", False), ("moop_l0keep", "dual", True),
+                               ("fm_only", "traj", False), ("ce_only", "coc", False)):
+        q, m, info = moop_masks(imp, A2, l0keep, crit)
         # consistency: in every layer the kept units outrank the cut ones under the score used
-        sq = np.maximum(rank_norm(imp["traj_vlm_q"]), rank_norm(imp["coc_vlm_q"]))
-        sm = np.maximum(rank_norm(imp["traj_vlm_mlp"]), rank_norm(imp["coc_vlm_mlp"]))
+        sq, sm = scores(imp, crit)
         for s, mk in ((sq, q), (sm, m)):
             for li in range(A2["layers"]):
                 if (mk[li] == 0).any():
@@ -102,10 +112,16 @@ def main():
         rem = removed_params(q, m, A2)
         q_cut, m_cut = (q == 0).sum(1), (m == 0).sum(1)
         cfg["arms"][name] = {
-            "l0keep": l0keep, **info, "removed_params": rem, "removed_share_of_35.81B": round(rem / total, 4),
+            "criterion": crit, "l0keep": l0keep, **info, "removed_params": rem,
+            "removed_share_of_35.81B": round(rem / total, 4),
             "q_cut_per_layer": sorted(set(q_cut.tolist())), "mlp_cut_per_layer": sorted(set(m_cut.tolist())),
             "layer0_q_kept": np.flatnonzero(q[0]).tolist()}
-        np.savez(out / f"masks_{name}.npz", q_mask=q.astype(np.float32), mlp_mask=m.astype(np.float32))
+        path = out / f"masks_{name}.npz"
+        if path.exists():  # a running job may hold it: never rewrite, only confirm it is the same selection
+            z = np.load(path)
+            assert (z["q_mask"] == q).all() and (z["mlp_mask"] == m).all(), f"{path} differs from a rebuild"
+        else:
+            np.savez(path, q_mask=q.astype(np.float32), mlp_mask=m.astype(np.float32))
         print(f"{name}: Q cut/layer {sorted(set(q_cut.tolist()))} (layer 0: {int(q_cut[0])}), "
               f"MLP cut/layer {sorted(set(m_cut.tolist()))}, removed {rem:,} = {rem / total:.1%} of 35.81B "
               f"{info if info else ''}")

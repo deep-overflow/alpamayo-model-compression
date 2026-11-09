@@ -29,22 +29,31 @@ from analyze_early_mlp_openloop import DRAWS, INK, MUTED, at6, boot, rows
 
 A2_ARMS = {"A2 dense": "iclr27-rebuttal/a2_test500_dense",
            "A2 + MoOP": "iclr27-rebuttal/a2_test500_moop",
-           "A2 + MoOP l0keep": "iclr27-rebuttal/a2_test500_moop_l0keep"}
+           "A2 + MoOP l0keep": "iclr27-rebuttal/a2_test500_moop_l0keep",
+           "A2 + FM-only": "iclr27-rebuttal/a2_test500_fm_only",
+           "A2 + CE-only": "iclr27-rebuttal/a2_test500_ce_only"}
 A15_ARMS = {"A1.5 dense": "baseline_ada_ps_test", "A1.5 + MoOP": "dual_u40_v2_ps_test",
-            "A1.5 + MoOP l0keep": "swap_ship_L0fullM_500"}
-PAIRS = [("A2 + MoOP", "A2 dense"), ("A2 + MoOP l0keep", "A2 dense"), ("A2 + MoOP l0keep", "A2 + MoOP"),
-         ("A1.5 + MoOP", "A1.5 dense"), ("A1.5 + MoOP l0keep", "A1.5 dense")]
+            "A1.5 + MoOP l0keep": "swap_ship_L0fullM_500",
+            "A1.5 + FM-only": "traj_u40_v2_test", "A1.5 + CE-only": "coc_u40_v2_test"}
+PAIRS = [("A2 + MoOP", "A2 dense"), ("A2 + MoOP l0keep", "A2 dense"), ("A2 + FM-only", "A2 dense"),
+         ("A2 + CE-only", "A2 dense"), ("A2 + MoOP l0keep", "A2 + MoOP"), ("A2 + MoOP", "A2 + FM-only"),
+         ("A2 + MoOP", "A2 + CE-only"),
+         ("A1.5 + MoOP", "A1.5 dense"), ("A1.5 + MoOP l0keep", "A1.5 dense"), ("A1.5 + FM-only", "A1.5 dense"),
+         ("A1.5 + CE-only", "A1.5 dense"), ("A1.5 + MoOP", "A1.5 + FM-only"), ("A1.5 + MoOP", "A1.5 + CE-only")]
 HORIZONS = {"1.6s": "_h16", "3.2s": "_h32", "6.4s": ""}
 BUCKETS = ("cruise", "decel_stop", "accel", "turn")
-REMOVED = {"A2 + MoOP": "12.21B / 35.81B (34.1%)", "A2 + MoOP l0keep": "12.21B / 35.81B (34.1%)",
-           "A1.5 + MoOP": "2.66B / 11.08B (24.0%)", "A1.5 + MoOP l0keep": "2.66B / 11.08B (24.0%)"}
+REMOVED = {**{k: "12.21B / 35.81B (34.1%)" for k in A2_ARMS if k != "A2 dense"},
+           **{k: "2.66B / 11.08B (24.0%)" for k in A15_ARMS if k != "A1.5 dense"}}
 
 
 def readouts(rr, ids):
+    """per-clip readouts; a horizon the run did not store (older A1.5 rows: no _h16/_h32) is NaN"""
     out = {}
+    one = rr[ids[0]]
     for h, suf in HORIZONS.items():
-        out[f"ade_{h}"] = at6(rr, ids, "ade_rollout_k" + suf)  # (n,)
-        out[f"fde_{h}"] = at6(rr, ids, "fde_rollout_k" + suf)
+        for kind in ("ade", "fde"):
+            key = f"{kind}_rollout_k{suf}"
+            out[f"{kind}_{h}"] = at6(rr, ids, key) if key in one else np.full(len(ids), np.nan)  # (n,)
     out["degen"] = np.array([float(rr[c]["coc_degenerate"]) for c in ids])
     out["gen_len"] = np.array([float(rr[c].get("gen_len", np.nan)) for c in ids])
     return out
@@ -82,7 +91,8 @@ def main():
         e = {}
         for m in ("ade_1.6s", "ade_3.2s", "ade_6.4s", "fde_1.6s", "fde_3.2s", "fde_6.4s", "degen"):
             d = ro[a][m] - ro[b][m]
-            e[m] = {"mean": float(d.mean()), "ci": boot(d, rng)}
+            e[m] = ({"mean": float("nan"), "ci": [float("nan"), float("nan")]} if np.isnan(d).any()
+                    else {"mean": float(d.mean()), "ci": boot(d, rng)})
         d = ro[a]["ade_6.4s"] - ro[b]["ade_6.4s"]
         e["ade_6.4s"].update({"median": float(np.median(d)), "median_ci": boot(d, rng, stat=np.median),
                               "wilcoxon_p": float(wilcoxon(d).pvalue), "rel_mean": float(d.mean() / ro[b]["ade_6.4s"].mean())})
