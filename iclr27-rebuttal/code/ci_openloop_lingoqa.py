@@ -1,6 +1,9 @@
 """95% CIs for the ICLR27 arms: open loop (Test500, OOD-Val262), LingoQA, and the Table 4 CoC NLL column.
 
-Rows are the Ada runs that reproduce paper Table 1 / Table 4 (checked against PAPER below). Nothing is re-run.
+Rows are the Ada runs that reproduce paper Table 1 / Table 4 (checked against PAPER below). LLM-Pruner (paper
+checkpoint data/alpasim/drivers/lp_r50) and FM-only / CE-only (stored rows had 6.4 s only) come from the 2026-11-09
+Ada re-runs in outputs/iclr27-rebuttal/ada_fill, used only because they pass iclr27-rebuttal/code/gate_ada_fill.py
+(FM / CE bit-identical to the stored rows, LLM-Pruner = the paper's numbers and the stored Ada clips).
 
   open loop  minADE@6 / minFDE@6 at 1.6 / 3.2 / 6.4 s: mean with a clip bootstrap CI, median, CoC degeneration;
              paired arm - dense and arm - MoOP per clip (mean, CI, median, two-sided bootstrap p)
@@ -11,9 +14,9 @@ Rows are the Ada runs that reproduce paper Table 1 / Table 4 (checked against PA
 All bootstraps: 200,000 draws, seed 0, shared draws across arms (common random numbers); every paired CI is
 recomputed with seed 1 and cells whose "excludes 0" call flips are listed.
 
-LLM-Pruner has no complete Ada open-loop or LingoQA rows (its Ada outputs were deleted with soowon's tree), so
-it appears only in the NLL column and in a separate A100 block (dense / MoOP / LLM-Pruner, outputs/cvpr27/a100;
-Test500 = the test_500 clips inside test_2000). The A100 and Ada numbers are never put in one table.
+A separate A100 block (dense / MoOP / the rebuilt LLM-Pruner outputs/cvpr27/slim_lp_r50, outputs/cvpr27/a100;
+Test500 = the test_500 clips inside test_2000) is a hardware cross-check. The A100 and Ada numbers are never put in
+one table.
 
 Usage (repo root): .venv/bin/python iclr27-rebuttal/code/ci_openloop_lingoqa.py
 """
@@ -40,19 +43,21 @@ SETS = {"test500": ("test_500.parquet", 500), "oodval262": ("ood_val.parquet", 2
 KINDS = ("ade", "fde")
 CHUNK = 10_000
 
+FILL = "iclr27-rebuttal/ada_fill"   # 2026-11-09 Ada re-runs (gate_ada_fill.py)
 # key, label, run tag, Ada test dir, Ada OOD dir, LingoQA dir, NLL dir (None = no Ada rows)
 ARMS = [
     ("dense", "Dense", "baseline", "baseline_pred_test", "baseline_pred_oodval", "lingo_vqa_baseline",
      "nll_dense_baseline_test"),
     ("wanda", "Wanda", "slim_wanda_u40_v2", "wanda_u40_v2_test", "wanda_u40_v2_oodval",
      "lingo_vqa_slim_wanda_u40_v2", "nll_dense_slim_wanda_u40_v2_test"),
-    ("lp_r50", "LLM-Pruner", "lp_r50", None, None, None, "nll_dense_lp_r50_test"),
+    ("lp_r50", "LLM-Pruner", "lp_r50", f"{FILL}/lp_r50_test500", f"{FILL}/lp_r50_oodval262", f"{FILL}/lingo_vqa_lp_r50",
+     "nll_dense_lp_r50_test"),
     ("tyr", "Tyr", "slim_tyr_u40_r", "tyr_u40_r_pred_test", "tyr_u40_r_pred_oodval", "lingo_vqa_slim_tyr_u40_r",
      "nll_dense_slim_tyr_u40_r_test"),
-    ("fm_only", "FM-only", "slim_traj_u40_v2", "traj_u40_v2_test", "traj_u40_v2_ood", "lingo_vqa_slim_traj_u40_v2",
-     "nll_dense_slim_traj_u40_v2_test"),
-    ("ce_only", "CE-only", "slim_coc_u40_v2", "coc_u40_v2_test", "coc_u40_v2_ood", "lingo_vqa_slim_coc_u40_v2",
-     "nll_dense_slim_coc_u40_v2_test"),
+    ("fm_only", "FM-only", "slim_traj_u40_v2", f"{FILL}/fm_only_test500", f"{FILL}/fm_only_oodval262",
+     "lingo_vqa_slim_traj_u40_v2", "nll_dense_slim_traj_u40_v2_test"),
+    ("ce_only", "CE-only", "slim_coc_u40_v2", f"{FILL}/ce_only_test500", f"{FILL}/ce_only_oodval262",
+     "lingo_vqa_slim_coc_u40_v2", "nll_dense_slim_coc_u40_v2_test"),
     ("moop", "MoOP", "slim_dual_u40_v2", "dual_u40_v2_pred_test", "dual_u40_v2_pred_oodval",
      "lingo_vqa_slim_dual_u40_v2", "nll_dense_slim_dual_u40_v2_test"),
     ("moop_e", "MoOP+E", "slim_dualexp_u40_em93p75", "dualexp_em93p75_test", "dualexp_em93p75_oodval", None, None),
@@ -367,7 +372,8 @@ def main():
     md += md_open_loop(ol, "Open loop (Ada)", order)
     md += md_lingo(lq, "LingoQA (Ada, Lingo-Judge)", order)
     md += md_nll(nll, order)
-    md += ["## A100 block (LLM-Pruner has no complete Ada rows; do not merge with the Ada tables)", ""]
+    md += [("## A100 block (hardware cross-check; LLM-Pruner here is the rebuilt outputs/cvpr27/slim_lp_r50; "
+            "do not merge with the Ada tables)"), ""]
     md += md_open_loop(ol_a100, "Open loop (A100)", list(A100_ARMS))
     md += md_lingo(lq_a100, "LingoQA (A100)", list(A100_ARMS))
     md += ["## Paper check", "", "```", *check, "```", "",
