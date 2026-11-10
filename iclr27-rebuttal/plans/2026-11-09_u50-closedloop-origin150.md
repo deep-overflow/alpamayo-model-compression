@@ -1,10 +1,22 @@
 # 계획: u50(29.98% 제거) MoOP · Tyr · LLM-Pruner 폐루프 — Origin150 × 2 rollout (cvlab21)
 
-2026-11-09 · 상태: **승인 대기** · 결과는 `iclr27-rebuttal/`에 정리
+2026-11-09 · 상태: **진행 중(11-10 10:38 KST 시작)** · 결과는 `iclr27-rebuttal/`에 정리
 
-**변경 이력(11-09, 사용자):**
-- 씬 세트를 s600(600씬 × 1)에서 **Origin150 × 2 rollout(arm당 300 rollout)**으로 바꿨다.
-- MoOP arm은 l0keep판이 아니라 **기본 MoOP u50(`dual_u50_v2`)**이다. MoOP l0keep u50은 나중에 따로 한다.
+**변경 이력(사용자):**
+- 11-09: 씬 세트를 s600(600씬 × 1)에서 **Origin150 × 2 rollout(arm당 300 rollout)**으로 바꿨다.
+- 11-09: MoOP arm은 l0keep판이 아니라 **기본 MoOP u50(`dual_u50_v2`)**이다.
+- 11-10: Tyr·LLM-Pruner는 **논문(ICLR) 판**으로 만든다. 아래 "arm" 표는 이 결정 전의 것이므로 이 블록이 우선한다.
+  - Tyr u50 = 논문 Tyr 행(`tyr_u40_r`)을 만든 포트 파이프라인(`run_tyr_supernet.py` → `run_tyr_search.py` → `make_slim`)에 u50 절단(층당 Q head 16/32, MLP 6,144/12,288)을 넣은 `tyr_u50_r`이다. CVPR 공식 절차판 `slim_tyr_u50`은 쓰지 않는다.
+  - LLM-Pruner u50 = 논문 `lp_r50`의 규칙(`lp_prune.py`, `cvpr27/lp_importance_v1`의 `coc_param_first`, 4–33번 층, head·MLP 같은 비율)에 비율만 0.6으로 올린 `lp_r60`이다. 제거량은 약 29.93%로, MoOP u50의 29.98%에 가장 가까운 비율이다.
+- 11-10: 75씬은 Blackwell 0–3, 75씬은 Ada 4–7에서 돌린다(`make_u50_scene_lists.py`, shard i → GPU i). Ada 씬은 dense `hofix`와 같은 카드다.
+- 11-10: **MoOP u50 l0keep(`dual_u50_l0keep_v2`)을 먼저 돌린다.** 그다음이 기본 MoOP u50이다.
+- 11-10: 지금은 Ada 4–7만 쓴다. Ada 몫 shard 4–7을 먼저 돌리고, Blackwell 몫 shard 0–3은 사용자가 0–3을 허락하면 돌린 뒤 병합한다.
+- 11-10: 별도 smoke 단계 없이 바로 본 런을 띄우고(사용자: "지금 바로"), 첫 rollout을 직접 확인한다.
+
+**진행 기록(KST):**
+- 11-10 10:35: MoOP u50 l0keep(제거 3,321,884,672 = 예산 − 4,096)과 MoOP u50(3,321,888,768)을 GPU 6·7에서 빌드했다. 각 빌드의 smoke 클립 하나에서 CoC NLL은 l0keep 0.151, 기본판 1.465였다.
+- 11-10 10:38: MoOP u50 l0keep의 shard 4–7을 GPU 4–7에서 시작했다(`run_u50_origin150.sh`, 로그 `outputs/iclr27-rebuttal/u50_origin150/run_ada.log`). 같은 런처가 이어서 기본 MoOP u50의 shard 4–7을 돌린다.
+- 아직 안 한 것: Tyr u50 포트 빌드(supernet은 카드 1장으로 수 시간), LLM-Pruner u50 빌드, G0 재빌드 두 개(`build_u50.sh`, `check_u50_builds.py`), Blackwell 몫 shard 0–3.
 
 ## 목적
 
