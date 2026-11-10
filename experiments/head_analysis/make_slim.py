@@ -495,8 +495,10 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                 vq[i, tyr.cut_lowest(sq[i], tc.num_attention_heads - kq[lv])] = 0.0
         eq, em = np.ones_like(eq), np.ones_like(em)
         kvonly = ()
-    elif cfg_name.startswith(("tyr_u40", "tyr_uniform_u40", "tyr_sel_u40",
+    elif cfg_name.startswith(("tyr_u40", "tyr_u50_r", "tyr_uniform_u40", "tyr_sel_u40",
                               "dualr_u40", "dualgr_u40")):
+        # tyr_u50_r: the paper Tyr port at u50 -- same branch, budget read from its own supernet
+        # (iclr27-rebuttal/plans/2026-11-09_u50-closedloop-origin150.md)
         # Tyr baseline (plans/2026-08-20_tyr-baseline.md). The supernet stores
         # OSSCAR-reconstructed o_proj / down_proj weights per sparsity level; this
         # branch WRITES the chosen level's weights into the model and derives the
