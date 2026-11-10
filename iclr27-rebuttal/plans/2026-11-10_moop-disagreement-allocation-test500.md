@@ -27,6 +27,10 @@
 
   - 상한 때문에 두 arm은 1–5번 층 MLP가 같다(6,144). 차이는 주로 중간 · 후반 층에서 난다.
 - **실행.** `code/run_disagree_alloc.sh`(카드당 워커 1개, mkdir 큐: 빌드 2개 → Test500 4묶음 × 2 arm), Ada 4–7번, main 체크아웃에서 띄움.
+- **대기 (21:46 KST).** 4–7번 카드가 비어 있지 않았다.
+  - soowon의 GPU 큐(`/mnt/nvme1n1/ad_vla/results/soowon/rebuttal_expert/queue_1110`)가 4–7번을 쓰고 있다. 작업 76개 중 68개가 대기였고, 거의 전부 OOD-train 묶음(묶음당 약 32분)이다.
+  - 4장이면 약 10시간이라 11-11 08:00 KST 전후에 빈다. 0–3번(Blackwell)도 다른 작업으로 차 있었다. cvlab20은 키 인증으로 접속되지 않는다.
+  - 남의 큐를 건드리지 않으려고 카드별 대기 스크립트 4개를 띄웠다(job tmp의 `start_when_free.sh`). 각 스크립트는 그 큐에 시작 안 된 작업이 0개이고 그 카드가 5분 연속 10 MiB 이하일 때만 워커를 띄운다. 로그는 `outputs/iclr27-rebuttal/disagree_alloc/logs/gate_{4..7}.log`.
 
 ## 목적 · 가설
 
