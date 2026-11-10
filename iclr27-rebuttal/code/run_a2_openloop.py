@@ -11,6 +11,10 @@ pre-hooks; zeroing there = removing the unit). Expert, KV groups and the vision 
 --gate runs the first N clips three times in one process (no hooks, all-ones hooks, the given masks) and checks that
 all-ones is bitwise equal to no hooks and that the masks change the output (G1 of the plan).
 
+Added 2026-11-10 for KISTI Hangang (iclr27-rebuttal/plans/2026-11-10_a2-u40-ood-gh200.md): --manifest (an eval_sets stem or a
+parquet path) and --set-name pick the clip set; one visible card puts the whole model on it (GH200 120 GB); A2_DISTILL points at
+an alpamayo2-distill copy (its src/ is put on sys.path, so no install is needed); an absolute --exp-id writes there.
+
 Usage (cards from the shell, model from the local cache):
   CUDA_VISIBLE_DEVICES=4,5 HF_HUB_OFFLINE=1 /mnt/nvme1n1/ad_vla/venvs/alpamayo2/bin/python \
       iclr27-rebuttal/code/run_a2_openloop.py --exp-id iclr27-rebuttal/a2_test500_dense --shard 0 --n-shards 2
@@ -35,8 +39,10 @@ import pandas as pd
 import torch
 
 REPO = Path(__file__).resolve().parents[2]
-# both paths set here so the import order below does not matter (run_oodval would add the second itself)
-sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval")
+A2D = Path(os.environ.get("A2_DISTILL", "/home/cvlab21/project/chan/alpamayo2-distill"))
+# all paths set here so the import order below does not matter (run_oodval would add the head_analysis one itself)
+sys.path.insert(0, str(A2D / "src"))  # alpamayo2_super (on cvlab21 also the venv's editable install)
+sys.path.insert(0, str(A2D / "experiments" / "oodval"))
 sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))  # eval_lib (numpy only)
 import cache_a2 as ca
 import eval_lib as el
@@ -45,7 +51,10 @@ from alpamayo2_super import helper
 from alpamayo2_super.input_profiles import select_task_input
 from alpamayo2_super.models.alpamayo2_super import Alpamayo2Super
 
-MANIFEST = Path("/mnt/nvme1n1/ad_vla/outputs/chan/eval_sets/test_500.parquet")
+
+def manifest_path(name):
+    """an eval_sets stem (test_500, ood_val, ood_train) or a parquet path"""
+    return Path(name) if name.endswith(".parquet") else REPO / "outputs" / "eval_sets" / f"{name}.parquet"
 
 
 class VlmMasks:
@@ -123,15 +132,18 @@ def main():
     ap.add_argument("--tag", default="alpamayo2")
     ap.add_argument("--gate", type=int, default=0, help="G1: run the first N clips as none / ones / masks and compare")
     ap.add_argument("--plan", default="iclr27-rebuttal/plans/2026-11-09_a2-moop-test500.md")
+    ap.add_argument("--manifest", default="test_500", help="eval_sets stem or parquet path")
+    ap.add_argument("--set-name", default="test", help="label written to the config")
     args = ap.parse_args()
     args.cache = ca.AV / "pre_processed" / args.cache_name
     args.gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     n_gpus = torch.cuda.device_count()
-    assert n_gpus == len(args.gpus.split(",")) >= 2, (n_gpus, args.gpus)
+    assert n_gpus == len(args.gpus.split(",")) >= 1, (n_gpus, args.gpus)
+    manifest = manifest_path(args.manifest)
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    man = [{"clip_id": r.clip_id, "t0_us": int(r.t0_us)} for r in pd.read_parquet(MANIFEST).itertuples()]
+    man = [{"clip_id": r.clip_id, "t0_us": int(r.t0_us)} for r in pd.read_parquet(manifest).itertuples()]
     man = man[args.shard::args.n_shards]  # strided, the same rule as run_baseline.py
     if args.gate:
         man = man[: args.gate]
@@ -139,8 +151,11 @@ def main():
         man = man[: args.limit]
 
     ro.set_determinism()
-    share = args.first_share if n_gpus == 2 else 1.0 / n_gpus - 0.03
-    device_map, per_gpu = ro.layer_device_map(n_gpus, share)
+    if n_gpus == 1:  # one card holds the whole model (GH200 120 GB)
+        device_map, per_gpu = {"": 0}, [ro.N_LAYERS]
+    else:
+        share = args.first_share if n_gpus == 2 else 1.0 / n_gpus - 0.03
+        device_map, per_gpu = ro.layer_device_map(n_gpus, share)
     gpu_names = [torch.cuda.get_device_name(i) for i in range(n_gpus)]
     print(f"{args.exp_id} | shard {args.shard}/{args.n_shards} | {len(man)} clips | cards {args.gpus} "
           f"({gpu_names[0]}) | layers per card {per_gpu} | masks {args.masks}", flush=True)
@@ -187,7 +202,7 @@ def main():
     rows = json.loads(rows_path.read_text()) if rows_path.exists() else []
     done = {r["clip_id"] for r in rows}
     (out_dir / f"config_s{args.shard}of{args.n_shards}.json").write_text(json.dumps({
-        "model": ro.MODEL_ID, "model_revision": ro.MODEL_REV, "set": "test", "manifest": str(MANIFEST),
+        "model": ro.MODEL_ID, "model_revision": ro.MODEL_REV, "set": args.set_name, "manifest": str(manifest),
         "cache": str(args.cache), "n_clips": len(man), "k": args.k, "seed": args.seed,
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4], +k per sample",
         "protocol": "1 CoC rollout, k denoisings on its KV cache (alpamayo2-distill run_oodval.py, matched to run_baseline.py)",
@@ -195,7 +210,7 @@ def main():
         "input_profile": "trajectory: cameras [0,1,2,3,5,6] x 4 frames", "masks": args.masks,
         "mask_placement": "forward pre-hooks: o_proj input per Q head, down_proj input per MLP channel (VLM text layers)",
         "shard": [args.shard, args.n_shards], "gpus": args.gpus, "gpu_names": gpu_names, "layers_per_gpu": per_gpu,
-        "plan": args.plan}, indent=2))
+        "plan": args.plan, "a2_distill": str(A2D)}, indent=2))
     t_start = time.time()
     for i, m in enumerate(man):
         if m["clip_id"] in done:
