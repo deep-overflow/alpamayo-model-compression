@@ -17,6 +17,14 @@
 - 11-10 10:35: MoOP u50 l0keep(제거 3,321,884,672 = 예산 − 4,096)과 MoOP u50(3,321,888,768)을 GPU 6·7에서 빌드했다. 각 빌드의 smoke 클립 하나에서 CoC NLL은 l0keep 0.151, 기본판 1.465였다.
 - 11-10 10:38: MoOP u50 l0keep의 shard 4–7을 GPU 4–7에서 시작했다(`run_u50_origin150.sh`, 로그 `outputs/iclr27-rebuttal/u50_origin150/run_ada.log`). 같은 런처가 이어서 기본 MoOP u50의 shard 4–7을 돌린다.
 - 아직 안 한 것: Tyr u50 포트 빌드(supernet은 카드 1장으로 수 시간), LLM-Pruner u50 빌드, G0 재빌드 두 개(`build_u50.sh`, `check_u50_builds.py`), Blackwell 몫 shard 0–3.
+- **11-10 13:25 정정: 위 두 MoOP u50 빌드는 무효다.**
+  - `make_slim.py`의 `--importance` 기본값은 `importance_v1`(7월 파일럿, 테스트 클립 12개 포함)인데, 두 빌드 명령이 이 인자를 빼먹었다. 논문 MoOP는 `importance_v2`(calib_100)다.
+  - G0(`dual_u40_v2` 재빌드가 논문 레시피와 같은지)가 36개 층 모두에서 FAIL해서 알았다.
+  - 10:38부터 돌던 l0keep 런(shard 4–7, rollout 104개)을 멈췄다. 빌드와 런은 지우지 않고 `*_impv1_invalid`로 이름만 바꿔 두었다.
+  - `--importance importance_v2`로 다시 빌드했다(13:29). 제거량은 MoOP u50 3,321,888,768, l0keep 3,321,884,672다.
+  - G0-moop·G0-lp 모두 PASS이고, `lp_r60`이 남긴 유닛은 `lp_r50`이 남긴 유닛의 부분집합이다.
+  - 13:34에 l0keep의 shard 4–7을 다시 시작했다. `build_u50.sh`·`check_u50_builds.py`에 importance 명시와 그 검사를 넣었다.
+- 11-10 13:25: Tyr u50 포트 supernet(GPU 0)을 시작했다. LLM-Pruner u50(`lp_r60`)을 빌드했다. 4–33번 층에서 층마다 head 19/32, MLP 7,373/12,288을 남겨 3,315,671,040개(29.93%)를 제거한다.
 
 ## 목적
 

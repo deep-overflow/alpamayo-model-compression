@@ -45,7 +45,10 @@ def main():
     res["G0-lp"] = same_units(meta(OUT / "g0" / "lp_r50"), lp50)
 
     moop = meta(REPO / "outputs" / "slim_dual_u50_v2")
-    res["B-moop"] = moop["params"]["removed"] == U50
+    # make_slim's --importance default is importance_v1 (July pilot set); the paper recipes use importance_v2
+    imp = {d: meta(REPO / "outputs" / d).get("importance_from")
+           for d in ("slim_dual_u50_v2", "slim_dual_u50_l0keep_v2") if (REPO / "outputs" / d).exists()}
+    res["B-moop"] = moop["params"]["removed"] == U50 and all(v == "importance_v2" for v in imp.values())
 
     tyr = meta(REPO / "outputs" / "slim_tyr_u50_r")
     tr = tyr["params"]["removed"]

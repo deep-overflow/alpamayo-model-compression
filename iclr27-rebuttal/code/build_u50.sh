@@ -34,13 +34,13 @@ stamp "builds: Tyr supernet on GPU $SUP_GPU, MoOP / LLM-Pruner / G0 on GPU $ONE_
     --head-cut 16 --mlp-cut 6144 --gpu "$SUP_GPU" ) > "$OUT/build_tyr_supernet.log" 2>&1 &
 p_sup=$!
 (
-  [ -f outputs/slim_dual_u50_v2/slim_state.pt ] || $PY $H/make_slim.py --config dual_u50_v2 \
+  [ -f outputs/slim_dual_u50_v2/slim_state.pt ] || $PY $H/make_slim.py --config dual_u50_v2 --importance importance_v2 \
     --out outputs/slim_dual_u50_v2 --gpu "$ONE_GPU"
   echo "== exit $? (MoOP u50)"
   [ -f outputs/slim_lp_r60/slim_state.pt ] || $PY experiments/llm_pruner/lp_prune.py \
     --importance cvpr27/lp_importance_v1 --arm coc_param_first --ratio 0.6 --out outputs/slim_lp_r60 --gpu "$ONE_GPU"
   echo "== exit $? (LLM-Pruner u50)"
-  [ -f "$OUT/g0/dual_u40_v2/slim_meta.json" ] || $PY $H/make_slim.py --config dual_u40_v2 \
+  [ -f "$OUT/g0/dual_u40_v2/slim_meta.json" ] || $PY $H/make_slim.py --config dual_u40_v2 --importance importance_v2 \
     --out outputs/iclr27-rebuttal/u50_origin150/g0/dual_u40_v2 --no-state --gpu "$ONE_GPU"
   echo "== exit $? (G0 dual_u40_v2)"
   [ -f "$OUT/g0/lp_r50/slim_meta.json" ] || $PY experiments/llm_pruner/lp_prune.py \
