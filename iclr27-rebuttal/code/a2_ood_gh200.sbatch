@@ -27,7 +27,7 @@ mkdir -p "$W/logs" "$W/outputs" "$Q/claimed"
 touch "$Q/tasks.txt" "$Q/done.log" "$Q/failed.log"
 export AD_VLA_DATA=$W/data HF_HUB_CACHE=$W/hub HF_HOME=$HOME/.cache/huggingface HF_HUB_OFFLINE=1
 export A2_DISTILL=$W/code/a2d CUDA_DEVICE_ORDER=PCI_BUS_ID PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-export CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=8 MPLCONFIGDIR=/tmp/mpl_$USER
+export CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MPLCONFIGDIR=/tmp/mpl_$USER
 PY=/scratch/e1997a06/project/alpamayo-model-compression/.venv/bin/python
 RUNNER=$R/iclr27-rebuttal/code/run_a2_openloop.py
 PLAN=iclr27-rebuttal/plans/2026-11-10_a2-u40-ood-gh200.md

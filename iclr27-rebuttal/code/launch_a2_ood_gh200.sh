@@ -22,7 +22,10 @@ echo "== G0 /appsdata group quota"
 lfs quota -g sa0713 /appsdata | tail -1 | awk '{free = $8 - $6; printf "  files %d / %d, free %d\n", $6, $8, free
   if (free < 20000) { print "  FAIL: under 20000 free files"; exit 1 }}'
 echo "== G0 inputs"
-SETS="$SETS" A2_DISTILL=$W/code/a2d "$PY" - <<'PY'
+# glogin: one thread per library and no GPU -- on 11-10 the import hung with OpenBLAS failing pthread_create at the
+# login node's RLIMIT_NPROC (8192) and cudaGetDeviceCount reporting out of memory
+SETS="$SETS" A2_DISTILL=$W/code/a2d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 CUDA_VISIBLE_DEVICES= \
+  "$PY" - <<'PY'
 import json, os, sys
 from pathlib import Path
 import numpy as np
