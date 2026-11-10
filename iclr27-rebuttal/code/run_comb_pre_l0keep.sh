@@ -1,40 +1,115 @@
 #!/bin/bash
-# iclr27-rebuttal/plans/2026-11-08_comb-rules-pre-l0keep-test500.md on GPU 4 only (session rule 2026-10-29):
-# wait until GPU 4 is empty, build raw-mean / raw-max without l0keep (selection only, --no-state), gate B1, then test500 for both.
-# Skips a build whose slim_meta.json exists and a run whose summary_s0of1.txt exists, so a rerun resumes.
-#
-#   bash iclr27-rebuttal/code/run_comb_pre_l0keep.sh > outputs/iclr27-rebuttal/comb_pre_l0keep_run.log 2>&1
+# iclr27-rebuttal/plans/2026-11-08_comb-rules-pre-l0keep-test500.md (amended 2026-11-10): combination rules under the paper's
+# pre-l0keep recipe -- rank-mean (dualsum_u40_v2), raw-mean (rawabsavg_u40_v2), raw-max (rawabsmean_u40_v2) -- on test500 and
+# LingoQA. rank-max (MoOP) and dense are the paper's existing Ada rows, so nothing is re-run for them.
+#   1. first card of CARDS, once empty (< 100 MiB twice, 2 min apart): build raw-mean / raw-max and a fresh rank-mean
+#      (selection only, --no-state), then gates B0 / B1 (check_comb_pre_l0keep_builds.py); stop if they fail
+#   2. one worker per card, each starting once its card is empty: a shared task list claimed with mkdir --
+#      test500 in 2 shards per arm (run_baseline.py, the ada_fill path: sharding is bit-identical), then LingoQA
+#      (run_lingo_vqa.py answers, score_lingo_vqa.py = Lingo-Judge, as for the paper's Table 4)
+# Resumable: a build with slim_meta.json, a shard with summary_s<k>of2.txt, a LingoQA answer with predictions.csv and a score
+# with metrics.json are skipped; delete outputs/iclr27-rebuttal/comb_pre_l0keep/queue to re-claim after a crash.
+#   CARDS="4 5 6 7" bash iclr27-rebuttal/code/run_comb_pre_l0keep.sh > outputs/iclr27-rebuttal/comb_pre_l0keep_launch.log 2>&1
 set -u
-GPU=${GPU:-4}
-REPO=$(cd "$(dirname "$0")/../.." && pwd)
-RETRY=$REPO/experiments/head_analysis/run_retry_host.sh
-export ALPAMAYO_REPO=$REPO
-cd "$REPO" || exit 1
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "$ROOT" || exit 1
+read -r -a CARD_LIST <<< "${CARDS:-4 5 6 7}"
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+export HF_HOME=$HOME/.cache/huggingface
+export HF_HUB_CACHE=/mnt/nvme1n1/ad_vla/cache/hub
+export HF_HUB_OFFLINE=1  # weights cached at the pinned revision; the full_right token is invalid since 2026-11-09
+HF_TOKEN=$(bash -c 'source /home/cvlab21/project/chan/alpasim-runs/.hf_env && printf %s "$HF_TOKEN"')
+export HF_TOKEN
+PY=$ROOT/.venv/bin/python
+OUT=iclr27-rebuttal/comb_pre_l0keep
+Q=outputs/$OUT/queue
+LOG=outputs/$OUT/logs
+mkdir -p "$Q" "$LOG"
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
+empty() { [ "$(nvidia-smi -i "$1" --query-gpu=memory.used --format=csv,noheader,nounits | tr -d ' ')" -lt 100 ]; }
+wait_empty() {  # <card>: empty twice in a row, 2 min apart
+  local n=0
+  while [ "$n" -lt 2 ]; do
+    if empty "$1"; then n=$((n + 1)); else n=0; fi
+    [ "$n" -lt 2 ] && sleep 120
+  done
+}
 
-stamp "waiting for GPU $GPU to be empty"
-free_twice=0
-while [ "$free_twice" -lt 2 ]; do
-  used=$(nvidia-smi -i "$GPU" --query-gpu=memory.used --format=csv,noheader,nounits | tr -d ' ')
-  if [ "$used" -lt 100 ]; then free_twice=$((free_twice + 1)); else free_twice=0; fi
-  [ "$free_twice" -lt 2 ] && sleep 120
+declare -A CFG=([rank_mean]=dualsum_u40_v2 [raw_mean]=rawabsavg_u40_v2 [raw_max]=rawabsmean_u40_v2)
+# rank-mean is evaluated from the September build that produced dualsum_u40_v2_test, so its rerun doubles as a reproducibility
+# check; the fresh build under $OUT is only for gate B0 (today's make_slim gives the same selection)
+declare -A MODEL=([rank_mean]=outputs/slim_dualsum_u40_v2 [raw_mean]=outputs/$OUT/slim_rawabsavg_u40_v2
+                  [raw_max]=outputs/$OUT/slim_rawabsmean_u40_v2)
+TASKS=()
+for arm in raw_mean raw_max rank_mean; do
+  for s in 0 1; do TASKS+=("ol $arm $s"); done
 done
-stamp "GPU $GPU empty, starting"
+for arm in raw_mean raw_max rank_mean; do TASKS+=("lingo $arm"); done
 
-for cfg in rawabsavg_u40_v2 rawabsmean_u40_v2; do
-  out=outputs/iclr27-rebuttal/slim_$cfg
-  [ -f "$out/slim_meta.json" ] && continue
-  stamp "build $cfg"
-  bash "$RETRY" 3 experiments/head_analysis/make_slim.py --config "$cfg" --importance importance_v2 \
-      --out "$out" --no-state --gpu "$GPU" || { stamp "build $cfg failed"; exit 1; }
-done
-"$REPO/.venv/bin/python" iclr27-rebuttal/code/check_comb_pre_l0keep_builds.py || { stamp "B1 FAIL, stopping"; exit 1; }
+run_task() {  # <kind> <arm> [shard]
+  local kind=$1 arm=$2
+  case $kind in
+    ol)
+      local s=$3 exp=$OUT/${arm}_test500
+      [ -f "outputs/$exp/summary_s${s}of2.txt" ] && { stamp "skip $exp s$s (done)"; return 0; }
+      "$PY" experiments/evaluation/run_baseline.py --set test --model "${MODEL[$arm]}" --exp-id "$exp" \
+          --shard "$s" --n-shards 2 --gpu 0 --reserve-gb 40 > "$LOG/${arm}_test500_s${s}of2.log" 2>&1
+      ;;
+    lingo)
+      if [ ! -f "outputs/$OUT/lingo_vqa_$arm/predictions.csv" ]; then
+        "$PY" experiments/lingoqa/run_lingo_vqa.py --arm "${MODEL[$arm]}" --exp-id "$OUT/lingo_vqa_$arm" \
+            --gpu 0 --reserve-gb 40 > "$LOG/lingo_${arm}_answer.log" 2>&1 || return 1
+      fi
+      if [ ! -f "outputs/$OUT/lingo_vqa_scores_$arm/metrics.json" ]; then
+        "$PY" experiments/lingoqa/score_lingo_vqa.py --runs "$OUT/lingo_vqa_$arm" \
+            --exp-id "$OUT/lingo_vqa_scores_$arm" --gpu 0 > "$LOG/lingo_${arm}_score.log" 2>&1
+      fi
+      ;;
+  esac
+}
 
-for cfg in rawabsavg_u40_v2 rawabsmean_u40_v2; do
-  d=outputs/iclr27-rebuttal/${cfg}_test500
-  [ -f "$d/summary_s0of1.txt" ] && continue
-  stamp "eval $cfg test500"
-  bash "$RETRY" 3 experiments/evaluation/run_baseline.py --model "outputs/iclr27-rebuttal/slim_$cfg" \
-      --exp-id "iclr27-rebuttal/${cfg}_test500" --gpu "$GPU" --set test --manifest test_500 || { stamp "eval $cfg failed"; exit 1; }
+worker() {  # <card>
+  local card=$1 t key
+  export CUDA_VISIBLE_DEVICES=$card
+  wait_empty "$card"
+  stamp "worker card $card start ($(nvidia-smi -i "$card" --query-gpu=name --format=csv,noheader))"
+  for t in "${TASKS[@]}"; do
+    key=${t// /_}
+    mkdir "$Q/claim_$key" 2>/dev/null || continue
+    stamp "card $card start: $t"
+    # shellcheck disable=SC2086
+    if run_task $t; then
+      stamp "card $card done: $t"
+      echo "$t" >> "$Q/done.log"
+    else
+      stamp "card $card FAILED: $t"
+      echo "$t" >> "$Q/failed.log"
+    fi
+  done
+  stamp "worker card $card finished"
+}
+
+first=${CARD_LIST[0]}
+stamp "builds wait for card $first to be empty"
+wait_empty "$first"
+for arm in raw_mean raw_max rank_mean; do
+  cfg=${CFG[$arm]}
+  dst=outputs/$OUT/slim_$cfg
+  [ -f "$dst/slim_meta.json" ] && continue
+  stamp "build $cfg on card $first"
+  CUDA_VISIBLE_DEVICES=$first "$PY" experiments/head_analysis/make_slim.py --config "$cfg" --importance importance_v2 \
+      --out "$dst" --no-state --gpu 0 > "$LOG/build_$cfg.log" 2>&1 || { stamp "build $cfg failed"; exit 1; }
 done
-stamp "all done"
+"$PY" iclr27-rebuttal/code/check_comb_pre_l0keep_builds.py > "$LOG/gates_b0_b1.log" 2>&1 \
+    || { stamp "B0/B1 FAIL, stopping (see $LOG/gates_b0_b1.log)"; exit 1; }
+stamp "B0/B1 PASS; starting workers on cards ${CARD_LIST[*]}"
+
+pids=()
+for card in "${CARD_LIST[@]}"; do
+  worker "$card" > "$LOG/worker_$card.log" 2>&1 &
+  pids+=($!)
+done
+wait "${pids[@]}"
+stamp "all workers finished; failed tasks: $(cat "$Q/failed.log" 2>/dev/null | tr '\n' ';')"

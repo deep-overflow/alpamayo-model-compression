@@ -2,6 +2,44 @@
 
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
+**Status (2026-11-10): code ready, NOT launched — waiting for the user's go** ("일단 코드 준비만 해줘").
+
+## Amendment 2026-11-10 (user: "실험을 다시 해야 할 것 같아. l0keep 이전 버전으로 rank-mean, raw-max, raw-mean을 진행해줘",
+"test500과 lingoqa 결과가 필요해")
+
+- **Scope**
+  - LingoQA is added for every rule, read the same way as the paper's Table 4.
+    - `run_lingo_vqa.py`: greedy, max_gen 128, 500 questions.
+    - `score_lingo_vqa.py` (Lingo-Judge) writes `scored.json`.
+    - CIs resample the 100 segments (`ci_openloop_lingoqa.lingo_block`).
+  - rank-max and dense reuse the paper's Ada rows: `dual_u40_v2_ps_test`, `lingo_vqa_slim_dual_u40_v2` (68.8%), `baseline_ada_ps_test`, `lingo_vqa_baseline` (73.2%).
+- **rank-mean is re-run** on test500 and newly measured on LingoQA.
+  - It runs from the September build `outputs/slim_dualsum_u40_v2`.
+  - Its test500 rerun is compared clip by clip with `dualsum_u40_v2_test` (same card type = bit-identical expected).
+  - Gate B0 checks that today's make_slim rebuilds that selection unit for unit.
+- **Outputs.** New builds and runs go under `outputs/iclr27-rebuttal/comb_pre_l0keep/`:
+  - builds: `slim_{rawabsavg,rawabsmean,dualsum}_u40_v2`
+  - test500: `{rank_mean,raw_mean,raw_max}_test500`
+  - LingoQA: `lingo_vqa_<arm>`, `lingo_vqa_scores_<arm>`
+  - analysis: `outputs/iclr27-rebuttal/comb_pre_l0keep_analysis/`
+- **Compute**
+  - Cards come from `CARDS`, default Ada 4-7. The "GPU 4 only" rule above has no recorded source.
+  - Each card is used only once it is empty: < 100 MiB twice, 2 min apart.
+  - Builds and gates B0/B1 run on the first card. After that, one worker per card claims tasks with mkdir: test500 in 2 shards per arm, then LingoQA.
+  - About 6 × 30 min + 3 × 13 min ≈ 1 h 10 min on four cards.
+- **Launch**
+  ```
+  CARDS="4 5 6 7" bash iclr27-rebuttal/code/run_comb_pre_l0keep.sh > outputs/iclr27-rebuttal/comb_pre_l0keep_launch.log 2>&1
+  ```
+- **Analysis**
+  ```
+  .venv/bin/python iclr27-rebuttal/code/analyze_comb_pre_l0keep.py
+  ```
+  - Missing arms are skipped, so it also works mid-run.
+- **Dry run (11-10, no GPU)**
+  - The analysis was run with rank-mean pointed at the September run. It reproduces the paper's rows: rank-max test500 0.950 / 2.546, LingoQA 68.8%; dense 0.842 / 73.2%.
+  - The September rank-mean is +0.010 [−0.029, +0.053] vs rank-max on minADE@6 6.4 s and keeps 17/19 of rank-max's layer-0 heads.
+
 The paper's main rows use the pre-l0keep recipe (`dual_u40_v2`, layer 0 cut like every other layer, 13 of 32 Q heads), so the
 ablation should use the same recipe. The l0keep ablation (2026-11-05, A100 test_2000) stays as the clean
 (layer-0-controlled) companion.
