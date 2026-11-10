@@ -6,7 +6,7 @@ The 10-07 run dropped every Hard100 scene with an aborted rollout in any arm (96
 - measured: the two mid-run-abort scenes (3b934c9a, ceb3d0d5) use the first two launched attempts, decomposed from
   the parquets h100_reeval_aborted.py re-scored; the two init-fail scenes (no ASL) stay `aborted`.
 Recomputed: per-arm terms [1], how the scored window ended [2], loss by ending rule [2b], scene-paired differences vs
-dense [3], the pooled split, and gates G1-G3. The behaviour sections of the 10-07 run (pace, stops, gate events per km)
+dense [3], the pooled split, MoOP - Tyr / LLM-Pruner (alt-route, 4 m rule, score; added 2026-11-09), and gates G1-G3. The behaviour sections of the 10-07 run (pace, stops, gate events per km)
 need per-timestep data that aborted rollouts lack and stay as in outputs/closedloop_gap_v1 (96 scenes).
 Input: outputs/closedloop_gap_v1/rollouts.parquet (per-rollout anatomy, aborted rows included).
 Usage (repo root): .venv/bin/python cvpr27/code/closedloop_gap_100.py [--hard100 paper|measured] [--draws 100000]
@@ -36,6 +36,8 @@ TERMS = G.TERMS + ['aborted']            # slow, frozen, cut4m, zeroed (pre-regi
 WHY = G.WHY + ['aborted']                # gate, rear, cut, full (post hoc) + aborted
 ENDS = ['full', 'offroad', 'atfault', 'rear', 'cut4m', 'aborted']
 SETS = [('origin150', 150), ('hard100', 100)]
+VS_MOOP = ['tyr', 'lp']                                  # MoOP - arm block (2026-11-09)
+MOOP_X = ['alt', 'cut_cost', 'cut4m', 'L_cut', 'score']
 
 
 def fill_aborted(df):
@@ -173,6 +175,29 @@ def main():
                       float(min(1.0, 2 * min((b <= 0).mean(), (b >= 0).mean())))]
         P['paired'][k] = row
         say(f"  {G.LABEL[k]:15s} {fmt(row['score'])}  " + '  '.join(fmt(row['L_' + w]) for w in WHY))
+
+    # MoOP vs the other two external baselines (added 2026-11-09). Reuses the scene resamples of [3], so every number
+    # above is unchanged. Rates are MoOP - arm; score terms are score contributions -(loss_MoOP - loss_arm).
+    res['moop_minus'] = {}
+    say('\n================ MoOP - Tyr / LLM-Pruner (scene-paired, same resamples as [3]); rates MoOP - arm,'
+        ' terms as score contribution -(loss_MoOP - loss_arm)')
+    for k in VS_MOOP:
+        res['moop_minus'][k] = {}
+        for label in [s for s, _ in SETS] + ['pooled']:
+            row = {}
+            for x in MOOP_X:
+                sign = -1.0 if (x in TERMS or x.startswith('L_')) else 1.0
+                if label == 'pooled':
+                    dd = {s: (sign * (SC[s][x]['dual'] - SC[s][x][k])).to_numpy() for s, _ in SETS}   # (S,) each
+                    b = sum(dd[s][IDX[s]].sum(1) for s, _ in SETS) / P['n_scenes']                     # (B,)
+                    lo, hi = np.percentile(b, [2.5, 97.5])
+                    row[x] = [float(np.concatenate(list(dd.values())).mean()), float(lo), float(hi),
+                              float(min(1.0, 2 * min((b <= 0).mean(), (b >= 0).mean())))]
+                else:
+                    row[x] = ci((sign * (SC[label][x]['dual'] - SC[label][x][k])).to_numpy(), IDX[label])
+            res['moop_minus'][k][label] = row
+            say(f"  MoOP - {G.LABEL[k]:10s} {label:9s} alt-route {fmt(row['alt'])}  4 m-rule costly cuts "
+                f"{fmt(row['cut_cost'])}  cut4m {fmt(row['cut4m'])}  L_cut {fmt(row['L_cut'])}  score {fmt(row['score'])}")
 
     # gates, as pre-registered in plans/2026-10-07_closedloop-gap-decomposition.md (G3 via the slow term only)
     o, h = res['origin150']['paired']['dual'], res['hard100']['paired']['dual']
