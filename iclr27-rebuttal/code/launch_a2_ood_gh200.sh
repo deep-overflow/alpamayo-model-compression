@@ -5,6 +5,9 @@
 #   bash iclr27-rebuttal/code/launch_a2_ood_gh200.sh          # G0, queue, 1 holder
 #   G0_ONLY=1 bash ...    checks only;   HOLDERS=2 bash ...    more holders (5thEx: 5 submitted per user, shared with lance)
 #   HOLDER_TIME=10:00:00 (default; ~24 tasks, about 4.5 h on one 4-GPU holder if GH200 runs ~10 s/clip)
+#   SETS="oodval" bash ...                 check and queue only these sets (default "oodval oodtrain")
+#   SETS="oodtrain" HOLDERS=0 bash ...     add OOD-train to a running holder's queue once its cache is pushed
+#                                          (idle workers poll the queue for IDLE_MAX = 2 h)
 #
 # Queue lines `<arm> <set> <shard> <n>`: OOD-Val262 in 2 shards per arm first (dense first), then OOD-train1271 in 4.
 set -euo pipefail
@@ -19,7 +22,7 @@ echo "== G0 /appsdata group quota"
 lfs quota -g sa0713 /appsdata | tail -1 | awk '{free = $8 - $6; printf "  files %d / %d, free %d\n", $6, $8, free
   if (free < 20000) { print "  FAIL: under 20000 free files"; exit 1 }}'
 echo "== G0 inputs"
-A2_DISTILL=$W/code/a2d "$PY" - <<'PY'
+SETS="$SETS" A2_DISTILL=$W/code/a2d "$PY" - <<'PY'
 import json, os, sys
 from pathlib import Path
 import numpy as np
@@ -42,7 +45,9 @@ for arm in ("moop", "fm_only", "ce_only"):
     q, m = z["q_mask"], z["mlp_mask"]
     chk(q.shape == (64, 64) and m.shape == (64, 25600) and int((q == 0).sum()) == 64 * 26 and int((m == 0).sum()) == 64 * 10203,
         f"masks_{arm}: Q cut {int((q == 0).sum())}, MLP cut {int((m == 0).sum())} (u40: 1664 / 652992)")
-for stem, cache, n in (("ood_val", "ood_a2", 262), ("ood_train", "ood_train_a2", 1271)):
+want = os.environ["SETS"].split()
+for stem, cache, n in [x for x in (("ood_val", "ood_a2", 262), ("ood_train", "ood_train_a2", 1271))
+                       if x[0].replace("_", "") in want]:
     man = pd.read_parquet(W / "code/amc/outputs/eval_sets" / f"{stem}.parquet")
     pre = W / "data/physicalai_av/pre_processed" / cache / "samples"
     miss = [c for c, t in zip(man.clip_id, man.t0_us) if not (pre / f"{c}__t0_{t}.npz").exists()]
@@ -57,8 +62,12 @@ echo "G0 PASS"
 mkdir -p "$Q/claimed"
 touch "$Q/tasks.txt"
 add() { grep -qxF "$*" "$Q/tasks.txt" || { echo "$*" >> "$Q/tasks.txt"; echo "  + $*"; }; }
-for a in dense moop fm_only ce_only; do for s in 0 1; do add "$a" oodval "$s" 2; done; done
-for a in dense moop fm_only ce_only; do for s in 0 1 2 3; do add "$a" oodtrain "$s" 4; done; done
+if [[ " $SETS " == *" oodval "* ]]; then
+  for a in dense moop fm_only ce_only; do for s in 0 1; do add "$a" oodval "$s" 2; done; done
+fi
+if [[ " $SETS " == *" oodtrain "* ]]; then
+  for a in dense moop fm_only ce_only; do for s in 0 1 2 3; do add "$a" oodtrain "$s" 4; done; done
+fi
 echo "queue: $(grep -cvE '^(#|$)' "$Q/tasks.txt") lines"
 cd "$W"
 for i in $(seq 1 "$HOLDERS"); do
@@ -68,5 +77,6 @@ sleep 5
 squeue -u e1997a06 -o '%.10i %.16j %.9T %.10M %.20S %R'
 EOS
 )
-ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-1} HOLDER_TIME=${HOLDER_TIME:-10:00:00} bash -s" \
+ssh -o BatchMode=yes kisti6 "G0_ONLY=${G0_ONLY:-} HOLDERS=${HOLDERS:-1} HOLDER_TIME=${HOLDER_TIME:-10:00:00} \
+SETS='${SETS:-oodval oodtrain}' bash -s" \
   <<< "$REMOTE" 2>&1 | grep -vE 'Deprecation|Redirecting'

@@ -17,6 +17,8 @@
 #   2. one worker per card claims lines of queue/tasks.txt (`<arm> <set> <shard> <n>`) by mkdir of queue/claimed/<line>,
 #      as cvpr27/code/eval_a100.sbatch does; a shard whose summary exists is skipped and the runner resumes per clip,
 #      so a resubmitted job picks up where a dead one stopped (claims of jobs no longer running are released at start)
+#   3. a worker with nothing to claim polls the queue every 60 s and exits after IDLE_MAX s (default 7200) without work, so
+#      lines appended later (OOD-train once its cache is pushed: SETS=oodtrain launch_a2_ood_gh200.sh) are still picked up
 set -uo pipefail
 W=/appsdata/e1997a06/a2_ood
 R=$W/code/amc
@@ -32,6 +34,7 @@ PLAN=iclr27-rebuttal/plans/2026-11-10_a2-u40-ood-gh200.md
 # worker k runs on the k-th card SLURM granted (cvpr27/code/eval_a100.sbatch: no device cgroup renumbering)
 IFS=, read -ra DEVS <<< "${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 JOB=${SLURM_JOB_ID:-local}
+IDLE_MAX=${IDLE_MAX:-7200}
 stamp() { echo "$(TZ=Asia/Seoul date '+%F %T') KST $*"; }
 
 declare -A MASKS=([moop]=$W/masks/masks_moop.npz [fm_only]=$W/masks/masks_fm_only.npz [ce_only]=$W/masks/masks_ce_only.npz)
@@ -81,8 +84,14 @@ claim_next() {  # prints "<line number> <task>" of the first unclaimed line, hav
 }
 
 worker() {  # <k>
-  local k=$1 dev=${DEVS[$1]} got i task
-  while got=$(claim_next); do
+  local k=$1 dev=${DEVS[$1]} got i task last
+  last=$(date +%s)
+  while :; do
+    if ! got=$(claim_next); then
+      [ $(($(date +%s) - last)) -ge "$IDLE_MAX" ] && break
+      sleep 60
+      continue
+    fi
     i=${got%% *}
     task=${got#* }
     stamp "card $k (dev $dev) start [$i] $task"
@@ -94,8 +103,9 @@ worker() {  # <k>
       echo "$(date -Is) FAIL [$i] job $JOB card $k $task" >> "$Q/failed.log"
       stamp "card $k FAILED [$i] $task"
     fi
+    last=$(date +%s)
   done
-  stamp "card $k: nothing left to claim"
+  stamp "card $k: nothing to claim for ${IDLE_MAX}s -- exiting"
 }
 
 if [ ! -e "$Q/GATE_PASS" ]; then
