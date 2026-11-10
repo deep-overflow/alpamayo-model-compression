@@ -66,7 +66,7 @@ if [ ! -f outputs/tyr_search_u50r/final_config.json ]; then
 fi
 stamp "Tyr search done: $(head -1 outputs/tyr_search_u50r/summary.txt 2>/dev/null)"
 if [ ! -f outputs/slim_tyr_u50_r/slim_state.pt ]; then
-  $PY $H/make_slim.py --config tyr_u50_r --tyr-supernet tyr_supernet_u50r \
+  $PY $H/make_slim.py --config tyr_u50_r --importance importance_v2 --tyr-supernet tyr_supernet_u50r \
     --tyr-config tyr_search_u50r/final_config.json --out outputs/slim_tyr_u50_r --gpu "$SUP_GPU" \
     > "$OUT/build_tyr_assemble.log" 2>&1 || { stamp "Tyr assembly failed"; exit 1; }
 fi
