@@ -20,7 +20,7 @@ PY=$REPO/.venv/bin/python
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
-ARMS=${ARMS:-"slim_dual_u50_l0keep_v2 slim_dual_u50_v2"}
+ARMS=${ARMS:-"slim_dual_u50_l0keep_v2 slim_tyr_u50_r slim_lp_r60 slim_dual_u50_v2"}   # user 11-10: plain MoOP u50 last
 GPUS="0 1 2 3 4 5 6 7"
 SHARDS=${SHARDS:-$GPUS}   # shard i always runs on GPU i
 PREFIX=u50o_
@@ -39,6 +39,17 @@ for CFG in $ARMS; do
     n=$((n + 1)); sleep 60
   done
   [ -e "$DRIVERS/$CFG" ] || cp -al "outputs/$CFG" "$DRIVERS/$CFG"
+  # A launch of this arm left running by an earlier launcher (replaced to change the arm order) is waited for,
+  # not relaunched; its containers are removed here because that launcher is gone.
+  n=0
+  while pgrep -f "launch_alpasim_shards.sh $CFG " > /dev/null; do
+    [ $((n % 30)) = 0 ] && stamp "$CFG: an earlier launch is still running -- waiting for it"
+    n=$((n + 1)); sleep 60
+  done
+  for c in $(docker ps -a --format '{{.Names}}' | grep "^${PREFIX}${CFG}_sh"); do docker rm -f "$c" > /dev/null; done
+  for nw in $(docker network ls --format '{{.Name}}' | grep "^${PREFIX}${CFG}_sh"); do
+    [ "$(docker network inspect -f '{{len .Containers}}' "$nw")" = 0 ] && docker network rm "$nw" > /dev/null
+  done
   todo=""
   for i in $SHARDS; do shard_done "$CFG" "$i" || todo="$todo $i"; done
   todo=${todo# }
@@ -67,6 +78,8 @@ for CFG in $ARMS; do
   missing=""
   for i in $GPUS; do shard_done "$CFG" "$i" || missing="$missing $i"; done
   if [ -n "$missing" ]; then stamp "$CFG: shards$missing not run yet -- merge waits for them"; continue; fi
+  # two launchers (Ada half, Blackwell half) can both see all eight shards done; only one merges
+  mkdir "$OUT/merge_$CFG.lock" 2> /dev/null || { stamp "$CFG: merge already taken by another launcher"; continue; }
 
   merged=${PREFIX}merged_$CFG
   $PY "$MERGE" --runs-root "$RUNS" --shards $(for i in 0 1 2 3 4 5 6 7; do echo "${PREFIX}${CFG}_sh$i"; done) \
