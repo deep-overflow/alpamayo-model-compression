@@ -5,7 +5,8 @@
 #   1. first card of CARDS, once empty (< 100 MiB twice, 2 min apart): build raw-mean / raw-max and a fresh rank-mean
 #      (selection only, --no-state), then gates B0 / B1 (check_comb_pre_l0keep_builds.py); stop if they fail
 #   2. one worker per card, each starting once its card is empty: a shared task list claimed with mkdir --
-#      test500 in 2 shards per arm (run_baseline.py, the ada_fill path: sharding is bit-identical), then LingoQA
+#      test500 in 2 shards per arm (run_baseline.py, the ada_fill path: sharding is bit-identical), OOD-Val262 in 2 shards
+#      per arm (--no-tf; added 2026-11-12 for Table 14), then LingoQA
 #      (run_lingo_vqa.py answers, score_lingo_vqa.py = Lingo-Judge, as for the paper's Table 4)
 # Resumable: a build with slim_meta.json, a shard with summary_s<k>of2.txt, a LingoQA answer with predictions.csv and a score
 # with metrics.json are skipped; delete outputs/iclr27-rebuttal/comb_pre_l0keep/queue to re-claim after a crash.
@@ -46,6 +47,10 @@ TASKS=()
 for arm in raw_mean raw_max rank_mean; do
   for s in 0 1; do TASKS+=("ol $arm $s"); done
 done
+# OOD-Val262 (added 2026-11-12 for the paper's Table 14), rollout only like the paper's OOD rows
+for arm in raw_mean raw_max rank_mean; do
+  for s in 0 1; do TASKS+=("ood $arm $s"); done
+done
 for arm in raw_mean raw_max rank_mean; do TASKS+=("lingo $arm"); done
 
 run_task() {  # <kind> <arm> [shard]
@@ -56,6 +61,12 @@ run_task() {  # <kind> <arm> [shard]
       [ -f "outputs/$exp/summary_s${s}of2.txt" ] && { stamp "skip $exp s$s (done)"; return 0; }
       "$PY" experiments/evaluation/run_baseline.py --set test --model "${MODEL[$arm]}" --exp-id "$exp" \
           --shard "$s" --n-shards 2 --gpu 0 --reserve-gb 40 > "$LOG/${arm}_test500_s${s}of2.log" 2>&1
+      ;;
+    ood)
+      local s=$3 exp=$OUT/${arm}_oodval262
+      [ -f "outputs/$exp/summary_s${s}of2.txt" ] && { stamp "skip $exp s$s (done)"; return 0; }
+      "$PY" experiments/evaluation/run_baseline.py --set ood --manifest ood_val --no-tf --model "${MODEL[$arm]}" \
+          --exp-id "$exp" --shard "$s" --n-shards 2 --gpu 0 --reserve-gb 40 > "$LOG/${arm}_oodval262_s${s}of2.log" 2>&1
       ;;
     lingo)
       if [ ! -f "outputs/$OUT/lingo_vqa_$arm/predictions.csv" ]; then

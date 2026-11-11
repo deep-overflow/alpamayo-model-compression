@@ -2,7 +2,26 @@
 
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
-**Status (2026-11-10): code ready, NOT launched — waiting for the user's go** ("일단 코드 준비만 해줘").
+**Status (2026-11-12 01:30 KST): code ready, NOT launched — GPUs 4–7 are held by the u50 closed-loop queue.**
+
+## Amendment 2026-11-12 (user: fill the paper's Table 14, "Combination rules with 95% confidence intervals")
+
+- **Scope.** Table 14 has three columns: LingoQA, Test500 minADE@6 and OOD-Val262 minADE@6. So OOD-Val262 is added to the runner:
+  2 shards per arm, rollout only (`--no-tf`), the same protocol as the paper's OOD rows.
+- **Table script.** `code/table14_comb_rules.py` writes the table, paste-ready LaTeX rows, all horizons and paired deltas to
+  `outputs/iclr27-rebuttal/table14_comb_rules/`. Missing runs print `[x]`.
+  - Every cell uses the estimator of the paper's max-rank cells: 200k clip bootstrap for open loop, 200k segment bootstrap
+    for LingoQA.
+  - The dry run reproduces the max-rank row exactly (68.8 [64.4, 73.0], 0.950 [0.869, 1.034], 1.119 [0.958, 1.307]).
+  - It already fills mean-rank Test500 from the September run: 0.960 [0.874, 1.051], +0.010 [−0.029, +0.053] vs max-rank.
+- **Why not launched.**
+  - All eight cards run AlpaSim for the u50 closed-loop queue (`run_u50_queue3.sh` → `run_u50_queue4.sh`). Cards 4–7 are
+    expected to stay busy until about 11-13.
+  - That queue starts its next arm as soon as a card frees. This runner's own `wait_empty` could win a gap and take 40 GB
+    from a card a closed-loop arm needs.
+  - So it is launched only in a window the user arranges.
+- **Cost.** About 1.5 h on four Ada cards: 3 builds, 6 Test500 shards (~30 min each), 6 OOD shards (~15 min each), 3 LingoQA
+  runs (~13 min each).
 
 ## Amendment 2026-11-10 (user: "실험을 다시 해야 할 것 같아. l0keep 이전 버전으로 rank-mean, raw-max, raw-mean을 진행해줘",
 "test500과 lingoqa 결과가 필요해")
