@@ -63,8 +63,8 @@ def main():
 
     f = lambda c: f"{c[0]:+.3f} [{c[1]:+.3f}, {c[2]:+.3f}]{'*' if c[1] > 0 or c[2] < 0 else ''}"
     lines = [f"seed {args.seed}, {args.draws:,} draws; * = CI excludes 0",
-             "| Method | O150 score | O150 offroad | O150 at-fault | H100 score | H100 offroad | H100 at-fault "
-             "| Combined score | Combined offroad | Combined at-fault |",
+             ("| Method | O150 score | O150 offroad | O150 at-fault | H100 score | H100 offroad | H100 at-fault "
+              "| Combined score | Combined offroad | Combined at-fault |"),
              "|---|---|---|---|---|---|---|---|---|---|"]
     for label, _ in ROWS:
         lines.append(f"| {label} | " + " | ".join(f(cells[label, s, m]) for s, m in (
