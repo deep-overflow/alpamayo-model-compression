@@ -21,7 +21,12 @@ masks_config.json.
 moop / fm_only / ce_only (no l0keep) and writes masks_<arm>_u<N>.npz + masks_config_u<N>.json. G0' then also checks the
 literal-ratio path: ratio 0.20 / 0.30 on A1.5 must reproduce outputs/slim_dual_u20_v2 / slim_dual_u30_v2 unit for unit.
 
-Usage: .venv/bin/python iclr27-rebuttal/code/make_a2_moop_masks.py [--pct 50]
+--q-cut N (added 2026-11-11, plans/2026-11-11_a2-u50-q8-gh200.md): make_slim's `_qcut<N>` rule -- the per-layer budget of the
+--pct allocation is kept, N Q heads are cut and the MLP channel count is derived from the budget (an assert refuses a remainder).
+Writes masks_<arm>_u<pct>_q<N>.npz; G0 then also checks the qcut path against A1.5's slim_dual_u40_qcut4_v2, and G0b checks
+that the q-cut masks remove exactly the base allocation's parameters and nest with it (fewer heads cut, more channels cut).
+
+Usage: .venv/bin/python iclr27-rebuttal/code/make_a2_moop_masks.py [--pct 50] [--q-cut 8]
 """
 
 import argparse
@@ -51,12 +56,22 @@ def scores(imp, crit):
     return rank_norm(imp[f"{crit}_vlm_q"]), rank_norm(imp[f"{crit}_vlm_mlp"])
 
 
-def moop_masks(imp, dims, l0keep, crit="dual", ratio=RATIO):
+def moop_masks(imp, dims, l0keep, crit="dual", ratio=RATIO, q_cut=None):
     """imp: npz-like with traj/coc_vlm_{q,mlp}; returns q_mask (L, H), mlp_mask (L, I), info dict."""
     L, H, I = dims["layers"], dims["heads"], dims["inter"]
     sq, sm = scores(imp, crit)
     rq, rm = np.full(L, ratio), np.full(L, ratio)
     info = {}
+    if q_cut is not None:  # make_slim `_qcut<N>`: same per-layer budget, N heads, channels derived
+        assert not l0keep
+        attn_cost = 2 * dims["head_dim"] * dims["hidden"]
+        mlp_cost = 3 * dims["hidden"]
+        per_layer = round(rq[0] * H) * attn_cost + round(rm[0] * I) * mlp_cost
+        n_m, rem = divmod(per_layer - q_cut * attn_cost, mlp_cost)
+        assert rem == 0, f"q-cut {q_cut} leaves {rem} parameters over"
+        assert 0 <= q_cut < H and 0 < n_m < I
+        rq, rm = np.full(L, q_cut / H), np.full(L, n_m / I)
+        info = {"q_cut_per_layer": q_cut, "mlp_cut_per_layer": int(n_m), "per_layer_budget": int(per_layer)}
     if l0keep:
         attn_cost = 2 * dims["head_dim"] * dims["hidden"]
         mlp_cost = 3 * dims["hidden"]
@@ -80,16 +95,19 @@ def removed_params(q, m, dims):
     return int((q == 0).sum() * attn_cost + (m == 0).sum() * mlp_cost)
 
 
-def g0_regression(literal=False):
-    """Same code on A1.5 importance_v2 vs the shipped kept sets; literal=True adds G0' (make_slim's u20 / u30 = 0.20 / 0.30)."""
+def g0_regression(literal=False, qcut=False):
+    """Same code on A1.5 importance_v2 vs the shipped kept sets; literal=True adds G0' (make_slim's u20 / u30 = 0.20 / 0.30),
+    qcut=True the `_qcut` path (slim_dual_u40_qcut4_v2: u40 budget, 4 Q heads cut per layer)."""
     imp = np.load(REPO / "outputs" / "importance_v2" / "importance.npz")
     out = {}
-    refs = [("dual", False, "slim_dual_u40_v2", RATIO), ("dual", True, "slim_dual_u40_l0keep_v2", RATIO),
-            ("traj", False, "slim_traj_u40_v2", RATIO), ("coc", False, "slim_coc_u40_v2", RATIO)]
+    refs = [("dual", False, "slim_dual_u40_v2", RATIO, None), ("dual", True, "slim_dual_u40_l0keep_v2", RATIO, None),
+            ("traj", False, "slim_traj_u40_v2", RATIO, None), ("coc", False, "slim_coc_u40_v2", RATIO, None)]
     if literal:
-        refs += [("dual", False, "slim_dual_u20_v2", 0.20), ("dual", False, "slim_dual_u30_v2", 0.30)]
-    for crit, l0keep, ref, ratio in refs:
-        q, m, _ = moop_masks(imp, A15, l0keep, crit, ratio)
+        refs += [("dual", False, "slim_dual_u20_v2", 0.20, None), ("dual", False, "slim_dual_u30_v2", 0.30, None)]
+    if qcut:
+        refs += [("dual", False, "slim_dual_u40_qcut4_v2", RATIO, 4)]
+    for crit, l0keep, ref, ratio, q_cut in refs:
+        q, m, _ = moop_masks(imp, A15, l0keep, crit, ratio, q_cut)
         meta = json.loads((REPO / "outputs" / ref / "slim_meta.json").read_text())
         same_q = all(set(np.flatnonzero(q[li])) == set(meta["vlm"][li]["q"]) for li in range(A15["layers"]))
         same_m = all(set(np.flatnonzero(m[li])) == set(meta["vlm"][li]["mlp"]) for li in range(A15["layers"]))
@@ -101,23 +119,35 @@ def g0_regression(literal=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pct", type=int, default=40, help="40 = the matched u40 (0.3985632694); else the literal N/100")
+    ap.add_argument("--q-cut", type=int, default=None, help="Q heads cut per layer at the --pct budget (make_slim _qcut)")
     args = ap.parse_args()
     ratio = RATIO if args.pct == 40 else args.pct / 100
-    sfx = "" if args.pct == 40 else f"_u{args.pct}"
+    base_sfx = "" if args.pct == 40 else f"_u{args.pct}"
+    sfx = base_sfx if args.q_cut is None else f"_u{args.pct}_q{args.q_cut}"
     arms = ((("moop", "dual", False), ("moop_l0keep", "dual", True), ("fm_only", "traj", False), ("ce_only", "coc", False))
-            if args.pct == 40 else (("moop", "dual", False), ("fm_only", "traj", False), ("ce_only", "coc", False)))
+            if args.pct == 40 and args.q_cut is None else
+            (("moop", "dual", False), ("fm_only", "traj", False), ("ce_only", "coc", False)))
     out = REPO / "outputs" / "iclr27-rebuttal" / "a2_moop"
     out.mkdir(parents=True, exist_ok=True)
-    g0 = g0_regression(literal=args.pct != 40)
+    g0 = g0_regression(literal=args.pct != 40, qcut=args.q_cut is not None)
     print("G0 regression on A1.5 (same code -> shipped kept sets):", json.dumps(g0))
     assert all(all(v.values()) for v in g0.values()), "G0 FAILED: the port does not reproduce A1.5's shipped masks"
 
     imp = np.load(A2_IMP)
     total = 35_810_000_000  # A2 Super, safetensors header (alpamayo2-distill plan 2026-10-15)
-    cfg = {"pct": args.pct, "ratio": ratio, "importance": str(A2_IMP), "dims": A2, "g0_regression": g0, "arms": {}}
+    cfg = {"pct": args.pct, "q_cut": args.q_cut, "ratio": ratio, "importance": str(A2_IMP), "dims": A2, "g0_regression": g0,
+           "arms": {}}
     for name, crit, l0keep in arms:
+        base = f"{name}{base_sfx}"
         name = f"{name}{sfx}"
-        q, m, info = moop_masks(imp, A2, l0keep, crit, ratio)
+        q, m, info = moop_masks(imp, A2, l0keep, crit, ratio, args.q_cut)
+        if args.q_cut is not None:  # G0b: same parameters as the base allocation, nested with it
+            qb, mb, _ = moop_masks(imp, A2, l0keep, crit, ratio)
+            assert removed_params(q, m, A2) == removed_params(qb, mb, A2), "q-cut budget differs from the base allocation"
+            assert ((q == 0) <= (qb == 0)).all(), "q-cut must cut a subset of the base allocation's heads"
+            assert ((mb == 0) <= (m == 0)).all(), "q-cut must cut a superset of the base allocation's channels"
+            info["base_arm"] = base
+            info["nested_with_base"] = True
         # consistency: in every layer the kept units outrank the cut ones under the score used
         sq, sm = scores(imp, crit)
         for s, mk in ((sq, q), (sm, m)):
@@ -141,7 +171,7 @@ def main():
               f"MLP cut/layer {sorted(set(m_cut.tolist()))}, removed {rem:,} = {rem / total:.1%} of 35.81B "
               f"{info if info else ''}")
     qa = np.load(out / f"masks_moop{sfx}.npz")["q_mask"]
-    if args.pct == 40:
+    if args.pct == 40 and args.q_cut is None:
         qb = np.load(out / "masks_moop_l0keep.npz")["q_mask"]
         assert (qa[1:] == qb[1:]).all(), "Q masks of layers 1-63 must match between the two arms"
     cfg["layer0_q_cut_moop"] = np.flatnonzero(qa[0] == 0).tolist()

@@ -223,7 +223,7 @@ def main():
               f"gen={rec['gen_len']}tok tot={rec['sec_total']:.1f}s | {rec['gen_coc'][:80]}", flush=True)
     rows_path.write_text(json.dumps(rows, indent=2))
     a = np.array([min(r["ade_rollout_k"][:6]) for r in rows])
-    line = (f"{args.tag} {args.exp_id} test500 shard {args.shard}/{args.n_shards}: {len(rows)} clips, "
+    line = (f"{args.tag} {args.exp_id} {args.set_name} shard {args.shard}/{args.n_shards}: {len(rows)} clips, "
             f"minADE@6 mean {a.mean():.4f} median {np.median(a):.4f}, "
             f"CoC degen {np.mean([r['coc_degenerate'] for r in rows]):.3f}")
     (out_dir / f"summary_s{args.shard}of{args.n_shards}.txt").write_text(line + "\n")

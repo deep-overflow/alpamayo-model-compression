@@ -17,12 +17,16 @@
 #   2. one worker per card claims lines of queue/tasks.txt (`<arm> <set> <shard> <n>`) by mkdir of queue/claimed/<line>,
 #      as cvpr27/code/eval_a100.sbatch does; a shard whose summary exists is skipped and the runner resumes per clip,
 #      so a resubmitted job picks up where a dead one stopped (claims of jobs no longer running are released at start)
+#   2026-11-11 (plans/2026-11-11_a2-u50-q8-gh200.md): masks are masks/masks_<arm>.npz for any arm (arms named dense* run without
+#   masks), set test500 added, QUEUE / GATE_MASKS select the queue directory and the gate's masks (--export), and REPRO_CHECK=1
+#   compares the gate's no-hook rows with the stored OOD-Val dense rows: on a mismatch dense_r OOD lines are queued instead of
+#   reusing those rows
 #   3. a worker with nothing to claim polls the queue every 60 s and exits after IDLE_MAX s (default 7200) without work, so
 #      lines appended later (OOD-train once its cache is pushed: SETS=oodtrain launch_a2_ood_gh200.sh) are still picked up
 set -uo pipefail
 W=/appsdata/e1997a06/a2_ood
 R=$W/code/amc
-Q=$W/queue
+Q=${QUEUE:-$W/queue}
 mkdir -p "$W/logs" "$W/outputs" "$Q/claimed"
 touch "$Q/tasks.txt" "$Q/done.log" "$Q/failed.log"
 export AD_VLA_DATA=$W/data HF_HUB_CACHE=$W/hub HF_HOME=$HOME/.cache/huggingface HF_HUB_OFFLINE=1
@@ -37,9 +41,9 @@ JOB=${SLURM_JOB_ID:-local}
 IDLE_MAX=${IDLE_MAX:-7200}
 stamp() { echo "$(TZ=Asia/Seoul date '+%F %T') KST $*"; }
 
-declare -A MASKS=([moop]=$W/masks/masks_moop.npz [fm_only]=$W/masks/masks_fm_only.npz [ce_only]=$W/masks/masks_ce_only.npz)
-declare -A MANIFEST=([oodval]=ood_val [oodtrain]=ood_train)
-declare -A CACHE=([oodval]=ood_a2 [oodtrain]=ood_train_a2)
+declare -A MANIFEST=([test500]=test_500 [oodval]=ood_val [oodtrain]=ood_train)
+declare -A CACHE=([test500]=test500_a2 [oodval]=ood_a2 [oodtrain]=ood_train_a2)
+GATE_EXP=$W/outputs/a2_gate_${Q##*/}
 
 stamp "job $JOB on $(hostname) | cards ${DEVS[*]} | queue $Q"
 nvidia-smi -L
@@ -63,7 +67,7 @@ run_task() {  # <dev> <arm> <set> <shard> <n>
   local dev=$1 arm=$2 set=$3 s=$4 n=$5 extra=()
   local exp=$W/outputs/a2_${set}_${arm}
   [ -f "$exp/summary_s${s}of${n}.txt" ] && { stamp "skip $arm $set s$s (done)"; return 0; }
-  [ "$arm" != dense ] && extra=(--masks "${MASKS[$arm]}")
+  case $arm in dense*) ;; *) extra=(--masks "$W/masks/masks_${arm}.npz") ;; esac
   CUDA_VISIBLE_DEVICES=$dev "$PY" "$RUNNER" --exp-id "$exp" --shard "$s" --n-shards "$n" --plan "$PLAN" \
       --manifest "${MANIFEST[$set]}" --set-name "${MANIFEST[$set]}" --cache-name "${CACHE[$set]}" \
       ${extra[@]+"${extra[@]}"} > "$W/logs/${arm}_${set}_s${s}of${n}_$JOB.log" 2>&1
@@ -110,10 +114,35 @@ worker() {  # <k>
 
 if [ ! -e "$Q/GATE_PASS" ]; then
   stamp "gate G1 on card 0 (dev ${DEVS[0]})"
-  if CUDA_VISIBLE_DEVICES=${DEVS[0]} "$PY" "$RUNNER" --exp-id "$W/outputs/a2_oodval_gate" --gate 2 --plan "$PLAN" \
-      --manifest ood_val --set-name ood_val --cache-name ood_a2 --masks "${MASKS[moop]}" \
+  if CUDA_VISIBLE_DEVICES=${DEVS[0]} "$PY" "$RUNNER" --exp-id "$GATE_EXP" --gate 2 --plan "$PLAN" \
+      --manifest ood_val --set-name ood_val --cache-name ood_a2 --masks "$W/masks/masks_${GATE_MASKS:-moop}.npz" \
       > "$W/logs/gate_$JOB.log" 2>&1; then
     echo "$JOB $(date -Is)" > "$Q/GATE_PASS"
+    if [ "${REPRO_CHECK:-0}" = 1 ]; then
+      # the gate's no-hook rows vs the OOD-Val dense rows of an earlier GH200 job: identical = those dense rows are reused
+      if "$PY" - "$GATE_EXP/gate.json" "$W/outputs/a2_oodval_dense" <<'PY'
+import glob
+import json
+import sys
+g = json.load(open(sys.argv[1]))
+rows = {}
+for f in glob.glob(f"{sys.argv[2]}/alpamayo2_s*of*.json"):
+    rows.update({r["clip_id"]: r for r in json.load(open(f))})
+keys = ("ade_rollout_k", "fde_rollout_k", "gen_coc")
+same = [all(r[k] == rows[r["clip_id"]][k] for k in keys) for r in g["records"]["none"] if r["clip_id"] in rows]
+print(f"dense reproducibility: {sum(same)}/{len(same)} gate clips identical to the stored OOD-Val dense rows")
+sys.exit(0 if same and all(same) else 1)
+PY
+      then
+        echo "$JOB $(date -Is)" > "$Q/REPRO_PASS"
+        stamp "dense reproducibility PASS: the stored OOD dense rows are reused"
+      else
+        echo "$JOB $(date -Is)" > "$Q/REPRO_FAIL"
+        stamp "dense reproducibility FAIL: queueing dense_r for OOD-Val and OOD-train"
+        for s in 0 1; do echo "dense_r oodval $s 2" >> "$Q/tasks.txt"; done
+        for s in 0 1 2 3; do echo "dense_r oodtrain $s 4" >> "$Q/tasks.txt"; done
+      fi
+    fi
     stamp "gate G1 PASS: $(grep -m1 'G1 ones==none' "$W/logs/gate_$JOB.log")"
   else
     stamp "gate G1 FAIL -- see $W/logs/gate_$JOB.log; stopping"

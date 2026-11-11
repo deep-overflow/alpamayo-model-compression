@@ -10,7 +10,8 @@
 # then checks sha256 of masks / manifests / code and the file counts and sizes of the model and caches (gate G0 local side).
 #
 #   bash iclr27-rebuttal/code/push_a2_ood_gh200.sh           # from the repo root
-#   PARTS="code masks" bash ...                              # a subset: code masks hub oodval oodtrain
+#   PARTS="code masks" bash ...                              # a subset: code masks hub test500 oodval oodtrain
+#   MASK_ARMS="moop_u50 moop_u50_q8 ..." bash ...            # which masks_<arm>.npz to push (default the u40 three)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
@@ -37,7 +38,8 @@ if has code; then
   mkdir -p "$TMP/amc/iclr27-rebuttal/code" "$TMP/amc/experiments/head_analysis" "$TMP/amc/outputs/eval_sets" "$TMP/a2d/experiments"
   cp iclr27-rebuttal/code/run_a2_openloop.py iclr27-rebuttal/code/a2_ood_gh200.sbatch "$TMP/amc/iclr27-rebuttal/code/"
   cp experiments/head_analysis/eval_lib.py "$TMP/amc/experiments/head_analysis/"
-  cp "$OUT/eval_sets/ood_val.parquet" "$OUT/eval_sets/ood_train.parquet" "$TMP/amc/outputs/eval_sets/"
+  cp "$OUT/eval_sets/test_500.parquet" "$OUT/eval_sets/ood_val.parquet" "$OUT/eval_sets/ood_train.parquet" \
+    "$TMP/amc/outputs/eval_sets/"
   mkdir -p "$TMP/a2d/src"
   cp -r "$A2D/src/alpamayo2_super" "$TMP/a2d/src/"
   cp -r "$A2D/experiments/oodval" "$TMP/a2d/experiments/"
@@ -52,9 +54,12 @@ fi
 
 if has masks; then
   stamp "masks"
-  rsync -a -e "$RS" "$OUT"/iclr27-rebuttal/a2_moop/masks_{moop,fm_only,ce_only}.npz "$H:$W/masks/"
-  (cd "$OUT/iclr27-rebuttal/a2_moop" && sha256sum masks_moop.npz masks_fm_only.npz masks_ce_only.npz) > "$TMP/m.local"
-  rsh "cd $W/masks && sha256sum masks_moop.npz masks_fm_only.npz masks_ce_only.npz" > "$TMP/m.remote"
+  read -r -a MA <<< "${MASK_ARMS:-moop fm_only ce_only}"
+  MF=("${MA[@]/#/masks_}")
+  MF=("${MF[@]/%/.npz}")
+  (cd "$OUT/iclr27-rebuttal/a2_moop" && rsync -a -e "$RS" "${MF[@]}" "$H:$W/masks/")
+  (cd "$OUT/iclr27-rebuttal/a2_moop" && sha256sum "${MF[@]}") > "$TMP/m.local"
+  rsh "cd $W/masks && sha256sum ${MF[*]}" > "$TMP/m.remote"
   diff -q "$TMP/m.local" "$TMP/m.remote" > /dev/null && stamp "masks: sha256 equal" || { stamp "masks: sha256 MISMATCH"; exit 1; }
 fi
 
@@ -78,6 +83,7 @@ push_cache() {  # <name> <expected samples>
   diff -q "$TMP/c.local" "$TMP/c.remote" > /dev/null && stamp "$1: $(wc -l < "$TMP/c.local") files, names and sizes equal" \
     || { stamp "$1: MISMATCH"; return 1; }
 }
+has test500 && push_cache test500_a2 500
 has oodval && push_cache ood_a2 262
 has oodtrain && push_cache ood_train_a2 1271
 rsh "lfs quota -g sa0713 /appsdata | tail -1" | awk '{printf "  /appsdata group files %s / %s\n", $6, $8}'
