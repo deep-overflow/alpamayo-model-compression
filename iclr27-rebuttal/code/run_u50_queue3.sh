@@ -20,9 +20,9 @@ stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
 mib() { nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -i "$1"; }
 empty() { for g in $1; do [ "$(mib "$g")" -le 10 ] || return 1; done; }
 has_summary() { [ -f "$RUNS/$1/aggregate/results-summary.json" ]; }
-cleanup() {
-  for c in $(docker ps -a --format '{{.Names}}' | grep "^$1"); do docker rm -f "$c" > /dev/null; done
-  for nw in $(docker network ls --format '{{.Name}}' | grep "^$1"); do
+cleanup() {  # docker compose lowercases project names (u50oA_ -> u50oa_), so match case-insensitively
+  for c in $(docker ps -a --format '{{.Names}}' | grep -i "^$1"); do docker rm -f "$c" > /dev/null; done
+  for nw in $(docker network ls --format '{{.Name}}' | grep -i "^$1"); do
     [ "$(docker network inspect -f '{{len .Containers}}' "$nw")" = 0 ] && docker network rm "$nw" > /dev/null
   done
 }
