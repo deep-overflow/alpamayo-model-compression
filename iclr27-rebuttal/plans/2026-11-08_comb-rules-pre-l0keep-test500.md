@@ -2,7 +2,27 @@
 
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
-**Status (2026-11-12 01:30 KST): code ready, NOT launched — GPUs 4–7 are held by the u50 closed-loop queue.**
+**Status (2026-11-12 02:00 KST): builds done, gates B0/B1 PASS — only the GPU evaluation is left.** It has not been launched
+because GPUs 4–7 are held by the u50 closed-loop queue.
+
+- **Builds.** The three recipes were built on CPU with `code/build_recipes_cpu.py` (user: "바로 평가만 하면 되도록 준비해줘").
+  - Why CPU: every GPU was busy, and a `--no-state` recipe needs no GPU.
+  - What it runs: make_slim's own `build_masks`, `apply_surgery` and `save_slim`, with `--importance importance_v2`. Only the
+    one-clip smoke test is skipped.
+  - Outputs: `outputs/iclr27-rebuttal/comb_pre_l0keep/slim_{dualsum,rawabsavg,rawabsmean}_u40_v2/`. Log in `logs/build_cpu.log`.
+- **Gates.**
+  - B0 PASS: the CPU rebuild of `dualsum_u40_v2` equals the September GPU build unit for unit.
+  - B1 PASS: all three remove 2,657,452,032 params (= MoOP) and keep 19 Q / 7,390 MLP per layer; the expert is as in MoOP.
+  - Layer-0 Q heads shared with rank-max: rank-mean 17/19, raw-mean 17/19, raw-max 18/19.
+  - Log in `logs/gates_b0_b1.log`.
+- **Launch** (from the main checkout, once the user has cleared a window on GPUs 4–7). The runner skips the builds because
+  `slim_meta.json` exists, re-runs B0/B1, then claims 6 Test500 + 6 OOD-Val262 shards and 3 LingoQA runs on the four cards
+  (about 1.5 h):
+  ```
+  CARDS="4 5 6 7" setsid nohup bash iclr27-rebuttal/code/run_comb_pre_l0keep.sh \
+      > outputs/iclr27-rebuttal/comb_pre_l0keep_launch.log 2>&1 < /dev/null &
+  ```
+- **Table afterwards:** `.venv/bin/python iclr27-rebuttal/code/table14_comb_rules.py`.
 
 ## Amendment 2026-11-12 (user: fill the paper's Table 14, "Combination rules with 95% confidence intervals")
 
