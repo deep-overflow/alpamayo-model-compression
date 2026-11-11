@@ -18,7 +18,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "cvpr27" / "code"))
-import closedloop_ci as cc  # noqa: E402
+import closedloop_ci as cc
 
 ROWS = [("Baseline", "baseline"), ("Wanda", "wanda"), ("LLM-Pruner", "lp_r50"), ("Týr-the-Pruner", "tyr"),
         ("FM-only", "traj"), ("CE-only", "coc"), ("MoOP + expert", "dualexp")]
@@ -61,14 +61,16 @@ def main():
             lo, hi = np.percentile(bp, [2.5, 97.5])
             cells[label, "pooled", m] = (float(np.concatenate([d[s] for s in cc.SETS]).mean()), float(lo), float(hi))
 
-    f = lambda c: f"{c[0]:+.3f} [{c[1]:+.3f}, {c[2]:+.3f}]{'*' if c[1] > 0 or c[2] < 0 else ''}"  # noqa: E731
+    f = lambda c: f"{c[0]:+.3f} [{c[1]:+.3f}, {c[2]:+.3f}]{'*' if c[1] > 0 or c[2] < 0 else ''}"
     lines = [f"seed {args.seed}, {args.draws:,} draws; * = CI excludes 0",
-             "| Method | O150 score | O150 offroad | O150 at-fault | H100 score | H100 offroad | H100 at-fault | Combined score |",
-             "|---|---|---|---|---|---|---|---|"]
+             "| Method | O150 score | O150 offroad | O150 at-fault | H100 score | H100 offroad | H100 at-fault "
+             "| Combined score | Combined offroad | Combined at-fault |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for label, _ in ROWS:
         lines.append(f"| {label} | " + " | ".join(f(cells[label, s, m]) for s, m in (
             ("origin150", "score"), ("origin150", "offroad"), ("origin150", "at_fault"), ("hard100", "score"),
-            ("hard100", "offroad"), ("hard100", "at_fault"), ("pooled", "score"))) + " |")
+            ("hard100", "offroad"), ("hard100", "at_fault"), ("pooled", "score"), ("pooled", "offroad"),
+            ("pooled", "at_fault"))) + " |")
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"cells_seed{args.seed}.json").write_text(json.dumps(
         {"seed": args.seed, "draws": args.draws, "cells": {"|".join(k): v for k, v in cells.items()}}, indent=1))
