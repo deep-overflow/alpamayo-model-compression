@@ -24,7 +24,7 @@ REF = "MoOP u50"
 ARMS = [("Baseline (dense)", "hofix_merged_baseline"), ("MoOP u50", "u50o_merged_slim_dual_u50_v2"),
         ("MoOP u50 l0keep", "u50o_merged_slim_dual_u50_l0keep_v2"), ("Tyr u50", "u50o_merged_slim_tyr_u50_r"),
         ("LLM-Pruner u50", "u50o_merged_slim_lp_r60"), ("FM-only u50", "u50o_merged_slim_traj_u50_v2"),
-        ("CE-only u50", "u50o_merged_slim_coc_u50_v2")]
+        ("CE-only u50", "u50o_merged_slim_coc_u50_v2"), ("Wanda u50", "u50o_merged_slim_wanda_u50_v2")]
 METRICS = ["score", "at_fault", "offroad"]
 
 
