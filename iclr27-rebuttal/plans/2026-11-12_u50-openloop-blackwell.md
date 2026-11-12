@@ -7,6 +7,7 @@
 - GPU 0–3을 쓴다.
 - 세트는 Test500과 OOD-Val262다.
 - LingoQA와 CoC NLL도 함께 잰다.
+- 11-12 23:3x: dense는 뺀다. dense 작업 8개는 worker가 가져가기 전에 대기열에서 미리 막았다. 짝 차이는 MoOP u50 대비로만 낸다.
 
 ## 목적
 

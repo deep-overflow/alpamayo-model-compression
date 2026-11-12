@@ -40,6 +40,23 @@ def ci_txt(e, sign=False, scale=1.0, nd=3):
     return f"{f.format(m)} [{f.format(lo)}, {f.format(hi)}]{star}"
 
 
+def nll_summary(dirs, refs):
+    """ci.nll_block without its fixed dense/moop references: absolute NLL and paired vs whichever refs are present."""
+    tags = {k: tag for k, _, tag in ARMS}
+    ids = ci.ids_of("test500")
+    v = {}
+    for a, d in dirs.items():
+        r = load_rows(d, tags[a])
+        assert all(c in r for c in ids), f"NLL {a}: clips missing"
+        v[a] = [r[c]["nll_dense"] for c in ids]  # (500,)
+    series = {f"{a}|abs": x for a, x in v.items()}
+    for a, x in v.items():
+        for ref in refs:
+            if ref != a and ref in v:
+                series[f"{a}|{ref}"] = [p - q for p, q in zip(x, v[ref])]
+    return {"n": len(ids), "stats": ci.summarise(series)}
+
+
 def main():
     runs = {}
     for k, _, tag in ARMS:
@@ -47,11 +64,13 @@ def main():
             d = D / f"{k}_{s}"
             if complete(d, tag, n):
                 runs.setdefault(k, {})[s] = load_rows(d, tag)
-    ol = ci.open_loop_block(runs, REFS)
+    refs = tuple(r for r in REFS if r in runs)  # dense was dropped by the user (11-12): MoOP u50 only
+    ol = ci.open_loop_block(runs, refs)
     lingo_dirs = {k: D / f"lingo_vqa_{k}" for k, _, _ in ARMS if (D / f"lingo_vqa_{k}" / "scored.json").exists()}
-    lingo = ci.lingo_block(lingo_dirs, REFS) if len(lingo_dirs) >= 1 else None
-    nll_dirs = {k: D / f"nll_dense_{tag}_test" for k, _, tag in ARMS if (D / f"nll_dense_{tag}_test").exists()}
-    nll = ci.nll_block(nll_dirs) if {"dense", "moop"} <= set(nll_dirs) else None
+    lingo = ci.lingo_block(lingo_dirs, refs) if len(lingo_dirs) >= 1 else None
+    nll_dirs = {k: D / f"nll_dense_{tag}_test" for k, _, tag in ARMS
+                if (D / f"nll_dense_{tag}_test" / "summary_s0of1.txt").exists()}
+    nll = nll_summary(nll_dirs, refs) if nll_dirs else None
 
     L = ["# u50 arms -- open loop, LingoQA, CoC NLL (RTX PRO 5000 Blackwell, GPUs 0-3)", "",
          ("Clip-level bootstrap (LingoQA: segment-level), 200,000 draws, seed 0. * = CI excludes 0. "
@@ -68,7 +87,7 @@ def main():
                 continue
             cells = [ci_txt(r["absolute"][f"{k}|{kind}|{h}"]) for kind in ci.KINDS for h in HZ]
             L.append(f"| {lab} | " + " | ".join(cells) + f" | {100 * r['coc_degenerate'][k]:.1f}% |")
-        for ref in REFS:
+        for ref in refs:
             L += ["", f"## {s} -- paired, method minus {LABEL[ref]}", "",
                   "| Method | minADE@6 1.6 s | 3.2 s | 6.4 s | minFDE@6 1.6 s | 3.2 s | 6.4 s |", "|---|---|---|---|---|---|---|"]
             for k, lab, _ in ARMS:
@@ -82,12 +101,13 @@ def main():
         st = lingo["stats"]
         L += [(f"## LingoQA ({lingo['n_questions']} questions, {lingo['n_segments']} segments; always-'yes' "
                f"{100 * lingo['floor_yes_accuracy']:.1f}%)"), "",
-              "| Method | accuracy % | - MoOP u50 (pp) | - dense (pp) | - always 'yes' (pp) |", "|---|---|---|---|---|"]
+              "| Method | accuracy % | " + " | ".join(f"- {LABEL[r]} (pp)" for r in refs) + " | - always 'yes' (pp) |",
+              "|---|---|" + "---|" * len(refs) + "---|"]
         for k, lab, _ in ARMS:
             if f"{k}|abs" not in st:
                 continue
             row = [ci_txt(st[f"{k}|abs"], scale=100, nd=1)]
-            for ref in REFS:
+            for ref in refs:
                 row.append(ci_txt(st[f"{k}|{ref}"], sign=True, scale=100, nd=1) if f"{k}|{ref}" in st else "--")
             row.append(ci_txt(st[f"{k}|floor_yes"], sign=True, scale=100, nd=1))
             L.append(f"| {lab} | " + " | ".join(row) + " |")
@@ -95,12 +115,12 @@ def main():
     if nll:
         st = nll["stats"]
         L += [f"## CoC NLL, Test500 dense CoC ({nll['n']} clips; nats/token)", "",
-              "| Method | NLL | - MoOP u50 | - dense |", "|---|---|---|---|"]
+              "| Method | NLL | " + " | ".join(f"- {LABEL[r]}" for r in refs) + " |", "|---|---|" + "---|" * len(refs)]
         for k, lab, _ in ARMS:
             if f"{k}|abs" not in st:
                 continue
             row = [ci_txt(st[f"{k}|abs"])] + [ci_txt(st[f"{k}|{ref}"], sign=True) if f"{k}|{ref}" in st else "--"
-                                             for ref in REFS]
+                                             for ref in refs]
             L.append(f"| {lab} | " + " | ".join(row) + " |")
     out = D / "analysis"
     out.mkdir(parents=True, exist_ok=True)
