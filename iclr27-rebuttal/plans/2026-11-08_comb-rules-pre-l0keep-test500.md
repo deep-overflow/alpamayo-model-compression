@@ -3,7 +3,27 @@
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
 **Status: Table 14 done 2026-11-12 23:56 KST** (report `iclr27-rebuttal/reports/2026-11-12_table14-combination-rules.md`).
-**OOD-train is running from 2026-11-13 00:15 KST.**
+**OOD-train PAUSED 2026-11-13 01:17 KST** (user: "평가 일단 잠시 멈춰줘 더 중요한 실험부터 진행해야 할 것 같아").
+
+- **Kept.** Shard 0 of 4 is complete for all four arms (318 of 1,271 clips each, with `summary_s0of4.txt`). It ran 00:08–01:05
+  on Ada 4–7, about 50 min per shard.
+- **Lost.** Shard 1 was cut at 57–96 of 318 clips. The worker process groups were killed (no orphans), and cards 4–7 are free.
+- **Interim, shard 0 only** (318 clips, 6.4 s minADE@6, mean, no CI):
+
+  | arm | minADE@6 | − max-rank |
+  |---|---|---|
+  | max-rank | 1.202 | — |
+  | mean-rank | 1.224 | +0.021 |
+  | max-raw | 1.277 | +0.075 |
+  | mean-raw | 1.514 | +0.311 |
+
+- **Resume** (main checkout, on empty Ada cards). Delete the stale queue first: the runner re-claims everything, skips the four
+  finished shards (their summary exists) and reruns the cut shard-1 runs from the start. 12 shards, about 2.5 h on four cards.
+  ```
+  rm -r outputs/iclr27-rebuttal/comb_pre_l0keep/queue_oodtrain
+  for c in 4 5 6 7; do CARD=$c setsid nohup bash iclr27-rebuttal/code/run_comb_oodtrain.sh \
+      > outputs/iclr27-rebuttal/comb_pre_l0keep/logs/oodtrain_worker_$c.log 2>&1 < /dev/null & done
+  ```
 
 ## Amendment 2026-11-13 (user: "OOD-train도 진행해줘")
 
