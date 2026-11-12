@@ -27,17 +27,20 @@ from ci_openloop_lingoqa import fmt_ci, lingo_block, star, summarise
 
 OUT = REPO / "outputs"
 C = "iclr27-rebuttal/comb_pre_l0keep"
-SETS = {"test500": ("test_500.parquet", 500), "oodval262": ("ood_val.parquet", 262)}
+SETS = {"test500": ("test_500.parquet", 500), "oodval262": ("ood_val.parquet", 262),
+        "oodtrain1271": ("ood_train.parquet", 1271)}   # OOD-train added 2026-11-13 (run_comb_oodtrain.sh, Ada)
 # row -> (tag, {set: [run dirs, first complete wins]}, LingoQA dir)
 ROWS = {
-    "Max-rank (MoOP)": ("slim_dual_u40_v2", {"test500": ["dual_u40_v2_pred_test"], "oodval262": ["dual_u40_v2_pred_oodval"]},
+    "Max-rank (MoOP)": ("slim_dual_u40_v2", {"test500": ["dual_u40_v2_pred_test"], "oodval262": ["dual_u40_v2_pred_oodval"],
+                                             "oodtrain1271": [f"{C}/max_rank_oodtrain1271"]},
                         "lingo_vqa_slim_dual_u40_v2"),
     "Mean-rank": ("slim_dualsum_u40_v2", {"test500": [f"{C}/rank_mean_test500", "dualsum_u40_v2_test"],
-                                          "oodval262": [f"{C}/rank_mean_oodval262"]}, f"{C}/lingo_vqa_rank_mean"),
-    "Max-raw": ("slim_rawabsmean_u40_v2", {"test500": [f"{C}/raw_max_test500"], "oodval262": [f"{C}/raw_max_oodval262"]},
-                f"{C}/lingo_vqa_raw_max"),
-    "Mean-raw": ("slim_rawabsavg_u40_v2", {"test500": [f"{C}/raw_mean_test500"], "oodval262": [f"{C}/raw_mean_oodval262"]},
-                 f"{C}/lingo_vqa_raw_mean"),
+                                          "oodval262": [f"{C}/rank_mean_oodval262"],
+                                          "oodtrain1271": [f"{C}/rank_mean_oodtrain1271"]}, f"{C}/lingo_vqa_rank_mean"),
+    "Max-raw": ("slim_rawabsmean_u40_v2", {"test500": [f"{C}/raw_max_test500"], "oodval262": [f"{C}/raw_max_oodval262"],
+                                           "oodtrain1271": [f"{C}/raw_max_oodtrain1271"]}, f"{C}/lingo_vqa_raw_max"),
+    "Mean-raw": ("slim_rawabsavg_u40_v2", {"test500": [f"{C}/raw_mean_test500"], "oodval262": [f"{C}/raw_mean_oodval262"],
+                                           "oodtrain1271": [f"{C}/raw_mean_oodtrain1271"]}, f"{C}/lingo_vqa_raw_mean"),
 }
 REF = "Max-rank (MoOP)"
 
@@ -86,15 +89,19 @@ def main():
         return f"{m:.1f} [{lo:.1f}, {hi:.1f}]", f"{m:.1f} {{\\scriptsize [{lo:.1f}, {hi:.1f}]}}"
 
     md = ["# Table 14 -- combination rules with 95% confidence intervals (pre-l0keep recipe, Ada)", "",
-          "| Rule | LingoQA (%) | Test500 minADE@6 (m) | OOD-Val262 minADE@6 (m) |", "|---|---|---|---|"]
-    tex = []
+          ("| Rule | LingoQA (%) | Test500 minADE@6 (m) | OOD-Val262 minADE@6 (m) | OOD-train1271 minADE@6 (m) |"),
+          "|---|---|---|---|---|"]
+    tex, tex4 = [], []
     for row in ROWS:
-        a, b, c = cell_lq(row), cell_ol(row, "test500"), cell_ol(row, "oodval262")
-        md.append(f"| {row} | {a[0]} | {b[0]} | {c[0]} |")
+        a, b, c, d = cell_lq(row), cell_ol(row, "test500"), cell_ol(row, "oodval262"), cell_ol(row, "oodtrain1271")
+        md.append(f"| {row} | {a[0]} | {b[0]} | {c[0]} | {d[0]} |")
         tex.append(f"{row} & {a[1]} & {b[1]} & {c[1]} \\\\")
-    md += ["", "LaTeX rows:", "", "```", *tex, "```", "",
+        tex4.append(f"{row} & {a[1]} & {b[1]} & {c[1]} & {d[1]} \\\\")
+    md += ["", "LaTeX rows, the paper's three columns:", "", "```", *tex, "```", "",
+           "LaTeX rows with OOD-train as a fourth column:", "", "```", *tex4, "```", "",
            "## Paired difference rule - max-rank (same clips / questions; * = CI excludes 0)", "",
-           "| Rule | LingoQA (pp) | Test500 dminADE@6 6.4 s | OOD-Val262 dminADE@6 6.4 s |", "|---|---|---|---|"]
+           "| Rule | LingoQA (pp) | Test500 dminADE@6 6.4 s | OOD-Val262 dminADE@6 6.4 s | OOD-train1271 dminADE@6 6.4 s |",
+           "|---|---|---|---|---|"]
     for row in ROWS:
         if row == REF:
             continue
@@ -104,7 +111,7 @@ def main():
         for s in SETS:
             d = ol[s]["stats"].get(f"d|{row}|ade|6.4s")
             cs.append(fmt_ci(d, sign=True) + star(d) if d else "[x]")
-        md.append(f"| {row} | {cl} | {cs[0]} | {cs[1]} |")
+        md.append(f"| {row} | {cl} | " + " | ".join(cs) + " |")
     for s, blk in ol.items():
         md += ["", f"## {s}: all horizons (mean [95% clip-bootstrap CI])", "",
                "| Rule | minADE@6 1.6 s | 3.2 s | 6.4 s | minFDE@6 1.6 s | 3.2 s | 6.4 s |", "|---|---|---|---|---|---|---|"]
