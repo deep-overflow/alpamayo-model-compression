@@ -2,7 +2,21 @@
 
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
-**Status: done 2026-11-12 23:56 KST.** Report `iclr27-rebuttal/reports/2026-11-12_table14-combination-rules.md`.
+**Status: Table 14 done 2026-11-12 23:56 KST** (report `iclr27-rebuttal/reports/2026-11-12_table14-combination-rules.md`).
+**OOD-train is running from 2026-11-13 00:15 KST.**
+
+## Amendment 2026-11-13 (user: "OOD-train도 진행해줘")
+
+- **What.** All four rules on OOD-train: 1,271 clips, manifest `ood_train`, rollout only.
+  - Max-rank is included because its only OOD-train rows are A100 / GH200, and one table keeps one card type.
+  - Builds are the Table 14 ones: `outputs/slim_dual_u40_v2`, `outputs/slim_dualsum_u40_v2`,
+    `outputs/iclr27-rebuttal/comb_pre_l0keep/slim_{rawabsmean,rawabsavg}_u40_v2`.
+- **How.** `code/run_comb_oodtrain.sh`, one worker per Ada card 4–7 (cards 0–3 are another session's u50 Blackwell runs).
+  - 4 shards per arm; outputs `outputs/iclr27-rebuttal/comb_pre_l0keep/<arm>_oodtrain1271/`.
+  - About 2.7 h for 4 × 1,271 clips at ~7.5 s per clip.
+- **Check.** Ada max-rank vs its A100 / GH200 OOD-train rows: only a sanity check of the hardware shift, never merged into the table.
+- **Table.** `table14_comb_rules.py` gets an OOD-train column for the report. The paper table keeps its three columns unless the
+  user asks.
 
 - **Run.** Ada 4–7, 22:02–23:56 KST, after the u50 closed-loop queue's last arm freed the cards (the closed-loop session was
   told). 15/15 tasks, 0 failed.
