@@ -2,8 +2,23 @@
 
 User ask: "l0keep 이전 방식에서 성능을 보여주는 게 좋을 것 같아. rank-mean, rank-max, raw-mean, raw-max를 test 500에서 비교해줘."
 
-**Status (2026-11-12 02:00 KST): builds done, gates B0/B1 PASS — only the GPU evaluation is left.** It has not been launched
-because GPUs 4–7 are held by the u50 closed-loop queue.
+**Status: done 2026-11-12 23:56 KST.** Report `iclr27-rebuttal/reports/2026-11-12_table14-combination-rules.md`.
+
+- **Run.** Ada 4–7, 22:02–23:56 KST, after the u50 closed-loop queue's last arm freed the cards (the closed-loop session was
+  told). 15/15 tasks, 0 failed.
+- **Checks.** B0/B1 PASS again at launch. The rank-mean Test500 rerun equals the September run on 500/500 clips.
+- **Table 14** (LingoQA / Test500 / OOD-Val262):
+
+  | rule | LingoQA | Test500 | OOD-Val262 |
+  |---|---|---|---|
+  | max-rank | 68.8 | 0.950 | 1.119 |
+  | mean-rank | 67.0 | 0.960 | 1.160 |
+  | max-raw | 59.2 | 0.974 | 1.173 |
+  | mean-raw | 14.0 | 1.216 | 1.373 |
+
+  Mean-raw collapses: cruise / turn losses and CoC degeneration 9.4%, the signature of a layer-0 head-choice collapse.
+
+(Earlier status, kept for the record: builds done on CPU at 02:00 KST, the launch waited for the closed-loop queue.)
 
 - **Builds.** The three recipes were built on CPU with `code/build_recipes_cpu.py` (user: "바로 평가만 하면 되도록 준비해줘").
   - Why CPU: every GPU was busy, and a `--no-state` recipe needs no GPU.
