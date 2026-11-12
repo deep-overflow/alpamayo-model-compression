@@ -77,8 +77,8 @@ def main():
         if k.endswith(f"|{REF}"):
             lq["stats"][f"d|{k.split('|')[0]}"] = v
 
-    def cell_ol(row, set_name):
-        e = ol[set_name]["stats"].get(f"abs|{row}|ade|6.4s")
+    def cell_ol(row, set_name, kind="ade"):
+        e = ol[set_name]["stats"].get(f"abs|{row}|{kind}|6.4s")
         return ("[x]", "[x]") if e is None else (fmt_ci(e), f"{e['mean']:.3f} {{\\scriptsize [{e['ci'][0]:.3f}, {e['ci'][1]:.3f}]}}")
 
     def cell_lq(row):
@@ -91,13 +91,17 @@ def main():
     md = ["# Table 14 -- combination rules with 95% confidence intervals (pre-l0keep recipe, Ada)", "",
           ("| Rule | LingoQA (%) | Test500 minADE@6 (m) | OOD-Val262 minADE@6 (m) | OOD-train1271 minADE@6 (m) |"),
           "|---|---|---|---|---|"]
-    tex, tex4 = [], []
+    tex, tex4, tex_fde = [], [], []
     for row in ROWS:
         a, b, c, d = cell_lq(row), cell_ol(row, "test500"), cell_ol(row, "oodval262"), cell_ol(row, "oodtrain1271")
+        bf, cf = cell_ol(row, "test500", "fde"), cell_ol(row, "oodval262", "fde")
         md.append(f"| {row} | {a[0]} | {b[0]} | {c[0]} | {d[0]} |")
         tex.append(f"{row} & {a[1]} & {b[1]} & {c[1]} \\\\")
         tex4.append(f"{row} & {a[1]} & {b[1]} & {c[1]} & {d[1]} \\\\")
-    md += ["", "LaTeX rows, the paper's three columns:", "", "```", *tex, "```", "",
+        tex_fde.append(f"{row} & {a[1]} & {b[1]} & {bf[1]} & {c[1]} & {cf[1]} \\\\")
+    md += ["", "LaTeX rows, the paper's layout (LingoQA | Test500 minADE@6, minFDE@6 | OOD-Val262 minADE@6, minFDE@6; 6.4 s):",
+           "", "```", *tex_fde, "```", "",
+           "LaTeX rows, three columns (LingoQA | Test500 | OOD-Val262 minADE@6):", "", "```", *tex, "```", "",
            "LaTeX rows with OOD-train as a fourth column:", "", "```", *tex4, "```", "",
            "## Paired difference rule - max-rank (same clips / questions; * = CI excludes 0)", "",
            "| Rule | LingoQA (pp) | Test500 dminADE@6 6.4 s | OOD-Val262 dminADE@6 6.4 s | OOD-train1271 dminADE@6 6.4 s |",
