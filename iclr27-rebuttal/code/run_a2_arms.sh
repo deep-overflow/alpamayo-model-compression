@@ -5,6 +5,7 @@
 # Arm names: dense, or any masks_<arm>.npz under outputs/iclr27-rebuttal/a2_moop/. Resumable like run_a2_worker.sh.
 # Optional: EXP_SUFFIX is appended to every exp id (u50 on Blackwell: _bw); PLAN is recorded in each config.
 #   CARDS=0,1 SHARD=0 ARMS="dense moop_u50" EXP_SUFFIX=_bw PLAN=iclr27-rebuttal/plans/2026-11-09_a2-u50-test500.md bash ...
+# Optional SET (2026-11-13): test500 (default) / oodval / oodtrain picks manifest + A2 cache; exp ids are a2_<SET>_<arm><suffix>.
 set -u
 # env.sh first: it sets its own REPO (= alpamayo2-distill), so this script's root is ROOT, computed after it
 source /home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval/env.sh
@@ -17,18 +18,23 @@ RUNNER=$ROOT/iclr27-rebuttal/code/run_a2_openloop.py
 [ -f "$RUNNER" ] || { echo "runner not found: $RUNNER"; exit 1; }
 cd "$ROOT" || exit 1
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
+SET=${SET:-test500}
+declare -A MAN=([test500]=test_500 [oodval]=ood_val [oodtrain]=ood_train)
+declare -A CAC=([test500]=test500_a2 [oodval]=ood_a2 [oodtrain]=ood_train_a2)
+[ -n "${MAN[$SET]:-}" ] || { echo "unknown SET $SET"; exit 1; }
 
 for arm in $ARMS; do
-  exp=iclr27-rebuttal/a2_test500_$arm${EXP_SUFFIX:-}
+  exp=iclr27-rebuttal/a2_${SET}_$arm${EXP_SUFFIX:-}
   if [ -f "outputs/$exp/summary_s${SHARD}of2.txt" ]; then stamp "skip $arm s$SHARD (done)"; continue; fi
   extra=()
   [ -n "${PLAN:-}" ] && extra+=(--plan "$PLAN")
+  [ "$SET" != test500 ] && extra+=(--manifest "${MAN[$SET]}" --set-name "${MAN[$SET]}" --cache-name "${CAC[$SET]}")
   if [ "$arm" != "dense" ]; then
     masks=outputs/iclr27-rebuttal/a2_moop/masks_$arm.npz
     [ -f "$masks" ] || { stamp "no masks for $arm: $masks"; exit 1; }
     extra+=(--masks "$masks")
   fi
-  stamp "start $arm shard $SHARD on cards $CARDS"
+  stamp "start $arm $SET shard $SHARD on cards $CARDS"
   "$PY" "$RUNNER" --exp-id "$exp" --shard "$SHARD" --n-shards 2 ${extra[@]+"${extra[@]}"} || { stamp "$arm s$SHARD failed"; exit 1; }
   stamp "done $arm shard $SHARD: $(cat "outputs/$exp/summary_s${SHARD}of2.txt")"
 done

@@ -20,7 +20,11 @@ channels cut per layer) vs u50-q8 (8 heads + 14,848 channels, the same 15,267,26
 all on GH200 with a GH200 dense (OOD: job 1251209's rows, or dense_r if the reproducibility check failed); OOD adds the GH200 u40
 rows, test500 the Blackwell u50 rows, both as context.
 
-Usage: .venv/bin/python iclr27-rebuttal/code/analyze_a2_test500.py [--preset u40|u50|u40_oodval|u40_oodtrain|u50q8_<set>] [--partial]
+--preset u50q8_test500_ada / u50q8_oodval_ada (2026-11-13, the same comparison on cvlab21 Ada 4-7, user: test500 and OOD-Val only):
+u50 and u50-q8 arms `_ada`; test500 dense = the 11-09 Ada run (a2_test500_dense, reused after the reproducibility gate) unless
+a2_test500_dense_ada exists; test500 adds the Ada u40 rows as context with u50 - u40 pairs (same card type).
+
+Usage: .venv/bin/python iclr27-rebuttal/code/analyze_a2_test500.py [--preset u40|u50|u40_oodval|u40_oodtrain|u50q8_<set>[_ada]] [--partial]
 """
 
 import argparse
@@ -126,6 +130,31 @@ for _set, _n, _name in (("test500", 500, "test500"), ("oodval", 262, "OOD-Val262
                     **{k: ("15.27B / 35.81B (42.6%)" if "u50" in k else "12.21B / 35.81B (34.1%)") for k in _ctx}},
         "exp_id": f"iclr27-rebuttal/a2_u50q8_{_set}_analysis", "plan": "iclr27-rebuttal/plans/2026-11-11_a2-u50-q8-gh200.md",
         "title": f"Alpamayo 2 Super u50 vs u50-q8 on {_name}, GH200 (context: {'Blackwell u50' if _set == 'test500' else 'GH200 u40'})"}
+
+for _set, _n, _name in (("test500", 500, "test500"), ("oodval", 262, "OOD-Val262")):
+    _R = "iclr27-rebuttal"
+    if _set == "test500":
+        _dense = f"{_R}/a2_test500_dense_ada" if (REPO / "outputs" / _R / "a2_test500_dense_ada").exists() else f"{_R}/a2_test500_dense"
+    else:
+        _dense = f"{_R}/a2_{_set}_dense_ada"
+    _arms = {"A2 dense": _dense}
+    for _alloc, _sfx in (("u50", "_u50"), ("u50-q8", "_u50_q8")):
+        for _lab, _key in _CRIT:
+            _arms[f"A2 + {_lab} {_alloc}"] = f"{_R}/a2_{_set}_{_key}{_sfx}_ada"
+    _ctx = {f"A2 + {_lab} u40": f"{_R}/a2_test500_{_key}" for _lab, _key in _CRIT} if _set == "test500" else {}
+    _pairs = [(a, "A2 dense") for a in _arms if a != "A2 dense"]
+    _pairs += [(f"A2 + {_lab} u50-q8", f"A2 + {_lab} u50") for _lab, _ in _CRIT]
+    for _alloc in ("u50", "u50-q8"):
+        _pairs += [(f"A2 + MoOP {_alloc}", f"A2 + FM-only {_alloc}"), (f"A2 + MoOP {_alloc}", f"A2 + CE-only {_alloc}")]
+    if _set == "test500":
+        _pairs += [(f"A2 + {_lab} u50", f"A2 + {_lab} u40") for _lab, _ in _CRIT]
+        _pairs += [(f"A2 + {_lab} u40", "A2 dense") for _lab, _ in _CRIT]
+    PRESETS[f"u50q8_{_set}_ada"] = {
+        "arms": _arms, "context": _ctx, "pairs": _pairs, "n": _n,
+        "removed": {**{k: "15.27B / 35.81B (42.6%)" for k in _arms if k != "A2 dense"},
+                    **{k: "12.21B / 35.81B (34.1%)" for k in _ctx}},
+        "exp_id": f"iclr27-rebuttal/a2_u50q8_{_set}_ada_analysis", "plan": "iclr27-rebuttal/plans/2026-11-11_a2-u50-q8-gh200.md",
+        "title": f"Alpamayo 2 Super u50 vs u50-q8 on {_name}, Ada (cvlab21 GPUs 4-7){' + Ada u40 context' if _ctx else ''}"}
 
 
 def readouts(rr, ids):
