@@ -9,10 +9,14 @@ Nothing is recomputed: every curve, matrix and number is read from the stored ou
   outputs/iclr27-rebuttal/a2_fig3_token_type/metrics.json   (a2_fig3_token_type.py; gates G4-G7 PASS)
   outputs/iclr27-rebuttal/a2_fig5_expert/metrics.json       (a2_fig5_expert.py; gate G8 PASS)
 so the values are those of the earlier overview PNGs (2026-11-08_a2_fig3_overview_q_head.png, 2026-11-08_a2_fig5_overview.png).
-Kept from those figures: data, axis ranges, colours, legend order, the grey band and the dotted step line. Changed: the footer
-"Q heads; grey = late band, dotted = I_traj/I_CoC step" is removed (it goes to the caption), the canvas is the ICLR \\linewidth
-(5.5 in) so the PDF is placed at 100% and the text stays readable (7-8 pt), and both figures use the main-paper rcParams
-(experiments/paper/fig_criterion.py: DejaVu Sans, TrueType-embedded, light y grid, semibold panel titles) and its palette.
+
+Layout follows the paper's main Fig. 3 / Fig. 5 as typeset (user reference, 2026-11-13): plot text in DejaVu Sans
+(experiments/paper/fig_criterion.py rcParams, TrueType-embedded), panel titles as subcaptions UNDER each column in the paper's
+serif (STIX = Times metrics; I_FM / I_CE as italic I with upright subscript), model names as serif row labels, one colour bar
+per heat map with "Spearman's rho" on it, and Fig. 5c's palette (Q head #618BC8, MLP #ECAE3C, uniform grey, solid black line at
+r = 0.9, square MLP marker). Kept from the earlier figures: data, axis ranges, the token-type colours and legend order, the grey
+band and the dotted step line. Removed: the footer "Q heads; grey = late band, dotted = I_traj/I_CoC step" (now in the caption).
+Canvas = ICLR \\linewidth (5.5 in), so the PDF is placed at 100%: plot text 7-7.5 pt, subcaptions 9 pt.
 
 Usage: .venv/bin/python iclr27-rebuttal/code/supp_alpamayo2_figs.py [--exp-id iclr27-rebuttal/supp_alpamayo2_figs]
 """
@@ -33,13 +37,15 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo2-distill/experiments/importance")
 import paper_figs_a2 as pfa  # imports paper_style -> fig_criterion rcParams
 
+plt.rcParams["mathtext.fontset"] = "stix"  # only the subcaptions use math; STIX matches the paper's Times
 ps = pfa.ps
 MODELS = pfa.MODELS  # name, n layers, band (grey), tau (dotted), ticks -- the earlier figures' definitions
 WIDTH = 5.5  # in, ICLR \linewidth
-TICK, LAB, TITLE, LEG, NOTE = 7, 7.5, 8, 7.5, 6.5  # pt
+TICK, LAB, LEG, NOTE, CAP = 7, 7.5, 7.5, 6.5, 9  # pt; CAP = subcaptions and row labels (serif)
+SERIF = "STIXGeneral"
 COLORS = {"All": "black", "Vision": ps.BLUE, "Prompt text": ps.YELLOW, "CoC": pfa.PURPLE, "Ego history": ps.BRICK}
 TYPE_ROW = {"Vision": pfa.VIS, "Prompt text": pfa.PT, "CoC": pfa.COC, "Ego history": pfa.HIST}
-C_Q, C_MLP, C_UNIFORM = "#0072B2", "#D55E00", ps.GREY  # main Fig. 5c palette
+C_Q, C_MLP, C_UNIFORM = ps.BLUE, ps.YELLOW, ps.GREY  # main Fig. 5c as typeset
 R_MARK = 0.9
 SRC3 = REPO / "outputs" / "iclr27-rebuttal" / "a2_fig3_token_type" / "metrics.json"
 SRC5 = REPO / "outputs" / "iclr27-rebuttal" / "a2_fig5_expert" / "metrics.json"
@@ -61,9 +67,23 @@ def style(ax, grid=True):
         ax.grid(axis="y")
 
 
+def captions(fig, bottom_axes, row_axes, titles, x_row=0.008, y_cap=0.012, x_centres=None):
+    """serif subcaption under each column (centred on the bottom-row axes, or on x_centres in figure fraction) and serif
+    model name left of each row"""
+    for i, (ax, t) in enumerate(zip(bottom_axes, titles, strict=True)):
+        p = ax.get_position()
+        x = (p.x0 + p.x1) / 2 if x_centres is None else x_centres[i]
+        fig.text(x, y_cap, t, ha="center", va="bottom", fontfamily=SERIF, fontsize=CAP)
+    for ax, key in zip(row_axes, ("a15", "a2"), strict=True):
+        p = ax.get_position()
+        fig.text(x_row, (p.y0 + p.y1) / 2, MODELS[key]["name"], rotation=90, ha="left", va="center", fontfamily=SERIF,
+                 fontsize=CAP)
+
+
 def vlm_figure(m3, out):
     pl = m3["per_layer"]
-    fig, axes = plt.subplots(2, 3, figsize=(WIDTH, 3.75))
+    fig, axes = plt.subplots(2, 3, figsize=(WIDTH, 4.0))
+    fig.subplots_adjust(left=0.135, right=0.99, top=0.905, bottom=0.175, wspace=0.42, hspace=0.5)
     for row, key in enumerate(("a15", "a2")):
         m = MODELS[key]
         agree, share = pl[f"{key}/q"]["agreement"], pl[f"{key}/q"]["share"]
@@ -76,7 +96,7 @@ def vlm_figure(m3, out):
         ax.axhline(0, color="black", lw=0.6)
         ax.set_ylim(-0.25, 1.05)
         ax.set_yticks([-0.25, 0, 0.25, 0.5, 0.75, 1.0])
-        ax.set_ylabel(f"{m['name']}\nCorrected ρ")
+        ax.set_ylabel("Corrected ρ")
         for col, obj, n_layers in ((1, "traj", last), (2, "coc", m["n"])):
             ax = axes[row, col]
             depth_marks(ax, m)
@@ -84,30 +104,42 @@ def vlm_figure(m3, out):
             for label, ty in TYPE_ROW.items():
                 ax.plot(np.arange(n_layers), s[ty][:n_layers], color=COLORS[label], lw=0.9, label=label)
             ax.set_ylim(0, 1.05)
-        axes[row, 1].set_ylabel("Share of layer importance")
+            ax.set_ylabel("Share of layer importance")
         for ax in axes[row]:
             ax.set_xlabel("VLM layer index")
             style(ax)
-    for ax, t in zip(axes[0], ("(a) Rank correlation", r"(b) $I_{\mathrm{FM}}$ by token type",
-                               r"(c) $I_{\mathrm{CE}}$ by token type"), strict=True):
-        ax.set_title(t, fontsize=TITLE, pad=4)
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.0), ncol=5, frameon=False, fontsize=LEG,
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.56, 1.0), ncol=5, frameon=False, fontsize=LEG,
                handlelength=1.4, handletextpad=0.4, columnspacing=1.1)
-    fig.tight_layout(pad=0.3, h_pad=0.6, w_pad=0.8, rect=(0, 0, 1, 0.94))
+    captions(fig, axes[1], axes[:, 0], ("(a) Rank correlation", r"(b) $\mathit{I}_{\mathrm{FM}}$ by token type",
+                                        r"(c) $\mathit{I}_{\mathrm{CE}}$ by token type"))
     save(fig, out, "supp_alpamayo2_vlm")
 
 
 def expert_figure(m5, out):
+    """Manual placement in inches: two heat maps with their own colour bars (as the paper's Fig. 5a, b) and the C(r) panel
+    must share 5.5 in at the same 7-7.5 pt text as the VLM figure, which automatic layout cannot fit."""
     res = m5["results"]
-    fig = plt.figure(figsize=(WIDTH, 3.8))
-    # heatmap, heatmap, shared colourbar, spacer (room for the colourbar label and (c)'s y label), curve
-    gs = fig.add_gridspec(2, 5, width_ratios=[1, 1, 0.05, 0.36, 1.12], wspace=0.28, hspace=0.55,
-                          left=0.1, right=0.975, top=0.885, bottom=0.105)
+    s, wc = 0.92, 0.98  # heat-map side, C(r) panel width
+    top, mid, bot = 0.12, 0.47, 0.6  # above row 1; row-1 x labels; row-2 x labels + subcaptions
+    W, H = WIDTH, top + s + mid + s + bot
+    lab_w, cb_gap, cb_w, cb_lab_w, gap, c_gap, c_lab_w = 0.32, 0.04, 0.06, 0.36, 0.1, 0.22, 0.42  # in
+    x_hm = [0.16 + lab_w]
+    x_hm.append(x_hm[0] + s + cb_gap + cb_w + cb_lab_w + gap + lab_w)
+    x_c = x_hm[1] + s + cb_gap + cb_w + cb_lab_w + c_gap + c_lab_w
+    # subcaptions centred under each subfigure block (y label .. colour-bar label, or y label .. C(r) panel), as LaTeX does
+    centres = [(x - lab_w + x + s + cb_gap + cb_w + cb_lab_w) / 2 / W for x in x_hm] + [(x_c - c_lab_w + x_c + wc) / 2 / W]
+    y_rows = [H - top - s, H - top - s - mid - s]  # top row, bottom row (axes bottoms)
+
+    def box(x, y, w, h):
+        return [x / W, y / H, w / W, h / H]
+
+    fig = plt.figure(figsize=(W, H))
+    bottom, first = [], []
     for row, key in enumerate(("a15", "a2")):
-        name = MODELS[key]["name"]
+        y = y_rows[row]
         for col, axis in enumerate(("q", "mlp")):
-            ax = fig.add_subplot(gs[row, col])
+            ax = fig.add_axes(box(x_hm[col], y, s, s))
             r = res[f"{key}/{axis}"]
             mat = np.asarray(r["matrix"])  # (S, S)
             edges = np.arange(mat.shape[0] + 1) - 0.5
@@ -116,48 +148,51 @@ def expert_figure(m5, out):
                                linewidth=0)
             ax.set_xlim(edges[0], edges[-1])
             ax.set_ylim(edges[-1], edges[0])
-            ax.set_aspect("equal")
             ax.set_xticks([0, 3, 6, 9])
             ax.set_yticks([0, 3, 6, 9])
             for sp in ax.spines.values():
                 sp.set_visible(True)
             ax.set_xlabel("Denoising step")
-            if col == 0:  # (b) shares (a)'s step axis; its label would sit on (a) at this width
-                ax.set_ylabel(f"{name}\nDenoising step")
+            ax.set_ylabel("Denoising step")
             ax.text(0.97, 0.03, f"mean {r['mean_pair_rho']:.3f}\nmin {r['min_pair_rho']:.3f}", transform=ax.transAxes,
                     ha="right", va="bottom", fontsize=NOTE - 0.5, color="white", linespacing=1.0)
             style(ax, grid=False)
-            if row == 0:  # the earlier titles, broken over two lines to fit a 1/3-\linewidth panel
-                ax.set_title(("(a) Q head\nrank similarity", "(b) MLP channel\nrank similarity")[col], fontsize=TITLE,
-                             pad=4)
-        cax = fig.add_subplot(gs[row, 2])
-        cb = fig.colorbar(im, cax=cax)
-        cb.set_label("Spearman's ρ", fontsize=LAB)
-        cb.ax.tick_params(labelsize=TICK, length=2, pad=1.5)
-        cb.outline.set_linewidth(0.5)
-        ax = fig.add_subplot(gs[row, 4])
-        ax.plot([0, 1], [0, 1], color=C_UNIFORM, lw=0.7, label="uniform")
-        for axis, col_, lab in (("q", C_Q, "Q head"), ("mlp", C_MLP, "MLP channel")):
+            cax = fig.add_axes(box(x_hm[col] + s + cb_gap, y, cb_w, s))
+            cb = fig.colorbar(im, cax=cax)
+            cb.set_label("Spearman's ρ", fontsize=LAB, labelpad=2)
+            cb.set_ticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+            cb.ax.tick_params(labelsize=TICK, length=2, pad=1.5)
+            cb.outline.set_linewidth(0.5)
+            if row == 1:
+                bottom.append(ax)
+            if col == 0:
+                first.append(ax)
+        ax = fig.add_axes(box(x_c, y, wc, s))
+        ax.plot([0, 1], [0, 1], color=C_UNIFORM, lw=0.6, label="uniform")
+        for axis, col_, lab, mk, off in (("q", C_Q, "Q head", "o", (-17, 12)), ("mlp", C_MLP, "MLP channel", "s", (-31, 6))):
             r = res[f"{key}/{axis}"]
             curve = np.asarray(r["curve"])
             grid = np.arange(len(curve)) / (len(curve) - 1)
             x = r["k_mark"] / (len(curve) - 1)
             ax.plot(grid, curve, color=col_, lw=1.2, label=lab)
-            ax.plot(x, r["C_mark"], "o", color=col_, ms=2.8)
-            ax.annotate(f"{r['C_mark'] * 100:.1f}%", (x, r["C_mark"]), textcoords="offset points", xytext=(-21, 5),
-                        color=col_, fontsize=NOTE, bbox={"fc": "white", "ec": "none", "pad": 0.4, "alpha": 0.85})
-        ax.axvline(R_MARK, color="0.4", lw=0.7, ls=":")
+            ax.plot(x, r["C_mark"], mk, color=col_, ms=2.8)
+            ax.annotate(f"{r['C_mark'] * 100:.1f}%", (x, r["C_mark"]), textcoords="offset points", xytext=off, color=col_,
+                        fontsize=NOTE, bbox={"fc": "white", "ec": "none", "pad": 0.3, "alpha": 0.85})
+        ax.axvline(R_MARK, color="black", lw=0.6)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
         ax.set_xticklabels(["0", "0.2", "0.4", "0.6", "0.8", "1"])
+        ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
         ax.set_xlabel("Fraction of units removed")
-        ax.set_ylabel("Removed importance fraction")
-        ax.legend(fontsize=NOTE, frameon=False, loc="upper left", handlelength=1.3, handletextpad=0.4, borderaxespad=0.2,
-                  labelspacing=0.25)
+        ax.set_ylabel("Removed importance\nfraction")  # two lines: one is taller than the 0.95 in panel
+        ax.legend(fontsize=NOTE - 0.5, frameon=False, loc="upper left", handlelength=1.1, handletextpad=0.35,
+                  borderaxespad=0.2, labelspacing=0.25)
         style(ax)
-        if row == 0:
-            ax.set_title("(c) Cumulative\nimportance", fontsize=TITLE, pad=4)
+        if row == 1:
+            bottom.append(ax)
+    captions(fig, bottom, first, ("(a) Q head rank similarity", "(b) MLP channel rank similarity",
+                                  "(c) Cumulative importance"), y_cap=0.01, x_centres=centres)
     save(fig, out, "supp_alpamayo2_expert")
 
 
@@ -196,9 +231,8 @@ def main():
                         for k, m in MODELS.items()},
         "expert_C09": {k: round(m5["results"][k]["C_mark"], 5) for k in m5["results"]},
         "sources": {"vlm": str(SRC3), "expert": str(SRC5)}, "width_in": WIDTH,
-        "font_pt": {"tick": TICK, "label": LAB, "title": TITLE, "legend": LEG, "note": NOTE}}
+        "font_pt": {"tick": TICK, "label": LAB, "legend": LEG, "note": NOTE, "subcaption_serif": CAP}}
     (out / "config.json").write_text(json.dumps(caption, indent=2))
-    print(json.dumps(caption, indent=2))
     print(f"wrote {out} and {assets}")
 
 
