@@ -22,7 +22,8 @@ from analyze_a100 import load_rows
 D = REPO / "outputs" / "iclr27-rebuttal" / "u50_openloop_bw"
 ARMS = [("dense", "Baseline (dense)", "baseline"), ("moop", "MoOP u50", "slim_dual_u50_v2"),
         ("tyr", "Týr-the-Pruner u50", "slim_tyr_u50_r"), ("lp", "LLM-Pruner u50", "slim_lp_r60"),
-        ("fm", "FM-only u50", "slim_traj_u50_v2"), ("ce", "CE-only u50", "slim_coc_u50_v2")]
+        ("fm", "FM-only u50", "slim_traj_u50_v2"), ("ce", "CE-only u50", "slim_coc_u50_v2"),
+        ("wanda", "Wanda u50", "slim_wanda_u50_v2")]
 LABEL = {k: lab for k, lab, _ in ARMS}
 REFS = ("moop", "dense")
 HZ = ("1.6s", "3.2s", "6.4s")
