@@ -93,6 +93,30 @@ def gt_coc_seq(tok, prompt_ids, gt_text, device):
     return torch.cat([prompt_ids, coc], dim=1)
 
 
+@torch.no_grad()
+def eval_from_generation_cache(model, inputs, roll, gt_xy, seeds):
+    """K denoisings on the rollout's own KV cache (prompt + generated CoC), as the official Alpamayo / AlpaSim
+    inference does, instead of eval_config_samples' teacher-forced re-prefill. Returns (ade_k, fde_k, pred_k)."""
+    cache = roll["past_key_values"]
+    prefill = cache.get_seq_length()
+    dev = inputs["input_ids"].device
+    offset = torch.tensor([prefill], device=dev)
+    prefix_mask = torch.ones(1, prefill, device=dev, dtype=torch.long)
+    preds = []
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        for s in seeds:
+            action = lib.denoise_with_cache(model, cache, roll["rope_deltas"], offset, prefix_mask,
+                                            seed=s)  # cropped back to prefill each call
+            pred_xyz, _ = model.action_space.action_to_traj(
+                action.float(), inputs["ego_history_xyz"][:, -1].float(),
+                inputs["ego_history_rot"][:, -1].float(),
+            )
+            preds.append(pred_xyz[0, :, :2].cpu().numpy())
+    pred_k = np.stack(preds)  # (K, T, 2)
+    ade, fde = el.ade_fde(pred_k, gt_xy)
+    return ade, fde, pred_k
+
+
 def load_manifest(which, sets_dir, n_indist, manifest=None, cache=None):
     """`indist` is the official-val draw, `test` the official-test draw, `ood` the OOD cache.
 
@@ -295,11 +319,23 @@ def main():
         gen_ids = roll["sequences"][0, prompt_len:coc_end].tolist()
         gen_coc = tok.decode([t for t in gen_ids if t not in (COT_END, TFS)],
                              skip_special_tokens=True)
-        del roll
         # keep the per-sample arrays, not just their min: seeds are base+k, so minADE@K'
         # for any K' <= k is a prefix of these and needs no second run
-        ade_k, fde_k, nll_self, pred_k = eval_config_samples(
-            model, inputs, seq_gen, prompt_len, coc_end, gt_xy, traj_seeds)
+        try:
+            ade_k, fde_k, nll_self, pred_k = eval_config_samples(
+                model, inputs, seq_gen, prompt_len, coc_end, gt_xy, traj_seeds)
+        except ValueError as e:
+            # A degenerate CoC can contain a vision placeholder token (<|image_pad|>); the teacher-forced
+            # re-prefill then holds one more image token than image features and Qwen3-VL raises. Only for
+            # that clip, drive on the generation's own KV cache -- the official Alpamayo / AlpaSim inference
+            # path -- where the CoC NLL is undefined (iclr27-rebuttal/plans/2026-11-12_u50-openloop-blackwell.md).
+            if "Image features and image tokens do not match" not in str(e):
+                raise
+            ade_k, fde_k, pred_k = eval_from_generation_cache(model, inputs, roll, gt_xy, traj_seeds)
+            nll_self = None
+            rec["tf_fallback"] = "generation_cache"
+            print(f"  {m['clip_id'][:8]}: vision token in the CoC -> generation-cache fallback", flush=True)
+        del roll
         rec.update({"minADE_rollout": float(ade_k.min()), "minFDE_rollout": float(fde_k.min()),
                     "ade_rollout_k": [round(float(x), 6) for x in ade_k],
                     "fde_rollout_k": [round(float(x), 6) for x in fde_k],

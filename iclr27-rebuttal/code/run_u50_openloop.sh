@@ -24,12 +24,25 @@ mkdir -p "$Q" "$LOG"
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
 
 declare -A MODEL=([moop]=outputs/slim_dual_u50_v2 [tyr]=outputs/slim_tyr_u50_r [lp]=outputs/slim_lp_r60
-                  [fm]=outputs/slim_traj_u50_v2 [ce]=outputs/slim_coc_u50_v2 [dense]=baseline)
+                  [fm]=outputs/slim_traj_u50_v2 [ce]=outputs/slim_coc_u50_v2 [dense]=baseline
+                  [wanda]=outputs/slim_wanda_u50_v2 [moope]=outputs/slim_dualexp_u50_em93p75)
 TASKS=()
 for arm in moop dense tyr lp fm ce; do
   for s in 0 1 2 3; do TASKS+=("ol $arm test500 $s 4"); done
   for s in 0 1; do TASKS+=("ol $arm oodval262 $s 2"); done
   TASKS+=("nll $arm" "lingo $arm")
+done
+# 11-13 (user: "Wanda and everything else"): Wanda u50 and MoOP + expert u50 on the same three evaluations, then
+# OOD-train open loop (4 shards) + ground-truth-CoC NLL for every arm. The failed Tyr Test500 shard 3 re-runs with
+# run_baseline's generation-cache fallback (its claim dir is removed before relaunch).
+for arm in wanda moope; do
+  for s in 0 1 2 3; do TASKS+=("ol $arm test500 $s 4"); done
+  for s in 0 1; do TASKS+=("ol $arm oodval262 $s 2"); done
+  TASKS+=("nll $arm" "lingo $arm")
+done
+for arm in moop moope tyr lp fm ce wanda dense; do
+  for s in 0 1 2 3; do TASKS+=("ol $arm oodtrain $s 4"); done
+  TASKS+=("nllgt $arm")
 done
 
 tag_of() { [ "${MODEL[$1]}" = baseline ] && echo baseline || basename "${MODEL[$1]}"; }
@@ -44,6 +57,7 @@ run_task() {  # <kind> <args...>
       case $set_name in
         test500) set_args=(--set test) ;;
         oodval262) set_args=(--set ood --manifest ood_val --no-tf) ;;
+        oodtrain) set_args=(--set ood --manifest ood_train --no-tf) ;;
       esac
       [ -f "outputs/$exp/summary_s${shard}of${n}.txt" ] && { stamp "skip $exp s$shard (done)"; return 0; }
       "$PY" experiments/evaluation/run_baseline.py "${set_args[@]}" --model "${MODEL[$arm]}" --exp-id "$exp" \
@@ -56,6 +70,13 @@ run_task() {  # <kind> <args...>
       [ -f "outputs/$exp/summary_s0of1.txt" ] && { stamp "skip $exp (done)"; return 0; }
       "$PY" experiments/evaluation/run_nll_dense.py --set test --model "${MODEL[$arm]}" --exp-id "$exp" \
           --gpu 0 --reserve-gb 40 > "$LOG/nll_${arm}.log" 2>&1
+      ;;
+    nllgt)
+      local arm=$1
+      local exp=$OUT/nllgt_${arm}_oodtrain
+      [ -f "outputs/$exp/summary_s0of1.txt" ] && { stamp "skip $exp (done)"; return 0; }
+      "$PY" cvpr27/code/run_nll_gtcoc.py --manifest ood_train --model "${MODEL[$arm]}" --exp-id "$exp" \
+          --gpu 0 --reserve-gb 40 > "$LOG/nllgt_${arm}.log" 2>&1
       ;;
     lingo)
       local arm=$1

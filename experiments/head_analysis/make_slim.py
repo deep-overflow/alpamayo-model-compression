@@ -228,6 +228,8 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
     dualexp = re.match(r"^dualexp_u40_e(\d+)$", cfg_name)
     dualexp_m = re.match(r"^dualexp_u40_em(\d+(?:p\d+)?)$", cfg_name)
     dualexp_l0k = re.match(r"^dualexp_u40_l0keep_em(\d+(?:p\d+)?)$", cfg_name)
+    # dualexp_u<N>_em<M> for N != 40: dual_u<N>_v2's VLM half + expert MLP-only at M% (u50 rebuttal arm)
+    dualexp_mu = re.match(r"^dualexp_u(?!40_)(\d+)_em(\d+(?:p\d+)?)$", cfg_name)
     axis = re.match(r"^expert([qm])_([uc])(\d+)$", cfg_name)
     vaxis = re.match(r"^dual([qm])_u40_v2$|^dualm_c(\d+)$", cfg_name)
     # must be matched before `uni`, whose (.+)_u(\d+)_v2 also accepts dualmass_u40_v2
@@ -398,6 +400,18 @@ def build_masks(cfg_name, imp, model, jlens="jlens_v2", vqa_imp="importance_vqa"
                                       imp_run, cache_imp, expert_imp, clearance_run, safe_tau)
         ez = dict(np.load(REPO / "outputs" / expert_imp / "importance.npz"))
         pct = float(dualexp_l0k.group(1).replace("p", "."))
+        eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads))  # (36, 16)
+        em = ml.select_mask(ez["traj_exp_mlp"], pct / 100,
+                            list(range(ec.num_hidden_layers)))  # (36, 8256)
+        kvonly = ()
+    elif dualexp_mu:
+        # MoOP + expert at another ratio (iclr27-rebuttal/plans/2026-11-12_u50-openloop-blackwell.md): the VLM half is
+        # dual_u<N>_v2's selection verbatim (same code path), the expert half is dualexp_u40_em<M>'s expert MLP cut.
+        vq, vm, _, _, _ = build_masks(f"dual_u{dualexp_mu.group(1)}_v2", imp, model, jlens, vqa_imp, stepvlm,
+                                      wanda_run, wanda_txt_run, tyr_supernet, tyr_config, scope,
+                                      imp_run, cache_imp, expert_imp, clearance_run, safe_tau)
+        ez = dict(np.load(REPO / "outputs" / expert_imp / "importance.npz"))
+        pct = float(dualexp_mu.group(2).replace("p", "."))
         eq = np.ones((ec.num_hidden_layers, ec.num_attention_heads))  # (36, 16)
         em = ml.select_mask(ez["traj_exp_mlp"], pct / 100,
                             list(range(ec.num_hidden_layers)))  # (36, 8256)
