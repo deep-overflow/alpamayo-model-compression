@@ -25,7 +25,7 @@ ARMS = [("dense", "Baseline (dense)", "baseline"), ("moop", "MoOP u50", "slim_du
         ("fm", "FM-only u50", "slim_traj_u50_v2"), ("ce", "CE-only u50", "slim_coc_u50_v2"),
         ("wanda", "Wanda u50", "slim_wanda_u50_v2")]
 LABEL = {k: lab for k, lab, _ in ARMS}
-REFS = ("moop", "dense")
+REFS = ("moop", "dense", "dense_bw")
 HZ = ("1.6s", "3.2s", "6.4s")
 
 
@@ -65,17 +65,36 @@ def main():
             d = D / f"{k}_{s}"
             if complete(d, tag, n):
                 runs.setdefault(k, {})[s] = load_rows(d, tag)
-    refs = tuple(r for r in REFS if r in runs)  # dense was dropped by the user (11-12): MoOP u50 only
-    ol = ci.open_loop_block(runs, refs)
     lingo_dirs = {k: D / f"lingo_vqa_{k}" for k, _, _ in ARMS if (D / f"lingo_vqa_{k}" / "scored.json").exists()}
-    lingo = ci.lingo_block(lingo_dirs, refs) if len(lingo_dirs) >= 1 else None
     nll_dirs = {k: D / f"nll_dense_{tag}_test" for k, _, tag in ARMS
                 if (D / f"nll_dense_{tag}_test" / "summary_s0of1.txt").exists()}
-    nll = nll_summary(nll_dirs, refs) if nll_dirs else None
+    if "dense" not in runs:
+        # No Blackwell dense (user, 11-12). The user asked (11-13) for pairs with the ICLR paper's dense model:
+        # its Ada runs behind paper Tables 1 / 9 -- same clips and per-clip seeds, different GPU type.
+        P = REPO / "outputs"
+        runs["dense"] = {"test500": load_rows(P / "baseline_pred_test", "baseline"),
+                         "oodval262": load_rows(P / "baseline_pred_oodval", "baseline")}
+        lingo_dirs["dense"] = P / "lingo_vqa_baseline"
+        nll_dirs["dense"] = P / "nll_dense_baseline_test"
+        LABEL["dense"] = "Dense (ICLR paper, Ada)"
+        ARMS[0] = ("dense", LABEL["dense"], "baseline")
+        # Same checkpoint and protocol rerun on this Blackwell type (driving only): same-GPU check of the dense pairs
+        runs["dense_bw"] = {"test500": load_rows(P / "baseline_bw_ps_test", "baseline"),
+                            "oodval262": load_rows(P / "baseline_bw_ps_oodval", "baseline")}
+        LABEL["dense_bw"] = "Dense (ICLR checkpoint, Blackwell rerun)"
+        ARMS.insert(1, ("dense_bw", LABEL["dense_bw"], "baseline"))
+    refs = tuple(r for r in REFS if r in runs)
+    lrefs = tuple(r for r in refs if r in lingo_dirs)
+    nrefs = tuple(r for r in refs if r in nll_dirs)
+    ol = ci.open_loop_block(runs, refs)
+    lingo = ci.lingo_block(lingo_dirs, lrefs) if len(lingo_dirs) >= 1 else None
+    nll = nll_summary(nll_dirs, nrefs) if nll_dirs else None
 
     L = ["# u50 arms -- open loop, LingoQA, CoC NLL (RTX PRO 5000 Blackwell, GPUs 0-3)", "",
          ("Clip-level bootstrap (LingoQA: segment-level), 200,000 draws, seed 0. * = CI excludes 0. "
-          "Blackwell-only table: do not merge with the paper's Ada rows."), ""]
+          "u50 arms ran on Blackwell. 'Dense (ICLR paper, Ada)' is the paper's run (same clips and seeds), so its "
+          "pairs cross GPU types; 'Dense (ICLR checkpoint, Blackwell rerun)' is the same checkpoint on this GPU type "
+          "(driving only)."), ""]
     for s in ci.SETS:
         if s not in ol:
             continue
@@ -102,13 +121,13 @@ def main():
         st = lingo["stats"]
         L += [(f"## LingoQA ({lingo['n_questions']} questions, {lingo['n_segments']} segments; always-'yes' "
                f"{100 * lingo['floor_yes_accuracy']:.1f}%)"), "",
-              "| Method | accuracy % | " + " | ".join(f"- {LABEL[r]} (pp)" for r in refs) + " | - always 'yes' (pp) |",
-              "|---|---|" + "---|" * len(refs) + "---|"]
+              "| Method | accuracy % | " + " | ".join(f"- {LABEL[r]} (pp)" for r in lrefs) + " | - always 'yes' (pp) |",
+              "|---|---|" + "---|" * len(lrefs) + "---|"]
         for k, lab, _ in ARMS:
             if f"{k}|abs" not in st:
                 continue
             row = [ci_txt(st[f"{k}|abs"], scale=100, nd=1)]
-            for ref in refs:
+            for ref in lrefs:
                 row.append(ci_txt(st[f"{k}|{ref}"], sign=True, scale=100, nd=1) if f"{k}|{ref}" in st else "--")
             row.append(ci_txt(st[f"{k}|floor_yes"], sign=True, scale=100, nd=1))
             L.append(f"| {lab} | " + " | ".join(row) + " |")
@@ -116,12 +135,12 @@ def main():
     if nll:
         st = nll["stats"]
         L += [f"## CoC NLL, Test500 dense CoC ({nll['n']} clips; nats/token)", "",
-              "| Method | NLL | " + " | ".join(f"- {LABEL[r]}" for r in refs) + " |", "|---|---|" + "---|" * len(refs)]
+              "| Method | NLL | " + " | ".join(f"- {LABEL[r]}" for r in nrefs) + " |", "|---|---|" + "---|" * len(nrefs)]
         for k, lab, _ in ARMS:
             if f"{k}|abs" not in st:
                 continue
             row = [ci_txt(st[f"{k}|abs"])] + [ci_txt(st[f"{k}|{ref}"], sign=True) if f"{k}|{ref}" in st else "--"
-                                             for ref in refs]
+                                             for ref in nrefs]
             L.append(f"| {lab} | " + " | ".join(row) + " |")
     out = D / "analysis"
     out.mkdir(parents=True, exist_ok=True)
