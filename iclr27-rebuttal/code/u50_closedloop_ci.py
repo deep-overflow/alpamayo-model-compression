@@ -21,7 +21,9 @@ REPO = Path(__file__).resolve().parents[2]
 RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
 OUT = REPO / "outputs" / "iclr27-rebuttal" / "u50_origin150" / "ci"
 REF = "MoOP u50"
-ARMS = [("Baseline (dense)", "hofix_merged_baseline"), ("MoOP u50", "u50o_merged_slim_dual_u50_v2"),
+# dense = the ICLR (paper Tables 2 / 8) Origin150 run, pre-hand-over-fix harness (user, 11-13); the patched-harness
+# hofix_merged_baseline was used until then
+ARMS = [("Baseline (dense, ICLR)", "m2601_merged_baseline"), ("MoOP u50", "u50o_merged_slim_dual_u50_v2"),
         ("MoOP u50 l0keep", "u50o_merged_slim_dual_u50_l0keep_v2"), ("Tyr u50", "u50o_merged_slim_tyr_u50_r"),
         ("LLM-Pruner u50", "u50o_merged_slim_lp_r60"), ("FM-only u50", "u50o_merged_slim_traj_u50_v2"),
         ("CE-only u50", "u50o_merged_slim_coc_u50_v2"), ("Wanda u50", "u50o_merged_slim_wanda_u50_v2")]
