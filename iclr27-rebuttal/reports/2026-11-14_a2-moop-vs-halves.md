@@ -14,8 +14,15 @@
   - 주행: `iclr27-rebuttal/outputs/a2_{test500,oodval}_*_ada/`, `a2_u50q8_{test500,oodval}_ada_analysis/`
   - LingoQA: `a2_lingo_*/`, `a2_lingoqa_analysis/`
 
-**요약**
-- **목표 달성 지점은 u50(층마다 50%, A2의 42.6% 제거)의 LingoQA다.**
+> **정정 (2026-11-14 13:2x KST):** 아래의 u50 LingoQA 결과(MoOP가 두 반쪽을 모두 이김)는 사전 등록한 재현 실험에서 재현되지 않았다.
+> - 재현 데이터는 LingoQA **train** 표본 2,000문항(세그먼트 400개)이다.
+> - MoOP 44.7%, FM-only 43.0%(+1.8 pp [+0.0, +3.5], p 0.055, Holm 0.11), CE-only 46.2%(MoOP −1.5 pp [−3.3, +0.4], p 0.14).
+> - 따라서 val의 u50 우위는 표본 변동으로 보며, **A2에서 MoOP가 언어로 두 반쪽을 이긴다는 근거는 없다.** 목표는 아직 달성되지 않았다.
+> - 상세: `iclr27-rebuttal/outputs/a2_lingotrain_analysis_primary/summary.txt`, 사전 등록은 `plans/2026-11-13_a2-lingoqa.md`.
+> - 다음 시도는 u55-q8 주행이다(`plans/2026-11-14_a2-u55-q8-blackwell.md`, 사전 등록).
+
+**요약 (초판, 위 정정을 함께 읽을 것)**
+- 초판에서는 목표 달성 지점을 u50(층마다 50%, A2의 42.6% 제거)의 LingoQA val로 판단했다. 이 판단은 위 재현 실험에서 무너졌다.
   - MoOP 70.8%가 FM-only 62.6%(+8.2 pp [+3.4, +13.0]\*, p = 0.0012)와 CE-only 66.4%(+4.4 pp [+0.4, +8.4]\*, p = 0.036)를 모두 유의하게 이긴다(dense 81.2%).
   - 문항 유형으로 나눠도 같다. FM-only에는 예/아니오 +8.5\*, 서술형 +7.9\*로 이긴다. CE-only에는 예/아니오 +8.9\*로 이기고 서술형은 같다(0.0).
   - 길이 편향으로는 설명되지 않는다. CE-only의 답이 더 긴데도 진다.
