@@ -60,12 +60,13 @@ from transformers.generation.logits_process import LogitsProcessorList
 TRAIN = Path(os.environ.get("LINGOQA_TRAIN", "/mnt/nvme1n1/ad_vla/data/lingoqa/train"))
 
 
-def train_sample(n_seg, per_seg, seed):
-    """n_seg random train segments x per_seg random questions each, sorted by segment (a fixed, seeded draw)."""
+def train_sample(n_seg, per_seg, seed, exclude=()):
+    """n_seg random train segments x per_seg random questions each, sorted by segment (a fixed, seeded draw); segments in
+    `exclude` are never drawn (a sample disjoint from an earlier one)."""
     df = pd.read_parquet(TRAIN / "train.parquet", columns=["question_id", "segment_id", "question", "answer"])
     g = df.groupby(["question_id", "segment_id", "question"])["answer"].apply(list).reset_index()
     rng = np.random.default_rng(seed)
-    segs = sorted(g.segment_id.unique())
+    segs = sorted(set(g.segment_id.unique()) - set(exclude))
     pick = sorted(rng.choice(segs, size=n_seg, replace=False).tolist())
     qs = []
     for s in pick:
@@ -109,6 +110,7 @@ def main():
     ap.add_argument("--n-seg", type=int, default=400, help="train: segments sampled")
     ap.add_argument("--per-seg", type=int, default=5, help="train: questions per sampled segment")
     ap.add_argument("--sample-seed", type=int, default=20261114)
+    ap.add_argument("--exclude-manifest", default=None, help="train: never draw the segments of this earlier manifest.json")
     args = ap.parse_args()
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     n_gpus = torch.cuda.device_count()
@@ -117,10 +119,13 @@ def main():
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.split == "train":
-        questions = train_sample(args.n_seg, args.per_seg, args.sample_seed)
+        excl = ({q["segment_id"] for q in json.loads(Path(args.exclude_manifest).read_text())["questions"]}
+                if args.exclude_manifest else set())
+        questions = train_sample(args.n_seg, args.per_seg, args.sample_seed, excl)
+        assert not excl & {q["segment_id"] for q in questions}
         (out_dir / "manifest.json").write_text(json.dumps(
             {"split": "train", "n_seg": args.n_seg, "per_seg": args.per_seg, "seed": args.sample_seed,
-             "questions": questions}, indent=1))
+             "excluded_segments_from": args.exclude_manifest, "n_excluded": len(excl), "questions": questions}, indent=1))
     else:
         questions, _ = ll.load_manifest()
     if args.gate:

@@ -56,7 +56,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", nargs="+", required=True)
     ap.add_argument("--exp-id", default="iclr27-rebuttal/a2_lingotrain_analysis")
+    ap.add_argument("--prefix", default=P, help="run-dir prefix (a2_lingotrain2 for the q8 confirmatory sample)")
+    ap.add_argument("--primary", nargs="+", default=None, help="a:b pairs for the Holm family (default: the u50 pair)")
     args = ap.parse_args()
+    primary = [tuple(x.split(":")) for x in args.primary] if args.primary else PRIMARY
+    secondary = [x for x in SECONDARY if x not in primary]
     out = REPO / "outputs" / args.exp_id
     out.mkdir(parents=True, exist_ok=True)
 
@@ -69,7 +73,7 @@ def main():
         ref = pd.DataFrame([{"question_id": g["question_id"], "segment_id": g["segment_id"], "question": g["question"],
                              "references": g["references"]} for g in gen])
         m = sl.score_run(judge, exp, ref, device)
-        arm = exp.split(f"{Path(P).name}_", 1)[1]
+        arm = exp.split(f"{Path(args.prefix).name}_", 1)[1]
         acc[arm] = m
         rows[arm] = {(r["question_id"], r["segment_id"]): r for r in json.loads((d / "scored.json").read_text())}
         print(f"{arm:<16} n {m['n_matched']}  acc {m['accuracy'] * 100:.1f}%  words {m['answer_words_median']:.0f}", flush=True)
@@ -83,13 +87,13 @@ def main():
         lo, hi, p = seg_boot(d, seg)
         return {"n": len(keys), "n_segments": len(set(seg)), "mean": float(d.mean()), "ci": [lo, hi], "p": p}
 
-    prim = {f"{a} - {b}": pair(a, b) for a, b in PRIMARY}
+    prim = {f"{a} - {b}": pair(a, b) for a, b in primary}
     ok = [k for k, v in prim.items() if v]
     for k, padj in zip(ok, holm([prim[k]["p"] for k in ok]), strict=True):
         prim[k]["p_holm"] = padj
-    sec = {f"{a} - {b}": pair(a, b) for a, b in SECONDARY}
+    sec = {f"{a} - {b}": pair(a, b) for a, b in secondary}
     (out / "config.json").write_text(json.dumps({
-        "runs": args.runs, "primary": PRIMARY, "secondary": SECONDARY, "correction": "Holm over the primary family",
+        "runs": args.runs, "primary": primary, "secondary": secondary, "correction": "Holm over the primary family",
         "bootstrap": "segments resampled, 200,000 draws, seed 0", "plan": "iclr27-rebuttal/plans/2026-11-13_a2-lingoqa.md"},
         indent=2))
     (out / "metrics.json").write_text(json.dumps({"accuracy": acc, "primary": prim, "secondary": sec}, indent=2))

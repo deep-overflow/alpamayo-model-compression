@@ -18,6 +18,12 @@ read -r -a PL <<< "${PAIRS:-4,5 6,7}"
 read -r -a AL <<< "${ARMS:-dense moop fm_only ce_only}"
 SPLIT=${SPLIT:-val}
 if [ "$SPLIT" = train ]; then P=a2_lingotrain; SPLIT_ARGS=(--split train); else P=a2_lingo; SPLIT_ARGS=(); fi
+# SPLIT=train2 (2026-11-14): the q8 confirmatory sample -- seed 20261115, segments disjoint from the first train sample
+if [ "$SPLIT" = train2 ]; then
+  P=a2_lingotrain2
+  SPLIT_ARGS=(--split train --sample-seed 20261115
+              --exclude-manifest outputs/iclr27-rebuttal/a2_lingotrain_moop_u50/manifest.json)
+fi
 Q=outputs/iclr27-rebuttal/${P}_queue
 mkdir -p "$Q"
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
@@ -70,6 +76,10 @@ wait_pair "$card,$card"
 stamp "scoring ${#runs[@]} runs on card $card"
 if [ "$SPLIT" = train ]; then
   CUDA_VISIBLE_DEVICES=$card "$PY15" iclr27-rebuttal/code/score_a2_lingo_train.py --runs "${runs[@]}" \
+      > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
+elif [ "$SPLIT" = train2 ]; then
+  CUDA_VISIBLE_DEVICES=$card "$PY15" iclr27-rebuttal/code/score_a2_lingo_train.py --runs "${runs[@]}" --prefix "$P" \
+      --primary moop_u50_q8:fm_only_u50_q8 moop_u50_q8:ce_only_u50_q8 --exp-id "iclr27-rebuttal/${P}_analysis" \
       > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
 else
   CUDA_VISIBLE_DEVICES=$card "$PY15" experiments/lingoqa/score_lingo_vqa.py --runs "${runs[@]}" \
