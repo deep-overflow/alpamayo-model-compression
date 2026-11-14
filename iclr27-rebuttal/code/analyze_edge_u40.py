@@ -39,6 +39,13 @@ L0_LABEL = {**LABEL, "moop_l0keep": "MoOP-l0k", "fm_only_l0keep": "FM-l0k", "ce_
 L0_PAIRS = ([(f"{a}_l0keep", a) for a in ("moop", "fm_only", "ce_only")]
             + [(f"{a}_l0keep", "dense") for a in ("moop", "fm_only", "ce_only")]
             + [("moop_l0keep", "fm_only_l0keep"), ("moop_l0keep", "ce_only_l0keep"), ("fm_only_l0keep", "ce_only_l0keep")])
+# --preset qcut (plans/2026-11-15_a2-edge-qcut-u40.md): q2 / q4 arms (fewer Q heads, more MLP channels, same budget), all sets
+QC_ARMS = ARMS + tuple(f"{a}_q{n}" for n in (2, 4) for a in ("moop", "fm_only", "ce_only"))
+QC_LABEL = {**LABEL, **{f"{a}_q{n}": f"{LABEL[a]}-q{n}" for n in (2, 4) for a in ("moop", "fm_only", "ce_only")}}
+QC_PAIRS = [pair for n in (2, 4) for pair in
+            [(f"{a}_q{n}", a) for a in ("moop", "fm_only", "ce_only")]
+            + [(f"{a}_q{n}", "dense") for a in ("moop", "fm_only", "ce_only")]
+            + [(f"moop_q{n}", f"fm_only_q{n}"), (f"moop_q{n}", f"ce_only_q{n}"), (f"fm_only_q{n}", f"ce_only_q{n}")]]
 
 
 def open_loop(set_name, partial):
@@ -105,21 +112,23 @@ def main():
     ap.add_argument("--partial", action="store_true")
     ap.add_argument("--exp-id", default="iclr27-rebuttal/edge_u40_analysis")
     ap.add_argument("--skip-lingo", action="store_true")
-    ap.add_argument("--preset", default="u40", choices=["u40", "l0keep"])
+    ap.add_argument("--preset", default="u40", choices=["u40", "l0keep", "qcut"])
     args = ap.parse_args()
     global ARMS, LABEL, PAIRS, SETS
     if args.preset == "l0keep":
         ARMS, LABEL, PAIRS = L0_ARMS, L0_LABEL, L0_PAIRS
         SETS = {"test500": SETS["test500"]}
         args.skip_lingo = True
-        if args.exp_id == "iclr27-rebuttal/edge_u40_analysis":
-            args.exp_id = "iclr27-rebuttal/edge_u40_l0keep_analysis"
+    elif args.preset == "qcut":
+        ARMS, LABEL, PAIRS = QC_ARMS, QC_LABEL, QC_PAIRS
+    if args.preset != "u40" and args.exp_id == "iclr27-rebuttal/edge_u40_analysis":
+        args.exp_id = f"iclr27-rebuttal/edge_u40_{args.preset}_analysis"
     out = REPO / "outputs" / args.exp_id
     out.mkdir(parents=True, exist_ok=True)
     res = {s: open_loop(s, args.partial) for s in SETS}
     lq = None if args.skip_lingo else lingo(args.partial)
 
-    title = (f"Alpamayo 2 Edge u40{' l0keep' if args.preset == 'l0keep' else ''} (Ada RTX 5880, cards 4-7)"
+    title = (f"Alpamayo 2 Edge u40{'' if args.preset == 'u40' else ' ' + args.preset} (Ada RTX 5880, cards 4-7)"
              f"{' -- PARTIAL' if args.partial else ''}")
     L = [title, ""]
     for s, r in res.items():

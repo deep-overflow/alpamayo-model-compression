@@ -21,7 +21,12 @@ its 16 Q heads, their 6 x 524,288 parameters are paid back as 768 extra MLP chan
 3 x hidden), spread 28 / 27 per layer. G0l: the parameterised rule with 3 x hidden reproduces make_a2_moop_masks' l0keep masks on
 A1.5 unit for unit; G0p: each l0keep mask removes exactly the non-l0keep parameter count. Writes masks_<arm>_l0keep[_u<N>].npz.
 
-Usage: .venv/bin/python iclr27-rebuttal/code/make_edge_moop_masks.py [--pct 50] [--l0keep]
+--q-cut N [N ...] (2026-11-15, plans/2026-11-15_a2-edge-qcut-u40.md): make_slim's _qcut rule at the --pct budget with Edge's MLP
+cost -- N Q heads cut per layer, the rest of the per-layer budget in MLP channels (one Edge Q head = 128 channels, so u40-qN cuts
+3,673 + (6 - N) x 128 channels). G0q: the parameterised rule with 3 x hidden reproduces make_a2_moop_masks' q-cut 4 on A1.5;
+G0p: exact parameter parity with the base allocation; G0n: the q-cut sets nest with it. Writes masks_<arm>_q<N>.npz.
+
+Usage: .venv/bin/python iclr27-rebuttal/code/make_edge_moop_masks.py [--pct 50] [--l0keep | --q-cut 2 4]
 """
 
 import argparse
@@ -108,6 +113,64 @@ def make_l0keep(imp, ratio, sfx, out, g0):
               f"({a['extra_per_layer_max_min']}/layer), short {a['params_short']}")
 
 
+def qcut_masks(imp, dims, crit, ratio, q_cut, mlp_cost):
+    """make_a2_moop_masks.moop_masks(q_cut=N) with the MLP channel cost as a parameter: the per-layer budget of the ratio
+    allocation is kept, N Q heads are cut per layer and the MLP channel count is derived from the budget."""
+    L, H, I = dims["layers"], dims["heads"], dims["inter"]
+    sq, sm = mam.scores(imp, crit)
+    attn_cost = 2 * dims["head_dim"] * dims["hidden"]
+    per_layer = round(ratio * H) * attn_cost + round(ratio * I) * mlp_cost
+    n_m, rem = divmod(per_layer - q_cut * attn_cost, mlp_cost)
+    assert rem == 0, f"q-cut {q_cut} leaves {rem} parameters over"
+    assert 0 <= q_cut < H and 0 < n_m < I
+    q = mam.select_mask_ratios(sq, np.full(L, q_cut / H))
+    m = mam.select_mask_ratios(sm, np.full(L, n_m / I))
+    return q, m, {"q_cut_per_layer": q_cut, "mlp_cut_per_layer": int(n_m), "per_layer_budget": int(per_layer)}
+
+
+def make_qcut(imp, ratio, sfx, out, q_cuts):
+    """--q-cut N [N ...]: masks_{moop,fm_only,ce_only}_q<N>[_u<P>].npz with Edge's MLP cost (2 x hidden)."""
+    g0 = mam.g0_regression(qcut=True)
+    print("G0 regression on A1.5 (incl. slim_dual_u40_qcut4_v2):", json.dumps(g0))
+    assert all(all(v.values()) for v in g0.values()), "G0 FAILED"
+    imp15 = np.load(REPO / "outputs" / "importance_v2" / "importance.npz")
+    g0q = {crit: bool(all(np.array_equal(a, b) for a, b in zip(
+        qcut_masks(imp15, mam.A15, crit, mam.RATIO, 4, 3 * mam.A15["hidden"])[:2],
+        mam.moop_masks(imp15, mam.A15, False, crit, mam.RATIO, 4)[:2]))) for crit in ("dual", "traj", "coc")}
+    print("G0q (parameterised q-cut == make_a2_moop_masks q-cut 4 on A1.5):", g0q)
+    assert all(g0q.values()), "G0q FAILED"
+    for n in q_cuts:
+        cfg = {"pct": args_pct(ratio), "ratio": ratio, "q_cut": n, "importance": str(EDGE_IMP), "dims": EDGE,
+               "g0_regression": g0, "g0q_parameterised_qcut": g0q, "mlp_cost": 2 * EDGE["hidden"], "total_params": TOTAL,
+               "text_decoder_params": TEXT_LAYERS, "arms": {}}
+        masks = {}
+        for name, crit in (("moop", "dual"), ("fm_only", "traj"), ("ce_only", "coc")):
+            q, m, info = qcut_masks(imp, EDGE, crit, ratio, n, 2 * EDGE["hidden"])
+            qb, mb, _ = mam.moop_masks(imp, EDGE, False, crit, ratio)
+            assert ((q == 0).sum(1) == n).all() and ((m == 0).sum(1) == info["mlp_cut_per_layer"]).all(), f"G0e {name}"
+            assert edge_removed(q, m) == edge_removed(qb, mb), f"G0p failed for {name}"
+            nested = bool(((q == 0) <= (qb == 0)).all() and ((mb == 0) <= (m == 0)).all())
+            assert nested, f"G0n failed for {name}: q-cut sets do not nest with the base allocation"
+            np.savez(out / f"masks_{name}_q{n}{sfx}.npz", q_mask=q.astype(np.float32), mlp_mask=m.astype(np.float32))
+            masks[name] = (q, m)
+            rem = edge_removed(q, m)
+            cfg["arms"][f"{name}_q{n}"] = {"criterion": crit, "removed_params": rem, "removed_frac_total": rem / TOTAL,
+                                           "removed_frac_text_decoder": rem / TEXT_LAYERS, "nested_with_base": nested,
+                                           **info, "file": str(out / f"masks_{name}_q{n}{sfx}.npz")}
+        ov = {}
+        for a, b in (("moop", "fm_only"), ("moop", "ce_only"), ("fm_only", "ce_only")):
+            for ax, i in (("q", 0), ("mlp", 1)):
+                ra, rb = masks[a][i] == 0, masks[b][i] == 0
+                ov[f"{a}_q{n}/{b}_q{n}/{ax}"] = float((ra & rb).sum() / ra.sum())
+        cfg["removed_set_overlap"] = ov
+        cfg["layer0_q_removed"] = {k: [int(h) for h in np.flatnonzero(v[0][0] == 0)] for k, v in masks.items()}
+        (out / f"masks_config_q{n}{sfx}.json").write_text(json.dumps(cfg, indent=2))
+        print(json.dumps({k: v for k, v in cfg.items() if k not in ("arms", "g0_regression")}, indent=1))
+        for k, a in cfg["arms"].items():
+            print(f"{k}: {a['q_cut_per_layer']} Q heads + {a['mlp_cut_per_layer']} MLP channels per layer, removed "
+                  f"{a['removed_params']:,} = {100 * a['removed_frac_total']:.2f}% of total")
+
+
 def args_pct(ratio):
     return 40 if ratio == mam.RATIO else round(ratio * 100)
 
@@ -116,6 +179,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pct", type=int, default=40, help="40 = the matched u40 (0.3985632694); else the literal N/100")
     ap.add_argument("--l0keep", action="store_true", help="write the _l0keep masks only (Edge MLP cost)")
+    ap.add_argument("--q-cut", type=int, nargs="+", default=None,
+                    help="Q heads cut per layer at the --pct budget (make_slim _qcut, Edge MLP cost); writes _q<N> masks only")
     args = ap.parse_args()
     ratio = mam.RATIO if args.pct == 40 else args.pct / 100
     sfx = "" if args.pct == 40 else f"_u{args.pct}"
@@ -130,6 +195,9 @@ def main():
     assert imp["traj_vlm_q"].shape == (28, 16) and imp["coc_vlm_mlp"].shape == (28, 9216)
     if args.l0keep:
         make_l0keep(imp, ratio, sfx, out, g0)
+        return
+    if args.q_cut:
+        make_qcut(imp, ratio, sfx, out, args.q_cut)
         return
     kq, km = round(ratio * EDGE["heads"]), round(ratio * EDGE["inter"])
     cfg = {"pct": args.pct, "ratio": ratio, "importance": str(EDGE_IMP), "dims": EDGE, "g0_regression": g0,
