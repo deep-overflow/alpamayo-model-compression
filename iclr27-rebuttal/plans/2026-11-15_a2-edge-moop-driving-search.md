@@ -1,5 +1,10 @@
 # Plan: find an Edge setting where MoOP drives better than FM-only and CE-only (explore, then confirm on OOD-train)
 
+**Status: done 2026-11-15 07:40 KST. Confirmation SUCCESS.**
+- On OOD-train1178, u50 MoOP − FM-only is −0.136 [−0.213, −0.056] (p_holm 0.00097) and MoOP − CE-only is −0.135
+  [−0.207, −0.062] (p_holm 0.00074).
+- Report: `reports/2026-11-15_a2-edge-moop-driving-search.md`.
+
 2026-11-15, written at ~03:35 KST. User goal (`/goal`): "MoOP가 주행 능력이 FM only나 CE only보다 잘 나오는 세팅 찾아줘", plus "시간 남으면
 ood train도 추가로 평가해줘".
 
