@@ -5,6 +5,8 @@
 # scores them all with experiments/lingoqa/score_lingo_vqa.py (Lingo-Judge) into each run's scored.json.
 #   PAIRS="4,5 6,7" ARMS="dense moop fm_only ce_only" bash iclr27-rebuttal/code/run_a2_lingoqa_queue.sh > outputs/iclr27-rebuttal/a2_lingo_queue.log 2>&1
 # Arm names: dense, or any masks_<arm>.npz under outputs/iclr27-rebuttal/a2_moop/; runs land in outputs/iclr27-rebuttal/a2_lingo_<arm>.
+# SPLIT=train (2026-11-14): the confirmatory LingoQA-train sample (run_a2_lingoqa.py --split train, its default 400 x 5 draw);
+# runs land in a2_lingotrain_<arm>, the queue in a2_lingotrain_queue, and scoring uses score_a2_lingo_train.py.
 set -u
 source /home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval/env.sh
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -14,7 +16,9 @@ PY2=/mnt/nvme1n1/ad_vla/venvs/alpamayo2/bin/python
 PY15=$ROOT/.venv/bin/python
 read -r -a PL <<< "${PAIRS:-4,5 6,7}"
 read -r -a AL <<< "${ARMS:-dense moop fm_only ce_only}"
-Q=outputs/iclr27-rebuttal/a2_lingo_queue
+SPLIT=${SPLIT:-val}
+if [ "$SPLIT" = train ]; then P=a2_lingotrain; SPLIT_ARGS=(--split train); else P=a2_lingo; SPLIT_ARGS=(); fi
+Q=outputs/iclr27-rebuttal/${P}_queue
 mkdir -p "$Q"
 stamp() { echo "$(date -d '+9 hours' '+%F %T') KST $*"; }
 empty() { [ "$(nvidia-smi -i "$1" --query-gpu=memory.used --format=csv,noheader,nounits | tr -d ' ')" -lt 100 ]; }
@@ -28,9 +32,9 @@ wait_pair() {  # <a,b>: both cards empty twice in a row, 2 min apart
 run_arm() {  # <cards> <arm>
   local extra=()
   [ "$2" != dense ] && extra=(--masks "outputs/iclr27-rebuttal/a2_moop/masks_$2.npz")
-  [ -f "outputs/iclr27-rebuttal/a2_lingo_$2/predictions.csv" ] && return 0
-  CUDA_VISIBLE_DEVICES=$1 "$PY2" iclr27-rebuttal/code/run_a2_lingoqa.py --exp-id "iclr27-rebuttal/a2_lingo_$2" \
-      ${extra[@]+"${extra[@]}"} > "$Q/answer_$2.log" 2>&1
+  [ -f "outputs/iclr27-rebuttal/${P}_$2/predictions.csv" ] && return 0
+  CUDA_VISIBLE_DEVICES=$1 "$PY2" iclr27-rebuttal/code/run_a2_lingoqa.py --exp-id "iclr27-rebuttal/${P}_$2" \
+      ${SPLIT_ARGS[@]+"${SPLIT_ARGS[@]}"} ${extra[@]+"${extra[@]}"} > "$Q/answer_$2.log" 2>&1
 }
 worker() {  # <cards> <is_first>
   local cards=$1 arm
@@ -59,11 +63,16 @@ for p in "${PL[@]}"; do worker "$p" "$first" > "$Q/worker_${p/,/_}.log" 2>&1 & p
 wait "${pids[@]}"
 runs=()
 for arm in "${AL[@]}"; do
-  [ -f "outputs/iclr27-rebuttal/a2_lingo_$arm/predictions.csv" ] && runs+=("iclr27-rebuttal/a2_lingo_$arm")
+  [ -f "outputs/iclr27-rebuttal/${P}_$arm/predictions.csv" ] && runs+=("iclr27-rebuttal/${P}_$arm")
 done
 card=${PL[0]%,*}
 wait_pair "$card,$card"
 stamp "scoring ${#runs[@]} runs on card $card"
-CUDA_VISIBLE_DEVICES=$card "$PY15" experiments/lingoqa/score_lingo_vqa.py --runs "${runs[@]}" \
-    --exp-id iclr27-rebuttal/a2_lingo_scores --gpu 0 > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
+if [ "$SPLIT" = train ]; then
+  CUDA_VISIBLE_DEVICES=$card "$PY15" iclr27-rebuttal/code/score_a2_lingo_train.py --runs "${runs[@]}" \
+      > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
+else
+  CUDA_VISIBLE_DEVICES=$card "$PY15" experiments/lingoqa/score_lingo_vqa.py --runs "${runs[@]}" \
+      --exp-id iclr27-rebuttal/a2_lingo_scores --gpu 0 > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
+fi
 stamp "all done"

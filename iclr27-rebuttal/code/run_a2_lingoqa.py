@@ -9,6 +9,12 @@ A1.5 port maps LingoQA's frames. Masks are applied as in run_a2_openloop.py (for
 
 --gate N answers the first N questions with no hooks and with all-ones hooks (must be identical) and with the masks.
 
+--split train (2026-11-14, the confirmatory replication in plans/2026-11-13_a2-lingoqa.md): a fixed random sample of LingoQA's
+train split instead of val -- --n-seg segments (seeded by --sample-seed) x --per-seg questions each; one human reference per question.
+A2's importance never saw LingoQA, so for the pruning comparison this is fresh data; whether A2 itself was trained on LingoQA train
+is unknown, which can lift every arm's absolute accuracy but not the paired arm-to-arm comparison. The sample is written to
+manifest.json; each row carries its references, which score_a2_lingo_train.py uses.
+
 Usage (cards from the shell, model from the local cache):
   CUDA_VISIBLE_DEVICES=4,5 HF_HUB_OFFLINE=1 /mnt/nvme1n1/ad_vla/venvs/alpamayo2/bin/python \\
       iclr27-rebuttal/code/run_a2_lingoqa.py --exp-id iclr27-rebuttal/a2_lingo_dense
@@ -51,6 +57,24 @@ from alpamayo2_super.text_tasks import build_text_task_messages
 from run_a2_openloop import VlmMasks
 from transformers.generation.logits_process import LogitsProcessorList
 
+TRAIN = Path(os.environ.get("LINGOQA_TRAIN", "/mnt/nvme1n1/ad_vla/data/lingoqa/train"))
+
+
+def train_sample(n_seg, per_seg, seed):
+    """n_seg random train segments x per_seg random questions each, sorted by segment (a fixed, seeded draw)."""
+    df = pd.read_parquet(TRAIN / "train.parquet", columns=["question_id", "segment_id", "question", "answer"])
+    g = df.groupby(["question_id", "segment_id", "question"])["answer"].apply(list).reset_index()
+    rng = np.random.default_rng(seed)
+    segs = sorted(g.segment_id.unique())
+    pick = sorted(rng.choice(segs, size=n_seg, replace=False).tolist())
+    qs = []
+    for s in pick:
+        sub = g[g.segment_id == s].sort_values("question_id")
+        for r in sub.iloc[sorted(rng.choice(len(sub), size=min(per_seg, len(sub)), replace=False))].itertuples():
+            qs.append({"question_id": r.question_id, "segment_id": r.segment_id, "question": r.question,
+                       "references": list(r.answer)})
+    return qs
+
 
 def encode(processor, model, frames, cams, question):
     """frames (1, 4, 3, H, W) uint8, cams (1,) -> tokenized inputs on cuda:0 (prepare_text_generation_inputs, processor cached)"""
@@ -81,6 +105,10 @@ def main():
     ap.add_argument("--first-share", type=float, default=0.47)
     ap.add_argument("--gate", type=int, default=0)
     ap.add_argument("--plan", default="iclr27-rebuttal/plans/2026-11-13_a2-lingoqa.md")
+    ap.add_argument("--split", default="val", choices=["val", "train"])
+    ap.add_argument("--n-seg", type=int, default=400, help="train: segments sampled")
+    ap.add_argument("--per-seg", type=int, default=5, help="train: questions per sampled segment")
+    ap.add_argument("--sample-seed", type=int, default=20261114)
     args = ap.parse_args()
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     n_gpus = torch.cuda.device_count()
@@ -88,7 +116,13 @@ def main():
 
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    questions, _ = ll.load_manifest()
+    if args.split == "train":
+        questions = train_sample(args.n_seg, args.per_seg, args.sample_seed)
+        (out_dir / "manifest.json").write_text(json.dumps(
+            {"split": "train", "n_seg": args.n_seg, "per_seg": args.per_seg, "seed": args.sample_seed,
+             "questions": questions}, indent=1))
+    else:
+        questions, _ = ll.load_manifest()
     if args.gate:
         questions = questions[: args.gate]
     elif args.limit:
@@ -129,7 +163,7 @@ def main():
     def frames_of(seg):
         if seg not in seg_cache:
             seg_cache.clear()  # questions are sorted by segment; keep one resident
-            d = ll.load_segment(seg)
+            d = ll.load_segment(seg, data=TRAIN, split="train") if args.split == "train" else ll.load_segment(seg)
             seg_cache[seg] = (d["image_frames"], d["camera_indices"])  # (1, 4, 3, H, W) uint8, (1,) = [1]
         return seg_cache[seg]
 
@@ -162,6 +196,8 @@ def main():
     (out_dir / "config.json").write_text(json.dumps({
         "model": ro.MODEL_ID, "model_revision": ro.MODEL_REV, "protocol": "standard LingoQA VQA (zero-shot)",
         "message_builder": "alpamayo2_super.text_tasks.build_text_task_messages(task='vqa')", "n_questions": len(questions),
+        "split": args.split, "sample": ({"n_seg": args.n_seg, "per_seg": args.per_seg, "seed": args.sample_seed}
+                                        if args.split == "train" else None),
         "max_gen": args.max_gen, "decoding": "greedy", "frames_per_segment": ll.N_FRAMES, "camera_index": ll.FRONT_CAMERA,
         "masks": args.masks, "mask_placement": "forward pre-hooks: o_proj input per Q head, down_proj input per MLP channel",
         "gpus": gpus, "gpu_names": gpu_names, "layers_per_gpu": per_gpu, "plan": args.plan, "a2_distill": str(A2D),
