@@ -44,6 +44,8 @@ import eval_lib as el
 SETS = {"test500": (REPO / "outputs" / "eval_sets" / "test_500.parquet", ec.AV / "pre_processed" / "test500_edge"),
         "oodval": (REPO / "outputs" / "iclr27-rebuttal" / "edge_moop" / "ood_val_250.parquet",
                    ec.AV / "pre_processed" / "oodval_edge"),
+        "oodtrain": (REPO / "outputs" / "iclr27-rebuttal" / "edge_moop" / "ood_train_1178.parquet",
+                     ec.AV / "pre_processed" / "oodtrain_edge"),  # confirmatory set of the driving search (t0 >= 2 s)
         "calib": (ec.CALIB_MANIFEST, ec.CALIB_CACHE)}
 
 

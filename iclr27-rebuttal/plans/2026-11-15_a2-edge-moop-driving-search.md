@@ -65,6 +65,59 @@ Round 2/3 picks depend on round-1 results. That is allowed, because exploration 
 - The OOD-train Edge cache is built in the background (`pre_processed/oodtrain_edge`) with a GT gate against
   `ood_train_a2`.
 
+## Addendum A: pre-registration of the confirmatory setting
+
+Written 2026-11-15 ~06:55 KST, after exploration ended and **before any OOD-train result of the three pruned arms existed**.
+Dense was already queued on OOD-train because it is needed whatever the pick; its numbers were not looked at before this
+addendum.
+
+**Exploration result.** Rule applied as written; `code/edge_search_summary.py`, `outputs/iclr27-rebuttal/edge_driving_search/`.
+Pooled Test500 + OOD-Val250, minADE@6 at 6.4 s.
+
+| setting | MoOP − FM-only | MoOP − CE-only | gap |
+|---|---|---|---|
+| **u50** | **−0.179 [−0.270, −0.087]** | **−0.297 [−0.395, −0.199]** | **−0.179** |
+| u70-q2 | −0.114 | −0.370 | −0.114 |
+| u50-q2 | −0.042 | −0.012 | −0.012 |
+| u60-q2 | −0.000 | −0.053 | −0.000 |
+| u40-q2 | +0.013 | −0.042 | +0.013 |
+| u50-q4 | +0.032 | +0.041 | +0.041 |
+| u40-q4 | +0.054 | −0.012 | +0.054 |
+| u40 | +0.065 | +0.066 | +0.066 |
+| u60 | +0.608 | −0.973 | +0.608 |
+
+u40-l0keep is not eligible (Test500 only).
+
+**Picked setting: u50**, the plain literal 0.50 ratio per layer:
+- 8 of 16 Q heads and 4,608 of 9,216 MLP channels removed per layer, in every one of the 28 VLM layers
+- 645,922,816 parameters = 24.4 % of 2.65 B (45.8 % of the text decoder)
+- expert, KV heads, vision tower and embeddings untouched
+- calib_100 importance (`edge_importance_v1`), no-nav prompt
+
+Masks, fixed by sha256:
+
+| arm | file | sha256 |
+|---|---|---|
+| MoOP | `masks_moop_u50.npz` | fe64a6c4758cfbf9898ab29fa9e34fe731e3328520558dbf250fb58c4e4cc096 |
+| FM-only | `masks_fm_only_u50.npz` | 4b7307536adf956f3956957d78f24c40974eb47655ac820c263b2e1d9d534892 |
+| CE-only | `masks_ce_only_u50.npz` | b198fb4414e7dcdb6be245d24ec98cdd7461c538f75e41e79dd62f77ed54ca9d |
+
+**Confirmatory run.**
+- `edge_oodtrain_{moop,fm_only,ce_only}_u50` + `edge_oodtrain_dense` on OOD-train1178 (`ood_train_1178.parquet`).
+- Same runner and protocol; Ada cards 4–7.
+
+**Primary**, unchanged from above:
+- Metric: minADE@6 at 6.4 s, paired.
+- Contrasts: MoOP − FM-only and MoOP − CE-only. Bootstrap 200,000, Holm over the 2.
+- SUCCESS = both negative with Holm p < 0.05. PARTIAL = one.
+- Analysis: `code/analyze_edge_confirm.py --setting-suffix _u50 --name u50`.
+
+**Known caveats, stated before the result:**
+- On OOD-Val250 alone, u50's MoOP − FM-only was −0.048 [−0.186, +0.096], not significant. The pooled win leans on
+  Test500.
+- At u60, MoOP collapses (2.16 m vs FM-only 1.55 m), so MoOP's advantage is a narrow sparsity regime rather than a
+  general one.
+
 ## Reports
 
 - Exploration rounds: `reports/2026-11-15_a2-edge-qcut-u40.md` (round 1), then one search report
