@@ -14,6 +14,32 @@
   - 주행: `iclr27-rebuttal/outputs/a2_{test500,oodval}_*_ada/`, `a2_u50q8_{test500,oodval}_ada_analysis/`
   - LingoQA: `a2_lingo_*/`, `a2_lingoqa_analysis/`
 
+> **최종 정리 (2026-11-14 19:3x KST): 목표("MoOP가 FM-only와 CE-only를 이길 때까지")를 단일 지표 기준으로는 달성하지 못했다.**
+> 시도한 모든 구성을 아래 표에 남긴다. 사전 등록한 검정은 표시했다.
+>
+> | 구성 | 주행 개루프 MoOP vs FM-only | 주행 개루프 MoOP vs CE-only | LingoQA MoOP vs FM-only | LingoQA MoOP vs CE-only |
+> |---|---|---|---|---|
+> | u40 | 비김 (3세트) | **이김** (3세트) | 비김 (val −2.4) | 비김 (val −2.6) |
+> | u50 | **짐** (+0.109\* / +0.077\*) | **이김** | val +8.2\* → train 재현(사전 등록) +1.8 n.s. | val +4.4\* → train 재현(사전 등록) −1.5 n.s. |
+> | u50-q8 | 비김 (−0.022 / −0.050) | OOD-Val **이김** (−0.348\*), test500 n.s. | **이김, 3회 재현**: val +6.2\*, train1 +4.3\*, train2(사전 등록 주 가설) +3.0\* (p_holm 0.002) | train1 +2.5\* → train2(사전 등록) −0.3 n.s. |
+> | u55-q8 (사전 등록, 762클립 합산) | +0.039 n.s. (p_holm 0.20) | **이김** (−0.222\*) | — | — |
+>
+> - **한 지표에서 두 반쪽을 모두 이긴 구성은 없다.**
+> - **u50-q8의 MoOP는 어느 반쪽에게도 유의하게 지지 않는다.** 언어에서 FM-only를 이기고(재현됨), 주행에서 CE-only를 이긴다. 즉 두 축을 함께 보면 두 반쪽을 지배한다.
+> - **구조적 이유(의견).** A2에서는 각 반쪽이 자기 목표 축에서 무너지지 않는다.
+>   - FM-only는 u55까지 주행을 지킨다.
+>   - CE-only는 언어를 지킨다.
+>   - 그래서 합집합이 그 축에서 반쪽을 넘어설 여지가 없다.
+>   - A1.5에서는 FM-only가 u40에서 이미 CoC와 주행을 함께 잃었기 때문에 MoOP가 두 반쪽을 모두 이겼다.
+> - **남은 축은 폐루프다.** A1.5에서 MoOP > FM-only > CE-only가 나온 축이고, A2 폐루프는 AlpaSim에 통합되어 있지 않다.
+> - **상세 출력**
+>   - `a2_u55q8_analysis/summary.txt`
+>   - `a2_lingotrain_analysis/summary.txt`
+>   - `a2_lingotrain2_analysis/summary.txt`
+> - **계획서**
+>   - `plans/2026-11-14_a2-u55-q8-blackwell.md`
+>   - `plans/2026-11-13_a2-lingoqa.md`
+
 > **정정 (2026-11-14 13:2x KST):** 아래의 u50 LingoQA 결과(MoOP가 두 반쪽을 모두 이김)는 사전 등록한 재현 실험에서 재현되지 않았다.
 > - 재현 데이터는 LingoQA **train** 표본 2,000문항(세그먼트 400개)이다.
 > - MoOP 44.7%, FM-only 43.0%(+1.8 pp [+0.0, +3.5], p 0.055, Holm 0.11), CE-only 46.2%(MoOP −1.5 pp [−3.3, +0.4], p 0.14).
