@@ -5,7 +5,12 @@ never share a card with someone else's job; this queue's own jobs may share, up 
 their Edge cache passed its GT gate (verify.json "passed": true). A failed job (e.g. a co-tenant OOM) goes back to the queue,
 up to --retries times; every runner is resumable, so a retry continues where it stopped.
 
+--arms / --kinds / --shards / --log pick the job set (2026-11-14, plans/2026-11-14_a2-edge-l0keep-u40.md: the three _l0keep arms on
+Test500 only). Masks are outputs/iclr27-rebuttal/edge_moop/masks_<arm>.npz, outputs edge_<kind>_<arm>.
+
 Usage: python iclr27-rebuttal/code/edge_queue.py --cards 4,5,6,7 --slots 2
+       python iclr27-rebuttal/code/edge_queue.py --arms moop_l0keep,fm_only_l0keep,ce_only_l0keep --kinds test500 \
+           --shards test500=8 --log logs_l0keep
 """
 
 import argparse
@@ -19,23 +24,25 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 PY = "/mnt/nvme1n1/ad_vla/venvs/alpamayo2-edge/bin/python"
 CACHE = Path("/mnt/nvme1n1/ad_vla/data/physicalai_av/pre_processed")
-LOG = REPO / "outputs" / "iclr27-rebuttal" / "edge_moop" / "logs_ada"
+LOG_ROOT = REPO / "outputs" / "iclr27-rebuttal" / "edge_moop"
+LOG = LOG_ROOT / "logs_ada"
 ARMS = ("dense", "moop", "fm_only", "ce_only")
 
 
 SHARDS = {"test500": 2, "oodval": 1}  # open-loop shards per arm (rows files edge_s{i}of{n}.json, merged by load_rows)
 
 
-def jobs():
+def jobs(arms=ARMS, kinds=("lingo", "test500", "oodval"), shards=None):
+    shards = {**SHARDS, **(shards or {})}
     out = []
-    for kind in ("lingo", "test500", "oodval"):
-        for arm in ARMS:
+    for kind in kinds:
+        for arm in arms:
             mask = [] if arm == "dense" else ["--masks", f"outputs/iclr27-rebuttal/edge_moop/masks_{arm}.npz"]
             if kind == "lingo":
                 cmd = [PY, "iclr27-rebuttal/code/run_edge_lingoqa.py", "--exp-id", f"iclr27-rebuttal/edge_lingo_{arm}"]
                 out.append({"name": f"lingo_{arm}", "cmd": cmd + mask, "ready": None, "tries": 0})
                 continue
-            n = SHARDS[kind]
+            n = shards[kind]
             for s in range(n):
                 cmd = [PY, "iclr27-rebuttal/code/run_edge_openloop.py", "--set", kind, "--exp-id",
                        f"iclr27-rebuttal/edge_{kind}_{arm}", "--shard", str(s), "--n-shards", str(n)]
@@ -74,10 +81,17 @@ def main():
     ap.add_argument("--retries", type=int, default=3)
     ap.add_argument("--poll", type=int, default=30)
     ap.add_argument("--threads", type=int, default=4, help="OMP/MKL/OpenBLAS threads per job")
+    ap.add_argument("--arms", default=",".join(ARMS))
+    ap.add_argument("--kinds", default="lingo,test500,oodval")
+    ap.add_argument("--shards", nargs="*", default=[], help="kind=n, e.g. test500=8")
+    ap.add_argument("--log", default="logs_ada", help="log dir under outputs/iclr27-rebuttal/edge_moop")
     args = ap.parse_args()
+    global LOG
+    LOG = LOG_ROOT / args.log
     cards = [int(c) for c in args.cards.split(",")]
     LOG.mkdir(parents=True, exist_ok=True)
-    queue, running, done, failed = jobs(), {}, [], []
+    shards = {k: int(v) for k, v in (s.split("=") for s in args.shards)}
+    queue, running, done, failed = jobs(args.arms.split(","), args.kinds.split(","), shards), {}, [], []
     os.chdir(REPO)
 
     def log(msg):

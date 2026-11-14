@@ -33,6 +33,12 @@ SETS = {"test500": REPO / "outputs" / "eval_sets" / "test_500.parquet", "oodval"
 PAIRS = [("moop", "dense"), ("fm_only", "dense"), ("ce_only", "dense"), ("moop", "fm_only"), ("moop", "ce_only"),
          ("fm_only", "ce_only")]
 KINDS = ("ade", "fde")
+# --preset l0keep (plans/2026-11-14_a2-edge-l0keep-u40.md): Test500 only, the three _l0keep arms next to dense and the plain arms
+L0_ARMS = ARMS + ("moop_l0keep", "fm_only_l0keep", "ce_only_l0keep")
+L0_LABEL = {**LABEL, "moop_l0keep": "MoOP-l0k", "fm_only_l0keep": "FM-l0k", "ce_only_l0keep": "CE-l0k"}
+L0_PAIRS = ([(f"{a}_l0keep", a) for a in ("moop", "fm_only", "ce_only")]
+            + [(f"{a}_l0keep", "dense") for a in ("moop", "fm_only", "ce_only")]
+            + [("moop_l0keep", "fm_only_l0keep"), ("moop_l0keep", "ce_only_l0keep"), ("fm_only_l0keep", "ce_only_l0keep")])
 
 
 def open_loop(set_name, partial):
@@ -99,13 +105,23 @@ def main():
     ap.add_argument("--partial", action="store_true")
     ap.add_argument("--exp-id", default="iclr27-rebuttal/edge_u40_analysis")
     ap.add_argument("--skip-lingo", action="store_true")
+    ap.add_argument("--preset", default="u40", choices=["u40", "l0keep"])
     args = ap.parse_args()
+    global ARMS, LABEL, PAIRS, SETS
+    if args.preset == "l0keep":
+        ARMS, LABEL, PAIRS = L0_ARMS, L0_LABEL, L0_PAIRS
+        SETS = {"test500": SETS["test500"]}
+        args.skip_lingo = True
+        if args.exp_id == "iclr27-rebuttal/edge_u40_analysis":
+            args.exp_id = "iclr27-rebuttal/edge_u40_l0keep_analysis"
     out = REPO / "outputs" / args.exp_id
     out.mkdir(parents=True, exist_ok=True)
     res = {s: open_loop(s, args.partial) for s in SETS}
     lq = None if args.skip_lingo else lingo(args.partial)
 
-    L = [f"Alpamayo 2 Edge u40 (Ada RTX 5880, cards 4-7){' -- PARTIAL' if args.partial else ''}", ""]
+    title = (f"Alpamayo 2 Edge u40{' l0keep' if args.preset == 'l0keep' else ''} (Ada RTX 5880, cards 4-7)"
+             f"{' -- PARTIAL' if args.partial else ''}")
+    L = [title, ""]
     for s, r in res.items():
         L += [f"== {s} ({r['n']} clips) open loop, minADE@6 / minFDE@6 [m]: mean (median)",
               f"{'arm':<9}" + "".join(f"{f'{k}@6 {h}':>20}" for k in ("ADE", "FDE") for h in HORIZONS)
