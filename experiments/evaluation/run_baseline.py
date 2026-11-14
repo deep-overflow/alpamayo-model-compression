@@ -180,10 +180,42 @@ def main():
     ap.add_argument("--blackout-cam", type=int, default=None, choices=[0, 1, 2, 6],
                     help="black out the t0 frame of this camera index on every clip "
                          "(0 cross-left, 1 front-wide, 2 cross-right, 6 front-tele)")
+    ap.add_argument("--lag-ms", type=float, default=0.0,
+                    help="feed the --timing-cams cameras' frames from this far in the past: "
+                         "they show t0-lag-0.3 .. t0-lag while the ego history still ends at t0")
+    ap.add_argument("--stride-ms", type=float, default=100.0,
+                    help="spacing of the --timing-cams cameras' 4 frames (100 = as trained)")
+    ap.add_argument("--timing-cams", type=int, nargs="+", default=None, choices=[0, 1, 2, 6],
+                    help="cameras --lag-ms/--stride-ms apply to; default all four")
+    ap.add_argument("--timing-cache", default="test_timing",
+                    help="build_timing_cache.py cache the shifted frames are picked from")
+    ap.add_argument("--jitter-ms", type=float, default=0.0,
+                    help="independent capture-time jitter per frame, dt ~ U(-J, +J) ms on all "
+                         "16 slots, drawn from the clip id (sample_cache.jitter_requests)")
+    ap.add_argument("--jitter-seed", type=int, default=0)
+    ap.add_argument("--jitter-future", default="black", choices=["black", "keep", "drop"],
+                    help="t0 frame whose dt > 0 (a future frame): black it out, keep the "
+                         "unjittered t0 frame (separates the jitter from the blackout), or "
+                         "drop the image and its 'frame 3' label from the prompt")
+    ap.add_argument("--jitter-no-shift", action="store_true",
+                    help="same draws, frames left on their nominal slots: only the t0 "
+                         "frames flagged as future are handled (blackout part alone)")
+    ap.add_argument("--t0-exclude", default=None, choices=["black", "drop"],
+                    help="exclude every camera's t0 frame: black it out, or drop the image and "
+                         "its 'frame 3' label from the prompt (t0-0.3 .. t0-0.1 unchanged)")
     args = ap.parse_args()
     if args.blackout and args.blackout_cam is not None:
         ap.error("--blackout and --blackout-cam are exclusive")
     blackout = args.blackout or args.blackout_cam is not None
+    timing = args.lag_ms != 0 or args.stride_ms != 100
+    timing_cams = sorted(args.timing_cams or [0, 1, 2, 6])
+    jitter = args.jitter_ms > 0
+    if jitter and timing:
+        ap.error("--jitter-ms and --lag-ms/--stride-ms are exclusive")
+    if jitter and args.jitter_ms > 50:
+        ap.error("--jitter-ms above 50 lets adjacent slots (100 ms apart) swap order")
+    if args.t0_exclude and (jitter or timing or blackout):
+        ap.error("--t0-exclude is a standalone intervention")
 
     tag = "baseline" if args.model == "baseline" else Path(args.model).name
     if args.quant:
@@ -194,6 +226,15 @@ def main():
         tag = f"{tag}_bk1"
     if args.blackout_cam is not None:
         tag = f"{tag}_bkcam{args.blackout_cam}"
+    if timing:
+        cams = "all" if timing_cams == [0, 1, 2, 6] else "".join(map(str, timing_cams))
+        tag = f"{tag}_tm{cams}_lag{args.lag_ms:g}_st{args.stride_ms:g}"
+    if jitter:
+        tag = (f"{tag}_jit{args.jitter_ms:g}_{args.jitter_future}"
+               f"{'_noshift' if args.jitter_no_shift else ''}"
+               f"{f'_js{args.jitter_seed}' if args.jitter_seed else ''}")
+    if args.t0_exclude:
+        tag = f"{tag}_t0x_{args.t0_exclude}"
     exp_id = args.exp_id or f"baseline_{args.which}"
     out_dir = REPO / "outputs" / exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -280,6 +321,17 @@ def main():
                      {"frame": "t0", "n_cams": 1, "seed": args.blackout_seed,
                       "rule": "sha256(f'blackout:{seed}:{clip_id}')[:4] % n_cam"}
                      if args.blackout else None),
+        "timing": ({"cams": timing_cams, "lag_ms": args.lag_ms, "stride_ms": args.stride_ms,
+                    "cache": args.timing_cache,
+                    "rule": "closest frame at or before t0 - lag - (3-i)*stride, i=0..3; "
+                            "other cameras t0 - (3-i)*100 ms"} if timing else None),
+        "jitter": ({"jitter_ms": args.jitter_ms, "seed": args.jitter_seed,
+                    "future": args.jitter_future, "shift": not args.jitter_no_shift,
+                    "cache": args.timing_cache,
+                    "rule": "dt ~ U(-J, J) per slot from sha256(f'jitter:{seed}:{clip_id}'); "
+                            "closest frame at or before t0 - (3-i)*100 ms + dt; t0 slot with "
+                            "dt > 0 -> `future`"} if jitter else None),
+        "t0_exclude": args.t0_exclude,
         "deterministic": {"use_deterministic_algorithms": True,
                           "warn_only": not args.strict_deterministic,
                           "cudnn_deterministic": True, "tf32": False,
@@ -292,6 +344,30 @@ def main():
             continue
         t0 = time.time()
         data = sc.load_cached(sc.path_for(m["cache"], m["clip_id"], m["t0_us"]))
+        if timing:
+            req = []
+            for ci in data["camera_indices"].tolist():
+                lag, stride = (args.lag_ms, args.stride_ms) if ci in timing_cams else (0, 100)
+                req.append(m["t0_us"] - np.round((lag + (3 - np.arange(4)) * stride) * 1000))
+            # image_frames: (n_cam, 4, 3, H, W) uint8, picked: (n_cam, 4) us
+            data["image_frames"], picked = sc.pick_timed_frames(
+                sc.path_for(args.timing_cache, m["clip_id"], m["t0_us"]),
+                data["camera_indices"].tolist(), np.stack(req).astype(np.int64))
+        if jitter:
+            req, dt, future = sc.jitter_requests(
+                m["clip_id"], m["t0_us"], len(data["camera_indices"]), args.jitter_ms,
+                args.jitter_seed, shift=not args.jitter_no_shift)  # (n_cam, 4) us, ms; (n_cam,)
+            data["image_frames"], picked = sc.pick_timed_frames(
+                sc.path_for(args.timing_cache, m["clip_id"], m["t0_us"]),
+                data["camera_indices"].tolist(), req)
+            if args.jitter_future == "black":
+                data["image_frames"][torch.from_numpy(future), -1] = 0  # (n_future, 3, H, W)
+        drop = ([c * 4 + 3 for c in np.flatnonzero(future)]
+                if jitter and args.jitter_future == "drop" else [])
+        if args.t0_exclude == "black":
+            data["image_frames"][:, -1] = 0                         # (n_cam, 3, H, W)
+        elif args.t0_exclude == "drop":
+            drop = [c * 4 + 3 for c in range(len(data["camera_indices"]))]
         if blackout:
             # image_frames: (n_cam, n_frame, 3, H, W) uint8, frame -1 = t0
             if args.blackout_cam is None:
@@ -299,7 +375,7 @@ def main():
             else:
                 slot = int((data["camera_indices"] == args.blackout_cam).nonzero()[0, 0])
             data["image_frames"][slot, -1] = 0                      # (3, H, W)
-        inputs = lib.build_inputs(model, processor, data, "cuda")
+        inputs = lib.build_inputs(model, processor, data, "cuda", drop_images=drop)
         prompt_len = inputs["input_ids"].shape[1]
         gt_xy = data["ego_future_xyz"][0, 0, :, :2].cpu().numpy()  # (64, 2)
 
@@ -309,6 +385,15 @@ def main():
         rec = {"clip_id": m["clip_id"], "bucket": el.bucket(gt_xy), "seed": base}
         if blackout:
             rec["blackout_cam"] = int(data["camera_indices"][slot])
+        if timing or jitter:
+            rec["frame_ts_ms"] = np.round((picked - m["t0_us"]) / 1e3, 1).tolist()
+        if jitter:
+            rec["jitter_dt_ms"] = np.round(dt, 2).tolist()
+            rec["future_t0_cams"] = [int(c) for c, f in zip(data["camera_indices"], future) if f]
+            rec["dup_frames"] = int((np.diff(picked, axis=1) == 0).sum())
+            rec["n_images"] = 16 - len(drop)
+        if args.t0_exclude:
+            rec["n_images"] = 16 - len(drop)
 
         # own-rollout condition: the model writes its own reasoning, then drives on it
         seed_all(base)
