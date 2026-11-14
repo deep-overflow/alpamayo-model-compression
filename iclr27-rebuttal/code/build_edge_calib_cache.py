@@ -93,10 +93,10 @@ def build_one(task):
     return {"clip_id": clip_id, "status": "ok", "sec": round(time.time() - t, 1), "bytes": out.stat().st_size}
 
 
-def verify(man, root):
+def verify(man, root, a2_root=A2_CACHE):
     rows = []
     for r in man.itertuples():
-        e, a = ec.path_for(r.clip_id, r.t0_us, root), ec.path_for(r.clip_id, r.t0_us, A2_CACHE)
+        e, a = ec.path_for(r.clip_id, r.t0_us, root), ec.path_for(r.clip_id, r.t0_us, a2_root)
         if not e.exists() or not a.exists():
             rows.append({"clip_id": r.clip_id, "missing": True})
             continue
@@ -113,7 +113,7 @@ def verify(man, root):
     ok = df[~df.missing]
     worst = {k: float(ok[k].max()) for k in ("future_xyz", "future_rot", "hist16_xyz", "hist16_rot")}
     passed = bool(len(ok) == len(man) and max(worst.values()) < 1e-4 and (ok.n_frames == 22).all())
-    print(f"verify vs calib_a2: {len(ok)}/{len(man)} compared, max |diff| {worst}, all 22 frames "
+    print(f"verify vs {Path(a2_root).name}: {len(ok)}/{len(man)} compared, max |diff| {worst}, all 22 frames "
           f"{bool((ok.n_frames == 22).all())} -> {'PASS' if passed else 'FAIL'}", flush=True)
     (root / "verify.json").write_text(json.dumps({"passed": passed, "max_abs_diff": worst, "n": len(ok)}, indent=2))
     return passed
@@ -126,13 +126,14 @@ def main():
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--manifest", default=str(ec.CALIB_MANIFEST))
     ap.add_argument("--root", default=str(ec.CALIB_CACHE))
+    ap.add_argument("--a2-root", default=str(A2_CACHE), help="A2 Super cache of the same clips, for --verify")
     args = ap.parse_args()
     root = Path(args.root)
     man = pd.read_parquet(args.manifest)
     if args.limit:
         man = man.head(args.limit)
     if args.verify:
-        sys.exit(0 if verify(man, root) else 1)
+        sys.exit(0 if verify(man, root, Path(args.a2_root)) else 1)
     (root / "samples").mkdir(parents=True, exist_ok=True)
     tasks = [(r.clip_id, int(r.t0_us), root) for r in man.itertuples()]
     done, errors, t0 = [], [], time.time()
@@ -151,7 +152,7 @@ def main():
     n = len(list((root / "samples").glob("*.npz")))
     gb = sum(p.stat().st_size for p in (root / "samples").glob("*.npz")) / 2**30
     (root / "summary.txt").write_text(
-        f"Alpamayo 2 Edge input cache (calib_100)\nclips in manifest: {len(man)}\nbuilt: {n}   failed: {len(errors)}\n"
+        f"Alpamayo 2 Edge input cache ({Path(args.manifest).stem})\nclips in manifest: {len(man)}\nbuilt: {n}   failed: {len(errors)}\n"
         f"size: {gb:.2f} GB\nschema: 22 jpegs (cams 1/6 x 5, cams 0/2/3/5 x 3, q95) + 20 history + 64 future poses\n"
         f"navigation: none stored (plan decision Q1)\nbuilder: iclr27-rebuttal/code/build_edge_calib_cache.py\n")
     print(f"done: {n} samples, {gb:.2f} GB, {len(errors)} errors -> {root}", flush=True)

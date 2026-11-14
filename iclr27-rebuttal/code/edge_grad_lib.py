@@ -188,14 +188,11 @@ def fused_tokenized(model, model_inputs):
 
 
 @torch.inference_mode()
-def rollout_sequence(model, model_inputs, max_gen):
-    """The release CoC rollout (generation half of Alpamayo2Edge.sample_trajectories_from_data, 1 sample).
+def generate(model, td, max_gen):
+    """Edge's release generation for one CoC (sample_trajectories_from_data's settings) on fused tokenized_data td.
 
-    Seed the RNG before calling. Returns (seq (1, T) = prompt + generated up to and including <|traj_future_start|>,
-    prompt_len, has_eos, cot text, rope_deltas from the prefill (1, 1)).
+    Seed the RNG before calling. Returns the generate() output with .past_key_values and .rope_deltas.
     """
-    td = fused_tokenized(model, model_inputs)
-    input_ids = td["input_ids"]
     anchor = model.config.traj_ids["future_start"]
     gc = copy.deepcopy(model.vlm.generation_config)
     gc.top_p, gc.top_k, gc.temperature = 0.98, None, 0.6
@@ -215,9 +212,21 @@ def rollout_sequence(model, model_inputs, max_gen):
     blocked = [t for t in eos_ids if t != anchor]
     if blocked:
         procs.append(MaskTokenIdsLogitsProcessor(blocked))
-    out = model._generate_with_shared_prefill(td, generation_config=gc, n_samples_total=1, logits_processor=procs,
-                                              stopping_criteria=StoppingCriteriaList([StopAfterEOS(anchor)]))
-    prompt_len = input_ids.shape[1]
+    return model._generate_with_shared_prefill(td, generation_config=gc, n_samples_total=1, logits_processor=procs,
+                                               stopping_criteria=StoppingCriteriaList([StopAfterEOS(anchor)]))
+
+
+@torch.inference_mode()
+def rollout_sequence(model, model_inputs, max_gen):
+    """The release CoC rollout (generation half of Alpamayo2Edge.sample_trajectories_from_data, 1 sample).
+
+    Seed the RNG before calling. Returns (seq (1, T) = prompt + generated up to and including <|traj_future_start|>,
+    prompt_len, has_eos, cot text, rope_deltas from the prefill (1, 1)).
+    """
+    td = fused_tokenized(model, model_inputs)
+    anchor = model.config.traj_ids["future_start"]
+    out = generate(model, td, max_gen)
+    prompt_len = td["input_ids"].shape[1]
     gen = out.sequences[:, prompt_len:]
     has_eos = bool((gen == anchor).any())
     seq = out.sequences.clone()
