@@ -110,7 +110,8 @@ def main():
     ap.add_argument("--n-seg", type=int, default=400, help="train: segments sampled")
     ap.add_argument("--per-seg", type=int, default=5, help="train: questions per sampled segment")
     ap.add_argument("--sample-seed", type=int, default=20261114)
-    ap.add_argument("--exclude-manifest", default=None, help="train: never draw the segments of this earlier manifest.json")
+    ap.add_argument("--exclude-manifest", nargs="+", default=None,
+                    help="train: never draw the segments of these earlier manifest.json files")
     args = ap.parse_args()
     gpus = os.environ["CUDA_VISIBLE_DEVICES"]
     n_gpus = torch.cuda.device_count()
@@ -119,8 +120,8 @@ def main():
     out_dir = REPO / "outputs" / args.exp_id
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.split == "train":
-        excl = ({q["segment_id"] for q in json.loads(Path(args.exclude_manifest).read_text())["questions"]}
-                if args.exclude_manifest else set())
+        excl = {q["segment_id"] for mf in (args.exclude_manifest or [])
+                for q in json.loads(Path(mf).read_text())["questions"]}
         questions = train_sample(args.n_seg, args.per_seg, args.sample_seed, excl)
         assert not excl & {q["segment_id"] for q in questions}
         (out_dir / "manifest.json").write_text(json.dumps(

@@ -18,6 +18,14 @@ read -r -a PL <<< "${PAIRS:-4,5 6,7}"
 read -r -a AL <<< "${ARMS:-dense moop fm_only ce_only}"
 SPLIT=${SPLIT:-val}
 if [ "$SPLIT" = train ]; then P=a2_lingotrain; SPLIT_ARGS=(--split train); else P=a2_lingo; SPLIT_ARGS=(); fi
+# SPLIT=train3 (2026-11-14 evening): the fresh language half of the pre-registered multi-objective test
+# (plans/2026-11-14_a2-pareto-q8.md) -- seed 20261116, segments disjoint from train samples 1 and 2
+if [ "$SPLIT" = train3 ]; then
+  P=a2_lingotrain3
+  SPLIT_ARGS=(--split train --sample-seed 20261116
+              --exclude-manifest outputs/iclr27-rebuttal/a2_lingotrain_moop_u50/manifest.json
+                                 outputs/iclr27-rebuttal/a2_lingotrain2_moop_u50_q8/manifest.json)
+fi
 # SPLIT=train2 (2026-11-14): the q8 confirmatory sample -- seed 20261115, segments disjoint from the first train sample
 if [ "$SPLIT" = train2 ]; then
   P=a2_lingotrain2
@@ -77,7 +85,7 @@ stamp "scoring ${#runs[@]} runs on card $card"
 if [ "$SPLIT" = train ]; then
   CUDA_VISIBLE_DEVICES=$card "$PY15" iclr27-rebuttal/code/score_a2_lingo_train.py --runs "${runs[@]}" \
       > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
-elif [ "$SPLIT" = train2 ]; then
+elif [ "$SPLIT" = train2 ] || [ "$SPLIT" = train3 ]; then
   CUDA_VISIBLE_DEVICES=$card "$PY15" iclr27-rebuttal/code/score_a2_lingo_train.py --runs "${runs[@]}" --prefix "$P" \
       --primary moop_u50_q8:fm_only_u50_q8 moop_u50_q8:ce_only_u50_q8 --exp-id "iclr27-rebuttal/${P}_analysis" \
       > "$Q/score.log" 2>&1 && stamp "scored" || stamp "scoring FAILED"
