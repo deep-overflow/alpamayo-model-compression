@@ -90,6 +90,7 @@ def main():
     ap.add_argument("--exp-id", required=True)
     ap.add_argument("--set", required=True, choices=list(SETS))
     ap.add_argument("--masks", default=None)
+    ap.add_argument("--weights", default=None, help="torch dict of rewritten o_proj / mlp.fc2 weights (Tyr), loaded first")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--k", type=int, default=8)
     ap.add_argument("--max-gen", type=int, default=256)
@@ -117,7 +118,21 @@ def main():
     masks = None
     if args.masks:
         z = np.load(args.masks)
-        masks = (z["q_mask"], z["mlp_mask"])
+        masks = tuple(z[k] for k in ("q_mask", "mlp_mask", "exp_mlp_mask") if k in z.files)  # expert MLP: MoOP + expert
+    if args.weights:  # rewritten o_proj / mlp.fc2 weights (Tyr reconstruction), loaded before the mask hooks
+        layers = model.vlm.model.language_model.layers
+        with torch.no_grad():
+            for name, w in torch.load(args.weights, map_location="cpu").items():
+                i = int(name.split(".")[1])
+                mod = layers[i].mlp.fc2 if name.endswith("mlp.fc2") else layers[i].self_attn.o_proj
+                assert tuple(mod.weight.shape) == tuple(w.shape), (name, w.shape)
+                mod.weight.data.copy_(w.to(mod.weight.device, mod.weight.dtype))
+            if masks is not None:  # the masked columns must already be exactly zero in the loaded weights
+                for i, layer in enumerate(layers):
+                    col_o = layer.self_attn.o_proj.weight.float().abs().sum(0).view(masks[0].shape[1], -1).sum(1)
+                    col_m = layer.mlp.fc2.weight.float().abs().sum(0)
+                    assert ((col_o == 0).cpu().numpy() == (masks[0][i] == 0)).all(), i
+                    assert ((col_m == 0).cpu().numpy() == (masks[1][i] == 0)).all(), i
 
     if args.gate:
         assert masks is not None, "--gate needs --masks"
@@ -125,7 +140,7 @@ def main():
         for mode in ("none", "ones", "masks"):
             hooks = None
             if mode == "ones":
-                hooks = eel.EdgeVlmMasks(model, np.ones_like(masks[0]), np.ones_like(masks[1]))
+                hooks = eel.EdgeVlmMasks(model, *[np.ones_like(m) for m in masks])
             elif mode == "masks":
                 hooks = eel.EdgeVlmMasks(model, *masks)
             res[mode] = [eval_clip(model, processor, m, cache_root, args) for m in man[: args.gate]]
@@ -151,7 +166,7 @@ def main():
         "cache": str(cache_root), "n_clips": len(man), "k": args.k, "seed": args.seed,
         "seed_rule": "sha256(f'{seed}:{clip_id}')[:4], +k per sample", "max_gen": args.max_gen,
         "sampling": {"do_sample": True, "temperature": 0.6, "top_p": 0.98}, "diffusion": {"inference_step": 10},
-        "prompt": "Edge driving prompt without the navigation line", "masks": args.masks,
+        "prompt": "Edge driving prompt without the navigation line", "masks": args.masks, "weights": args.weights,
         "mask_placement": "forward pre-hooks: o_proj input per Q head, mlp.fc2 input per MLP channel",
         "gpu": os.environ["CUDA_VISIBLE_DEVICES"], "gpu_name": gpu, "plan": args.plan,
         "deterministic": {"use_deterministic_algorithms": True, "warn_only": True, "tf32": False}}, indent=2))

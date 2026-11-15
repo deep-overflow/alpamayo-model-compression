@@ -38,6 +38,8 @@ def jobs(arms=ARMS, kinds=("lingo", "test500", "oodval"), shards=None):
     for kind in kinds:
         for arm in arms:
             mask = [] if arm == "dense" else ["--masks", f"outputs/iclr27-rebuttal/edge_moop/masks_{arm}.npz"]
+            if (LOG_ROOT / f"weights_{arm}.pt").exists():  # rewritten weights (Tyr): open loop only
+                mask += ["--weights", f"outputs/iclr27-rebuttal/edge_moop/weights_{arm}.pt"]
             if kind == "lingo":
                 cmd = [PY, "iclr27-rebuttal/code/run_edge_lingoqa.py", "--exp-id", f"iclr27-rebuttal/edge_lingo_{arm}"]
                 out.append({"name": f"lingo_{arm}", "cmd": cmd + mask, "ready": None, "tries": 0})

@@ -39,9 +39,10 @@ def set_determinism():
 
 
 class EdgeVlmMasks:
-    """Forward pre-hooks that zero masked Q heads (o_proj input) and MLP channels (mlp.fc2 input)."""
+    """Forward pre-hooks that zero masked Q heads (o_proj input) and MLP channels (mlp.fc2 input); optionally also the
+    expert's MLP channels (model.expert.expert.layers[i].mlp.fc2 input; MoOP + expert, 2026-11-15)."""
 
-    def __init__(self, model, q_mask, mlp_mask):
+    def __init__(self, model, q_mask, mlp_mask, exp_mlp_mask=None):
         layers = model.vlm.model.language_model.layers
         assert q_mask.shape[0] == mlp_mask.shape[0] == len(layers), (q_mask.shape, mlp_mask.shape, len(layers))
         self.handles = []
@@ -62,6 +63,16 @@ class EdgeVlmMasks:
 
             self.handles.append(attn.o_proj.register_forward_pre_hook(q_hook))
             self.handles.append(layer.mlp.fc2.register_forward_pre_hook(m_hook))
+        if exp_mlp_mask is not None:
+            exp_layers = model.expert.expert.layers
+            assert exp_mlp_mask.shape[0] == len(exp_layers), (exp_mlp_mask.shape, len(exp_layers))
+            for i, layer in enumerate(exp_layers):
+                em = torch.tensor(exp_mlp_mask[i], device=layer.mlp.fc2.weight.device, dtype=torch.bfloat16).view(1, 1, -1)
+
+                def e_hook(module, args, em=em):
+                    return (args[0] * em.to(args[0].dtype),)  # (B, 64, I_exp)
+
+                self.handles.append(layer.mlp.fc2.register_forward_pre_hook(e_hook))
 
     def remove(self):
         for h in self.handles:

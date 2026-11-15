@@ -171,6 +171,34 @@ def make_qcut(imp, ratio, sfx, out, q_cuts):
                   f"{a['removed_params']:,} = {100 * a['removed_frac_total']:.2f}% of total")
 
 
+def make_moop_expert(imp, ratio, sfx, out, pct):
+    """--expert-mlp M: make_slim `dualexp_u<N>_em<M>` on Edge -- the VLM half is MoOP's selection verbatim, the expert half
+    cuts M% of every expert layer's MLP channels by the expert FM importance (`traj_exp_mlp`, mask_lib.select_mask);
+    expert Q heads and KV untouched. Edge expert MLP channel = fc1 row + fc2 column = 2 x 512 parameters."""
+    import mask_lib
+
+    q, m, _ = mam.moop_masks(imp, EDGE, False, "dual", ratio)
+    base = out / f"masks_moop{sfx}.npz"
+    if base.exists():  # G-e0: the VLM half equals the evaluated MoOP masks unit for unit
+        z = np.load(base)
+        assert np.array_equal(z["q_mask"], q) and np.array_equal(z["mlp_mask"], m), "VLM half differs from MoOP masks"
+    e_scores = imp["traj_exp_mlp"]  # (28, 3840)
+    n_el, n_ei = e_scores.shape
+    em = mask_lib.select_mask(e_scores, pct / 100, list(range(n_el)))
+    k = round(n_ei * pct / 100)  # mask_lib.select_mask's own count
+    assert ((em == 0).sum(1) == k).all(), "G-e1: expert cut count"
+    tag = f"{pct:g}".replace(".", "p")
+    path = out / f"masks_moop_em{tag}{sfx}.npz"
+    np.savez(path, q_mask=q.astype(np.float32), mlp_mask=m.astype(np.float32), exp_mlp_mask=em.astype(np.float32))
+    vlm_rem, exp_rem = edge_removed(q, m), int((em == 0).sum() * 2 * 512)
+    cfg = {"recipe": f"make_slim dualexp_u{args_pct(ratio)}_em{tag} on Edge", "ratio": ratio, "expert_mlp_pct": pct,
+           "expert_cut_per_layer": k, "expert_keep_per_layer": n_ei - k, "vlm_removed": vlm_rem, "expert_removed": exp_rem,
+           "total_removed": vlm_rem + exp_rem, "removed_frac_total": (vlm_rem + exp_rem) / TOTAL,
+           "expert_importance": f"{EDGE_IMP}:traj_exp_mlp", "masks": str(path)}
+    (out / f"masks_config_moop_em{tag}{sfx}.json").write_text(json.dumps(cfg, indent=2))
+    print(json.dumps(cfg, indent=1))
+
+
 def args_pct(ratio):
     return 40 if ratio == mam.RATIO else round(ratio * 100)
 
@@ -179,6 +207,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pct", type=int, default=40, help="40 = the matched u40 (0.3985632694); else the literal N/100")
     ap.add_argument("--l0keep", action="store_true", help="write the _l0keep masks only (Edge MLP cost)")
+    ap.add_argument("--expert-mlp", type=float, default=None,
+                    help="MoOP + expert (make_slim dualexp_u<N>_em<M>): also cut this %% of every expert layer's MLP channels")
     ap.add_argument("--q-cut", type=int, nargs="+", default=None,
                     help="Q heads cut per layer at the --pct budget (make_slim _qcut, Edge MLP cost); writes _q<N> masks only")
     args = ap.parse_args()
@@ -198,6 +228,9 @@ def main():
         return
     if args.q_cut:
         make_qcut(imp, ratio, sfx, out, args.q_cut)
+        return
+    if args.expert_mlp is not None:
+        make_moop_expert(imp, ratio, sfx, out, args.expert_mlp)
         return
     kq, km = round(ratio * EDGE["heads"]), round(ratio * EDGE["inter"])
     cfg = {"pct": args.pct, "ratio": ratio, "importance": str(EDGE_IMP), "dims": EDGE, "g0_regression": g0,
