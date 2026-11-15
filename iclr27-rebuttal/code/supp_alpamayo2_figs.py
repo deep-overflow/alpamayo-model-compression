@@ -14,8 +14,8 @@ Values. Alpamayo 1.5 rows reproduce the main panels exactly: (a) follows paper_s
 of gradanat_v1, Ego history recomputed with the same rng order), (b, c) are gradanat_v1's additive token shares (equal to the
 stored 2026-11-08 values to 0), the expert panels use stepimp_fm_perstep_v2 through the stored 2026-11-08 matrices / curves
 (gate G8: equal to the paper text). Alpamayo 2 Super rows come from the stored 2026-11-08 outputs
-(outputs/iclr27-rebuttal/a2_fig3_token_type, a2_fig5_expert; same estimators). Supp-only additions kept from the earlier figure:
-each model's grey late band and the dotted I_traj/I_CoC step line (its meaning goes to the caption).
+(outputs/iclr27-rebuttal/a2_fig3_token_type, a2_fig5_expert; same estimators). Supp-only addition kept from the earlier figure:
+each model's grey late band. The dotted I_traj/I_CoC step line was removed from the VLM panels on 2026-11-15 (user: shading only).
 
 Usage: .venv/bin/python iclr27-rebuttal/code/supp_alpamayo2_figs.py [--exp-id iclr27-rebuttal/supp_alpamayo2_figs]
 """
@@ -97,9 +97,8 @@ def a15_corrected_series():
 
 
 def depth_marks(ax, m):
-    """grey band as the main panels' axvspan (per model) + the supp-only dotted step line (kept dotted at export)"""
+    """grey band as the main panels' axvspan (per model); the dotted step line was dropped 2026-11-15 (user: shading only)"""
     ax.axvspan(*m["band"], color=ps.GREY, alpha=0.13, lw=0)
-    ax.axvline(m["tau"]["q"] - 0.5, color="black", lw=0.9, ls=(0, (1.5, 2)), gid="step")
 
 
 def export_panel(fig, out_dir, name):
@@ -288,8 +287,7 @@ def main():
                           "definition": ("the paper's late band (Fig. 3)" if k == "a15" else
                                          "the A1.5 band moved by relative depth (22/36 x 64 = 39)")}
                       for k, m in MODELS.items()},
-        "dotted_step": {k: {"tau_q_heads": m["tau"]["q"], "tau_mlp": m["tau"]["mlp"], "drawn_at": m["tau"]["q"] - 0.5}
-                        for k, m in MODELS.items()},
+        "step_tau_not_drawn": {k: {"tau_q_heads": m["tau"]["q"], "tau_mlp": m["tau"]["mlp"]} for k, m in MODELS.items()},
         "expert_C09": {k: round(m5["results"][k]["C_mark"], 5) for k in m5["results"]},
         "a15_rank_correlation_vs_stored_2026_11_08_max_abs_diff": diff15,
         "page_in": [W, H], "panel_in": [pw, ph], "subcaption_pt": cap_pt}

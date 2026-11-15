@@ -6,8 +6,8 @@ Writes into paper/fig/assets/:
 The A1.5 and A2 Super panels are the existing files in supp_alpamayo2_panels/ (placed unchanged).
 
 Edge values: outputs/iclr27-rebuttal/edge_paper_analysis/metrics.json (edge_paper_analysis.py, gated against the stored
-A2 numbers). Grey band = the A1.5 late band moved by relative depth (22/36 x 28 = 17 -> layers 17-27), dotted line =
-Edge's own I_FM / I_CE step tau (Q heads), as for A2 Super.
+A2 numbers). Grey band = the A1.5 late band moved by relative depth (22/36 x 28 = 17 -> layers 17-27), as for A2 Super. The dotted
+step line (Edge's own I_FM / I_CE step tau) was removed on 2026-11-15 (user: shading only); tau stays in config.json.
 
 Usage: .venv/bin/python iclr27-rebuttal/code/supp_alpamayo2_edge_figs.py [--exp-id iclr27-rebuttal/supp_alpamayo2_edge_figs]
 """
@@ -102,7 +102,7 @@ def main():
     cfg = {"source": str(SRC), "model": me["model"],
            "grey_band": {"layers_shaded": [int(np.ceil(m["band"][0])), int(np.floor(m["band"][1]))],
                          "definition": "the A1.5 band moved by relative depth (22/36 x 28 = 17)"},
-           "dotted_step": {"tau_q_heads": m["tau"]["q"], "tau_mlp": m["tau"]["mlp"], "drawn_at": m["tau"]["q"] - 0.5},
+           "step_tau_not_drawn": {"tau_q_heads": m["tau"]["q"], "tau_mlp": m["tau"]["mlp"]},
            "expert_C09": {ax: round(ex[ax]["C_mark"], 5) for ax in ex}, "page_in_3row": [W, H]}
     (out / "config.json").write_text(json.dumps(cfg, indent=2))
     print(json.dumps(cfg, indent=2))

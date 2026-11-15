@@ -220,7 +220,8 @@ The MLP has no such break: ρ between steps 0–6 and 7–9 is 0.85.
 - Panels: `paper/fig/assets/supp_alpamayo2_panels/edge_{rank_correlation, share_fm, share_ce, steps_q_head, steps_mlp, mass_curve}.pdf`.
 - Composites: `paper/fig/assets/supp_alpamayo2_{vlm,expert}_3row.pdf`. Rows are A1.5 / A2 Super / A2 Edge; the A1.5 and
   A2 panels are the existing files, placed unchanged.
-- Edge grey band: layers 17–27. Dotted step line: at 21.5.
+- Edge grey band: layers 17–27. The dotted step line (at 21.5) was removed from all VLM panels on 2026-11-15 (user:
+  shading only); tau = 22 stays in the tables and in `supp_alpamayo2_edge_figs/config.json`.
 - One value falls below the shared y-range (−0.25): Edge Prompt text at layer 23 (−0.26).
 
 ## Analysis (Opinion)
