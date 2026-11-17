@@ -32,6 +32,7 @@
 #                            an optional `shard` column (0..k-1) fixes each scene's card
 #   DRIVER_OMP_THREADS=8     worth 2.3x wall-clock; must not be mixed within one comparison
 #   ONLY_SHARDS="0 2"        run a subset while keeping the same k-way split
+#   TOOLS_PY=<python>        python (with pandas) that writes the shard suites; default the repo .venv
 #   DRY_RUN=1                write the shard suites and print the plan, launch nothing
 #   EXTRA_OVERRIDES="..."    extra wizard overrides, space-separated, e.g.
 #                            "++driver.inference.blackout_t0_random_camera=true"
@@ -70,7 +71,7 @@ SCENES_CSV=${SCENES_CSV-}
 # that release and is what pins the render version.
 PARENT_SUITE=${PARENT_SUITE-public_2601}
 SUITES_CSV=$RUNS/shard_suites_${PREFIX}${CFG}.csv
-mapfile -t SHARD_SUITES < <("$REPO/.venv/bin/python" - \
+mapfile -t SHARD_SUITES < <("${TOOLS_PY:-$REPO/.venv/bin/python}" - \
     "$SUITE" "$N_SCENES" "${#GPUS[@]}" "$DONE_DIR" "$SUITES_CSV" "$CFG" "$SCENES_CSV" \
     "$PARENT_SUITE" <<'PY'
 import sys
