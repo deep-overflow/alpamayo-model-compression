@@ -1,9 +1,10 @@
 """Side-by-side comparison video of several arms on one scene: per arm a column of BEV (cl_bev.py),
-optionally with the front camera (cl_dump_camera.py) on top. Arm label burned in top-left; from each
+optionally with camera frames (cl_dump_camera.py) on top: the front wide camera (--camera front) or all four
+driver cameras as a 2x2 grid, front wide | front tele over cross left | cross right (--camera all). Arm label burned in top-left; from each
 arm's event frame on, a red frame and an event pill. Returns the data entry (per-frame CoC as runs).
 
 Used by cl_gallery.py (BEV only) and for the MoOP project page (camera + BEV):
-  python closed-loop-viz/cl_compose.py --entries entries.json --video-dir DIR --data out.json [--camera]
+  python closed-loop-viz/cl_compose.py --entries entries.json --video-dir DIR --data out.json [--camera front|all]
 entries.json: [{"id": ..., "label": ..., "arms": [{"label": "MoOP", "dir": ".../moop"}, ...], ...}, ...]
 (any extra keys are copied into the data entry).
 """
@@ -18,6 +19,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 CW, CH, BW, BH, GAP = 640, 364, 640, 480, 6
+QW, QH = 320, 180                       # one tile of the 2x2 grid; the grid is 640 x 360
+GRID = [("camera_front_wide_120fov", "front wide"), ("camera_front_tele_30fov", "front tele"),
+        ("camera_cross_left_120fov", "cross left"), ("camera_cross_right_120fov", "cross right")]
 RED = (229, 72, 77)
 EVENT_TXT = {"collision": "AT-FAULT COLLISION", "offroad": "OFF-ROAD"}
 
@@ -50,7 +54,16 @@ def entry_data(entry, video, arms=None):
     return out
 
 
-def compose(entry, video, camera=False, crf=27, tmp_root=None):
+def cam_frame(arm_dir, cam, f):
+    """A camera frame from a dump: cams/<camera>/ (4-camera dumps) or the older front-only frames/."""
+    p = Path(arm_dir) / "cams" / cam / f"{f:05d}.jpg"
+    if not p.exists() and cam == GRID[0][0]:
+        p = Path(arm_dir) / "frames" / f"{f:05d}.jpg"
+    return Image.open(p)
+
+
+def compose(entry, video, camera=None, crf=27, tmp_root=None):
+    camera = {True: "front", False: None}.get(camera, camera)
     arms = load_arms(entry)
     if camera:
         for a in arms:
@@ -58,8 +71,9 @@ def compose(entry, video, camera=False, crf=27, tmp_root=None):
             assert cam["rollout_id"] == a["bev"]["rollout_id"], f"{a['dir']}: camera and BEV are different rollouts"
             assert cam["n_frames"] == a["bev"]["n_frames"], f"{a['dir']}: camera/BEV frame counts differ"
     n = max(a["bev"]["n_frames"] for a in arms)
-    top = CH if camera else 0
+    top = {None: 0, "front": CH, "all": 2 * QH}[camera]
     font = ImageFont.truetype(BOLD, 23)
+    small = ImageFont.truetype(BOLD, 13)
     tmp = Path(tempfile.mkdtemp(prefix="clcompose_", dir=tmp_root))
     try:
         for i in range(n):
@@ -69,9 +83,15 @@ def compose(entry, video, camera=False, crf=27, tmp_root=None):
                 b = a["bev"]
                 f = min(i, b["n_frames"] - 1)
                 x0 = j * (BW + GAP)
-                if camera:
-                    canvas.paste(Image.open(Path(a["dir"]) / "frames" / f"{f:05d}.jpg").resize((CW, CH), Image.LANCZOS),
-                                 (x0, 0))
+                if camera == "front":
+                    canvas.paste(cam_frame(a["dir"], GRID[0][0], f).resize((CW, CH), Image.LANCZOS), (x0, 0))
+                elif camera == "all":
+                    for q, (cam, name) in enumerate(GRID):
+                        qx, qy = x0 + (q % 2) * QW, (q // 2) * QH
+                        canvas.paste(cam_frame(a["dir"], cam, f).resize((QW, QH), Image.LANCZOS), (qx, qy))
+                        d.text((qx + 6, qy + QH - 19), name, font=small, fill=(255, 255, 255, 220))
+                    d.line([(x0 + QW, 0), (x0 + QW, top)], fill=(12, 12, 14), width=2)
+                    d.line([(x0, QH), (x0 + BW, QH)], fill=(12, 12, 14), width=2)
                 canvas.paste(Image.open(Path(a["dir"]) / "bev" / f"{f:05d}.jpg"), (x0, top))
                 if camera:
                     d.line([(x0, top), (x0 + BW, top)], fill=(12, 12, 14), width=2)
@@ -98,7 +118,8 @@ def main():
     ap.add_argument("--entries", type=Path, required=True)
     ap.add_argument("--video-dir", type=Path, required=True)
     ap.add_argument("--data", type=Path, required=True)
-    ap.add_argument("--camera", action="store_true", help="stack the front camera above the BEV")
+    ap.add_argument("--camera", choices=["front", "all"], default=None,
+                    help="camera frames above the BEV: front wide only, or all four as a 2x2 grid")
     args = ap.parse_args()
     data = {"fps": 10, "scenes": []}
     for e in json.loads(args.entries.read_text()):

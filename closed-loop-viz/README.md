@@ -419,8 +419,8 @@ Tools behind the MoOP project page's driving videos (deep-overflow.github.io/MoO
 | script | what it does | GPU |
 |---|---|---|
 | `cl_bev.py` | heading-up, ego-centred BEV frames on the scene's own map (`Artifact(usdz).map`) | no |
-| `cl_dump_camera.py` | front-wide camera frames, replayed from the recorded render requests | renderer |
-| `cl_compose.py` | arms side by side: BEV, or camera over BEV (`--camera`); data JSON with per-frame CoC | no |
+| `cl_dump_camera.py` | all four driver cameras (front wide/tele, cross left/right), replayed from the recorded render requests | renderer |
+| `cl_compose.py` | arms side by side: BEV, or cameras over BEV (`--camera front` / `--camera all` = 2x2 grid); data JSON with per-frame CoC | no |
 | `cl_gallery.py` | candidate gallery (BEV only) for picking showcase scenes | no |
 | `serve_range.py` | static server with Range support, so `<video>` seeks | no |
 
