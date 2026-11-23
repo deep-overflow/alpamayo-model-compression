@@ -411,3 +411,40 @@ well-formed and the reading of the scene is wrong. It is an illustration of an
 already-measured aggregate effect (−0.091 [−0.134, −0.050] vs `dual`, p=3e−06), **not evidence
 on its own** — one rollout of one scene cannot establish a mechanism, and the `offroad` gate
 over all 150 scenes does not separate the two arms (20 → 28 hits, p=0.087).
+
+## Map BEV, camera + BEV comparisons, and the candidate gallery (2026-11-23)
+
+Tools behind the MoOP project page's driving videos (deep-overflow.github.io/MoOP, commit 7472b89):
+
+| script | what it does | GPU |
+|---|---|---|
+| `cl_bev.py` | heading-up, ego-centred BEV frames on the scene's own map (`Artifact(usdz).map`) | no |
+| `cl_dump_camera.py` | front-wide camera frames, replayed from the recorded render requests | renderer |
+| `cl_compose.py` | arms side by side: BEV, or camera over BEV (`--camera`); data JSON with per-frame CoC | no |
+| `cl_gallery.py` | candidate gallery (BEV only) for picking showcase scenes | no |
+| `serve_range.py` | static server with Range support, so `<video>` seeks | no |
+
+**What red means in the BEV.** Only what the scorer flagged at that timestamp:
+- the road edge the ego box touches, on per-frame `offroad` frames;
+- the traffic box within 0.3 m, on `collision_*` frames.
+
+`eval/scorers/offroad.py` calls a frame off-road when no nearby lane (nor their union) contains the ego box AND the box
+touches the closest road edge. So the red edge is the scorer's own reason. The grey lane surface is the union of the
+same lane polygons it tests.
+
+**Frame alignment.**
+- Render request i ends at the (i+1)-th actor-pose timestamp, so BEV frame i is drawn there.
+- `event_frame` is the first frame whose time reaches the event.
+- The 11-22 page version, which counted from t0, marked events 2 frames late.
+
+**Gallery** (u40 + u50, Hard100 + Origin150).
+- Rule: MoOP passes both rollouts, and FM-only and CE-only (each its worse rollout) both fail the same way.
+- 37 scenes (collision 10, off-road 27); none is shared between u40 and u50.
+- u40 Hard100 3b934c9a is dropped because its worse rollout's log was never written.
+- Output lives at `outputs/iclr27-rebuttal/closedloop_gallery/`. Run with:
+```bash
+taskset -c 0-31 /mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python closed-loop-viz/cl_gallery.py \
+    --out outputs/iclr27-rebuttal/closedloop_gallery --work /tmp/clgallery_work -j 6
+python closed-loop-viz/serve_range.py 8780 outputs/iclr27-rebuttal/closedloop_gallery   # ssh -L 8780:localhost:8780 cvlab21
+```
+Pin to node 0 (`taskset -c 0-31`): when node 1 is drained by other users' shared memory, CPU work there stalls in the kernel.
