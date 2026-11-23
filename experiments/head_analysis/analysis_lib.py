@@ -34,8 +34,11 @@ def set_expert_attn_impl(model, impl: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_inputs(model, processor, data, device):
+def build_inputs(model, processor, data, device, drop_images=()):
     """Build fused input_ids + tokenized data exactly as the release inference does.
+
+    drop_images: flat camera-major indices (cam_slot * 4 + frame) whose image and
+    "frame i" label are left out of the prompt; the camera-name label stays.
 
     Returns dict with input_ids (1, T) already containing fused traj-history tokens.
     """
@@ -43,6 +46,14 @@ def build_inputs(model, processor, data, device):
         frames=data["image_frames"].flatten(0, 1),
         camera_indices=data["camera_indices"],
     )
+    if len(drop_images):
+        content = messages[1]["content"]
+        img_pos = [p for p, it in enumerate(content) if it["type"] == "image"]  # (16,)
+        cut = set()
+        for j in drop_images:
+            assert content[img_pos[j] - 1]["text"].startswith("frame "), content[img_pos[j] - 1]
+            cut |= {img_pos[j] - 1, img_pos[j]}
+        messages[1]["content"] = [it for p, it in enumerate(content) if p not in cut]
     inputs = processor.apply_chat_template(
         messages,
         tokenize=True,
