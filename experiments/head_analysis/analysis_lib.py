@@ -3,10 +3,10 @@
 Runs against the alpamayo1_5 package using /workspace/alpamayo1.5/.venv.
 """
 
+from typing import ClassVar
+
 import numpy as np
 import torch
-import torch.nn.functional as F
-
 from alpamayo1_5 import helper
 from alpamayo1_5.models.token_utils import to_special_token
 
@@ -136,10 +136,10 @@ def compute_spans(model, input_ids: torch.Tensor) -> dict:
 @torch.no_grad()
 def run_rollout(model, inputs, temperature=0.6, top_p=0.98, max_generation_length=256):
     """Autoregressive CoC rollout with num_traj_samples=1. Returns sequences etc."""
-    from transformers import StoppingCriteriaList
-    from transformers.generation.logits_process import LogitsProcessorList
     from alpamayo1_5.models.alpamayo1_5 import ExpertLogitsProcessor
     from alpamayo1_5.models.token_utils import StopAfterEOS, replace_padding_after_eos
+    from transformers import StoppingCriteriaList
+    from transformers.generation.logits_process import LogitsProcessorList
 
     input_ids = inputs["input_ids"]
     tokenized_data = inputs["tokenized_data"]
@@ -248,7 +248,7 @@ class VLMStatsCollector:
     Accumulates fp64 sums on CPU; call finalize() for means.
     """
 
-    STAT_KEYS = [
+    STAT_KEYS: ClassVar[list[str]] = [
         "mass_vision", "mass_text", "mass_hist", "mass_sink",
         "entropy", "attdist",
     ]
