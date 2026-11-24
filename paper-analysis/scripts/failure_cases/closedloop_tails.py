@@ -4,8 +4,8 @@ overlap; failure-mode decomposition (gates, progress, deviation); scene kinemati
 import json, numpy as np, pandas as pd
 from pathlib import Path
 from scipy.stats import wilcoxon, spearmanr, mannwhitneyu, fisher_exact
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 SETS = {"150": "m2601_merged_{}", "hard100": "h100_merged_{}"}
 ARMS = {"base": "baseline", "traj": "slim_traj_u40_v2", "coc": "slim_coc_u40_v2", "dual": "slim_dual_u40_v2"}
 MET = ["collision_at_fault", "collision_any", "offroad", "progress_rel", "dist_to_gt_trajectory", "plan_deviation", "min_distance_to_obstacle_m", "dist_traveled_m"]

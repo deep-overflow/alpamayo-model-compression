@@ -46,7 +46,7 @@ plt.rcParams.update({
     "font.size": 9, "axes.grid": True, "axes.axisbelow": True,
 })
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 CLOSED = {
     "baseline": "m2601_merged_baseline",
     "dual": "m2601_merged_slim_dual_u40_v2",

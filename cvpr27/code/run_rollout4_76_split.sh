@@ -9,8 +9,8 @@
 #
 #   bash cvpr27/code/run_rollout4_76_split.sh > outputs/cvpr27/rollout4_76/queue_split.log 2>&1
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 OUT=$REPO/outputs/cvpr27/rollout4_76
 CSV=$OUT/scenes76_gpu0-3.csv
 stamp() { echo "$(date -u '+%F %T') UTC $*"; }

@@ -39,7 +39,7 @@ import pandas as pd
 import torch
 
 REPO = Path(__file__).resolve().parents[2]
-A2D = Path(os.environ.get("A2_DISTILL", "/home/cvlab21/project/chan/alpamayo2-distill"))
+A2D = Path(os.environ.get("A2_DISTILL", "/home/cvlab21/project/chan/advla/alpamayo2-distill"))
 # all paths set here so the import order below does not matter (run_oodval would add the head_analysis one itself)
 sys.path.insert(0, str(A2D / "src"))  # alpamayo2_super (on cvlab21 also the venv's editable install)
 sys.path.insert(0, str(A2D / "experiments" / "oodval"))

@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo2-distill/experiments/importance")
+sys.path.insert(0, "/home/cvlab21/project/chan/advla/alpamayo2-distill/experiments/importance")
 import paper_figs_a2 as pfa
 from paper_figs_a2 import (
     COC,

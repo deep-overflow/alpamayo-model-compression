@@ -39,7 +39,7 @@ import torch
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval")
+sys.path.insert(0, "/home/cvlab21/project/chan/advla/alpamayo2-distill/experiments/oodval")
 import run_oodval as ro
 from alpamayo2_super import helper
 

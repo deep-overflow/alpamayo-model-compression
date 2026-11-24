@@ -52,7 +52,7 @@ from PIL import Image
 OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")          # read: eval sets and arm dumps
 CACHE = Path("/mnt/nvme1n1/ad_vla/data/physicalai_av/pre_processed/ood/samples")
 # write: figures live in the repo beside closed-loop-viz, not under the outputs mount
-VIZ = Path("/home/cvlab21/project/chan/alpamayo-model-compression/open-loop-viz")
+VIZ = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/open-loop-viz")
 
 FRONT_CAMERA = 1   # camera_indices is [0, 1, 2, 6]; 1 is the front camera
 K_EVAL = 6         # best-of-6, the reduction the published tables use

@@ -9,7 +9,7 @@
 # ALPAMAYO_REPO overrides the checkout (a git worktree needs its own .venv/outputs).
 MAX=${1:-60}
 shift
-REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/alpamayo-model-compression}
+REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/advla/alpamayo-model-compression}
 cd "$REPO" || exit 1
 # CUDA orders devices by speed while nvidia-smi orders by PCI bus, so without
 # this --gpu N and `nvidia-smi -i N` mean different cards on this box

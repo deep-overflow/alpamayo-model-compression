@@ -11,7 +11,7 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 
-V = Path("/home/cvlab21/project/chan/alpamayo-model-compression/closed-loop-viz/video")
+V = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/closed-loop-viz/video")
 
 vids = sorted(V.rglob("*.mp4"))
 sizes = Counter()

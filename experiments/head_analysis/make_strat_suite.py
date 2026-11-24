@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-SUITES = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 FEATS = REPO / "outputs" / "scene_difficulty" / "scene_difficulty_public2601.csv"
 HARD100 = REPO / "outputs" / "scene_difficulty" / "hard100_suite.csv"
 SANGOH = Path("/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5/aggregate/results-summary.json")

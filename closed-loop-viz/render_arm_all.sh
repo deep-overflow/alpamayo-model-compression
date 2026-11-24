@@ -14,12 +14,12 @@
 
 set -uo pipefail
 
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 # Resolve the script directory from $0 rather than naming a worktree. These lived in
 # .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
 # with its session -- after which every `$HERE/...` here pointed at nothing.
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-ALPASIM=/home/cvlab21/project/chan/alpasim
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
 # Overridable: the default is the job dir this was first written under, and a job dir goes
 # away with its job. A caller running from a later session passes its own.
 T=${T:-/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp}
@@ -43,7 +43,7 @@ DO_CAMERA=${DO_CAMERA:-1}
 # the rule the caller would otherwise have to remember.
 case "$RUN" in
   /*) ;;
-  *) RUN=/home/cvlab21/project/chan/alpasim-runs/$RUN ;;
+  *) RUN=/home/cvlab21/project/chan/advla/alpasim-runs/$RUN ;;
 esac
 [ -f "$RUN/aggregate/results-summary.json" ] || {
   echo "RUN 이 잘못되었습니다: $RUN"; exit 1; }

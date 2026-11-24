@@ -20,12 +20,12 @@
 # GPU 2 (i<2) or 3 (i>=2). Waits for assigned GPUs to be free (<1 GB used) before
 # each launch; staggers launches so the first run populates the shared scene cache.
 #
-# Requires /home/cvlab21/project/chan/alpasim-runs/.hf_env (HF_TOKEN + HF_HOME).
+# Requires /home/cvlab21/project/chan/advla/alpasim-runs/.hf_env (HF_TOKEN + HF_HOME).
 
 set -u
 
-ALPASIM=/home/cvlab21/project/chan/alpasim
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 # NuRec scenes live off-repo (49 GB); a symlink inside data/ dangles in the
 # containers, so point scene_cache at the real path instead.
 SCENE_CACHE=/mnt/nvme1n1/ad_vla/data/nre-artifacts

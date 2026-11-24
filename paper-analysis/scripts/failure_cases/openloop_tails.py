@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np, pandas as pd
 from scipy.stats import spearmanr, mannwhitneyu, fisher_exact
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 ARMS = {"base": "baseline_ada", "coc": "coc_u40_v2", "traj": "traj_u40_v2", "dual": "dual_u40_v2"}
 SETS = {"test": "test_500", "ood": "ood"}
 KW = {"stop": r"\bstop|halt|come to a (complete )?stop", "slow": r"slow|decelerat|brak|yield|reduce speed", "wait": r"\bwait|stationary|remain stopped|stay stopped",

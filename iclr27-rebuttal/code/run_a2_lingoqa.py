@@ -39,7 +39,7 @@ import pandas as pd
 import torch
 
 REPO = Path(__file__).resolve().parents[2]
-A2D = Path(os.environ.get("A2_DISTILL", "/home/cvlab21/project/chan/alpamayo2-distill"))
+A2D = Path(os.environ.get("A2_DISTILL", "/home/cvlab21/project/chan/advla/alpamayo2-distill"))
 sys.path.insert(0, str(A2D / "src"))
 sys.path.insert(0, str(A2D / "experiments" / "oodval"))
 sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))

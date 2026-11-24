@@ -8,9 +8,9 @@
 #
 #   setsid nohup bash iclr27-rebuttal/code/run_u50_queue2.sh > outputs/iclr27-rebuttal/u50_origin150/run_queue2.log 2>&1 &
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/iclr27-rebuttal/u50_origin150
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 PY=$REPO/.venv/bin/python
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python

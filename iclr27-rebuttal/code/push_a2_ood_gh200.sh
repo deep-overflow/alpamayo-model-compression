@@ -21,7 +21,7 @@ H=e1997a06@hangang-dm.ksc.re.kr
 SAFE="-o BatchMode=yes -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive"
 RS="ssh -o ControlPath=$CM $SAFE"
 W=/appsdata/e1997a06/a2_ood
-A2D=/home/cvlab21/project/chan/alpamayo2-distill
+A2D=/home/cvlab21/project/chan/advla/alpamayo2-distill
 HUB=/mnt/nvme1n1/ad_vla/cache/hub/models--nvidia--Alpamayo2-Super
 PRE=/mnt/nvme1n1/ad_vla/data/physicalai_av/pre_processed
 OUT=$(readlink -f outputs)

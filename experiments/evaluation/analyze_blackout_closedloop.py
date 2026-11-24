@@ -40,7 +40,7 @@ import numpy as np
 from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"
 C1, C2, C3, C4 = "#2a78d6", "#008300", "#e87ba4", "#eda100"

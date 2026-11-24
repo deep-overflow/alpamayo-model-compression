@@ -34,8 +34,8 @@ Archived reference for experiment harness, runner tracks, closed-loop evaluation
 ## Closed-loop evaluation (alpasim)
 
 Open-loop minADE hid the failure that closed-loop rollouts exposed, so headline configs get run in the
-sibling **alpasim** repo at `/home/cvlab21/project/chan/alpasim`, with logs under
-`/home/cvlab21/project/chan/alpasim-runs/matrix_<config>/`.
+sibling **alpasim** repo at `/home/cvlab21/project/chan/advla/alpasim`, with logs under
+`/home/cvlab21/project/chan/advla/alpasim-runs/matrix_<config>/`.
 
 ```bash
 bash experiments/head_analysis/launch_alpasim_matrix.sh <n_scenes> <n_rollouts> [config ...]

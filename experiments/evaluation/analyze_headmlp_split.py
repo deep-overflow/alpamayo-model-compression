@@ -24,7 +24,7 @@ rollout은 짝지을 수 없다 -- id가 런마다 새로 뽑는 UUID이고 설�
 
 Usage:
   .venv/bin/python experiments/evaluation/analyze_headmlp_split.py \
-      --out /home/cvlab21/project/chan/alpamayo-model-compression/outputs/headmlp_split
+      --out /home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs/headmlp_split
 """
 
 import argparse
@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from coc_action_consistency import K, at6, rows
 
 OUT = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 BOOT = 20000
 GATES = ("collision_at_fault", "offroad")
 
@@ -285,7 +285,7 @@ def make_plots(res, plots):
 # analyze_longitudinal.py (alpasim venv) re-reads the same rollouts as continuous
 # measures. Its output is read here rather than recomputed: the gates are rare events
 # with no power, and the surrogates are what decide whether the loss is longitudinal.
-LONG_DIR = Path("/home/cvlab21/project/chan/alpamayo-model-compression/outputs/"
+LONG_DIR = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs/"
                 "headmlp_longitudinal_vsdual")
 # (key, label, sign that means SAFER). matplotlib has no Korean face on this box, so plot
 # labels stay English while the prose around them is Korean -- same as the rest of the repo.
@@ -335,7 +335,7 @@ def longitudinal_block(res, plots):
 
 
 # ------------------------------------------------------------ lateral surrogates
-LAT_DIR = Path("/home/cvlab21/project/chan/alpamayo-model-compression/outputs/headmlp_lateral")
+LAT_DIR = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs/headmlp_lateral")
 LAT_KEYS = [("frac_out_of_lane", "time out of lane", -1),
             ("longest_excursion_s", "longest out-of-lane episode", -1),
             ("out_of_lane_episodes", "out-of-lane episodes", -1),

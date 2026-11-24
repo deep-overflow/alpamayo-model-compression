@@ -25,7 +25,7 @@ Pre-registered gates (plans/2026-08-25_pathway-map.md):
 Usage:
   bash experiments/head_analysis/run_retry_host.sh 20 \
       experiments/head_analysis/run_pathway.py --gpu 4 --num-clips 50 --k 8 \
-      --outputs-root /home/cvlab21/project/chan/alpamayo-model-compression/outputs
+      --outputs-root /home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs
 """
 
 import argparse

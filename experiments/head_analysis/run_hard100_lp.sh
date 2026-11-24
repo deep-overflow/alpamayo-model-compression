@@ -13,13 +13,13 @@
 #
 # 사용:  bash run_lp.sh "lp_r50_dual"          # 한 arm
 #        bash run_lp.sh "lp_r50 lp_r50_dual"   # 둘 다 (순차)
-# 취소:  touch /home/cvlab21/project/chan/alpasim-runs/hard100/ABORT_LP
-# 진행:  tail -f /home/cvlab21/project/chan/alpasim-runs/hard100/run_lp.log
+# 취소:  touch /home/cvlab21/project/chan/advla/alpasim-runs/hard100/ABORT_LP
+# 진행:  tail -f /home/cvlab21/project/chan/advla/alpasim-runs/hard100/run_lp.log
 set -u
 
-DIR=/home/cvlab21/project/chan/alpasim-runs/hard100
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+DIR=/home/cvlab21/project/chan/advla/alpasim-runs/hard100
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 LOG=$DIR/run_lp.log
 PREV_LOG=$DIR/run_tyr.log
 PREV_DONE="tyr_r 전체 완료"

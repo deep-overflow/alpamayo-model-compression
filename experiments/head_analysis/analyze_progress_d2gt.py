@@ -15,8 +15,8 @@ Three levels, all from the stored aggregate summaries (no GPU, no re-simulation)
 plus the distance normalisation d2gt / 100 m and dist_traveled / gt_dist_traveled.
 
 Usage (alpasim venv, for the summary parsing only):
-  cd /home/cvlab21/project/chan/alpasim && uv run python \
-      .../analyze_progress_d2gt.py --runs-root /home/cvlab21/project/chan/alpasim-runs \
+  cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
+      .../analyze_progress_d2gt.py --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
       --out .../outputs/alpasim_progress_d2gt
 """
 

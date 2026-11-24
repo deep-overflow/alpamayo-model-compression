@@ -43,7 +43,7 @@ from paper_numbers import ARMS
 
 BOOT = 5000
 SET_SUFFIX = ("indist", "test", "oodval", "ood")
-ALPASIM_RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+ALPASIM_RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 # unpruned Alpamayo 1.5; every slim_meta agrees on this as params.full
 BASE_PARAMS = 11_078_526_194
 # checkpoints live under outputs/, but a config only ever run closed-loop may exist just

@@ -35,7 +35,7 @@ from scipy.stats import wilcoxon
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "outputs" / "alpasim_dense_s600"
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 RUN = RUNS / "s600_merged_baseline"
 HOFIX = RUNS / "hofix_merged_baseline"
 SANGOH = G.SANGOH

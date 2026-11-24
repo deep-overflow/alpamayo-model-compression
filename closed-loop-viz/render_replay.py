@@ -52,7 +52,7 @@ import numpy as np
 from matplotlib import animation
 from matplotlib.patches import Rectangle
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 
 # Same ink/ground as the repo's plots so a frame grab sits beside the report figures.
 BG, INK, MUTED = "#FAF9F5", "#29261B", "#6B6555"

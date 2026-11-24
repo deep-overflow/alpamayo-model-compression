@@ -17,7 +17,7 @@ against that suite's own baseline.
 
 Runs with the alpasim repo's venv (needs alpasim_utils for the CoC logs):
 
-    cd /home/cvlab21/project/chan/alpasim && uv run python \
+    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
         <repo>/experiments/head_analysis/collect_alpasim_table.py \
         --out <repo>/outputs/alpasim_table
 """
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-CHAN = Path("/home/cvlab21/project/chan/alpasim-runs")
+CHAN = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 SOOWON = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs")
 DRIVERS = Path("/mnt/nvme1n1/ad_vla/data/alpasim/drivers")
 

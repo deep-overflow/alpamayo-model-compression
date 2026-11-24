@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 SOOWON = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root")
 O = Path("/mnt/nvme1n1/ad_vla/outputs/chan")
 

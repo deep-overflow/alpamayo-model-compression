@@ -8,7 +8,7 @@ from pathlib import Path
 
 TPL = Path(sys.argv[1])
 OUT = Path(sys.argv[2])
-M = json.loads(Path("/home/cvlab21/project/chan/alpamayo-model-compression/"
+M = json.loads(Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/"
                     "outputs/hard100_eval/metrics.json").read_text())
 
 LABEL = {"baseline": "baseline <span class='sub'>비압축</span>",
@@ -60,7 +60,7 @@ vs150 = [row_score, row_off, row_af]
 
 # G3 (종방향 대리지표) 는 별도 실행의 산출물에서 읽는다. 없으면 조용히 비우지 말고 멈춘다 --
 # 7절이 그 표를 전제로 서술돼 있어서, 빈 채로 나가면 리포트가 거짓말이 된다.
-LONG = Path("/home/cvlab21/project/chan/alpamayo-model-compression/"
+LONG = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/"
             "outputs/hard100_longitudinal/metrics.json")
 LNAME = {"baseline": "baseline <span class='sub'>비압축</span>",
          "slim_dual_u40_v2": "<code>dual_u40_v2</code>",

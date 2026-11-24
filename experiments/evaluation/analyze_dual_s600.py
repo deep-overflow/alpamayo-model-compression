@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
 import analyze_alpasim as AA
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 BOUT = REPO / "outputs" / "alpasim_dense_s600"   # scene list, sampling cells and card per scene
 PRE = [("origin150", "m2601_merged_baseline", "m2601_merged_slim_dual_u40_v2"),
        ("hard100", "h100_merged_baseline", "h100_merged_slim_dual_u40_v2")]

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pandas as pd
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 OUT = REPO / "outputs" / "iclr27-rebuttal" / "u50_origin150"
 
 

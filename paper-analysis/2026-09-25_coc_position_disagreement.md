@@ -72,7 +72,7 @@ the CE-favoured "next-token heads" carry, and it is absent from `I_traj` by cons
    earlier-CoC readers) is the whole story.
 
    ```bash
-   cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+   cd /home/cvlab21/project/chan/advla/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
    for s in 0 1 2 3; do
      ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_coc_path_split.py \
          --exp-id coc_pathsplit_v1_s$s --shard $s --n-shards 4 --gpu $((4 + s)) > outputs/coc_pathsplit_v1_s$s.launch.log 2>&1 &
@@ -95,7 +95,7 @@ the CE-favoured "next-token heads" carry, and it is absent from `I_traj` by cons
    path split (test 1) would then have to carry alone.
 
    ```bash
-   cd /home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
+   cd /home/cvlab21/project/chan/advla/alpamayo-model-compression/.claude/worktrees/dual-saves-trunk
    for s in 0 1; do
      ALPAMAYO_REPO=$PWD nohup bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_coc_census.py \
          --exp-id coc_census_v1_s$s --shard $s --n-shards 2 --gpu $((4 + s)) > outputs/coc_census_v1_s$s.launch.log 2>&1 &

@@ -99,7 +99,7 @@ cells outside the window: 1
 ## Reproduction
 
 ```bash
-cd /home/cvlab21/project/chan/alpamayo-model-compression
+cd /home/cvlab21/project/chan/advla/alpamayo-model-compression
 bash experiments/head_analysis/run_retry_host.sh 30 experiments/head_analysis/run_gradient_anatomy.py \
     --exp-id gradanat_val100 --calib-manifest calib_val100 --cache eval --num-clips 100 --gpu 4
 #   ... gradanat_ood: --calib-manifest calib_ood_100 --cache ood; gradanat_test100: --calib-manifest calib_test100 --cache test

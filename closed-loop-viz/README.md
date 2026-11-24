@@ -47,7 +47,7 @@ empty string, which is what CoC degeneracy looks like frame by frame. `wanda` de
 ## Usage
 
 ```bash
-cd /home/cvlab21/project/chan/alpasim && CUDA_VISIBLE_DEVICES="" uv run python \
+cd /home/cvlab21/project/chan/advla/alpasim && CUDA_VISIBLE_DEVICES="" uv run python \
   <repo>/closed-loop-viz/render_replay.py \
   --scene clipgt-2431387d-b9c5-4241-a219-497a99d1f4e5 \
   --arm "dual=slim_dual_u40_v2" --arm "tyr=slim_tyr_u40_r" \
@@ -73,7 +73,7 @@ skips scenes whose mp4 already exists).
 ```bash
 GPU=1 PORT=16007 bash closed-loop-viz/start_renderer.sh      # renderer alone, ~35 s to serve
 
-cd /home/cvlab21/project/chan/alpasim && CUDA_VISIBLE_DEVICES="" uv run python \
+cd /home/cvlab21/project/chan/advla/alpasim && CUDA_VISIBLE_DEVICES="" uv run python \
   <repo>/closed-loop-viz/replay_camera.py \
   --scene clipgt-04749bb9-9b37-495b-bed0-77f0e33ac7da \
   --config slim_dual_u40_qcut4_v2 --camera camera_front_wide_120fov \

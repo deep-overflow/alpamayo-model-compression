@@ -59,7 +59,7 @@ CM=${NEURON_CM-$HOME/.ssh/cm-neuron}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # The code that travels is the working tree with your uncommitted changes in it, not
 # this worktree -- override with CODE_SRC if you keep the checkout somewhere else.
-CODE_SRC=${CODE_SRC-/home/cvlab21/project/chan/alpamayo-model-compression}
+CODE_SRC=${CODE_SRC-/home/cvlab21/project/chan/advla/alpamayo-model-compression}
 SRC=${AD_VLA_SRC-/mnt/nvme1n1/ad_vla}
 HUB=$SRC/cache/hub
 PRE=$SRC/data/physicalai_av/pre_processed
@@ -68,7 +68,7 @@ PY=${PUSH_PY-$CODE_SRC/.venv/bin/python}
 MODEL_REV=$(grep -oP 'MODEL_REV = "\K[0-9a-f]+' "$CODE_SRC/experiments/head_analysis/slim_lib.py")
 RESUME_RUNS=${RESUME_RUNS-recover_coc_u55}
 LINGO_DATA=${LINGO_DATA-$SRC/data/lingoqa}
-LINGO_BENCH=${LINGO_BENCH-/home/cvlab21/project/chan/LingoQA/benchmark}
+LINGO_BENCH=${LINGO_BENCH-/home/cvlab21/project/chan/advla/LingoQA/benchmark}
 TRAIN_CONFIGS=${TRAIN_CONFIGS-}   # empty = every slim_* recipe (51 of them, 160 MB)
 A100_RECIPES=${A100_RECIPES-slim_dual_u40_v2 slim_dual_u40_l0keep_v2}
 

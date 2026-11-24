@@ -32,7 +32,7 @@ def setup_hf_env(offline=False):
     os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
     os.environ.setdefault("HF_HUB_CACHE", "/mnt/nvme1n1/ad_vla/cache/hub")
     if "HF_TOKEN" not in os.environ:
-        txt = Path("/home/cvlab21/project/chan/alpasim-runs/.hf_env").read_text()
+        txt = Path("/home/cvlab21/project/chan/advla/alpasim-runs/.hf_env").read_text()
         os.environ["HF_TOKEN"] = re.search(r"HF_TOKEN=(\S+)", txt).group(1).strip("\"'")
     if offline:
         os.environ["HF_HUB_OFFLINE"] = "1"

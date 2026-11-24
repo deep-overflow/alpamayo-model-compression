@@ -28,7 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 SG = Path("/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5")
 FEATS = REPO / "outputs/scene_difficulty/scene_feats_public2601.json"
 S1_LO, S1_HI, S1_PRIOR = 0.42, 0.58, 0.499
@@ -84,7 +84,7 @@ def paired(a, b, name_a, name_b):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", type=Path,
-                    default=Path("/home/cvlab21/project/chan/alpasim-runs"))
+                    default=Path("/home/cvlab21/project/chan/advla/alpasim-runs"))
     ap.add_argument("--out", type=Path, default=REPO / "outputs/hard100_eval")
     args = ap.parse_args()
     R = args.runs_root

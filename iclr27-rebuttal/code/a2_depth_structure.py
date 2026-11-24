@@ -45,7 +45,7 @@ TOP_STAB_FRAC = 64 / 12288
 N_SPLITS = 20
 EARLY_FRAC = 0.15  # "early" = layers 1 .. floor(0.15 n)
 GINI_HI, MID_GINI_MAX, OVERLAP_MIN = 0.85, 0.5, 0.6
-A2_DIR = Path("/home/cvlab21/project/chan/alpamayo2-distill/outputs/a2_importance_v1")
+A2_DIR = Path("/home/cvlab21/project/chan/advla/alpamayo2-distill/outputs/a2_importance_v1")
 MODELS = {
     "a15": {"name": "Alpamayo 1.5", "dir": REPO / "outputs" / "importance_v2", "n": 36,
             "bands": {"0": [0], "1-4": list(range(1, 5)), "5": [5], "6-21": list(range(6, 22)),

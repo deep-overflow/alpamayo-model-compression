@@ -14,10 +14,10 @@
 #   STAGE=smoke bash experiments/head_analysis/run_dense_s600.sh > outputs/alpasim_dense_s600/smoke.log 2>&1
 set -u
 STAGE=${STAGE:-smoke}
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 OUT=$REPO/outputs/alpasim_dense_s600
 GPUS="0 1 2 3 4 5 6 7"
 stamp() { echo "$(date -u '+%F %T') UTC $*"; }

@@ -29,14 +29,14 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo2-distill/experiments/importance")
+sys.path.insert(0, "/home/cvlab21/project/chan/advla/alpamayo2-distill/experiments/importance")
 import a2_fig3_token_type as f3
 import a2_fig5_expert as f5
 import analyze_importance_a2 as aia
 
 warnings.filterwarnings("ignore", "Mean of empty slice")
 EDGE = REPO / "outputs" / "iclr27-rebuttal" / "edge_importance_v1"
-A2RUN = Path("/home/cvlab21/project/chan/alpamayo2-distill/outputs/a2_importance_v1")
+A2RUN = Path("/home/cvlab21/project/chan/advla/alpamayo2-distill/outputs/a2_importance_v1")
 STORED3 = REPO / "outputs" / "iclr27-rebuttal" / "a2_fig3_token_type" / "metrics.json"
 STORED5 = REPO / "outputs" / "iclr27-rebuttal" / "a2_fig5_expert" / "metrics.json"
 N_LAYERS = 28

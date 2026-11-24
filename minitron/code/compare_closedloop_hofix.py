@@ -21,7 +21,7 @@ sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 
 import analyze_handover as A
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 BEFORE, AFTER = "m2601_merged_baseline", "hofix_merged_baseline"
 KEYS = ["collision_at_fault", "collision_any", "offroad", "progress_clipped_rel", "progress_rel_to_total",
         "dist_traveled_m", "dist_to_gt_trajectory", "plan_deviation"]

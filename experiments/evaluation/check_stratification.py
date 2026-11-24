@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 from make_eval_sets import ATTR, derive, weighted_l1
 

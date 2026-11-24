@@ -24,9 +24,9 @@ import collections
 import json
 from pathlib import Path
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 ARTIFACTS = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts")
-SUITES_CSV = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES_CSV = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 
 
 def run_dir(config, prefix="m2601_merged_"):

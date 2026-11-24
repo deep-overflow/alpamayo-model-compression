@@ -10,10 +10,10 @@
 #
 #   bash cvpr27/code/resume_tyr_off_8gpu.sh > outputs/cvpr27/alpasim_tyr_off_s600/resume.log 2>&1
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 PY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
-AGG=/home/cvlab21/project/chan/alpasim/.venv/bin/alpasim-aggregation
+AGG=/home/cvlab21/project/chan/advla/alpasim/.venv/bin/alpasim-aggregation
 OUT=$REPO/outputs/cvpr27/alpasim_tyr_off_s600
 CFG=slim_tyr_off
 L0=l600_merged_slim_dual_u40_l0keep_v2

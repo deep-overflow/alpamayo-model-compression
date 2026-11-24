@@ -12,7 +12,7 @@ Data: outputs/{gradanat_v1,gradanat_val100,gradanat_ood,gradanat_test100}/anatom
 import numpy as np
 from scipy.stats import spearmanr
 
-REPO = "/home/cvlab21/project/chan/alpamayo-model-compression"
+REPO = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 VIS, HIST, PT, COC, SINK = range(5)
 T4 = (VIS, PT, COC, HIST)
 NAMES = ("vision", "prompt-text", "generated CoC", "ego-history")

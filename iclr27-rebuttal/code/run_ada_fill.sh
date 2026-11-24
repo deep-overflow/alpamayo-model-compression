@@ -13,7 +13,7 @@ export CUBLAS_WORKSPACE_CONFIG=:4096:8
 export HF_HOME=$HOME/.cache/huggingface
 export HF_HUB_CACHE=/mnt/nvme1n1/ad_vla/cache/hub
 export HF_HUB_OFFLINE=1  # weights cached at the pinned revision; the full_right token is invalid since 2026-11-09
-HF_TOKEN=$(bash -c 'source /home/cvlab21/project/chan/alpasim-runs/.hf_env && printf %s "$HF_TOKEN"')
+HF_TOKEN=$(bash -c 'source /home/cvlab21/project/chan/advla/alpasim-runs/.hf_env && printf %s "$HF_TOKEN"')
 export HF_TOKEN
 PY=$ROOT/.venv/bin/python
 OUT=iclr27-rebuttal/ada_fill

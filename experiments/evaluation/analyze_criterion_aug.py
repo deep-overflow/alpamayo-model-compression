@@ -24,7 +24,7 @@ B. CoC-행동 일관성 — Alpamayo-R1 (arXiv 2511.00088, S5.3) 의 `r_consiste
 
 Usage:
   .venv/bin/python experiments/evaluation/analyze_criterion_aug.py \
-      --out /home/cvlab21/project/chan/alpamayo-model-compression/outputs/criterion_aug
+      --out /home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs/criterion_aug
 """
 
 import argparse

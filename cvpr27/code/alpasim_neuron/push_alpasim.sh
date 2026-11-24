@@ -1,7 +1,7 @@
 #!/bin/bash
 # Push the AlpaSim tree (code + small data) and one smoke scene to NEURON /scratch.
 set -euo pipefail
-A=/home/cvlab21/project/chan/alpasim
+A=/home/cvlab21/project/chan/advla/alpasim
 D=/scratch/e1997a06
 SCENE=4f6bf6bb-9696-43b9-a1bf-04e12ccad5cc   # clipgt-01d503d4..., public_2601, first scene of s600 sh0
 ssh -o BatchMode=yes neuron-dm "mkdir -p $D/project/alpasim $D/alpasim/nre-artifacts/all-usdzs $D/alpasim/sqsh $D/alpasim/runs"

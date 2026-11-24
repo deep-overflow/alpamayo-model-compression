@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 OUT = REPO / "outputs" / "iclr27-rebuttal" / "u50_origin150"
 DRIVERS = Path("/mnt/nvme1n1/ad_vla/data/alpasim/drivers")
 U50 = 3_321_888_768

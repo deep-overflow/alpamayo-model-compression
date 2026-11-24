@@ -21,7 +21,7 @@ import numpy as np
 from scipy.stats import mannwhitneyu, rankdata, spearmanr
 
 REPO = Path(__file__).resolve().parents[2]
-CL = Path("/home/cvlab21/project/chan/alpasim-runs")
+CL = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 FULL_RUN = Path("/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5")
 LP_RUN = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs/cl150_merged_lp_r50")
 TEAL, BLUE, ORANGE = "#006F73", "#0072B2", "#D55E00"

@@ -8,7 +8,7 @@
 #
 #   bash experiments/head_analysis/finish_traj_s600.sh      (after outputs/alpasim_trajl0_s600/main.DONE)
 set -eu
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/alpasim_trajl0_s600
 PY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
 ARM="--arm f600_merged_slim_trajfix_u40_l0keep_v2 --arm-label FM-only_l0keep --no-pre-fix"

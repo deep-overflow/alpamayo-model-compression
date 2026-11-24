@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 OUT = REPO / "outputs" / "iclr27-rebuttal" / "alpasim_score_u40_u50"
 LP150 = REPO / "outputs" / "alpasim_all_metrics" / "rollout_metrics.parquet"
 SETS = {"origin150": ("Origin150", {"u40": "m2601_merged_", "u50": "u50o_merged_"}),

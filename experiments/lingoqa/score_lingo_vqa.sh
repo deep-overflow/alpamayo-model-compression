@@ -14,8 +14,8 @@
 set -u
 EXP=${1:?usage: score_lingo_vqa.sh <exp_id> [gpu]}
 GPU=${2:-5}
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-LINGOQA=/home/cvlab21/project/chan/LingoQA
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+LINGOQA=/home/cvlab21/project/chan/advla/LingoQA
 PRED="$REPO/outputs/$EXP/predictions.csv"
 
 [ -f "$PRED" ] || { echo "no predictions.csv for $EXP"; exit 1; }

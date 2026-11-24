@@ -26,7 +26,7 @@ import analyze_handover as A
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 MOVING, SAT = 2.0, -7.9
 BATCH = re.compile(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),\d+\].*Inference batches: (\d+) processed")
 

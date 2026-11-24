@@ -14,9 +14,9 @@
 #     > outputs/iclr27-rebuttal/u50_hard100/run_slim_dual_u50_v2.log 2>&1 &
 set -u
 CFG=${1:?usage: run_u50_hard100.sh <cfg>, e.g. slim_dual_u50_v2}
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/iclr27-rebuttal/u50_hard100
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 PY=${TOOLS_PY:-$REPO/.venv/bin/python}   # merge / G1h / suites need only pandas; TOOLS_PY overrides (repo .venv deleted 11-17)
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python

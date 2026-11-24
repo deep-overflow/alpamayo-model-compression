@@ -42,7 +42,7 @@ from mask_lib import select_mask_ratios
 from run_cocsafe import rank_norm
 
 RATIO = 0.3985632694  # make_slim u40: the matched target, never 0.40
-A2_IMP = Path("/home/cvlab21/project/chan/alpamayo2-distill/outputs/a2_importance_v1/importance.npz")
+A2_IMP = Path("/home/cvlab21/project/chan/advla/alpamayo2-distill/outputs/a2_importance_v1/importance.npz")
 A2 = {"layers": 64, "heads": 64, "inter": 25600, "hidden": 5120, "head_dim": 128}
 A15 = {"layers": 36, "heads": 32, "inter": 12288, "hidden": 4096, "head_dim": 128}
 

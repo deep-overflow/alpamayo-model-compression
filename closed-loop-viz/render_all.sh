@@ -13,13 +13,13 @@
 
 set -uo pipefail
 
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 # Resolve the script directory from $0 rather than naming a worktree. These lived in
 # .claude/worktrees/closed-loop-viz while the work was in flight, and a worktree goes away
 # with its session -- after which every `$HERE/...` here pointed at nothing.
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-ALPASIM=/home/cvlab21/project/chan/alpasim
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 OUT=${OUT:-$REPO/closed-loop-viz/video/matrix150}
 WORKERS=${WORKERS:-6}
 LOG=${LOG:-/home/cvlab21/project/chan/.claude/jobs/285e9a74/tmp/render_all.log}

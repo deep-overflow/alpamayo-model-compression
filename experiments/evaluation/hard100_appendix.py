@@ -31,7 +31,7 @@ from scipy import stats
 
 REPO = Path(__file__).resolve().parents[2]
 SANGOH = Path("/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5")
-OURS = Path("/home/cvlab21/project/chan/alpasim-runs/h100_merged_baseline")
+OURS = Path("/home/cvlab21/project/chan/advla/alpasim-runs/h100_merged_baseline")
 N_MATRIX = 150
 
 
@@ -60,7 +60,7 @@ def build(args):
     sel = d[d.scene_id.isin(suite.scene_id)]
     ours, ours_roll = scene_scores(OURS)
 
-    suites = pd.read_csv("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+    suites = pd.read_csv("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
     s2601 = suites[suites.test_suite_id == "public_2601"]
     s2604 = suites[suites.test_suite_id == "public_2604"]
     n_2604 = s2604.scene_id.nunique()

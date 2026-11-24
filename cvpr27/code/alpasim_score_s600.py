@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 OUT = Path(__file__).resolve().parents[2] / "outputs" / "cvpr27" / "alpasim_score_s600"
 ARMS = [("s600_merged_baseline", "dense"), ("d600_merged_slim_dual_u40_v2", "MoOP"),
         ("l600_merged_slim_dual_u40_l0keep_v2", "MoOP_l0keep"), ("f600_merged_slim_trajfix_u40_l0keep_v2", "FM-only"),

@@ -7,7 +7,7 @@
 
 alpasim venv 로 돌려야 한다. ASL 프로토버프를 읽는 데 alpasim_utils 가 필요하다:
 
-  cd /home/cvlab21/project/chan/alpasim && uv run python \
+  cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
       <repo>/experiments/evaluation/coc_paired_tyrk.py --out <abs>/outputs/tyrK_pairs
 
 `--arm NAME RUNDIR` 를 반복하면 임의의 arm 집합을 쓸 수 있다 (생략하면 150씬 tyrK 3 arm).
@@ -34,7 +34,7 @@ KEYS = ("degenerate_frac", "empty_frac", "soup_frac")
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", type=Path,
-                    default=Path("/home/cvlab21/project/chan/alpasim-runs"))
+                    default=Path("/home/cvlab21/project/chan/advla/alpasim-runs"))
     ap.add_argument("--out", type=Path, default=REPO / "outputs/tyrK_pairs")
     ap.add_argument("--arm", nargs=2, action="append", metavar=("NAME", "RUNDIR"),
                     help="arm 하나 (반복 가능). 생략하면 150씬 tyrK 3 arm")

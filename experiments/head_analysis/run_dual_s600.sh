@@ -25,10 +25,10 @@ set -u
 STAGE=${STAGE:-smoke}
 CFG=${CFG:-slim_dual_u40_v2}
 TAG=${TAG:-d600}
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 OUT=${OUT:-$REPO/outputs/alpasim_dual_s600}
 SCENES=$REPO/outputs/alpasim_dual_s600   # the shard-pinned scene lists, shared by every arm
 GPUS=${GPUS:-0 1 2 3 4 5 6 7}

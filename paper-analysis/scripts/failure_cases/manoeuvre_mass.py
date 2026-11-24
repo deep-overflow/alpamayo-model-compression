@@ -7,7 +7,7 @@ import json, sys
 import numpy as np
 sys.path.insert(0, "experiments/evaluation"); sys.path.insert(0, "experiments/head_analysis")
 import sample_cache as sc, eval_lib as el
-REPO = "/home/cvlab21/project/chan/alpamayo-model-compression"
+REPO = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 z = np.load(f"{REPO}/outputs/importance_v2/importance_perclip.npz")
 met = json.load(open(f"{REPO}/outputs/importance_v2/metrics.json"))
 clips = sc.calib_samples(REPO, "calib_100")

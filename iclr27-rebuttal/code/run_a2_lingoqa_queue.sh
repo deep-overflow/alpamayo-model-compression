@@ -8,7 +8,7 @@
 # SPLIT=train (2026-11-14): the confirmatory LingoQA-train sample (run_a2_lingoqa.py --split train, its default 400 x 5 draw);
 # runs land in a2_lingotrain_<arm>, the queue in a2_lingotrain_queue, and scoring uses score_a2_lingo_train.py.
 set -u
-source /home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval/env.sh
+source /home/cvlab21/project/chan/advla/alpamayo2-distill/experiments/oodval/env.sh
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT" || exit 1
 export HF_HUB_OFFLINE=1

@@ -36,7 +36,7 @@ drops ties and many scenes tie exactly.
 
 Usage (this repo's venv is enough -- only pandas is needed, no alpasim_utils):
     .venv/bin/python experiments/head_analysis/analyze_lateral.py \
-        --runs-root /home/cvlab21/project/chan/alpasim-runs --prefix m2601_merged_ \
+        --runs-root /home/cvlab21/project/chan/advla/alpasim-runs --prefix m2601_merged_ \
         --reference slim_dual_u40_v2 \
         --configs baseline slim_dual_u40_v2 slim_dual_u40_qcut4_v2 \
         --out .../outputs/headmlp_lateral

@@ -4,7 +4,7 @@ the two halves' aggregates and averages over layers. Also the top-50% keep-set o
 import numpy as np
 from scipy.stats import spearmanr
 
-SRC = {"A2": "/home/cvlab21/project/chan/alpamayo2-distill/outputs/a2_importance_v1",
+SRC = {"A2": "/home/cvlab21/project/chan/advla/alpamayo2-distill/outputs/a2_importance_v1",
        "A1.5": "/mnt/nvme1n1/ad_vla/outputs/chan/importance_v2"}
 AGG = {"abs_sum": lambda x: np.abs(x.sum(0)), "mean_abs": lambda x: np.abs(x).mean(0), "abs_mean": lambda x: np.abs(x.mean(0)),
        "sum": lambda x: x.sum(0), "mean": lambda x: x.mean(0)}

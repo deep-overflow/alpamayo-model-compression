@@ -12,8 +12,8 @@
 #
 #   bash experiments/head_analysis/finish_coc_s600.sh      (after outputs/alpasim_cocl0_s600/resume.DONE)
 set -eu
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 OUT=$REPO/outputs/alpasim_cocl0_s600
 CFG=slim_coc_u40_l0keep_v2
 ARM=c600_merged_$CFG

@@ -38,9 +38,9 @@
 # Cost: ~11.6 min/scene/driver. 150 scenes over 2 cards is ~14.5 h per config.
 set -u
 
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-ALPASIM=/home/cvlab21/project/chan/alpasim
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 SUITE=${SUITE-public_2601}
 PREFIX=${PREFIX-m2601_}
@@ -88,7 +88,7 @@ import sys
 from pathlib import Path
 import pandas as pd
 suite, n, runs = sys.argv[1], int(sys.argv[2]), Path(sys.argv[3])
-su = pd.read_csv("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+su = pd.read_csv("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 want = set(su[su.test_suite_id == suite].sort_values("scene_id").head(n).scene_id)
 if len(want) != n:
     print(f"[FAIL] suite {suite} yielded {len(want)} scenes, expected {n}"); sys.exit(1)

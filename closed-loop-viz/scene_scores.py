@@ -13,7 +13,7 @@ import json
 import statistics as st
 from pathlib import Path
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 
 
 def main():

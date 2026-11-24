@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-V = Path("/home/cvlab21/project/chan/alpamayo-model-compression/closed-loop-viz/video")
+V = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/closed-loop-viz/video")
 SUITE = "origin150"
 KIND = sys.argv[1] if len(sys.argv) > 1 else "camera"
 ARMS = ["baseline", "dual", "wanda", "tyr", "coc", "traj", "tyrK", "llm-pruner"]

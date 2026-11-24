@@ -539,7 +539,7 @@ pooled 옆 대괄호는 부트스트랩 95% CI(씬 단위 재표본, 10,000회)�
 
     p.append(f"""
 <h2><span class="num">7.</span>재현</h2>
-<pre><code>cd /home/cvlab21/project/chan/alpasim &amp;&amp; uv run python \\
+<pre><code>cd /home/cvlab21/project/chan/advla/alpasim &amp;&amp; uv run python \\
     $REPO/experiments/head_analysis/collect_alpasim_table.py \\
     --out $REPO/outputs/alpasim_table --workers 12
 $REPO/.venv/bin/python $REPO/experiments/head_analysis/render_alpasim_table.py \\

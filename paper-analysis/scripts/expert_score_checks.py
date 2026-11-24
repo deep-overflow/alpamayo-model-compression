@@ -9,7 +9,7 @@ mlp_abs_step (10,36,8256)); outputs/importance_stepexp_znorm/importance.npz."""
 import numpy as np
 from scipy import stats
 
-R = "/home/cvlab21/project/chan/alpamayo-model-compression"
+R = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 with np.load(f"{R}/outputs/stepimp_fm_perstep_v2/step_importance.npz") as s:
     Q, M = s["q_abs_step"].astype(np.float64), s["mlp_abs_step"].astype(np.float64)
 with np.load(f"{R}/outputs/importance_stepexp_znorm/importance.npz") as z:

@@ -35,7 +35,7 @@ against the fine-tuned block. Remaining caveats to state wherever it is reported
 Writes `predictions.csv` with the columns LingoQA's own `evaluate.py` expects
 (question_id, segment_id, answer), 500 rows. Score it with the upstream script:
 
-  python /home/cvlab21/project/chan/LingoQA/benchmark/evaluate.py \
+  python /home/cvlab21/project/chan/advla/LingoQA/benchmark/evaluate.py \
       --predictions_path outputs/<exp_id>/predictions.csv
 
 Usage:

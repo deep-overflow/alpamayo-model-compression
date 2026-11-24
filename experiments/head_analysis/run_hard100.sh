@@ -7,15 +7,15 @@
 #   2) 그 다음 Ada 4-7이 연속 $CONSEC 회 비어 있는지 확인  <- GO가 조금 일러도 충돌 방지
 #   3) baseline -> 병합 -> slim_dual_u40_v2 -> 병합
 #
-# 시작 신호:  touch /home/cvlab21/project/chan/alpasim-runs/hard100/GO
-# 취소:      touch /home/cvlab21/project/chan/alpasim-runs/hard100/ABORT
-#            (또는 kill $(cat /home/cvlab21/project/chan/alpasim-runs/hard100/scheduler.pid))
-# 진행 확인:  tail -f /home/cvlab21/project/chan/alpasim-runs/hard100/run.log
+# 시작 신호:  touch /home/cvlab21/project/chan/advla/alpasim-runs/hard100/GO
+# 취소:      touch /home/cvlab21/project/chan/advla/alpasim-runs/hard100/ABORT
+#            (또는 kill $(cat /home/cvlab21/project/chan/advla/alpasim-runs/hard100/scheduler.pid))
+# 진행 확인:  tail -f /home/cvlab21/project/chan/advla/alpasim-runs/hard100/run.log
 set -u
 
-DIR=/home/cvlab21/project/chan/alpasim-runs/hard100
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+DIR=/home/cvlab21/project/chan/advla/alpasim-runs/hard100
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 LOG=$DIR/run.log
 GPUS="4 5 6 7"
 FREE_MIB=2048          # 유휴 카드도 수백 MiB를 쓸 수 있어 0이 아닌 문턱
@@ -112,6 +112,6 @@ for cfg in $CONFIGS; do
 done
 
 log "=== 전체 완료. 분석 명령:"
-log "    cd /home/cvlab21/project/chan/alpasim && uv run python \\"
+log "    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \\"
 log "      $REPO/experiments/head_analysis/analyze_alpasim.py \\"
 log "      --runs-root $RUNS --out $REPO/outputs/hard100_eval"

@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cl_bev import frame_cocs, load_map, read_rollout, render_arm, verdict_of
 from cl_compose import compose, entry_data
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 SETS = {("u40", "Hard100"): "h100_merged_slim_{}_u40_v2", ("u40", "Origin150"): "m2601_merged_slim_{}_u40_v2",
         ("u50", "Hard100"): "u50h_merged_slim_{}_u50_v2", ("u50", "Origin150"): "u50o_merged_slim_{}_u50_v2"}
 ARMS = [("moop", "MoOP", "dual"), ("fm", "FM-only", "traj"), ("ce", "CE-only", "coc")]

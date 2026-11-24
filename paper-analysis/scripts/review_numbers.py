@@ -5,7 +5,7 @@ import json
 import numpy as np
 from scipy.stats import spearmanr
 
-REPO = "/home/cvlab21/project/chan/alpamayo-model-compression"
+REPO = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 BANDS = {"0-6": slice(0, 7), "7-21": slice(7, 22), "22-34": slice(22, 35), "0-21": slice(0, 22)}
 z = np.load(f"{REPO}/outputs/importance_v2/importance.npz")
 pc = np.load(f"{REPO}/outputs/importance_v2/importance_perclip.npz")

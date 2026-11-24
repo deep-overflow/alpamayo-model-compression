@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO / "experiments" / "evaluation"))
 
 import analyze_handover as A
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 OLD, NEW = RUNS / "m2601_merged_baseline", RUNS / "hofix_gate_merged_baseline"
 SUITE = RUNS / "shard_suites_hofix_gate_baseline.csv"
 MOVING, SAT = 2.0, -7.9

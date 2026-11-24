@@ -24,7 +24,7 @@ docker run -d --name "$NAME" \
   -p "$PORT:6007" \
   -e HOME=/tmp -e XDG_CACHE_HOME=/tmp/.cache -e OMP_NUM_THREADS=1 \
   -v /mnt/nvme1n1/ad_vla/data/nre-artifacts:/mnt/nre-data \
-  -v /home/cvlab21/project/chan/alpasim/data/nre-artifacts/ego-hoods:/mnt/ego-hoods \
+  -v /home/cvlab21/project/chan/advla/alpasim/data/nre-artifacts/ego-hoods:/mnt/ego-hoods \
   --entrypoint bash \
   nvcr.io/nvidia/nre/nre-ga:26.04 \
   -c "umask 0000

@@ -17,7 +17,7 @@ the matrix never touched and turns it into an out-of-sample test.
 
 Usage:
   python analyze_difficulty_strat.py \
-      --runs-root /home/cvlab21/project/chan/alpasim-runs \
+      --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
       --lp-root /mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs \
       --full-suite-run /mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5 \
       --out outputs/difficulty_strat

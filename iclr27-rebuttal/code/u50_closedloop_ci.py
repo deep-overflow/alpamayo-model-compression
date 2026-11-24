@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 REF = "MoOP u50"
 U50 = [("MoOP u50", "slim_dual_u50_v2"), ("MoOP u50 l0keep", "slim_dual_u50_l0keep_v2"), ("Tyr u50", "slim_tyr_u50_r"),
        ("LLM-Pruner u50", "slim_lp_r60"), ("FM-only u50", "slim_traj_u50_v2"), ("CE-only u50", "slim_coc_u50_v2"),

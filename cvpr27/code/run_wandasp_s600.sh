@@ -10,7 +10,7 @@
 #
 #   bash cvpr27/code/run_wandasp_s600.sh > outputs/cvpr27/wandasp_s600.log 2>&1
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 PY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 L0=l600_merged_slim_dual_u40_l0keep_v2

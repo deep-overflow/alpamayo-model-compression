@@ -2,9 +2,9 @@
 step), mean future speed, future path length, net signed heading change, max |curvature| proxy."""
 import sys
 import numpy as np, pandas as pd
-sys.path.insert(0, "/home/cvlab21/project/chan/alpamayo-model-compression/experiments/evaluation")
+sys.path.insert(0, "/home/cvlab21/project/chan/advla/alpamayo-model-compression/experiments/evaluation")
 import sample_cache as sc
-REPO = "/home/cvlab21/project/chan/alpamayo-model-compression"
+REPO = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 rows = []
 for sname, manifest, cache in (("test", "test_500", "test"), ("ood", "ood", "ood")):
     for cid, t0 in sc.calib_samples(REPO, manifest):

@@ -10,8 +10,8 @@ moment from the ASL log, then compares:
   3. collision type (front / lateral / rear) per config.
 
 Usage (alpasim venv):
-    cd /home/cvlab21/project/chan/alpasim && uv run python \
-        .../analyze_collisions.py --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
+        .../analyze_collisions.py --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
         --out .../outputs/alpasim_collisions
 """
 

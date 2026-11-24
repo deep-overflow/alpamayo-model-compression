@@ -6,13 +6,13 @@
 #
 # 로그도 분리한다 — 두 프로세스가 같은 파일에 append 하면 줄이 섞일 수 있다.
 #
-# 취소:  touch /home/cvlab21/project/chan/alpasim-runs/hard100/ABORT_TYR
-# 진행:  tail -f /home/cvlab21/project/chan/alpasim-runs/hard100/run_tyr.log
+# 취소:  touch /home/cvlab21/project/chan/advla/alpasim-runs/hard100/ABORT_TYR
+# 진행:  tail -f /home/cvlab21/project/chan/advla/alpasim-runs/hard100/run_tyr.log
 set -u
 
-DIR=/home/cvlab21/project/chan/alpasim-runs/hard100
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+DIR=/home/cvlab21/project/chan/advla/alpasim-runs/hard100
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 LOG=$DIR/run_tyr.log
 PREV_LOG=$DIR/run.log
 CFG=slim_tyr_u40_r

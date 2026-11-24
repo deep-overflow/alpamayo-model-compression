@@ -8,7 +8,7 @@
 # Optional SET (2026-11-13): test500 (default) / oodval / oodtrain picks manifest + A2 cache; exp ids are a2_<SET>_<arm><suffix>.
 set -u
 # env.sh first: it sets its own REPO (= alpamayo2-distill), so this script's root is ROOT, computed after it
-source /home/cvlab21/project/chan/alpamayo2-distill/experiments/oodval/env.sh
+source /home/cvlab21/project/chan/advla/alpamayo2-distill/experiments/oodval/env.sh
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 export HF_HUB_OFFLINE=1  # weights are cached at the pinned revision; the full_right token is invalid since 2026-11-09
 export CUDA_VISIBLE_DEVICES=${CARDS:?set CARDS, e.g. 4,5}

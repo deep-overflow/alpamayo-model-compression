@@ -17,7 +17,7 @@ symlinked, so the merged run stays readable if a shard directory is later remove
 
 Usage:
   python experiments/head_analysis/merge_alpasim_shards.py \
-      --runs-root /home/cvlab21/project/chan/alpasim-runs \
+      --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
       --shards m2601_baseline_sh0 m2601_baseline_sh1 m2601_baseline_sh2 m2601_baseline_sh3 \
       --out m2601_merged_baseline
 """

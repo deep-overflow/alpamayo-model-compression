@@ -9,9 +9,9 @@
 #
 #   setsid nohup bash iclr27-rebuttal/code/run_u50_queue4.sh > outputs/iclr27-rebuttal/u50_origin150/run_queue4.log 2>&1 &
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/iclr27-rebuttal/u50_origin150
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 PY=$REPO/.venv/bin/python
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
@@ -31,7 +31,7 @@ cleanup() {  # docker compose lowercases project names, so match case-insensitiv
   done
 }
 cd "$REPO"
-source /home/cvlab21/project/chan/alpasim-runs/.hf_env   # valid token + HF_HOME (full_right is invalid since 11-09)
+source /home/cvlab21/project/chan/advla/alpasim-runs/.hf_env   # valid token + HF_HOME (full_right is invalid since 11-09)
 export HF_HUB_CACHE=/mnt/nvme1n1/ad_vla/cache/hub CUDA_DEVICE_ORDER=PCI_BUS_ID HF_HUB_ENABLE_HF_TRANSFER=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 

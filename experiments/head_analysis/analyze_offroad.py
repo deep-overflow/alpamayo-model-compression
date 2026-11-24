@@ -16,8 +16,8 @@ Aggregation mirrors analyze_alpasim / analyze_longitudinal: rollout -> scene mea
 paired delta vs a reference arm with bootstrap CI and Wilcoxon.
 
 Usage (alpasim venv, for pandas/pyarrow):
-  cd /home/cvlab21/project/chan/alpasim && uv run python \
-      .../analyze_offroad.py --runs-root /home/cvlab21/project/chan/alpasim-runs \
+  cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
+      .../analyze_offroad.py --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
       --out .../outputs/alpasim_offroad
 """
 

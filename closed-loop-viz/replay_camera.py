@@ -46,7 +46,7 @@ import grpc
 from alpasim_grpc.v0 import sensorsim_pb2_grpc
 from PIL import Image, ImageDraw, ImageFont
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 
 # The four the driver requests, laid out two per row: the forward pair on top (wide, then
 # its zoomed twin), the side pair beneath in physical left-right order.

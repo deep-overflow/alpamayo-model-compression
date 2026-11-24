@@ -1,6 +1,6 @@
 """Tyr-the-Pruner algorithm 1 (prune-to-supernet), following the official repo step for step.
 
-cvpr27/plans/2026-10-31_tyr-a100.md. Official code: /home/cvlab21/project/chan/Tyr-the-Pruner
+cvpr27/plans/2026-10-31_tyr-a100.md. Official code: /home/cvlab21/project/chan/advla/Tyr-the-Pruner
 (prune_to_supernet.py, src/pruner.py, src/local_pruner.py, script/example.sh).
 
 What follows the official code exactly:

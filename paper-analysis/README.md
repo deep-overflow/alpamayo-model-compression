@@ -166,7 +166,7 @@ F2에서는 기능이 없는데, 이것은 모순이 아니라 "어느 점수를
 - `figures/main`, `figures/supplementary`의 파일은 저장소 `figures/`의 복사본이다. 그중 **`*5_*`, `_bands`, `_ci`, `pertoken`, `band_mix`는 이번에 만든 패널**로, `fig_why_differs.py`가 만들지 않고 `figures/README.md`에도 없다(git untracked). 논문에 쓰기로 정하면 스크립트에 패널로 올려야 재현된다.
 - `scripts/`의 파이썬 파일이 그 패널들을 다시 만든다. 저장소 `.venv`로 실행하며 `experiments/paper/fig_criterion.py`·`fig_why_differs.py`의 스타일 함수를 import한다. 출력은 각 스크립트 옆의 `figs/`에 떨어진다.
   ```bash
-  cd /home/cvlab21/project/chan/alpamayo-model-compression
+  cd /home/cvlab21/project/chan/advla/alpamayo-model-compression
   MPLCONFIGDIR=/tmp/alpamayo-mpl .venv/bin/python paper-analysis/scripts/same_token5.py q     # 또는 mlp
   MPLCONFIGDIR=/tmp/alpamayo-mpl .venv/bin/python paper-analysis/scripts/token_handoff5.py
   MPLCONFIGDIR=/tmp/alpamayo-mpl .venv/bin/python paper-analysis/scripts/token_handoff5_q_variants.py

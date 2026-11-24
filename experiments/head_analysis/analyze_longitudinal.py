@@ -16,8 +16,8 @@ and no re-simulation. Aggregation mirrors analyze_alpasim.py: per-rollout -> per
 mean -> paired delta vs baseline with bootstrap CI and Wilcoxon.
 
 Usage (alpasim venv):
-    cd /home/cvlab21/project/chan/alpasim && uv run python \
-        .../analyze_longitudinal.py --runs-root /home/cvlab21/project/chan/alpasim-runs \
+    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
+        .../analyze_longitudinal.py --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
         --out .../outputs/alpasim_longitudinal
 """
 

@@ -10,8 +10,8 @@
 # 사용: bash watchdog_arm.sh <config> <logfile> <done-string> [waiter-script]
 #   예: bash watchdog_arm.sh lp_r50 run_lp.log "LP 전체 완료" run_lp.sh
 set -u
-DIR=/home/cvlab21/project/chan/alpasim-runs/hard100
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+DIR=/home/cvlab21/project/chan/advla/alpasim-runs/hard100
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 CFG=${1:?config}
 LOGF=$DIR/${2:?logfile}
 DONE=${3:?done-string}

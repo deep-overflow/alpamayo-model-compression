@@ -44,7 +44,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 PREFIX = "m2601_merged_"
 REF = "slim_dual_u40_v2"
 ARMS = ["slim_dual_u40_qcut4_v2", "slim_dualexp_u40_em93p75"]

@@ -41,7 +41,7 @@ import torch
 REPO = Path(__file__).resolve().parents[2]
 # LINGOQA_BENCH: the LingoQA repo's benchmark/ dir, which supplies judge.py.
 LINGOQA = Path(os.environ.get("LINGOQA_BENCH",
-                              "/home/cvlab21/project/chan/LingoQA/benchmark"))
+                              "/home/cvlab21/project/chan/advla/LingoQA/benchmark"))
 sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(LINGOQA))

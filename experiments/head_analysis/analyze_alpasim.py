@@ -8,10 +8,10 @@ plots/*.png per the repo output convention.
 
 Runs with the alpasim repo's venv (needs alpasim_utils, alpasim_grpc, numpy, matplotlib):
 
-    cd /home/cvlab21/project/chan/alpasim && uv run python \
-        /home/cvlab21/project/chan/alpamayo-model-compression/experiments/head_analysis/analyze_alpasim.py \
-        --runs-root /home/cvlab21/project/chan/alpasim-runs \
-        --out /home/cvlab21/project/chan/alpamayo-model-compression/outputs/alpasim_eval
+    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
+        /home/cvlab21/project/chan/advla/alpamayo-model-compression/experiments/head_analysis/analyze_alpasim.py \
+        --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
+        --out /home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs/alpasim_eval
 """
 
 import argparse

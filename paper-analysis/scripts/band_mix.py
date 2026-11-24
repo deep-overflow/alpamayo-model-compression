@@ -9,7 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 sys.path.insert(0, str(REPO / "experiments" / "paper"))
 import fig_criterion as fc  # noqa: E402
 import fig_why_differs as fw  # noqa: E402

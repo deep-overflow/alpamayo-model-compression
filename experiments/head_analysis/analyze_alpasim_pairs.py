@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import wilcoxon
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 ARMS = {
     "baseline": "m2601_merged_baseline",
     "dual": "m2601_merged_slim_dual_u40_v2",

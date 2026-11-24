@@ -23,7 +23,7 @@ import numpy as np
 from scipy import stats
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS_DEFAULT = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS_DEFAULT = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 
 # (prefix, 표시 이름, 기대 씬 수, 설명)
 SUITES = [

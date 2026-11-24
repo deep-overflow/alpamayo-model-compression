@@ -82,7 +82,7 @@ corrected = 기존 split-half 천장 보정값(재계산, 50/10회 분할이라 
 ## 재현
 
 ```bash
-cd /home/cvlab21/project/chan/alpamayo-model-compression/paper-analysis/scripts
+cd /home/cvlab21/project/chan/advla/alpamayo-model-compression/paper-analysis/scripts
 ../../.venv/bin/python finding1_numbers.py
 ```
 

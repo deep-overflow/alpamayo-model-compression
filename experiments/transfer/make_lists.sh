@@ -10,7 +10,7 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-CODE_SRC=${CODE_SRC-/home/cvlab21/project/chan/alpamayo-model-compression}
+CODE_SRC=${CODE_SRC-/home/cvlab21/project/chan/advla/alpamayo-model-compression}
 SRC=${AD_VLA_SRC-/mnt/nvme1n1/ad_vla}
 HUB=$SRC/cache/hub
 PRE=$SRC/data/physicalai_av/pre_processed

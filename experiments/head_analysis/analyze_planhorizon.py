@@ -40,9 +40,9 @@ Pre-registered gates (plans/2026-09-11_effective-plan-horizon.md):
 
 Runs under **alpasim's** venv (needs `alpasim_utils` to read the protobuf logs):
 
-    cd /home/cvlab21/project/chan/alpasim && uv run python \
+    cd /home/cvlab21/project/chan/advla/alpasim && uv run python \
         <repo>/experiments/head_analysis/analyze_planhorizon.py \
-        --runs-root /home/cvlab21/project/chan/alpasim-runs \
+        --runs-root /home/cvlab21/project/chan/advla/alpasim-runs \
         --configs baseline slim_dual_u40_v2 --n-scenes 30 \
         --out <abs>/outputs/planhorizon
 """

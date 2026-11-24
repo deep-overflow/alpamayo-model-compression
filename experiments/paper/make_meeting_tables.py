@@ -22,7 +22,7 @@ from matplotlib.patches import Rectangle
 REPO = Path(__file__).resolve().parents[2]
 OUTPUTS = REPO / "outputs"
 LP = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/llm-pruner")
-CL = Path("/home/cvlab21/project/chan/alpasim-runs")
+CL = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 LP_CL = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-runs")
 FULL = 11_078_526_194
 SOURCES = {}

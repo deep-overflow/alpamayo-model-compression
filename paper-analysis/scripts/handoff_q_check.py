@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-REPO = Path("/home/cvlab21/project/chan/alpamayo-model-compression")
+REPO = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression")
 VIS, HIST, PT, COC, SINK = range(5)
 NAMES = {VIS: "vision", PT: "prompt", COC: "CoC", HIST: "history"}
 LAST = 35

@@ -14,7 +14,7 @@ import csv
 from pathlib import Path
 
 ARTIFACTS = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts/scenesets")
-SUITES_CSV = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES_CSV = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 
 
 def main():

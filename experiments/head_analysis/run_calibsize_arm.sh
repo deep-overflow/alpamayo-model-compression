@@ -20,9 +20,9 @@
 # 취소:  touch $DIR/ABORT     진행:  tail -f $DIR/run.log
 set -u
 
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-ALPASIM=/home/cvlab21/project/chan/alpasim
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 CFG=${1:?usage: run_calibsize_arm.sh <config> (예: slim_dual_st2000b)}
 DIR=${DIR-$RUNS/$CFG}

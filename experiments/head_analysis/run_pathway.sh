@@ -19,7 +19,7 @@ elif [ "${1:-}" = "--census" ]; then
 fi
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VENV=/mnt/nvme1n1/ad_vla/venvs/alpamayo-mc/bin/python
-SHARED_OUT=/home/cvlab21/project/chan/alpamayo-model-compression/outputs
+SHARED_OUT=/home/cvlab21/project/chan/advla/alpamayo-model-compression/outputs
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF-expandable_segments:True}

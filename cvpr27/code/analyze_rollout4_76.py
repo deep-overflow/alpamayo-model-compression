@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 OUT = REPO / "outputs" / "cvpr27" / "rollout4_76"
 ARMS = [("r4l0_merged_slim_dual_u40_l0keep_v2", "MoOP_l0keep"), ("r4ty_merged_slim_tyr_off", "tyr_off"),
         ("r4lp_merged_slim_lp_m24", "lp_m24"), ("r4dn_merged_baseline", "dense"),

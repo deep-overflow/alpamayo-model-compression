@@ -47,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_replay import clean_coc, read_rollout
 
 ARTIFACTS = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts/scenesets")
-SUITES_CSV = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES_CSV = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 W, H, DPI = 640, 480, 100
 LAT, AHEAD, BEHIND = 30.0, 33.0, 12.0          # 60 m x 45 m -> 10.67 px/m on both axes
 BG, ROAD, LANE, EDGE, TRAIL = "#15181d", "#373d48", "#59626f", "#b4bcc7", "#e3e6ea"

@@ -31,7 +31,7 @@ import extract_scene_feats
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-SUITES = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 MATRIX_N = 150          # the shipped closed-loop matrix is sorted(scene_id)[:150]
 
 

@@ -74,7 +74,7 @@ plt.rcParams.update({
     "axes.spines.top": False, "axes.spines.right": False, "font.size": 10,
 })
 
-RUNS = Path("/home/cvlab21/project/chan/alpasim-runs")
+RUNS = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 SOOWON = Path("/mnt/nvme1n1/ad_vla/outputs/soowon/alpasim-analysis/runs_root")
 SANGOH = Path("/mnt/nvme1n1/ad_vla/results/sangoh/alpasim_runs/eval2601_a1_5")
 USDZ = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts/all-usdzs")

@@ -280,7 +280,7 @@ for arm, ref in [
 record("coc_consistency", consistency)
 
 # Closed-loop count and aggregation invariants.
-runs = Path("/home/cvlab21/project/chan/alpasim-runs")
+runs = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 closed = {}
 for tag, run in [
     ("baseline", "m2601_merged_baseline"),

@@ -9,7 +9,7 @@ run through alpasim `eval.main`, given the all-zero `img_is_black` rows the orig
 per-timestep <out>/parquets/<scene>_<cfg>/<rollout_id>/metrics.parquet.
 
 Usage (repo root):
-    set -a; . /home/cvlab21/project/chan/alpasim-runs/.hf_env; set +a   # only if a usdz must be downloaded
+    set -a; . /home/cvlab21/project/chan/advla/alpasim-runs/.hf_env; set +a   # only if a usdz must be downloaded
     .venv/bin/python cvpr27/code/h100_reeval_aborted.py [--cfgs lp_r50 ...] [--scenes ceb3d0d5 ...]
 """
 import argparse
@@ -26,7 +26,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 RUNS = '/mnt/nvme1n1/ad_vla/results/chan/alpasim-runs'
-ALPASIM = '/home/cvlab21/project/chan/alpasim'
+ALPASIM = '/home/cvlab21/project/chan/advla/alpasim'
 USDZ_DIR = '/mnt/nvme1n1/ad_vla/data/nre-artifacts/all-usdzs'
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFGS = ['baseline', 'slim_dual_u40_v2', 'slim_dualexp_u40_em93p75', 'slim_coc_u40_v2', 'slim_traj_u40_v2',

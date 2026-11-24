@@ -12,9 +12,9 @@
 #   SHARDS="4 5 6 7" ARMS="slim_dual_u50_l0keep_v2 slim_dual_u50_v2" setsid nohup bash \
 #     iclr27-rebuttal/code/run_u50_origin150.sh > outputs/iclr27-rebuttal/u50_origin150/run_ada.log 2>&1 &
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/iclr27-rebuttal/u50_origin150
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 PY=$REPO/.venv/bin/python
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python

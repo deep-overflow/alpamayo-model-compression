@@ -14,7 +14,7 @@ from pathlib import Path
 import torch
 
 REPO = Path(__file__).resolve().parents[3]
-OFFICIAL = Path("/home/cvlab21/project/chan/Tyr-the-Pruner")
+OFFICIAL = Path("/home/cvlab21/project/chan/advla/Tyr-the-Pruner")
 sys.path.insert(0, str(OFFICIAL))
 sys.path.insert(0, str(REPO / "experiments" / "head_analysis"))
 

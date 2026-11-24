@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-R = Path("/home/cvlab21/project/chan/alpasim-runs")
+R = Path("/home/cvlab21/project/chan/advla/alpasim-runs")
 SCENE = sys.argv[1]
 ARMS = sys.argv[2:]
 

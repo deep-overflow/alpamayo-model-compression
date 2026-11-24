@@ -30,7 +30,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 USDZ = Path("/mnt/nvme1n1/ad_vla/data/nre-artifacts/all-usdzs")
-SUITES = Path("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+SUITES = Path("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 
 
 def suite_scenes(suite):

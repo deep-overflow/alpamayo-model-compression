@@ -245,7 +245,7 @@ def main():
     ap.add_argument("--effort", default="low", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--env-file",
-                    default="/home/cvlab21/project/chan/alpamayo-model-compression/cvpr27/long-tail-detection/.env")
+                    default="/home/cvlab21/project/chan/advla/alpamayo-model-compression/cvpr27/long-tail-detection/.env")
     ap.add_argument("--summarize-only", action="store_true")
     args = ap.parse_args()
 

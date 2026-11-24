@@ -18,7 +18,7 @@ STAGE=${STAGE:-gate}
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 GPUS="4 5 6 7"
 stamp() { echo "$(date -u '+%F %T') UTC $*"; }
 

@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import wilcoxon
 
-O = Path("/home/cvlab21/project/chan/alpamayo-model-compression/.claude/worktrees/"
+O = Path("/home/cvlab21/project/chan/advla/alpamayo-model-compression/.claude/worktrees/"
          "calib-stability-curve/outputs")
 K = 6
 

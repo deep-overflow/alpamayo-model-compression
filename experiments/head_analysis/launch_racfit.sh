@@ -19,7 +19,7 @@ ROLL=${2:?rollout cache exp-id}
 GPUS=${3:-"0 1 2 3"}
 NLAYERS=${NLAYERS:-36}
 RETRIES=${RETRIES:-240}
-REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/alpamayo-model-compression}
+REPO=${ALPAMAYO_REPO:-/home/cvlab21/project/chan/advla/alpamayo-model-compression}
 EXTRA=${EXTRA:-}
 
 set -- $GPUS

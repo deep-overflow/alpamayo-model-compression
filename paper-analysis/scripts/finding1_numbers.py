@@ -8,7 +8,7 @@ import json
 import numpy as np
 from scipy.stats import spearmanr
 
-REPO = "/home/cvlab21/project/chan/alpamayo-model-compression"
+REPO = "/home/cvlab21/project/chan/advla/alpamayo-model-compression"
 VIS, HIST, PT, COC, SINK = range(5)
 LAST = 35
 BANDS = {"0-21": slice(0, 22), "22-34": slice(22, LAST)}

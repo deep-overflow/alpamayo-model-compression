@@ -9,8 +9,8 @@
 #
 #   bash cvpr27/code/run_lp_pair_split_s600.sh > outputs/cvpr27/lp_s600.log 2>&1
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 PY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
 LAUNCH=$REPO/experiments/head_analysis/launch_alpasim_shards.sh
 MERGE=$REPO/experiments/head_analysis/merge_alpasim_shards.py

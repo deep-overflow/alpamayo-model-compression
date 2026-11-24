@@ -2,7 +2,7 @@
 
 계획서: [`../plans/2026-10-26_alpasim-handover-fix.md`](../plans/2026-10-26_alpasim-handover-fix.md)
 
-`/home/cvlab21/project/chan/alpasim`(2026-07-12 동기화본)에는 `.git`이 없다. 그래서 변경 내용을
+`/home/cvlab21/project/chan/advla/alpasim`(2026-07-12 동기화본)에는 `.git`이 없다. 그래서 변경 내용을
 `handover_fix.patch`로 이 레포에 남긴다. 바꾸기 전 원본은
 `/mnt/nvme1n1/ad_vla/outputs/chan/minitron/alpasim_patch/orig/`에 있다.
 
@@ -44,7 +44,7 @@
 
 ```bash
 # 적용 (이미 적용된 상태)
-patch -d /home/cvlab21/project/chan/alpasim -p1 < minitron/alpasim/handover_fix.patch
+patch -d /home/cvlab21/project/chan/advla/alpasim -p1 < minitron/alpasim/handover_fix.patch
 # 되돌리기
-patch -d /home/cvlab21/project/chan/alpasim -p1 -R < minitron/alpasim/handover_fix.patch
+patch -d /home/cvlab21/project/chan/advla/alpasim -p1 -R < minitron/alpasim/handover_fix.patch
 ```

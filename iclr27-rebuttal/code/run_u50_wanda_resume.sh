@@ -8,10 +8,10 @@
 #
 #   setsid nohup bash iclr27-rebuttal/code/run_u50_wanda_resume.sh > outputs/iclr27-rebuttal/u50_origin150/run_wanda_resume.log 2>&1 &
 set -u
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
 OUT=$REPO/outputs/iclr27-rebuttal/u50_origin150
-RUNS=/home/cvlab21/project/chan/alpasim-runs
-ALPASIM=/home/cvlab21/project/chan/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
 PY=$REPO/.venv/bin/python
 APY=/mnt/nvme1n1/ad_vla/venvs/alpasim-chan/bin/python
 H=$REPO/experiments/head_analysis

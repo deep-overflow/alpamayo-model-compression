@@ -31,7 +31,7 @@ from scipy.stats import rankdata
 REPO = Path(__file__).resolve().parents[2]
 MODELS = {"a15": {"name": "Alpamayo 1.5", "steps": REPO / "outputs" / "stepimp_fm_perstep_v2" / "step_importance.npz"},
           "a2": {"name": "Alpamayo 2 Super",
-                 "steps": Path("/home/cvlab21/project/chan/alpamayo2-distill/outputs/a2_importance_v1/step_importance.npz")}}
+                 "steps": Path("/home/cvlab21/project/chan/advla/alpamayo2-distill/outputs/a2_importance_v1/step_importance.npz")}}
 KEYS = {"q": "q_abs_step", "mlp": "mlp_abs_step"}
 R_MARK = 0.9
 # G8: paper text (analysis_v2 / Fig. 5): mean step-pair rho, C(0.9)

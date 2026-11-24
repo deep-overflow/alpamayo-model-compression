@@ -23,7 +23,7 @@
 #
 # Example:
 #   bash launch_alpasim_shards.sh baseline 150 2 "4 5 6 7" \
-#       /home/cvlab21/project/chan/alpasim-runs/m2601_150_baseline
+#       /home/cvlab21/project/chan/advla/alpasim-runs/m2601_150_baseline
 #
 # Env:
 #   SUITE=public_2601        which suite the uuids must belong to
@@ -43,9 +43,9 @@
 #     bash launch_alpasim_shards.sh slim_dual_u40_v2 100 2 "4 5 6 7"
 set -u
 
-REPO=/home/cvlab21/project/chan/alpamayo-model-compression
-ALPASIM=/home/cvlab21/project/chan/alpasim
-RUNS=/home/cvlab21/project/chan/alpasim-runs
+REPO=/home/cvlab21/project/chan/advla/alpamayo-model-compression
+ALPASIM=/home/cvlab21/project/chan/advla/alpasim
+RUNS=/home/cvlab21/project/chan/advla/alpasim-runs
 SCENE_CACHE=/mnt/nvme1n1/ad_vla/data/nre-artifacts
 DRIVERS=/mnt/nvme1n1/ad_vla/data/alpasim/drivers
 SUITE=${SUITE-public_2601}
@@ -81,7 +81,7 @@ import pandas as pd
 suite, n, k, done_dir, out_csv, cfg, scenes_csv, parent = (
     sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], sys.argv[6],
     sys.argv[7], sys.argv[8])
-su = pd.read_csv("/home/cvlab21/project/chan/alpasim/data/scenes/sim_suites.csv")
+su = pd.read_csv("/home/cvlab21/project/chan/advla/alpasim/data/scenes/sim_suites.csv")
 if scenes_csv:
     rows = pd.read_csv(scenes_csv)
     for col in ("scene_id", "uuid"):

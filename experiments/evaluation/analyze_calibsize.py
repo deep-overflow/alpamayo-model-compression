@@ -210,7 +210,7 @@ def plot_overlap(ov, names, out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", type=Path,
-                    default=Path("/home/cvlab21/project/chan/alpasim-runs"))
+                    default=Path("/home/cvlab21/project/chan/advla/alpasim-runs"))
     ap.add_argument("--coc-from", type=Path, default=None,
                     help="analyze_alpasim.py 가 쓴 metrics.json (CoC 퇴화율을 여기서 읽는다)")
     ap.add_argument("--out", type=Path, default=REPO / "outputs/calibsize_eval")
